@@ -1,108 +1,80 @@
 # Condo Management System
 
-A modern web application for managing condominiums, built with React, Node.js, and PostgreSQL.
+A full-stack application for managing condominium properties, built with React, TypeScript, and Node.js.
 
 ## Features
 
-- User authentication (Admin and Resident roles)
-- Condominium management
-- Project proposal and voting system
-- Real-time notifications
-- Responsive design with Tailwind CSS
+- User authentication with Clerk
+- Role-based access control
+- Company and resident management
+- Property management
+- Maintenance request tracking
 
 ## Tech Stack
 
-- Frontend:
-  - React
-  - TypeScript
-  - Tailwind CSS
-  - Axios
+- Frontend: React, TypeScript, TailwindCSS
+- Backend: Node.js, Express, TypeScript
+- Authentication: Clerk
+- Database: (To be implemented)
 
-- Backend:
-  - Node.js
-  - Express
-  - TypeScript
-  - PostgreSQL
+## Getting Started
 
-## Prerequisites
+### Prerequisites
 
 - Node.js (v14 or higher)
-- PostgreSQL (v12 or higher)
 - npm or yarn
+- Clerk account for authentication
 
-## Setup
+### Installation
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/condoproject.git
-cd condoproject
+git clone https://github.com/yourusername/condo-management.git
+cd condo-management
 ```
 
-2. Install backend dependencies:
+2. Install dependencies:
 ```bash
+# Install server dependencies
+cd server
+npm install
+
+# Install client dependencies
+cd ../client
 npm install
 ```
 
-3. Install frontend dependencies:
+3. Set up environment variables:
+- Create a `.env` file in the server directory
+- Add your Clerk secret key and other configuration
+
+4. Start the development servers:
 ```bash
-cd client
-npm install
-```
-
-4. Set up the database:
-- Create a PostgreSQL database named 'condo_db'
-- Run the schema.sql file in src/db/schema.sql
-
-5. Configure environment variables:
-- Create a .env file in the root directory with the following variables:
-```
-DB_HOST=localhost
-DB_PORT=5433
-DB_NAME=condo_db
-DB_USER=postgres
-DB_PASSWORD=your_password
-JWT_SECRET=your_jwt_secret
-```
-
-6. Start the backend server:
-```bash
+# Start the backend server
+cd server
 npm run dev
-```
 
-7. Start the frontend development server:
-```bash
-cd client
+# Start the frontend development server
+cd ../client
 npm start
 ```
-
-The application will be available at:
-- Frontend: http://localhost:3001
-- Backend: http://localhost:3000
 
 ## Project Structure
 
 ```
-condoproject/
-├── client/                 # Frontend React application
-│   ├── src/
-│   │   ├── components/    # React components
-│   │   ├── context/       # React context providers
-│   │   └── App.tsx        # Main application component
-│   └── package.json
-├── src/
-│   ├── controllers/       # Backend controllers
-│   ├── routes/           # API routes
-│   ├── db/              # Database configuration
-│   └── server.ts        # Main server file
-└── package.json
+condo-management/
+├── client/                 # React frontend
+├── server/                 # Node.js backend
+├── .gitignore
+└── README.md
 ```
 
 ## Contributing
 
 1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
 ## License
