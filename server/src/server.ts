@@ -1,128 +1,86 @@
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
-import { Clerk } from '@clerk/clerk-sdk-node';
-
-dotenv.config();
+import { clerkClient } from '@clerk/clerk-sdk-node';
+import invitesRouter from './routes/invites';
+import helmet from 'helmet';
+import compression from 'compression';
+import rateLimit from 'express-rate-limit';
+import { createServer } from 'http';
+import { Server } from 'socket.io';
+import { setupWebSocketHandlers } from './services/websocket';
+import { errorHandler } from './middleware/errorHandler';
+import logger from './middleware/logger';
+import { validateRequest } from './middleware/validateRequest';
+import Joi from 'joi';
 
 const app = express();
+const httpServer = createServer(app);
+const io = new Server(httpServer, {
+  cors: {
+    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    methods: ['GET', 'POST']
+  }
+});
+
 const port = process.env.PORT || 3001;
 
-// Configure CORS to allow requests from frontend
+// Security middleware
+app.use(helmet());
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', 'http://127.0.0.1:3000', 'http://127.0.0.1:3001', 'http://127.0.0.1:3002'],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Accept', 'Authorization'],
+  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
   credentials: true
 }));
 
-app.use(express.json());
-
-// Log all incoming requests
-app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
-  next();
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100 // limit each IP to 100 requests per windowMs
 });
+app.use('/api/', limiter);
+
+// Performance middleware
+app.use(compression());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Logging and monitoring
+app.use(logger);
+
+// API versioning
+const apiVersion = 'v1';
+const apiPrefix = `/api/${apiVersion}`;
 
 // Root route
 app.get('/', (req, res) => {
   res.json({ 
-    message: 'Condo Management API Server',
+    message: 'Welcome to the Condo Management API',
+    version: '1.0.0',
     status: 'running',
-    endpoints: {
-      health: '/api/health',
-      testSetup: '/api/test/setup-test-company'
-    }
+    apiVersion
   });
 });
 
-// Verify environment variables
-if (!process.env.CLERK_SECRET_KEY) {
-  console.error('ERROR: CLERK_SECRET_KEY is not set in .env file');
-  process.exit(1);
-}
+// Register routes with versioning
+app.use(`${apiPrefix}/invites`, invitesRouter);
 
-// Test routes (only in development)
-app.post('/api/test/setup-test-company', async (req, res) => {
-  try {
-    console.log('Creating test company...');
-    const clerk = Clerk({ secretKey: process.env.CLERK_SECRET_KEY });
-    
-    // Check if test user already exists
-    console.log('Checking for existing test company...');
-    const existingUsers = await clerk.users.getUserList({
-      emailAddress: ['test@company.com'],
-    });
-
-    if (existingUsers.length > 0) {
-      console.log('Test company already exists');
-      return res.json({ 
-        message: 'Test company already exists',
-        user: existingUsers[0]
-      });
-    }
-
-    // Create test company user
-    console.log('Creating new test company user...');
-    const user = await clerk.users.createUser({
-      emailAddress: ['test@company.com'],
-      password: 'testcompany123',
-      firstName: 'Test',
-      lastName: 'Company',
-      publicMetadata: {
-        role: 'company',
-        companyName: 'Test Company Inc.',
-        companyRegistration: 'TEST123456',
-      },
-    });
-
-    console.log('Test company created successfully');
-    res.json({
-      message: 'Test company created successfully',
-      user
-    });
-  } catch (err) {
-    console.error('Error creating test company:', err);
-    // More detailed error response
-    res.status(500).json({ 
-      message: 'Failed to create test company',
-      error: err instanceof Error ? {
-        message: err.message,
-        stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
-      } : 'Unknown error'
-    });
-  }
-});
-
-// Health check endpoint
-app.get('/api/health', (req, res) => {
-  console.log('Health check requested');
+// Health check route
+app.get(`${apiPrefix}/health`, (req, res) => {
   res.json({ 
     status: 'ok',
-    environment: process.env.NODE_ENV || 'development',
-    clerkConfigured: !!process.env.CLERK_SECRET_KEY,
-    port: port
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
   });
 });
 
-// Handle 404s
-app.use((req, res) => {
-  res.status(404).json({ message: `Route ${req.method} ${req.path} not found` });
-});
+// Setup WebSocket handlers
+setupWebSocketHandlers(io);
 
-// Error handling middleware
-app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error('Unhandled error:', err);
-  res.status(500).json({
-    message: 'Internal server error',
-    error: process.env.NODE_ENV === 'development' ? err.message : undefined
-  });
-});
+// Error handling
+app.use(errorHandler);
 
-app.listen(port, () => {
-  console.log('=================================');
-  console.log(`Server running on port ${port}`);
+// Start server
+httpServer.listen(port, () => {
+  console.log(`Server is running on port ${port}`);
+  console.log(`API version: ${apiVersion}`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`Clerk configured: ${!!process.env.CLERK_SECRET_KEY}`);
-  console.log('=================================');
 }); 

@@ -5,63 +5,55 @@ const router = express.Router();
 
 // Only available in development
 if (process.env.NODE_ENV === 'development') {
-  router.post('/setup-test-company', async (req, res) => {
+  router.post('/setup-test-admin', async (req, res) => {
     try {
+      if (!process.env.CLERK_SECRET_KEY) {
+        throw new Error('CLERK_SECRET_KEY is not configured');
+      }
+
       const clerk = Clerk({ secretKey: process.env.CLERK_SECRET_KEY });
       
       // Check if test user already exists
+      console.log('Checking for existing test admin...');
       const existingUsers = await clerk.users.getUserList({
-        emailAddress: ['test@company.com'],
+        emailAddress: ['test@admin.com'],
       });
 
       if (existingUsers.length > 0) {
+        console.log('Test admin already exists');
         return res.json({ 
-          message: 'Test company already exists',
+          message: 'Test admin already exists',
           user: existingUsers[0]
         });
       }
 
-      // Create test company user
+      // Create test admin user
+      console.log('Creating new test admin user...');
       const user = await clerk.users.createUser({
-        emailAddress: ['test@company.com'],
-        password: 'testcompany123',
+        emailAddress: ['test@admin.com'],
+        password: 'testadmin123',
         firstName: 'Test',
-        lastName: 'Company',
+        lastName: 'Admin',
         publicMetadata: {
-          role: 'company',
-          companyName: 'Test Company Inc.',
-          companyRegistration: 'TEST123456',
+          role: 'admin',
+          isSuperAdmin: true,
         },
       });
 
-      // Create test condominiums in your database
-      // This is just an example - adjust according to your database schema
-      const testCondominiums = [
-        {
-          name: 'Sunset Towers',
-          address: '123 Sunset Blvd',
-          companyId: user.id
-        },
-        {
-          name: 'Ocean View Residences',
-          address: '456 Beach Road',
-          companyId: user.id
-        }
-      ];
-
-      // Here you would typically save these to your database
-      // For now, we'll just return them
+      console.log('Test admin created successfully');
       
       res.json({
-        message: 'Test company created successfully',
-        user,
-        condominiums: testCondominiums
+        message: 'Test admin created successfully',
+        user
       });
     } catch (err) {
-      console.error('Error creating test company:', err);
+      console.error('Error creating test admin:', err);
       res.status(500).json({ 
-        message: 'Failed to create test company',
-        error: err instanceof Error ? err.message : 'Unknown error'
+        message: 'Failed to create test admin',
+        error: err instanceof Error ? {
+          message: err.message,
+          stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+        } : 'Unknown error'
       });
     }
   });

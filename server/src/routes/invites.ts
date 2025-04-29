@@ -1,13 +1,13 @@
 import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { pool } from '../db/pool';
-import { authenticateClerkJWT } from '../middleware/auth';
+import { authenticateClerkJWT, Request } from '../middleware/auth';
 import { sendInvitationEmail } from '../utils/email';
+import { supabase } from '../lib/supabase';
 
 const router = express.Router();
 
 // Create a new invitation
-router.post('/', authenticateClerkJWT, async (req, res) => {
+router.post('/', authenticateClerkJWT, async (req: Request, res) => {
   const { email, condominiumId, role } = req.body;
   const token = uuidv4();
   const expiresAt = new Date();
@@ -15,40 +15,48 @@ router.post('/', authenticateClerkJWT, async (req, res) => {
 
   try {
     // Check if the user making the request is a company and owns the condominium
-    const companyCheck = await pool.query(
-      'SELECT id FROM condominiums WHERE id = $1 AND company_id = $2',
-      [condominiumId, req.user.id]
-    );
+    const { data: companyCheck, error: companyError } = await supabase
+      .from('condominiums')
+      .select('id')
+      .eq('id', condominiumId)
+      .eq('company_id', req.user?.id)
+      .single();
 
-    if (companyCheck.rows.length === 0) {
+    if (companyError || !companyCheck) {
       return res.status(403).json({ message: 'Not authorized to invite administrators for this condominium' });
     }
 
     // Check if there's already a pending invitation for this email and condominium
-    const existingInvite = await pool.query(
-      'SELECT id FROM invites WHERE email = $1 AND condominium_id = $2 AND status = $3',
-      [email, condominiumId, 'pending']
-    );
+    const { data: existingInvite, error: inviteError } = await supabase
+      .from('invites')
+      .select('id')
+      .eq('email', email)
+      .eq('condominium_id', condominiumId)
+      .eq('status', 'pending')
+      .single();
 
-    if (existingInvite.rows.length > 0) {
+    if (existingInvite) {
       return res.status(400).json({ message: 'An invitation has already been sent to this email' });
     }
 
     // Create the invitation
-    const result = await pool.query(
-      `INSERT INTO invites (
-        token, 
-        email, 
-        condominium_id, 
-        role, 
-        status, 
-        expires_at, 
-        created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, NOW()) RETURNING *`,
-      [token, email, condominiumId, role, 'pending', expiresAt]
-    );
+    const { data: invite, error: createError } = await supabase
+      .from('invites')
+      .insert({
+        token,
+        email,
+        condominium_id: condominiumId,
+        role,
+        status: 'pending',
+        expires_at: expiresAt,
+        created_at: new Date()
+      })
+      .select()
+      .single();
 
-    const invite = result.rows[0];
+    if (createError) {
+      throw createError;
+    }
 
     // Send invitation email
     const inviteUrl = `${process.env.CLIENT_URL}/admin/invite?token=${token}`;
@@ -74,33 +82,33 @@ router.get('/verify/:token', async (req, res) => {
   const { token } = req.params;
 
   try {
-    const result = await pool.query(
-      `SELECT 
-        i.id,
-        i.email,
-        i.condominium_id,
-        i.role,
-        i.status,
-        i.expires_at,
-        c.name as condominium_name
-      FROM invites i
-      JOIN condominiums c ON c.id = i.condominium_id
-      WHERE i.token = $1 AND i.status = 'pending'`,
-      [token]
-    );
+    const { data: invite, error } = await supabase
+      .from('invites')
+      .select(`
+        id,
+        email,
+        condominium_id,
+        role,
+        status,
+        expires_at,
+        condominiums (
+          name
+        )
+      `)
+      .eq('token', token)
+      .eq('status', 'pending')
+      .single();
 
-    if (result.rows.length === 0) {
+    if (error || !invite) {
       return res.status(404).json({ message: 'Invalid or expired invitation' });
     }
 
-    const invite = result.rows[0];
-
     // Check if invitation has expired
     if (new Date() > new Date(invite.expires_at)) {
-      await pool.query(
-        'UPDATE invites SET status = $1 WHERE id = $2',
-        ['expired', invite.id]
-      );
+      await supabase
+        .from('invites')
+        .update({ status: 'expired' })
+        .eq('id', invite.id);
       return res.status(400).json({ message: 'Invitation has expired' });
     }
 
@@ -109,7 +117,7 @@ router.get('/verify/:token', async (req, res) => {
         id: invite.id,
         email: invite.email,
         condominiumId: invite.condominium_id,
-        condominiumName: invite.condominium_name,
+        condominiumName: invite.condominiums[0].name,
         role: invite.role,
         expiresAt: invite.expires_at
       }
@@ -126,65 +134,62 @@ router.post('/accept/:token', async (req, res) => {
   const { userId, email } = req.body;
 
   try {
-    // Start a transaction
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
+    // Get and validate the invitation
+    const { data: invite, error: inviteError } = await supabase
+      .from('invites')
+      .select('*')
+      .eq('token', token)
+      .eq('status', 'pending')
+      .single();
 
-      // Get and validate the invitation
-      const inviteResult = await client.query(
-        'SELECT * FROM invites WHERE token = $1 AND status = $1',
-        [token, 'pending']
-      );
-
-      if (inviteResult.rows.length === 0) {
-        throw new Error('Invalid or expired invitation');
-      }
-
-      const invite = inviteResult.rows[0];
-
-      // Check if invitation has expired
-      if (new Date() > new Date(invite.expires_at)) {
-        await client.query(
-          'UPDATE invites SET status = $1 WHERE id = $2',
-          ['expired', invite.id]
-        );
-        throw new Error('Invitation has expired');
-      }
-
-      // Verify email matches invitation
-      if (email !== invite.email) {
-        throw new Error('Email does not match invitation');
-      }
-
-      // Create admin-condominium relationship
-      await client.query(
-        `INSERT INTO admin_condominiums (
-          admin_id,
-          condominium_id,
-          created_at
-        ) VALUES ($1, $2, NOW())`,
-        [userId, invite.condominium_id]
-      );
-
-      // Update invitation status
-      await client.query(
-        'UPDATE invites SET status = $1, accepted_at = NOW() WHERE id = $2',
-        ['accepted', invite.id]
-      );
-
-      await client.query('COMMIT');
-
-      res.json({ 
-        message: 'Invitation accepted successfully',
-        condominiumId: invite.condominium_id
-      });
-    } catch (err) {
-      await client.query('ROLLBACK');
-      throw err;
-    } finally {
-      client.release();
+    if (inviteError || !invite) {
+      throw new Error('Invalid or expired invitation');
     }
+
+    // Check if invitation has expired
+    if (new Date() > new Date(invite.expires_at)) {
+      await supabase
+        .from('invites')
+        .update({ status: 'expired' })
+        .eq('id', invite.id);
+      throw new Error('Invitation has expired');
+    }
+
+    // Verify email matches invitation
+    if (email !== invite.email) {
+      throw new Error('Email does not match invitation');
+    }
+
+    // Create admin-condominium relationship
+    const { error: relationError } = await supabase
+      .from('admin_condominiums')
+      .insert({
+        admin_id: userId,
+        condominium_id: invite.condominium_id,
+        created_at: new Date()
+      });
+
+    if (relationError) {
+      throw relationError;
+    }
+
+    // Update invitation status
+    const { error: updateError } = await supabase
+      .from('invites')
+      .update({ 
+        status: 'accepted',
+        accepted_at: new Date()
+      })
+      .eq('id', invite.id);
+
+    if (updateError) {
+      throw updateError;
+    }
+
+    res.json({ 
+      message: 'Invitation accepted successfully',
+      condominiumId: invite.condominium_id
+    });
   } catch (err) {
     console.error('Error accepting invitation:', err);
     res.status(500).json({ 
