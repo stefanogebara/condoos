@@ -1,0 +1,67 @@
+import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { apiPost, apiGet } from './api';
+
+export interface User {
+  id: number;
+  email: string;
+  first_name: string;
+  last_name: string;
+  role: 'resident' | 'board_admin';
+  condominium_id: number;
+  unit_number: string | null;
+  avatar_url: string | null;
+}
+
+interface AuthCtx {
+  user: User | null;
+  loading: boolean;
+  login: (email: string, password: string) => Promise<User>;
+  logout: () => void;
+}
+
+const Ctx = createContext<AuthCtx>({
+  user: null, loading: true,
+  login: async () => { throw new Error('not ready'); },
+  logout: () => {},
+});
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const raw = localStorage.getItem('condoos_user');
+    const token = localStorage.getItem('condoos_token');
+    if (raw && token) {
+      setUser(JSON.parse(raw));
+      // Revalidate in the background
+      apiGet<{ user: User }>('/auth/me')
+        .then((d) => { setUser(d.user); localStorage.setItem('condoos_user', JSON.stringify(d.user)); })
+        .catch(() => {})
+        .finally(() => setLoading(false));
+    } else {
+      setLoading(false);
+    }
+  }, []);
+
+  const login = async (email: string, password: string): Promise<User> => {
+    const data = await apiPost<{ token: string; user: User }>('/auth/login', { email, password });
+    localStorage.setItem('condoos_token', data.token);
+    localStorage.setItem('condoos_user', JSON.stringify(data.user));
+    setUser(data.user);
+    return data.user;
+  };
+
+  const logout = () => {
+    localStorage.removeItem('condoos_token');
+    localStorage.removeItem('condoos_user');
+    setUser(null);
+    window.location.href = '/login';
+  };
+
+  return <Ctx.Provider value={{ user, loading, login, logout }}>{children}</Ctx.Provider>;
+}
+
+export function useAuth() {
+  return useContext(Ctx);
+}
