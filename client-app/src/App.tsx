@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './lib/auth';
 import LandingPage from './pages/Landing';
 import LoginPage from './pages/Login';
+import DesignSystemPage from './pages/DesignSystem';
 import ResidentApp from './pages/resident/ResidentApp';
 import BoardApp from './pages/board/BoardApp';
 
@@ -29,6 +30,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<RootRoute />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/design" element={<DesignSystemPage />} />
         <Route path="/app/*" element={<RequireAuth role="resident"><ResidentApp /></RequireAuth>} />
         <Route path="/board/*" element={<RequireAuth role="board_admin"><BoardApp /></RequireAuth>} />
         <Route path="*" element={<Navigate to="/" replace />} />

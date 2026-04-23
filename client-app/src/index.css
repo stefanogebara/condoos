@@ -13,8 +13,20 @@ body {
   background-attachment: fixed;
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  font-feature-settings: 'cv11', 'ss01', 'ss03';  /* Inter stylistic sets: single-storey a, curved ascenders */
+  letter-spacing: -0.01em;
 }
+
+/* Display uses Inter Tight with tighter tracking for a modern, Google/Claude feel */
+h1, h2, h3, .font-display {
+  font-family: 'Inter Tight', 'Inter', system-ui, sans-serif;
+  letter-spacing: -0.025em;
+  font-feature-settings: 'ss01', 'cv11';
+}
+
+h1 { letter-spacing: -0.035em; }
 
 /* Ambient colored blobs for the whole app */
 body::before, body::after {

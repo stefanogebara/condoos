@@ -38,7 +38,13 @@ module.exports = {
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', '-apple-system', 'Segoe UI', 'Helvetica', 'Arial', 'sans-serif'],
-        display: ['"Fraunces"', 'Georgia', 'serif'],
+        display: ['"Inter Tight"', 'Inter', 'system-ui', 'sans-serif'],
+        mono: ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
+      },
+      letterSpacing: {
+        tightest: '-0.04em',
+        tighter:  '-0.025em',
+        tight:    '-0.015em',
       },
       borderRadius: {
         '4xl': '2rem',
