@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Vote, MessageCircle } from 'lucide-react';
+import { MessageCircle } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 import GlassCard from '../../components/GlassCard';
 import Badge from '../../components/Badge';

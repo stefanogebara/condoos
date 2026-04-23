@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { ArrowLeft, Sparkles, Vote as VoteIcon, MessageCircle } from 'lucide-react';
@@ -37,14 +37,14 @@ export default function ProposalDetail() {
   const [summary, setSummary] = useState<any>(null);
   const [explainer, setExplainer] = useState<string | null>(null);
 
-  const load = () => apiGet<Proposal>(`/proposals/${id}`).then((data) => {
+  const load = useCallback(() => apiGet<Proposal>(`/proposals/${id}`).then((data) => {
     setP(data);
     if (data.ai_summary) {
       try { setSummary(JSON.parse(data.ai_summary)); } catch {}
     }
     if (data.ai_explainer) setExplainer(data.ai_explainer);
-  }).catch(() => {});
-  useEffect(() => { load(); }, [id]);
+  }).catch(() => {}), [id]);
+  useEffect(() => { load(); }, [load]);
 
   async function addComment(e: React.FormEvent) {
     e.preventDefault();

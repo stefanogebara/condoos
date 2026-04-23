@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { ArrowLeft, Sparkles, Save, CheckCircle2, Circle, Megaphone } from 'lucide-react';
@@ -22,12 +22,12 @@ export default function BoardMeetingDetail() {
   const [saving, setSaving] = useState(false);
   const [summary, setSummary] = useState<any>(null);
 
-  const load = () => apiGet<Meeting>(`/meetings/${id}`).then((data) => {
+  const load = useCallback(() => apiGet<Meeting>(`/meetings/${id}`).then((data) => {
     setM(data);
     setNotes(data.raw_notes || '');
     if (data.ai_summary) { try { setSummary(JSON.parse(data.ai_summary)); } catch {} }
-  });
-  useEffect(() => { load(); }, [id]);
+  }), [id]);
+  useEffect(() => { load(); }, [load]);
 
   async function saveNotes() {
     setSaving(true);

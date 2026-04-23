@@ -44,7 +44,6 @@ export default function Amenities() {
     } finally { setSaving(false); }
   }
 
-  const myReservations = reservations.filter((r) => r.user_id === user?.id && r.status !== 'cancelled');
   const future = reservations
     .filter((r) => new Date(r.starts_at) > new Date() && r.status !== 'cancelled')
     .sort((a, b) => a.starts_at.localeCompare(b.starts_at));

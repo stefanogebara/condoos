@@ -13,10 +13,10 @@ export default function Landing() {
       <nav className="sticky top-0 z-30 px-6 lg:px-12 py-5 flex items-center justify-between backdrop-blur-xl bg-cream-50/30 border-b border-white/30">
         <Logo />
         <div className="hidden md:flex items-center gap-2 text-sm text-dusk-300">
-          <a className="px-3 py-1.5 rounded-full hover:bg-white/40 transition">Home</a>
-          <a className="px-3 py-1.5 rounded-full hover:bg-white/40 transition">Features</a>
-          <a className="px-3 py-1.5 rounded-full hover:bg-white/40 transition">For Boards</a>
-          <a className="px-3 py-1.5 rounded-full hover:bg-white/40 transition">For Residents</a>
+          <a href="#home"      className="px-3 py-1.5 rounded-full hover:bg-white/40 transition">Home</a>
+          <a href="#features"  className="px-3 py-1.5 rounded-full hover:bg-white/40 transition">Features</a>
+          <a href="#boards"    className="px-3 py-1.5 rounded-full hover:bg-white/40 transition">For Boards</a>
+          <a href="#residents" className="px-3 py-1.5 rounded-full hover:bg-white/40 transition">For Residents</a>
         </div>
         <Link to="/login"><Button variant="primary" size="sm" rightIcon={<ArrowRight className="w-4 h-4" />}>Sign in</Button></Link>
       </nav>

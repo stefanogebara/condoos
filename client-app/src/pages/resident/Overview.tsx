@@ -4,7 +4,6 @@ import { Package, DoorOpen, Waves, Vote, ArrowRight, Sparkles, Megaphone } from 
 import PageHeader from '../../components/PageHeader';
 import GlassCard from '../../components/GlassCard';
 import Badge from '../../components/Badge';
-import Avatar from '../../components/Avatar';
 import Button from '../../components/Button';
 import { apiGet } from '../../lib/api';
 import { useAuth } from '../../lib/auth';

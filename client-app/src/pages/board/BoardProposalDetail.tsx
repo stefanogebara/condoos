@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { ArrowLeft, Sparkles, Play, Check, X, MessageCircle } from 'lucide-react';
@@ -17,13 +17,13 @@ export default function BoardProposalDetail() {
   const [decision, setDecision] = useState<any>(null);
   const [explainer, setExplainer] = useState<string | null>(null);
 
-  const load = () => apiGet<any>(`/proposals/${id}`).then((d) => {
+  const load = useCallback(() => apiGet<any>(`/proposals/${id}`).then((d) => {
     setP(d);
     if (d.ai_summary)      { try { setSummary(JSON.parse(d.ai_summary)); } catch {} }
     if (d.ai_explainer)    setExplainer(d.ai_explainer);
     if (d.decision_summary){ try { setDecision(JSON.parse(d.decision_summary)); } catch {} }
-  });
-  useEffect(() => { load(); }, [id]);
+  }), [id]);
+  useEffect(() => { load(); }, [load]);
 
   async function setStatus(status: string) {
     setBusy(true);
