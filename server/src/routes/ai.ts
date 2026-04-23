@@ -26,18 +26,22 @@ const router = Router();
 async function tryAI<T>(
   messages: any[],
   fallback: () => T,
-  opts?: { jsonMode?: boolean; maxTokens?: number }
+  opts?: { jsonMode?: boolean; maxTokens?: number; label?: string }
 ): Promise<T> {
+  const label = opts?.label || 'ai';
   try {
     const raw = await chat(messages, { jsonMode: opts?.jsonMode, maxTokens: opts?.maxTokens });
     if (opts?.jsonMode) {
       const parsed = parseJsonLoose<T>(raw);
-      if (!parsed) return fallback();
+      if (!parsed) {
+        console.warn(`[${label}] JSON parse failed, using fallback. First 300 chars:`, raw.slice(0, 300));
+        return fallback();
+      }
       return parsed;
     }
     return raw as unknown as T;
   } catch (err) {
-    console.warn('[ai] fallback used:', (err as Error).message);
+    console.warn(`[${label}] fallback used:`, (err as Error).message);
     return fallback();
   }
 }
@@ -52,7 +56,7 @@ router.post('/proposal-draft', requireAuth, asyncHandler(async (req: AuthedReque
       { role: 'user', content: text },
     ],
     () => fallbackProposalDraft(text),
-    { jsonMode: true, maxTokens: 600 }
+    { jsonMode: true, maxTokens: 600, label: 'proposal-draft' }
   );
   return ok(res, out);
 }));
@@ -75,7 +79,7 @@ router.post('/cluster-suggestions', requireAuth, requireRole('board_admin'), asy
       { role: 'user', content: `Here are the open suggestions:\n\n${payload}` },
     ],
     () => fallbackCluster(rows),
-    { jsonMode: true, maxTokens: 800 }
+    { jsonMode: true, maxTokens: 1200, label: 'cluster-suggestions' }
   );
 
   // Persist clusters
@@ -123,7 +127,7 @@ router.post('/proposals/:id/summarize-thread', requireAuth, asyncHandler(async (
       { role: 'user', content: `Proposal: ${prop.title}\n\nDescription: ${prop.description}\n\nDiscussion:\n${formatted}` },
     ],
     () => fallbackThreadSummary(comments.length),
-    { jsonMode: true, maxTokens: 500 }
+    { jsonMode: true, maxTokens: 800, label: 'summarize-thread' }
   );
 
   db.prepare(`UPDATE proposals SET ai_summary=? WHERE id=?`).run(JSON.stringify(out), id);
@@ -143,7 +147,7 @@ router.post('/meetings/:id/summarize', requireAuth, requireRole('board_admin'), 
       { role: 'user', content: `Meeting: ${m.title}\nAgenda: ${m.agenda || '(none)'}\n\nRaw notes:\n${m.raw_notes}` },
     ],
     () => fallbackMeetingSummary(m.raw_notes),
-    { jsonMode: true, maxTokens: 900 }
+    { jsonMode: true, maxTokens: 1800, label: 'meetings/summarize' }
   );
 
   db.prepare(`UPDATE meetings SET ai_summary=?, status='completed' WHERE id=?`).run(JSON.stringify(out), id);
@@ -172,7 +176,7 @@ router.post('/proposals/:id/explain', requireAuth, asyncHandler(async (req: Auth
       { role: 'user', content: `Title: ${p.title}\n\nDescription: ${p.description}` },
     ],
     () => fallbackExplain(p.title, p.description),
-    { maxTokens: 400 }
+    { maxTokens: 500, label: 'explain' }
   );
 
   db.prepare(`UPDATE proposals SET ai_explainer=? WHERE id=?`).run(text, id);
@@ -209,7 +213,7 @@ router.post('/proposals/:id/decision-summary', requireAuth, requireRole('board_a
       },
     ],
     () => fallbackDecisionSummary(p.title, outcome, votes),
-    { jsonMode: true, maxTokens: 500 }
+    { jsonMode: true, maxTokens: 800, label: 'decision-summary' }
   );
 
   db.prepare(

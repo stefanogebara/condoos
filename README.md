@@ -12,15 +12,38 @@ Design language: **claymorphism + glassmorphism**. Muted sage / dusty peach / cr
 
 ---
 
-## Quickstart
+## Clone & run (< 2 min)
 
 ```bash
+git clone https://github.com/stefanogebara/condoos.git
+cd condoos
+
+# One-shot setup: copies .env, installs deps, seeds SQLite
+bash scripts/setup.sh
+
+# Run server (4000) + client (3000) together
+npm run dev
+```
+
+Open `http://localhost:3000` → click **Resident** or **Board admin** on the login page.
+
+**Heads-up on the AI features**: by default `.env` ships without an `OPENROUTER_API_KEY`, so every `/api/ai/*` endpoint returns a deterministic fallback (tagged `_fallback: true` in the JSON). To get real Claude Haiku, drop a key from [openrouter.ai](https://openrouter.ai) into `.env`:
+
+```bash
+OPENROUTER_API_KEY=sk-or-v1-...
+OPENROUTER_MODEL=anthropic/claude-3.5-haiku
+```
+
+Everything else — auth, DB, voting, packages, visitors, meetings — runs without any key.
+
+### Manual steps (if the script fails)
+
+```bash
+cp .env.example .env
 npm run install:all   # install root + server + client
 npm run seed          # create SQLite + seed demo data
 npm run dev           # run server (4000) + client (3000) together
 ```
-
-Open `http://localhost:3000`.
 
 ### Demo accounts
 
