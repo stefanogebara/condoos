@@ -46,7 +46,10 @@ router.get('/clusters', requireAuth, requireRole('board_admin'), (req: AuthedReq
 });
 
 router.post('/:id/dismiss', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+  const u = req.user!;
   const id = Number(req.params.id);
+  const s = db.prepare(`SELECT id FROM suggestions WHERE id=? AND condominium_id=?`).get(id, u.condominium_id);
+  if (!s) return fail(res, 'not_found', 404);
   db.prepare(`UPDATE suggestions SET status='dismissed' WHERE id=?`).run(id);
   return ok(res, { id, status: 'dismissed' });
 });

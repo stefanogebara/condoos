@@ -5,16 +5,110 @@ import { ok, fail } from '../lib/respond';
 
 const router = Router();
 
+/** Fetches a proposal only if it belongs to the user's condo. Null otherwise. */
+function getScopedProposal(id: number, condoId: number) {
+  return db.prepare(
+    `SELECT p.*, usr.first_name AS author_first, usr.last_name AS author_last
+     FROM proposals p JOIN users usr ON usr.id = p.author_id
+     WHERE p.id = ? AND p.condominium_id = ?`
+  ).get(id, condoId) as any;
+}
+
+/**
+ * Can this user vote on this proposal, given its voter_eligibility setting?
+ * Looks at ALL active memberships of the user in the condo and picks the
+ * "strongest" relationship (owner > tenant > occupant). Primary_contact status
+ * is drawn from any matching user_unit row.
+ */
+function resolveVoterRights(userId: number, condoId: number): {
+  eligible_as_all: boolean;
+  eligible_as_owner: boolean;
+  eligible_as_primary_contact: boolean;
+  voting_weight: number;
+} {
+  const rows = db.prepare(
+    `SELECT uu.relationship, uu.primary_contact, uu.voting_weight
+     FROM user_unit uu
+     JOIN units un ON un.id = uu.unit_id
+     JOIN buildings b ON b.id = un.building_id
+     WHERE uu.user_id = ? AND b.condominium_id = ? AND uu.status = 'active'`
+  ).all(userId, condoId) as Array<{ relationship: string; primary_contact: number; voting_weight: number }>;
+
+  if (rows.length === 0) {
+    return { eligible_as_all: false, eligible_as_owner: false, eligible_as_primary_contact: false, voting_weight: 0 };
+  }
+  const isOwner   = rows.some((r) => r.relationship === 'owner');
+  const isPrimary = rows.some((r) => r.primary_contact === 1);
+  // Sum all voting weights the user holds in this condo (owner of 3 units = 3x).
+  const weight    = rows.reduce((acc, r) => acc + (r.voting_weight || 0), 0);
+  return {
+    eligible_as_all: true,
+    eligible_as_owner: isOwner,
+    eligible_as_primary_contact: isPrimary,
+    voting_weight: weight,
+  };
+}
+
+function canVote(userId: number, condoId: number, eligibility: string | null): boolean {
+  const rights = resolveVoterRights(userId, condoId);
+  if (!rights.eligible_as_all) return false;
+  if (eligibility === 'owners_only')           return rights.eligible_as_owner;
+  if (eligibility === 'primary_contact_only')  return rights.eligible_as_primary_contact;
+  return true; // 'all' or null
+}
+
+/**
+ * Compute weighted tallies for a proposal. Each vote is multiplied by the
+ * voter's voting_weight at tally time (not recorded into proposal_votes, so
+ * weights can be adjusted later without rewriting history).
+ */
 function withCounts(row: any) {
-  const counts = db.prepare(
-    `SELECT
-       SUM(CASE WHEN choice='yes' THEN 1 ELSE 0 END) AS yes,
-       SUM(CASE WHEN choice='no' THEN 1 ELSE 0 END) AS no,
-       SUM(CASE WHEN choice='abstain' THEN 1 ELSE 0 END) AS abstain,
-       COUNT(*) AS total
-     FROM proposal_votes WHERE proposal_id = ?`
-  ).get(row.id) as any;
-  return { ...row, votes: counts };
+  const votes = db.prepare(
+    `SELECT pv.user_id, pv.choice,
+            COALESCE((
+              SELECT SUM(uu.voting_weight) FROM user_unit uu
+              JOIN units un ON un.id = uu.unit_id
+              JOIN buildings b ON b.id = un.building_id
+              WHERE uu.user_id = pv.user_id AND b.condominium_id = ? AND uu.status = 'active'
+            ), 1.0) AS weight,
+            EXISTS(
+              SELECT 1 FROM user_unit uu
+              JOIN units un ON un.id = uu.unit_id
+              JOIN buildings b ON b.id = un.building_id
+              WHERE uu.user_id = pv.user_id AND b.condominium_id = ?
+                AND uu.status = 'active' AND uu.relationship = 'owner'
+            ) AS is_owner,
+            EXISTS(
+              SELECT 1 FROM user_unit uu
+              JOIN units un ON un.id = uu.unit_id
+              JOIN buildings b ON b.id = un.building_id
+              WHERE uu.user_id = pv.user_id AND b.condominium_id = ?
+                AND uu.status = 'active' AND uu.primary_contact = 1
+            ) AS is_primary
+     FROM proposal_votes pv
+     WHERE pv.proposal_id = ?`
+  ).all(row.condominium_id, row.condominium_id, row.condominium_id, row.id) as any[];
+
+  const eligible = (v: any): boolean => {
+    if (row.voter_eligibility === 'owners_only')          return !!v.is_owner;
+    if (row.voter_eligibility === 'primary_contact_only') return !!v.is_primary;
+    return true;
+  };
+
+  let yes = 0, no = 0, abstain = 0, total = 0;
+  let yesWeight = 0, noWeight = 0, abstainWeight = 0, totalWeight = 0;
+  for (const v of votes) {
+    if (!eligible(v)) continue;
+    total += 1;
+    totalWeight += v.weight;
+    if (v.choice === 'yes')     { yes += 1;     yesWeight += v.weight; }
+    if (v.choice === 'no')      { no += 1;      noWeight += v.weight; }
+    if (v.choice === 'abstain') { abstain += 1; abstainWeight += v.weight; }
+  }
+  return {
+    ...row,
+    votes: { yes, no, abstain, total, yes_weight: yesWeight, no_weight: noWeight, abstain_weight: abstainWeight, total_weight: totalWeight },
+  };
 }
 
 router.get('/', requireAuth, (req: AuthedRequest, res) => {
@@ -32,10 +126,7 @@ router.get('/', requireAuth, (req: AuthedRequest, res) => {
 
 router.get('/:id', requireAuth, (req: AuthedRequest, res) => {
   const id = Number(req.params.id);
-  const p = db.prepare(
-    `SELECT p.*, usr.first_name AS author_first, usr.last_name AS author_last
-     FROM proposals p JOIN users usr ON usr.id = p.author_id WHERE p.id = ?`
-  ).get(id) as any;
+  const p = getScopedProposal(id, req.user!.condominium_id);
   if (!p) return fail(res, 'not_found', 404);
   const comments = db.prepare(
     `SELECT c.*, usr.first_name, usr.last_name, usr.unit_number
@@ -50,17 +141,35 @@ router.get('/:id', requireAuth, (req: AuthedRequest, res) => {
   const myVote = (db.prepare(
     `SELECT choice FROM proposal_votes WHERE proposal_id=? AND user_id=?`
   ).get(id, req.user!.id) as any)?.choice || null;
-  return ok(res, { ...withCounts(p), comments, voters: votes, my_vote: myVote });
+  const rights = resolveVoterRights(req.user!.id, req.user!.condominium_id);
+  const can_vote = canVote(req.user!.id, req.user!.condominium_id, p.voter_eligibility);
+  return ok(res, {
+    ...withCounts(p),
+    comments,
+    voters: votes,
+    my_vote: myVote,
+    voter_rights: { ...rights, can_vote, proposal_eligibility: p.voter_eligibility },
+  });
 });
 
 router.post('/', requireAuth, (req: AuthedRequest, res) => {
   const u = req.user!;
-  const { title, description, category, estimated_cost, ai_drafted, source_suggestion_id } = req.body || {};
+  const { title, description, category, estimated_cost, ai_drafted, source_suggestion_id, voter_eligibility } = req.body || {};
   if (!title || !description) return fail(res, 'missing_fields');
+
+  const eligibility = ['all', 'owners_only', 'primary_contact_only'].includes(voter_eligibility)
+    ? voter_eligibility
+    : 'all';
+
+  if (source_suggestion_id) {
+    const s = db.prepare(`SELECT condominium_id FROM suggestions WHERE id=?`).get(source_suggestion_id) as any;
+    if (!s || s.condominium_id !== u.condominium_id) return fail(res, 'forbidden', 403);
+  }
+
   const row = db.prepare(
-    `INSERT INTO proposals (condominium_id, author_id, title, description, category, estimated_cost, ai_drafted, source_suggestion_id, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'discussion')`
-  ).run(u.condominium_id, u.id, title, description, category || null, estimated_cost || null, ai_drafted ? 1 : 0, source_suggestion_id || null);
+    `INSERT INTO proposals (condominium_id, author_id, title, description, category, estimated_cost, ai_drafted, source_suggestion_id, voter_eligibility, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'discussion')`
+  ).run(u.condominium_id, u.id, title, description, category || null, estimated_cost || null, ai_drafted ? 1 : 0, source_suggestion_id || null, eligibility);
   if (source_suggestion_id) {
     db.prepare(`UPDATE suggestions SET status='promoted', promoted_proposal_id=? WHERE id=?`)
       .run(row.lastInsertRowid, source_suggestion_id);
@@ -71,6 +180,8 @@ router.post('/', requireAuth, (req: AuthedRequest, res) => {
 router.post('/:id/comments', requireAuth, (req: AuthedRequest, res) => {
   const u = req.user!;
   const id = Number(req.params.id);
+  const p = getScopedProposal(id, u.condominium_id);
+  if (!p) return fail(res, 'not_found', 404);
   const body = (req.body?.body || '').trim();
   if (!body) return fail(res, 'empty_body');
   const row = db.prepare(
@@ -85,9 +196,12 @@ router.post('/:id/vote', requireAuth, (req: AuthedRequest, res) => {
   const id = Number(req.params.id);
   const choice = req.body?.choice;
   if (!['yes','no','abstain'].includes(choice)) return fail(res, 'invalid_choice');
-  const p = db.prepare(`SELECT status FROM proposals WHERE id=?`).get(id) as any;
+  const p = getScopedProposal(id, u.condominium_id);
   if (!p) return fail(res, 'not_found', 404);
   if (p.status !== 'voting') return fail(res, 'not_in_voting', 409);
+  if (!canVote(u.id, u.condominium_id, p.voter_eligibility)) {
+    return fail(res, 'not_eligible_to_vote', 403);
+  }
   db.prepare(
     `INSERT INTO proposal_votes (proposal_id, user_id, choice) VALUES (?, ?, ?)
      ON CONFLICT(proposal_id, user_id) DO UPDATE SET choice=excluded.choice`
@@ -95,11 +209,30 @@ router.post('/:id/vote', requireAuth, (req: AuthedRequest, res) => {
   return ok(res, { id, choice });
 });
 
+// Admin can change who is allowed to vote, but only while the proposal is still in discussion.
+router.patch('/:id/eligibility', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+  const u = req.user!;
+  const id = Number(req.params.id);
+  const eligibility = req.body?.voter_eligibility;
+  if (!['all', 'owners_only', 'primary_contact_only'].includes(eligibility)) {
+    return fail(res, 'invalid_eligibility');
+  }
+  const p = getScopedProposal(id, u.condominium_id);
+  if (!p) return fail(res, 'not_found', 404);
+  if (p.status !== 'discussion') return fail(res, 'locked_once_voting_opens', 409);
+  db.prepare(`UPDATE proposals SET voter_eligibility=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`)
+    .run(eligibility, id);
+  return ok(res, { id, voter_eligibility: eligibility });
+});
+
 router.post('/:id/status', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+  const u = req.user!;
   const id = Number(req.params.id);
   const status = req.body?.status;
   const valid = ['discussion','voting','approved','rejected','completed'];
   if (!valid.includes(status)) return fail(res, 'invalid_status');
+  const p = getScopedProposal(id, u.condominium_id);
+  if (!p) return fail(res, 'not_found', 404);
   db.prepare(`UPDATE proposals SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(status, id);
   return ok(res, { id, status });
 });

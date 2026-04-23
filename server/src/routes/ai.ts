@@ -107,8 +107,11 @@ router.post('/cluster-suggestions', requireAuth, requireRole('board_admin'), asy
 
 // 3. Summarize a proposal's discussion thread
 router.post('/proposals/:id/summarize-thread', requireAuth, asyncHandler(async (req: AuthedRequest, res) => {
+  const u = req.user!;
   const id = Number(req.params.id);
-  const prop = db.prepare(`SELECT title, description FROM proposals WHERE id=?`).get(id) as any;
+  const prop = db.prepare(
+    `SELECT title, description FROM proposals WHERE id=? AND condominium_id=?`
+  ).get(id, u.condominium_id) as any;
   if (!prop) return fail(res, 'not_found', 404);
   const comments = db.prepare(
     `SELECT c.body, usr.first_name, usr.last_name
@@ -136,8 +139,11 @@ router.post('/proposals/:id/summarize-thread', requireAuth, asyncHandler(async (
 
 // 4. Summarize a meeting + generate action items + draft resident announcement
 router.post('/meetings/:id/summarize', requireAuth, requireRole('board_admin'), asyncHandler(async (req: AuthedRequest, res) => {
+  const u = req.user!;
   const id = Number(req.params.id);
-  const m = db.prepare(`SELECT * FROM meetings WHERE id=?`).get(id) as any;
+  const m = db.prepare(
+    `SELECT * FROM meetings WHERE id=? AND condominium_id=?`
+  ).get(id, u.condominium_id) as any;
   if (!m) return fail(res, 'not_found', 404);
   if (!m.raw_notes || !m.raw_notes.trim()) return fail(res, 'no_notes', 400);
 
@@ -166,8 +172,11 @@ router.post('/meetings/:id/summarize', requireAuth, requireRole('board_admin'), 
 
 // 5. Plain-language explainer for residents
 router.post('/proposals/:id/explain', requireAuth, asyncHandler(async (req: AuthedRequest, res) => {
+  const u = req.user!;
   const id = Number(req.params.id);
-  const p = db.prepare(`SELECT title, description FROM proposals WHERE id=?`).get(id) as any;
+  const p = db.prepare(
+    `SELECT title, description FROM proposals WHERE id=? AND condominium_id=?`
+  ).get(id, u.condominium_id) as any;
   if (!p) return fail(res, 'not_found', 404);
 
   const text = await tryAI<string>(
@@ -185,8 +194,11 @@ router.post('/proposals/:id/explain', requireAuth, asyncHandler(async (req: Auth
 
 // 6. Board-ready decision summary after vote closes
 router.post('/proposals/:id/decision-summary', requireAuth, requireRole('board_admin'), asyncHandler(async (req: AuthedRequest, res) => {
+  const u = req.user!;
   const id = Number(req.params.id);
-  const p = db.prepare(`SELECT * FROM proposals WHERE id=?`).get(id) as any;
+  const p = db.prepare(
+    `SELECT * FROM proposals WHERE id=? AND condominium_id=?`
+  ).get(id, u.condominium_id) as any;
   if (!p) return fail(res, 'not_found', 404);
   const counts = db.prepare(
     `SELECT

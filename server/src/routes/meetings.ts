@@ -5,6 +5,12 @@ import { ok, fail } from '../lib/respond';
 
 const router = Router();
 
+function getScopedMeeting(id: number, condoId: number) {
+  return db.prepare(
+    `SELECT * FROM meetings WHERE id = ? AND condominium_id = ?`
+  ).get(id, condoId) as any;
+}
+
 router.get('/', requireAuth, (req: AuthedRequest, res) => {
   const u = req.user!;
   const rows = db.prepare(
@@ -14,8 +20,9 @@ router.get('/', requireAuth, (req: AuthedRequest, res) => {
 });
 
 router.get('/:id', requireAuth, (req: AuthedRequest, res) => {
+  const u = req.user!;
   const id = Number(req.params.id);
-  const m = db.prepare(`SELECT * FROM meetings WHERE id=?`).get(id) as any;
+  const m = getScopedMeeting(id, u.condominium_id);
   if (!m) return fail(res, 'not_found', 404);
   const actions = db.prepare(
     `SELECT * FROM action_items WHERE meeting_id=? ORDER BY created_at ASC`
@@ -34,20 +41,26 @@ router.post('/', requireAuth, requireRole('board_admin'), (req: AuthedRequest, r
 });
 
 router.patch('/:id/notes', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+  const u = req.user!;
   const id = Number(req.params.id);
+  if (!getScopedMeeting(id, u.condominium_id)) return fail(res, 'not_found', 404);
   const { raw_notes } = req.body || {};
   db.prepare(`UPDATE meetings SET raw_notes=?, ai_summary=NULL WHERE id=?`).run(raw_notes || '', id);
   return ok(res, { id });
 });
 
 router.post('/:id/complete', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+  const u = req.user!;
   const id = Number(req.params.id);
+  if (!getScopedMeeting(id, u.condominium_id)) return fail(res, 'not_found', 404);
   db.prepare(`UPDATE meetings SET status='completed' WHERE id=?`).run(id);
   return ok(res, { id, status: 'completed' });
 });
 
 router.post('/:id/action-items', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+  const u = req.user!;
   const id = Number(req.params.id);
+  if (!getScopedMeeting(id, u.condominium_id)) return fail(res, 'not_found', 404);
   const { description, owner_label, owner_id, due_date } = req.body || {};
   if (!description) return fail(res, 'missing_description');
   const row = db.prepare(
@@ -57,9 +70,15 @@ router.post('/:id/action-items', requireAuth, requireRole('board_admin'), (req: 
 });
 
 router.post('/action-items/:id/toggle', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+  const u = req.user!;
   const id = Number(req.params.id);
-  const row = db.prepare(`SELECT status FROM action_items WHERE id=?`).get(id) as any;
-  if (!row) return fail(res, 'not_found', 404);
+  const row = db.prepare(
+    `SELECT ai.status, m.condominium_id
+     FROM action_items ai
+     JOIN meetings m ON m.id = ai.meeting_id
+     WHERE ai.id = ?`
+  ).get(id) as any;
+  if (!row || row.condominium_id !== u.condominium_id) return fail(res, 'not_found', 404);
   const next = row.status === 'open' ? 'done' : 'open';
   db.prepare(`UPDATE action_items SET status=? WHERE id=?`).run(next, id);
   return ok(res, { id, status: next });

@@ -90,11 +90,41 @@ export default function BoardProposalDetail() {
         <Badge tone={p.status === 'voting' ? 'peach' : 'sage'}>{p.status}</Badge>
         {p.ai_drafted === 1 && <Badge tone="sage">AI-drafted</Badge>}
         {p.category && <Badge tone="neutral">{p.category}</Badge>}
+        <Badge tone={p.voter_eligibility === 'owners_only' ? 'peach' : 'neutral'}>
+          {p.voter_eligibility === 'owners_only' ? 'Owners only'
+           : p.voter_eligibility === 'primary_contact_only' ? 'Primary contact only'
+           : 'All residents vote'}
+        </Badge>
       </div>
 
       <GlassCard variant="clay" className="p-7 mb-6">
         <p className="text-dusk-400 whitespace-pre-line leading-relaxed">{p.description}</p>
       </GlassCard>
+
+      {p.status === 'discussion' && (
+        <GlassCard className="p-5 mb-6">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <div className="text-xs uppercase tracking-wider text-dusk-300 font-medium">Who votes on this?</div>
+              <div className="text-sm text-dusk-400 mt-1">Lock in before opening voting. Cannot change after.</div>
+            </div>
+            <select
+              value={p.voter_eligibility || 'all'}
+              onChange={async (e) => {
+                try {
+                  await (await import('../../lib/api')).apiPatch(`/proposals/${id}/eligibility`, { voter_eligibility: e.target.value });
+                  load();
+                } catch (err: any) { toast.error(err?.response?.data?.error || 'Update failed'); }
+              }}
+              className="input max-w-xs"
+            >
+              <option value="all">All residents (including tenants)</option>
+              <option value="owners_only">Owners only (capex / HOA spending)</option>
+              <option value="primary_contact_only">One per unit — primary contact</option>
+            </select>
+          </div>
+        </GlassCard>
+      )}
 
       <div className="grid md:grid-cols-3 gap-4 mb-6">
         <GlassCard variant="clay-sage" className="p-5 text-center">

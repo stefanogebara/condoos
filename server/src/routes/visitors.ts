@@ -32,15 +32,21 @@ router.post('/', requireAuth, (req: AuthedRequest, res) => {
 });
 
 router.post('/:id/decide', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+  const u = req.user!;
   const id = Number(req.params.id);
   const decision = req.body?.decision;
   if (!['approved', 'denied'].includes(decision)) return fail(res, 'invalid_decision');
+  const v = db.prepare(`SELECT id FROM visitors WHERE id=? AND condominium_id=?`).get(id, u.condominium_id);
+  if (!v) return fail(res, 'not_found', 404);
   db.prepare(`UPDATE visitors SET status=?, decided_at=CURRENT_TIMESTAMP WHERE id=?`).run(decision, id);
   return ok(res, { id, status: decision });
 });
 
 router.post('/:id/arrived', requireAuth, (req: AuthedRequest, res) => {
+  const u = req.user!;
   const id = Number(req.params.id);
+  const v = db.prepare(`SELECT id FROM visitors WHERE id=? AND condominium_id=?`).get(id, u.condominium_id);
+  if (!v) return fail(res, 'not_found', 404);
   db.prepare(`UPDATE visitors SET status='arrived' WHERE id=?`).run(id);
   return ok(res, { id, status: 'arrived' });
 });

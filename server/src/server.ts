@@ -7,6 +7,7 @@ import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
 
+import { requireAuth, requireActiveMembership } from './lib/auth';
 import authRoutes from './routes/auth';
 import packagesRoutes from './routes/packages';
 import visitorsRoutes from './routes/visitors';
@@ -31,18 +32,23 @@ app.get('/api/health', (_req, res) => {
   res.json({ ok: true, service: 'condoos-api', ts: new Date().toISOString() });
 });
 
+// Pre-auth / onboarding routes — no active-membership gate (users here may
+// not have claimed a unit yet).
 app.use('/api/auth', authRoutes);
-app.use('/api/packages', packagesRoutes);
-app.use('/api/visitors', visitorsRoutes);
-app.use('/api/amenities', amenitiesRoutes);
-app.use('/api/announcements', announcementsRoutes);
-app.use('/api/suggestions', suggestionsRoutes);
-app.use('/api/proposals', proposalsRoutes);
-app.use('/api/meetings', meetingsRoutes);
-app.use('/api/users', usersRoutes);
-app.use('/api/ai', aiRoutes);
 app.use('/api/onboarding', onboardingRoutes);
-app.use('/api/memberships', membershipsRoutes);
+
+// All real data routes require an active user_unit membership.
+const scoped = [requireAuth, requireActiveMembership];
+app.use('/api/packages',      scoped, packagesRoutes);
+app.use('/api/visitors',      scoped, visitorsRoutes);
+app.use('/api/amenities',     scoped, amenitiesRoutes);
+app.use('/api/announcements', scoped, announcementsRoutes);
+app.use('/api/suggestions',   scoped, suggestionsRoutes);
+app.use('/api/proposals',     scoped, proposalsRoutes);
+app.use('/api/meetings',      scoped, meetingsRoutes);
+app.use('/api/users',         scoped, usersRoutes);
+app.use('/api/ai',            scoped, aiRoutes);
+app.use('/api/memberships',   scoped, membershipsRoutes);
 
 // 404
 app.use((req, res) => res.status(404).json({ success: false, error: 'not_found', path: req.path }));

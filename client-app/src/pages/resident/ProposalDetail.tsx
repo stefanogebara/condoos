@@ -24,9 +24,17 @@ interface Proposal {
   author_first: string;
   author_last: string;
   voting_closes_at: string | null;
+  voter_eligibility: 'all' | 'owners_only' | 'primary_contact_only';
   comments: Comment[];
   votes: { yes: number; no: number; abstain: number; total: number };
   my_vote: 'yes' | 'no' | 'abstain' | null;
+  voter_rights?: {
+    can_vote: boolean;
+    eligible_as_owner: boolean;
+    eligible_as_primary_contact: boolean;
+    voting_weight: number;
+    proposal_eligibility: string;
+  };
 }
 
 export default function ProposalDetail() {
@@ -102,6 +110,8 @@ export default function ProposalDetail() {
         <Badge tone={p.status === 'voting' ? 'peach' : 'sage'}>{p.status}</Badge>
         {p.ai_drafted === 1 && <Badge tone="sage">AI-drafted</Badge>}
         {p.category && <Badge tone="neutral">{p.category}</Badge>}
+        {p.voter_eligibility === 'owners_only' && <Badge tone="peach">Owners only</Badge>}
+        {p.voter_eligibility === 'primary_contact_only' && <Badge tone="peach">One vote per unit</Badge>}
       </div>
 
       <GlassCard variant="clay" className="p-7 mb-6">
@@ -129,12 +139,25 @@ export default function ProposalDetail() {
             <span className="text-dusk-300">{p.votes.abstain} abstain</span>
           </div>
 
-          <div className="mt-5 flex gap-2">
-            <Button variant={p.my_vote === 'yes' ? 'sage' : 'ghost'} onClick={() => cast('yes')} disabled={busy}>Yes</Button>
-            <Button variant={p.my_vote === 'no'  ? 'peach' : 'ghost'} onClick={() => cast('no')}  disabled={busy}>No</Button>
-            <Button variant="ghost" onClick={() => cast('abstain')} disabled={busy}>Abstain</Button>
-            {p.my_vote && <span className="ml-auto self-center text-xs text-dusk-300">You voted: <span className="font-semibold">{p.my_vote}</span></span>}
-          </div>
+          {p.voter_rights?.can_vote === false ? (
+            <div className="mt-5 p-4 rounded-2xl bg-white/60 border border-white/70 text-sm text-dusk-400">
+              <strong className="font-semibold">You're not eligible to vote on this proposal.</strong>
+              <span className="ml-1">
+                {p.voter_eligibility === 'owners_only'
+                  ? 'Only unit owners can vote on HOA spending decisions.'
+                  : p.voter_eligibility === 'primary_contact_only'
+                  ? 'Only the primary contact of each unit votes here.'
+                  : 'Join a unit first to participate.'}
+              </span>
+            </div>
+          ) : (
+            <div className="mt-5 flex gap-2">
+              <Button variant={p.my_vote === 'yes' ? 'sage' : 'ghost'} onClick={() => cast('yes')} disabled={busy}>Yes</Button>
+              <Button variant={p.my_vote === 'no'  ? 'peach' : 'ghost'} onClick={() => cast('no')}  disabled={busy}>No</Button>
+              <Button variant="ghost" onClick={() => cast('abstain')} disabled={busy}>Abstain</Button>
+              {p.my_vote && <span className="ml-auto self-center text-xs text-dusk-300">You voted: <span className="font-semibold">{p.my_vote}</span></span>}
+            </div>
+          )}
         </GlassCard>
       )}
 

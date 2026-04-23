@@ -15,8 +15,18 @@ export interface AuthUser {
   avatar_url: string | null;
 }
 
+export interface ActiveMembership {
+  user_unit_id: number;
+  unit_id: number;
+  condominium_id: number;
+  relationship: 'owner' | 'tenant' | 'occupant';
+  primary_contact: number;
+  voting_weight: number;
+}
+
 export interface AuthedRequest extends Request {
   user?: AuthUser;
+  memberships?: ActiveMembership[];   // populated by requireActiveMembership
 }
 
 export function signToken(userId: number): string {
@@ -60,4 +70,41 @@ export function requireRole(role: AuthUser['role']) {
     }
     next();
   };
+}
+
+/**
+ * Verify the authenticated user has at least one active user_unit row,
+ * auto-correct their users.condominium_id if it points at a condo where they
+ * have no active membership (prevents orphan-scope data leaks), and expose
+ * the full set of active memberships as req.memberships.
+ *
+ * Use on every data route that is scoped by condominium_id.
+ */
+export function requireActiveMembership(req: AuthedRequest, res: Response, next: NextFunction) {
+  if (!req.user) return res.status(401).json({ success: false, error: 'not_authenticated' });
+  const rows = db.prepare(
+    `SELECT uu.id AS user_unit_id, uu.unit_id, uu.relationship, uu.primary_contact, uu.voting_weight,
+            b.condominium_id
+     FROM user_unit uu
+     JOIN units un ON un.id = uu.unit_id
+     JOIN buildings b ON b.id = un.building_id
+     WHERE uu.user_id = ? AND uu.status = 'active'`
+  ).all(req.user.id) as ActiveMembership[];
+
+  if (rows.length === 0) {
+    return res.status(403).json({ success: false, error: 'no_active_membership' });
+  }
+
+  // Auto-correct stale users.condominium_id.
+  const currentCondoHasMembership = rows.some((r) => r.condominium_id === req.user!.condominium_id);
+  if (!currentCondoHasMembership) {
+    db.prepare(`UPDATE users SET condominium_id = ? WHERE id = ?`).run(
+      rows[0].condominium_id,
+      req.user.id,
+    );
+    req.user.condominium_id = rows[0].condominium_id;
+  }
+
+  req.memberships = rows;
+  next();
 }

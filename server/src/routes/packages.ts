@@ -24,7 +24,9 @@ router.get('/', requireAuth, (req: AuthedRequest, res) => {
 router.post('/:id/pickup', requireAuth, (req: AuthedRequest, res) => {
   const u = req.user!;
   const id = Number(req.params.id);
-  const pkg = db.prepare(`SELECT * FROM packages WHERE id = ?`).get(id) as any;
+  const pkg = db.prepare(
+    `SELECT * FROM packages WHERE id = ? AND condominium_id = ?`
+  ).get(id, u.condominium_id) as any;
   if (!pkg) return fail(res, 'not_found', 404);
   if (u.role !== 'board_admin' && pkg.recipient_id !== u.id) return fail(res, 'forbidden', 403);
   db.prepare(`UPDATE packages SET status='picked_up', picked_up_at=CURRENT_TIMESTAMP WHERE id=?`).run(id);
@@ -36,6 +38,11 @@ router.post('/', requireAuth, requireRole('board_admin'), (req: AuthedRequest, r
   const { recipient_id, carrier, description } = req.body || {};
   if (!recipient_id || !carrier) return fail(res, 'missing_fields');
   const u = req.user!;
+  // Recipient must live in the admin's condo.
+  const recipient = db.prepare(
+    `SELECT id FROM users WHERE id = ? AND condominium_id = ?`
+  ).get(recipient_id, u.condominium_id);
+  if (!recipient) return fail(res, 'recipient_not_in_condo', 400);
   const row = db.prepare(
     `INSERT INTO packages (condominium_id, recipient_id, carrier, description)
      VALUES (?, ?, ?, ?)`

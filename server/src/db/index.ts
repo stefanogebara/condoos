@@ -93,6 +93,8 @@ export function initSchema() {
   addColumnIfMissing('condominiums', 'voting_model',       `TEXT NOT NULL DEFAULT 'one_per_unit'`);
   addColumnIfMissing('condominiums', 'require_approval',   `INTEGER NOT NULL DEFAULT 1`);
   addColumnIfMissing('condominiums', 'created_by_user_id', `INTEGER REFERENCES users(id)`);
+  // Voter eligibility on proposals: 'all' (residents + owners), 'owners_only', 'primary_contact_only'
+  addColumnIfMissing('proposals',    'voter_eligibility',  `TEXT NOT NULL DEFAULT 'all'`);
 
   migrateLegacyUnits();
 

@@ -30,6 +30,11 @@ router.post('/reservations', requireAuth, (req: AuthedRequest, res) => {
   const u = req.user!;
   const { amenity_id, starts_at, ends_at } = req.body || {};
   if (!amenity_id || !starts_at || !ends_at) return fail(res, 'missing_fields');
+  // Amenity must belong to the user's condo.
+  const amenity = db.prepare(
+    `SELECT id FROM amenities WHERE id = ? AND condominium_id = ?`
+  ).get(amenity_id, u.condominium_id);
+  if (!amenity) return fail(res, 'amenity_not_in_condo', 400);
   const row = db.prepare(
     `INSERT INTO amenity_reservations (amenity_id, user_id, starts_at, ends_at)
      VALUES (?, ?, ?, ?)`
@@ -40,8 +45,11 @@ router.post('/reservations', requireAuth, (req: AuthedRequest, res) => {
 router.delete('/reservations/:id', requireAuth, (req: AuthedRequest, res) => {
   const u = req.user!;
   const id = Number(req.params.id);
-  const row = db.prepare(`SELECT * FROM amenity_reservations WHERE id = ?`).get(id) as any;
-  if (!row) return fail(res, 'not_found', 404);
+  const row = db.prepare(
+    `SELECT r.*, a.condominium_id FROM amenity_reservations r
+     JOIN amenities a ON a.id = r.amenity_id WHERE r.id = ?`
+  ).get(id) as any;
+  if (!row || row.condominium_id !== u.condominium_id) return fail(res, 'not_found', 404);
   if (u.role !== 'board_admin' && row.user_id !== u.id) return fail(res, 'forbidden', 403);
   db.prepare(`UPDATE amenity_reservations SET status='cancelled' WHERE id = ?`).run(id);
   return ok(res, { id, status: 'cancelled' });

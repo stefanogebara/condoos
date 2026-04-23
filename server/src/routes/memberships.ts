@@ -73,6 +73,80 @@ router.post('/:id/deny', requireAuth, requireRole('board_admin'), (req: AuthedRe
   return ok(res, { id, status: 'revoked' });
 });
 
+// POST /api/memberships/import-csv — bulk-create pre-assigned invites.
+// Body: { csv: "email,unit,relationship\njordan@x.com,612,tenant\n..." }
+// Each row creates an invites row (status=pending) scoped to the admin's condo.
+// When a user later signs in with a matching email, we auto-activate them.
+const csvSchema = z.object({ csv: z.string().min(3).max(100_000) });
+
+router.post('/import-csv', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+  const parsed = csvSchema.safeParse(req.body);
+  if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
+  const u = req.user!;
+
+  // Very small CSV parser: header row optional, columns = email,unit,[relationship]
+  const lines = parsed.data.csv.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  if (lines.length === 0) return fail(res, 'empty_csv');
+
+  // Detect header
+  const first = lines[0].toLowerCase();
+  const hasHeader = first.includes('email') || first.includes('unit');
+  const dataLines = hasHeader ? lines.slice(1) : lines;
+
+  const findUnit = db.prepare(
+    `SELECT u.id FROM units u
+     JOIN buildings b ON b.id = u.building_id
+     WHERE b.condominium_id = ? AND LOWER(u.number) = LOWER(?)`
+  );
+  const insertInvite = db.prepare(
+    `INSERT INTO invites (condominium_id, email, unit_id, role, status)
+     VALUES (?, ?, ?, 'resident', 'pending')`
+  );
+
+  const imported: any[] = [];
+  const errors: any[] = [];
+
+  const tx = db.transaction(() => {
+    for (let i = 0; i < dataLines.length; i++) {
+      const cols = dataLines[i].split(',').map((c) => c.trim());
+      if (cols.length < 2) { errors.push({ row: i + 1, error: 'need_email_and_unit' }); continue; }
+      const [email, unit, rel] = cols;
+      if (!email || !email.includes('@')) { errors.push({ row: i + 1, error: 'invalid_email' }); continue; }
+      const unitRow = findUnit.get(u.condominium_id, unit) as { id: number } | undefined;
+      if (!unitRow) { errors.push({ row: i + 1, error: 'unit_not_found', unit }); continue; }
+      const relationship = ['owner', 'tenant', 'occupant'].includes((rel || '').toLowerCase())
+        ? (rel as string).toLowerCase()
+        : 'tenant';
+      // Skip if an active pending invite already exists for this email+unit.
+      const dup = db.prepare(
+        `SELECT id FROM invites WHERE condominium_id=? AND email=? AND unit_id=? AND status='pending'`
+      ).get(u.condominium_id, email.toLowerCase(), unitRow.id);
+      if (dup) { errors.push({ row: i + 1, error: 'already_invited', email, unit }); continue; }
+
+      const inv = insertInvite.run(u.condominium_id, email.toLowerCase(), unitRow.id);
+      imported.push({ row: i + 1, invite_id: Number(inv.lastInsertRowid), email, unit, relationship });
+    }
+  });
+  tx();
+
+  return ok(res, { imported_count: imported.length, error_count: errors.length, imported, errors });
+});
+
+// GET /api/memberships/invites — list pending invites so admin can see who's expected.
+router.get('/invites', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+  const u = req.user!;
+  const rows = db.prepare(
+    `SELECT i.id, i.email, i.status, i.created_at, i.claimed_by_user_id,
+            un.id AS unit_id, un.number AS unit_number, un.floor, b.name AS building_name
+     FROM invites i
+     JOIN units un ON un.id = i.unit_id
+     JOIN buildings b ON b.id = un.building_id
+     WHERE i.condominium_id = ?
+     ORDER BY i.created_at DESC`
+  ).all(u.condominium_id);
+  return ok(res, rows);
+});
+
 // POST /api/memberships/:id/reassign  — move a pending claim to a different unit
 const reassignSchema = z.object({ unit_id: z.number().int() });
 router.post('/:id/reassign', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
