@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Users, Vote, Sparkles, Calendar, Package, DoorOpen } from 'lucide-react';
+import { ArrowRight, Users, Vote, Sparkles, Calendar, Package, DoorOpen, Waves } from 'lucide-react';
 import Logo from '../components/Logo';
 import Button from '../components/Button';
 import GlassCard from '../components/GlassCard';
@@ -10,22 +10,22 @@ export default function Landing() {
   return (
     <div className="relative min-h-screen overflow-x-hidden">
       {/* Nav */}
-      <nav className="sticky top-0 z-30 px-6 lg:px-12 py-5 flex items-center justify-between backdrop-blur-xl bg-cream-50/30 border-b border-white/30">
+      <nav className="sticky top-0 z-30 px-6 lg:px-12 py-4 flex items-center justify-between backdrop-blur-xl bg-cream-50/40 border-b border-white/30">
         <Logo />
-        <div className="hidden md:flex items-center gap-2 text-sm text-dusk-300">
-          <a href="#home"      className="px-3 py-1.5 rounded-full hover:bg-white/40 transition">Home</a>
-          <a href="#features"  className="px-3 py-1.5 rounded-full hover:bg-white/40 transition">Features</a>
-          <a href="#boards"    className="px-3 py-1.5 rounded-full hover:bg-white/40 transition">For Boards</a>
-          <a href="#residents" className="px-3 py-1.5 rounded-full hover:bg-white/40 transition">For Residents</a>
+        <div className="hidden md:flex items-center gap-1 text-sm text-dusk-300">
+          <a href="#features"  className="px-3 py-1.5 rounded-full hover:bg-white/50 transition">Features</a>
+          <a href="#ai"        className="px-3 py-1.5 rounded-full hover:bg-white/50 transition">AI co-pilot</a>
+          <Link to="/design"   className="px-3 py-1.5 rounded-full hover:bg-white/50 transition">Design</Link>
+          <a href="https://github.com/stefanogebara/condoos" target="_blank" rel="noreferrer" className="px-3 py-1.5 rounded-full hover:bg-white/50 transition">GitHub</a>
         </div>
         <Link to="/login"><Button variant="primary" size="sm" rightIcon={<ArrowRight className="w-4 h-4" />}>Sign in</Button></Link>
       </nav>
 
-      {/* Hero */}
-      <section className="relative px-6 lg:px-12 pt-16 pb-24">
-        <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-10 items-center">
+      {/* Hero — tighter, more confident, Inter Tight first */}
+      <section className="relative px-6 lg:px-12 pt-20 pb-28">
+        <div className="max-w-7xl mx-auto grid lg:grid-cols-[1.05fr_1fr] gap-14 items-center">
           <div className="relative z-10 animate-fade-up">
-            <div className="inline-flex items-center gap-3 mb-8">
+            <div className="inline-flex items-center gap-3 mb-10">
               <div className="flex -space-x-2">
                 <Avatar name="Maya Chen" size="sm" />
                 <Avatar name="Jordan Martins" size="sm" />
@@ -36,28 +36,38 @@ export default function Landing() {
                 trusted by 500+ condominiums
               </span>
             </div>
-            <h1 className="font-display text-5xl md:text-6xl lg:text-7xl leading-[1.05] tracking-tight text-dusk-500">
-              Run your building,<br />
+
+            <h1 className="font-display text-dusk-500 leading-[0.95] tracking-tightest"
+                style={{ fontSize: 'clamp(3rem, 7vw, 5.5rem)', fontWeight: 600 }}>
+              Run your building,
+              <br />
               <span className="italic text-dusk-400">softly.</span>
             </h1>
-            <p className="mt-7 text-lg text-dusk-300 max-w-xl leading-relaxed">
-              Packages, visitors, amenities, announcements, voting — and an AI that turns resident complaints into structured proposals and meeting notes into plain-language updates.
+
+            <p className="mt-8 text-[17px] md:text-[19px] text-dusk-300 max-w-xl leading-[1.55] tracking-tight">
+              Packages, visitors, amenities, voting — and an AI that turns resident
+              complaints into structured proposals and meeting notes into plain-language updates.
             </p>
+
             <div className="mt-10 flex items-center gap-3 flex-wrap">
-              <Link to="/login"><Button variant="primary" size="lg" rightIcon={<ArrowRight className="w-5 h-5" />}>Try the demo</Button></Link>
-              <Button variant="ghost" size="lg">See features</Button>
+              <Link to="/login">
+                <Button variant="primary" size="lg" rightIcon={<ArrowRight className="w-5 h-5" />}>
+                  Try the demo
+                </Button>
+              </Link>
+              <a href="#features">
+                <Button variant="ghost" size="lg">See what's inside</Button>
+              </a>
             </div>
-            <div className="mt-10 grid grid-cols-3 gap-3 max-w-md">
-              {[
-                { n: '01', label: 'Sign in' },
-                { n: '02', label: 'Explore' },
-                { n: '03', label: 'Decide' },
-              ].map((s) => (
-                <GlassCard key={s.n} className="p-4 text-center">
-                  <div className="text-xs uppercase tracking-widest text-dusk-200 mb-1">{s.n}</div>
-                  <div className="font-semibold text-dusk-400">{s.label}</div>
-                </GlassCard>
-              ))}
+
+            <div className="mt-14 flex items-center gap-6 flex-wrap text-xs uppercase tracking-[0.14em] text-dusk-200 font-medium">
+              <span>Claude Haiku</span>
+              <span className="w-1 h-1 rounded-full bg-dusk-200/60" />
+              <span>Inter Tight</span>
+              <span className="w-1 h-1 rounded-full bg-dusk-200/60" />
+              <span>Gemini Image</span>
+              <span className="w-1 h-1 rounded-full bg-dusk-200/60" />
+              <span>SQLite</span>
             </div>
           </div>
 
@@ -95,28 +105,45 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* Features */}
+      {/* Pull quote — breathe */}
       <section className="relative px-6 lg:px-12 pb-24">
+        <div className="max-w-4xl mx-auto text-center">
+          <p className="font-display text-2xl md:text-4xl leading-[1.2] tracking-tight text-dusk-400">
+            "<span className="italic text-dusk-500">Perhaps we are searching in the branches for what we only find in the roots.</span>"
+          </p>
+          <p className="mt-5 text-sm uppercase tracking-[0.16em] text-dusk-200 font-medium">a calmer way to run a building</p>
+        </div>
+      </section>
+
+      {/* Features */}
+      <section id="features" className="relative px-6 lg:px-12 pb-28 scroll-mt-20">
         <div className="max-w-7xl mx-auto">
-          <h2 className="font-display text-3xl md:text-4xl text-dusk-500 mb-3">Everything a building runs on.</h2>
-          <p className="text-dusk-300 mb-10 max-w-xl">Replace spreadsheets, chat groups, and paper notices with one calm operating system.</p>
+          <div className="max-w-2xl mb-12">
+            <span className="chip mb-4"><span className="w-1.5 h-1.5 rounded-full bg-sage-400" /> everything in one OS</span>
+            <h2 className="font-display text-4xl md:text-5xl text-dusk-500 tracking-tight leading-[1.05] mt-4">
+              Everything a building runs on.
+            </h2>
+            <p className="text-dusk-300 mt-4 text-lg leading-relaxed">
+              Replace spreadsheets, chat groups, and paper notices with one calm operating system.
+            </p>
+          </div>
           <div className="grid md:grid-cols-3 gap-5">
             {[
               { icon: Package,  color: 'sage',  title: 'Packages & visitors', body: 'Real-time front-desk queue. Approve guests from your phone.' },
-              { icon: DoorOpen, color: 'peach', title: 'Amenities & bookings', body: 'Pool, gym, party room. Residents book. Conflicts prevented.' },
-              { icon: Vote,     color: 'sage',  title: 'Proposals & voting',  body: 'Turn complaints into decisions. Live counts. Full transparency.' },
-              { icon: Calendar, color: 'peach', title: 'Meetings',            body: 'Paste raw notes. Get summary, decisions, action items.' },
-              { icon: Sparkles, color: 'sage',  title: 'AI co-pilot',         body: 'Cluster complaints, draft proposals, explain to residents.' },
-              { icon: Users,    color: 'peach', title: 'Resident-first',      body: 'Plain-language updates. Nobody reads the bylaws.' },
+              { icon: Waves,    color: 'peach', title: 'Amenities & bookings', body: 'Pool, gym, party room. Residents book. Conflicts prevented.' },
+              { icon: Vote,     color: 'sage',  title: 'Proposals & voting',   body: 'Turn complaints into decisions. Live counts. Full transparency.' },
+              { icon: Calendar, color: 'peach', title: 'Meetings',             body: 'Paste raw notes. Get summary, decisions, action items.' },
+              { icon: Sparkles, color: 'sage',  title: 'AI co-pilot',          body: 'Cluster complaints, draft proposals, explain to residents.' },
+              { icon: Users,    color: 'peach', title: 'Resident-first',       body: 'Plain-language updates. Nobody reads the bylaws.' },
             ].map((f, i) => (
               <GlassCard key={i} variant="clay" hover className="p-7">
-                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-4 ${
+                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-5 ${
                   f.color === 'sage' ? 'bg-sage-200 text-sage-700' : 'bg-peach-100 text-peach-500'
                 }`}>
                   <f.icon className="w-6 h-6" />
                 </div>
-                <h3 className="font-display text-xl text-dusk-500 mb-1">{f.title}</h3>
-                <p className="text-sm text-dusk-300 leading-relaxed">{f.body}</p>
+                <h3 className="font-display text-[20px] font-semibold text-dusk-500 tracking-tight leading-tight">{f.title}</h3>
+                <p className="text-[15px] text-dusk-300 leading-relaxed mt-2">{f.body}</p>
               </GlassCard>
             ))}
           </div>
@@ -124,27 +151,31 @@ export default function Landing() {
       </section>
 
       {/* AI callout — dusk landscape with glass cards */}
-      <section className="relative px-6 lg:px-12 pb-24">
+      <section id="ai" className="relative px-6 lg:px-12 pb-28 scroll-mt-20">
         <div className="max-w-7xl mx-auto relative overflow-hidden rounded-[40px] shadow-clay-lg">
           <img src="/images/bg-dusk.jpg" alt="" className="absolute inset-0 w-full h-full object-cover" />
+          <div className="absolute inset-0 bg-gradient-to-b from-dusk-500/10 via-transparent to-dusk-500/30" />
           <div className="relative p-10 md:p-16 text-cream-50">
-            <span className="chip bg-white/20 border-white/30 text-cream-50">AI co-pilot</span>
-            <h2 className="font-display text-3xl md:text-5xl mt-4 max-w-2xl leading-tight">
+            <span className="chip bg-white/20 border-white/30 text-cream-50"><Sparkles className="w-3.5 h-3.5" /> AI co-pilot</span>
+            <h2 className="font-display text-4xl md:text-[56px] mt-5 max-w-3xl tracking-tightest leading-[1.02]">
               From "the lobby AC is broken" to a board decision — in minutes.
             </h2>
-            <div className="mt-10 grid md:grid-cols-3 gap-5">
+            <p className="mt-5 text-cream-50/80 text-lg max-w-xl leading-relaxed">
+              Six AI moments, one quiet interface. Graceful fallbacks so demos never hang.
+            </p>
+            <div className="mt-12 grid md:grid-cols-3 gap-5">
               <GlassCard variant="glass-dark" className="p-6">
-                <div className="text-xs uppercase tracking-wider opacity-70 mb-2">Step 1 · Resident</div>
-                <p className="text-cream-50/90">"The lobby AC is barely working. It was 30°C inside yesterday."</p>
+                <div className="text-xs uppercase tracking-[0.12em] opacity-70 mb-3 font-medium">01 · Resident</div>
+                <p className="text-cream-50/95 text-[15px] leading-relaxed italic">"The lobby AC is barely working. It was 30°C inside yesterday."</p>
               </GlassCard>
               <GlassCard variant="glass-dark" className="p-6">
-                <div className="text-xs uppercase tracking-wider opacity-70 mb-2">Step 2 · AI drafts</div>
-                <p className="font-semibold">Replace lobby AC unit</p>
-                <p className="text-sm opacity-80 mt-1">Maintenance · ~$9,400 · 5-ton replacement quote from Cool Breeze HVAC.</p>
+                <div className="text-xs uppercase tracking-[0.12em] opacity-70 mb-3 font-medium">02 · AI drafts</div>
+                <p className="font-semibold text-[16px]">Replace lobby AC unit</p>
+                <p className="text-[13px] opacity-80 mt-2 leading-relaxed">Maintenance · ~$9,400 · 5-ton replacement quote from Cool Breeze HVAC.</p>
               </GlassCard>
               <GlassCard variant="glass-dark" className="p-6">
-                <div className="text-xs uppercase tracking-wider opacity-70 mb-2">Step 3 · Board votes</div>
-                <p>Opens for voting → residents approve → AI publishes a resident-friendly announcement.</p>
+                <div className="text-xs uppercase tracking-[0.12em] opacity-70 mb-3 font-medium">03 · Board votes</div>
+                <p className="text-[15px] leading-relaxed">Opens for voting → residents approve → AI publishes a resident-friendly announcement.</p>
               </GlassCard>
             </div>
           </div>
@@ -152,10 +183,14 @@ export default function Landing() {
       </section>
 
       {/* Footer */}
-      <footer className="px-6 lg:px-12 py-10 border-t border-white/40 bg-cream-50/30 backdrop-blur-xl">
+      <footer className="px-6 lg:px-12 py-12 border-t border-white/40 bg-cream-50/30 backdrop-blur-xl">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-dusk-300">
           <Logo size={22} />
-          <p>© 2026 CondoOS — built for hackathons, designed for humans.</p>
+          <p className="font-mono text-xs text-dusk-200">© 2026 CondoOS · built for hackathons, designed for humans</p>
+          <div className="flex items-center gap-4 text-xs">
+            <Link to="/design" className="hover:text-dusk-500 transition">Design system</Link>
+            <a href="https://github.com/stefanogebara/condoos" target="_blank" rel="noreferrer" className="hover:text-dusk-500 transition">GitHub</a>
+          </div>
         </div>
       </footer>
     </div>
