@@ -54,6 +54,15 @@ npm run dev           # run server (4000) + client (3000) together
 
 Four additional residents (Jordan, Taylor, Riley, Sam) are seeded with password `resident123` for live voting/comment demos.
 
+### Google sign-in (optional)
+
+Set `GOOGLE_CLIENT_ID` in `.env` and on Fly (and optionally `REACT_APP_GOOGLE_CLIENT_ID` for Vercel). Create the client at [console.cloud.google.com/apis/credentials](https://console.cloud.google.com/apis/credentials) with:
+
+- **Type**: Web application
+- **Authorized JS origins**: `http://localhost:3000`, `https://condoos-ten.vercel.app`
+
+When set, a "Continue with Google" button appears on the login page. First-time Google users auto-join the seeded condominium as residents. Without the env var the button hides silently — demo stays clean.
+
 ---
 
 ## The 5-minute demo

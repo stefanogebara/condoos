@@ -1,18 +1,33 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { GoogleOAuthProvider, GoogleLogin } from '@react-oauth/google';
 import toast from 'react-hot-toast';
 import { Building2, ArrowRight, Shield, User } from 'lucide-react';
 import { useAuth } from '../lib/auth';
+import { apiGet } from '../lib/api';
 import Logo from '../components/Logo';
 import Button from '../components/Button';
 import GlassCard from '../components/GlassCard';
 
 export default function Login() {
-  const { login } = useAuth();
+  const { login, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading]   = useState(false);
+  const [googleClientId, setGoogleClientId] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Detect if Google sign-in is configured on the server.
+    const envClientId = process.env.REACT_APP_GOOGLE_CLIENT_ID;
+    if (envClientId) {
+      setGoogleClientId(envClientId);
+    } else {
+      apiGet<{ google_client_id: string | null; google_enabled: boolean }>('/auth/config')
+        .then((cfg) => { if (cfg.google_enabled && cfg.google_client_id) setGoogleClientId(cfg.google_client_id); })
+        .catch(() => {});
+    }
+  }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -40,7 +55,21 @@ export default function Login() {
       .finally(() => setLoading(false));
   }
 
-  return (
+  async function handleGoogleSuccess(credential: string | undefined) {
+    if (!credential) return toast.error('No Google credential received');
+    setLoading(true);
+    try {
+      const u = await loginWithGoogle(credential);
+      toast.success(`Welcome, ${u.first_name}`);
+      navigate(u.role === 'board_admin' ? '/board' : '/app');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || 'Google sign-in failed');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const form = (
     <div className="relative min-h-screen grid lg:grid-cols-2">
       {/* Left: dusk landscape with quote */}
       <div className="relative hidden lg:flex items-end overflow-hidden">
@@ -52,7 +81,7 @@ export default function Login() {
             A calm, soft place for a building to think.
           </h2>
           <p className="mt-4 text-cream-50/80 text-base">
-            Sign in with a demo account to explore both the resident and board experience. No account needed.
+            Sign in with a demo account, Google, or manually. No account needed for the demo.
           </p>
           <div className="mt-8 flex gap-2">
             <span className="chip bg-white/15 text-cream-50 border-white/25">claymorphism</span>
@@ -99,7 +128,28 @@ export default function Login() {
             </div>
           </GlassCard>
 
-          <div className="flex items-center gap-3 my-6">
+          {googleClientId && (
+            <>
+              <div className="flex items-center gap-3 my-4">
+                <div className="flex-1 h-px bg-dusk-100/40" />
+                <span className="text-xs text-dusk-200">or continue with</span>
+                <div className="flex-1 h-px bg-dusk-100/40" />
+              </div>
+              <div className="flex justify-center mb-4">
+                <GoogleLogin
+                  onSuccess={(c) => handleGoogleSuccess(c.credential)}
+                  onError={() => toast.error('Google sign-in was cancelled')}
+                  shape="pill"
+                  theme="outline"
+                  size="large"
+                  text="continue_with"
+                  width="340"
+                />
+              </div>
+            </>
+          )}
+
+          <div className="flex items-center gap-3 my-4">
             <div className="flex-1 h-px bg-dusk-100/40" />
             <span className="text-xs text-dusk-200">or manually</span>
             <div className="flex-1 h-px bg-dusk-100/40" />
@@ -121,4 +171,11 @@ export default function Login() {
       </div>
     </div>
   );
+
+  // Only wrap in GoogleOAuthProvider when we actually have a client ID,
+  // otherwise the SDK throws on mount.
+  if (googleClientId) {
+    return <GoogleOAuthProvider clientId={googleClientId}>{form}</GoogleOAuthProvider>;
+  }
+  return form;
 }

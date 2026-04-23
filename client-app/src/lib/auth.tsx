@@ -16,12 +16,14 @@ interface AuthCtx {
   user: User | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<User>;
+  loginWithGoogle: (credential: string) => Promise<User>;
   logout: () => void;
 }
 
 const Ctx = createContext<AuthCtx>({
   user: null, loading: true,
   login: async () => { throw new Error('not ready'); },
+  loginWithGoogle: async () => { throw new Error('not ready'); },
   logout: () => {},
 });
 
@@ -34,7 +36,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const token = localStorage.getItem('condoos_token');
     if (raw && token) {
       setUser(JSON.parse(raw));
-      // Revalidate in the background
       apiGet<{ user: User }>('/auth/me')
         .then((d) => { setUser(d.user); localStorage.setItem('condoos_user', JSON.stringify(d.user)); })
         .catch(() => {})
@@ -44,12 +45,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const login = async (email: string, password: string): Promise<User> => {
-    const data = await apiPost<{ token: string; user: User }>('/auth/login', { email, password });
+  const completeLogin = (data: { token: string; user: User }): User => {
     localStorage.setItem('condoos_token', data.token);
     localStorage.setItem('condoos_user', JSON.stringify(data.user));
     setUser(data.user);
     return data.user;
+  };
+
+  const login = async (email: string, password: string): Promise<User> => {
+    const data = await apiPost<{ token: string; user: User }>('/auth/login', { email, password });
+    return completeLogin(data);
+  };
+
+  const loginWithGoogle = async (credential: string): Promise<User> => {
+    const data = await apiPost<{ token: string; user: User }>('/auth/google', { credential });
+    return completeLogin(data);
   };
 
   const logout = () => {
@@ -59,7 +69,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.location.href = '/login';
   };
 
-  return <Ctx.Provider value={{ user, loading, login, logout }}>{children}</Ctx.Provider>;
+  return (
+    <Ctx.Provider value={{ user, loading, login, loginWithGoogle, logout }}>
+      {children}
+    </Ctx.Provider>
+  );
 }
 
 export function useAuth() {
