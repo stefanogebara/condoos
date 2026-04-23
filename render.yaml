@@ -1,0 +1,30 @@
+# CondoOS — Render blueprint. One-click deploy: https://render.com/deploy
+# Attach a 1GB disk at /data so SQLite persists. Set secrets in the dashboard.
+
+services:
+  - type: web
+    name: condoos-api
+    runtime: docker
+    dockerfilePath: ./server/Dockerfile
+    dockerContext: .
+    plan: starter
+    region: oregon
+    autoDeploy: true
+    healthCheckPath: /api/health
+    disk:
+      name: condoos-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 8080
+      - key: DB_PATH
+        value: /data/condoos.sqlite
+      - key: JWT_SECRET
+        generateValue: true
+      - key: OPENROUTER_API_KEY
+        sync: false                    # set manually in the Render dashboard
+      - key: OPENROUTER_MODEL
+        value: anthropic/claude-3.5-haiku

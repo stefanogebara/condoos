@@ -1,0 +1,23 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "name": "condoos",
+  "framework": "create-react-app",
+  "buildCommand": "cd client-app && npm install --legacy-peer-deps && CI=false npm run build",
+  "outputDirectory": "client-app/build",
+  "installCommand": "echo 'skip root install'",
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "https://condoos-api.fly.dev/api/:path*" },
+    { "source": "/((?!static|images|favicon|manifest|robots|asset-manifest|_next).*)",
+      "destination": "/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/static/(.*)",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+    },
+    {
+      "source": "/images/(.*)",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=604800" }]
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+# CondoOS API on Fly.io.
+# Deploy with:
+#   flyctl auth login
+#   flyctl launch --copy-config --no-deploy   # or flyctl apps create condoos-api
+#   flyctl volumes create condoos_data --region <region> --size 1
+#   flyctl secrets set OPENROUTER_API_KEY=sk-or-v1-...
+#   flyctl secrets set JWT_SECRET=$(openssl rand -hex 32)
+#   flyctl deploy
+
+app = "condoos-api"
+primary_region = "mia"                # Miami — change if you prefer another
+kill_signal = "SIGINT"
+kill_timeout = "10s"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+  NODE_ENV = "production"
+  DB_PATH = "/data/condoos.sqlite"
+
+[[mounts]]
+  source = "condoos_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "30s"
+    method = "GET"
+    timeout = "5s"
+    path = "/api/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
+
+# First-run note: after the first deploy, SSH in and seed:
+#   flyctl ssh console -C "node -e \"require('./dist/db/seed.js')\""
+# The Express bootstrap auto-creates the schema.

@@ -1,0 +1,16 @@
+node_modules
+*/node_modules
+client-app
+docs
+archive
+.git
+.github
+.env
+.env.*
+*.sqlite
+*.sqlite-journal
+server/data
+server/dist
+server/node_modules
+.playwright-mcp
+*.log

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Users, Vote, Sparkles, Calendar, Package, DoorOpen, Waves } from 'lucide-react';
+import { ArrowRight, Users, Vote, Sparkles, Calendar, Package, Waves } from 'lucide-react';
 import Logo from '../components/Logo';
 import Button from '../components/Button';
 import GlassCard from '../components/GlassCard';
