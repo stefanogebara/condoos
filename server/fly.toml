@@ -8,7 +8,7 @@
 #   flyctl deploy
 
 app = "condoos-api"
-primary_region = "mia"                # Miami — change if you prefer another
+primary_region = "iad"                # Ashburn, VA — closest US-East to Vercel edges
 kill_signal = "SIGINT"
 kill_timeout = "10s"
 
