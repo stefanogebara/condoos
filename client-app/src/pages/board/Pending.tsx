@@ -9,7 +9,7 @@ import Button from '../../components/Button';
 import EmptyState from '../../components/EmptyState';
 import { apiGet, apiPost } from '../../lib/api';
 
-interface Pending {
+interface PendingRequest {
   id: number;
   relationship: 'owner' | 'tenant' | 'occupant';
   primary_contact: number;
@@ -26,10 +26,10 @@ interface Pending {
 }
 
 export default function Pending() {
-  const [rows, setRows] = useState<Pending[]>([]);
+  const [rows, setRows] = useState<PendingRequest[]>([]);
   const [busyId, setBusyId] = useState<number | null>(null);
 
-  const load = () => apiGet<Pending[]>('/memberships/pending').then(setRows).catch(() => {});
+  const load = () => apiGet<PendingRequest[]>('/memberships/pending').then(setRows).catch(() => {});
   useEffect(() => { load(); }, []);
 
   async function act(id: number, action: 'approve' | 'deny') {

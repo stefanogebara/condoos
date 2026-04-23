@@ -2,6 +2,7 @@ import { Router } from 'express';
 import db from '../db';
 import { requireAuth, requireRole, AuthedRequest } from '../lib/auth';
 import { ok, fail, asyncHandler } from '../lib/respond';
+import { getProposalVoteTally, resolveVoteOutcome } from '../lib/proposal-tally';
 import { chat, parseJsonLoose } from '../ai/openrouter';
 import {
   PROPOSAL_DRAFT_SYS,
@@ -200,17 +201,8 @@ router.post('/proposals/:id/decision-summary', requireAuth, requireRole('board_a
     `SELECT * FROM proposals WHERE id=? AND condominium_id=?`
   ).get(id, u.condominium_id) as any;
   if (!p) return fail(res, 'not_found', 404);
-  const counts = db.prepare(
-    `SELECT
-       SUM(CASE WHEN choice='yes' THEN 1 ELSE 0 END) AS yes,
-       SUM(CASE WHEN choice='no' THEN 1 ELSE 0 END) AS no,
-       SUM(CASE WHEN choice='abstain' THEN 1 ELSE 0 END) AS abstain
-     FROM proposal_votes WHERE proposal_id=?`
-  ).get(id) as any;
-
-  const votes = { yes: counts.yes || 0, no: counts.no || 0, abstain: counts.abstain || 0 };
-  const outcome: 'approved' | 'rejected' | 'inconclusive' =
-    votes.yes > votes.no ? 'approved' : votes.no > votes.yes ? 'rejected' : 'inconclusive';
+  const votes = getProposalVoteTally(p);
+  const outcome = resolveVoteOutcome(votes);
 
   const comments = db.prepare(
     `SELECT body FROM proposal_comments WHERE proposal_id=? ORDER BY created_at ASC LIMIT 20`
@@ -221,7 +213,7 @@ router.post('/proposals/:id/decision-summary', requireAuth, requireRole('board_a
       { role: 'system', content: DECISION_SUMMARY_SYS },
       {
         role: 'user',
-        content: `Proposal: ${p.title}\n\nDescription: ${p.description}\n\nFinal vote: ${votes.yes} yes, ${votes.no} no, ${votes.abstain} abstain (outcome: ${outcome}).\n\nRepresentative comments:\n${comments.map((c) => `- ${c.body}`).join('\n')}`,
+        content: `Proposal: ${p.title}\n\nDescription: ${p.description}\n\nFinal vote: ${votes.yes} yes, ${votes.no} no, ${votes.abstain} abstain. Weighted tally: ${votes.yes_weight} yes, ${votes.no_weight} no, ${votes.abstain_weight} abstain (outcome: ${outcome}).\n\nRepresentative comments:\n${comments.map((c) => `- ${c.body}`).join('\n')}`,
       },
     ],
     () => fallbackDecisionSummary(p.title, outcome, votes),

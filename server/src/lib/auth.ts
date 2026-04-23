@@ -2,13 +2,21 @@ import jwt from 'jsonwebtoken';
 import { Request, Response, NextFunction } from 'express';
 import db from '../db';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'condoos-dev-secret';
+function getJwtSecret(): string {
+  const secret = process.env.JWT_SECRET;
+  if (!secret && process.env.NODE_ENV === 'production') {
+    throw new Error('JWT_SECRET is required in production');
+  }
+  return secret || 'condoos-dev-secret';
+}
+
+const JWT_SECRET = getJwtSecret();
 
 export interface AuthUser {
   id: number;
   email: string;
   role: 'resident' | 'board_admin';
-  condominium_id: number;
+  condominium_id: number | null;
   first_name: string;
   last_name: string;
   unit_number: string | null;
@@ -75,7 +83,7 @@ export function requireRole(role: AuthUser['role']) {
 /**
  * Verify the authenticated user has at least one active user_unit row,
  * auto-correct their users.condominium_id if it points at a condo where they
- * have no active membership (prevents orphan-scope data leaks), and expose
+ * have no active membership (keeps legacy cached fields coherent), and expose
  * the full set of active memberships as req.memberships.
  *
  * Use on every data route that is scoped by condominium_id.
@@ -107,4 +115,14 @@ export function requireActiveMembership(req: AuthedRequest, res: Response, next:
 
   req.memberships = rows;
   next();
+}
+
+export function getActiveCondoId(req: AuthedRequest): number {
+  const condoId = req.user?.condominium_id ?? req.memberships?.[0]?.condominium_id;
+  if (!condoId) {
+    const err = new Error('no_active_membership') as Error & { status?: number };
+    err.status = 403;
+    throw err;
+  }
+  return condoId;
 }

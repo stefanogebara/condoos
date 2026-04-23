@@ -7,7 +7,7 @@ export interface User {
   first_name: string;
   last_name: string;
   role: 'resident' | 'board_admin';
-  condominium_id: number;
+  condominium_id: number | null;
   unit_number: string | null;
   avatar_url: string | null;
 }

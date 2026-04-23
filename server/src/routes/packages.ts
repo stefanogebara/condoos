@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import db from '../db';
-import { requireAuth, requireRole, AuthedRequest } from '../lib/auth';
+import { requireAuth, requireRole, getActiveCondoId, AuthedRequest } from '../lib/auth';
 import { ok, fail } from '../lib/respond';
 
 const router = Router();
@@ -38,15 +38,22 @@ router.post('/', requireAuth, requireRole('board_admin'), (req: AuthedRequest, r
   const { recipient_id, carrier, description } = req.body || {};
   if (!recipient_id || !carrier) return fail(res, 'missing_fields');
   const u = req.user!;
+  const condoId = getActiveCondoId(req);
   // Recipient must live in the admin's condo.
   const recipient = db.prepare(
-    `SELECT id FROM users WHERE id = ? AND condominium_id = ?`
-  ).get(recipient_id, u.condominium_id);
+    `SELECT usr.id
+     FROM users usr
+     JOIN user_unit uu ON uu.user_id = usr.id
+     JOIN units un ON un.id = uu.unit_id
+     JOIN buildings b ON b.id = un.building_id
+     WHERE usr.id = ? AND b.condominium_id = ? AND uu.status = 'active'
+     LIMIT 1`
+  ).get(recipient_id, condoId);
   if (!recipient) return fail(res, 'recipient_not_in_condo', 400);
   const row = db.prepare(
     `INSERT INTO packages (condominium_id, recipient_id, carrier, description)
      VALUES (?, ?, ?, ?)`
-  ).run(u.condominium_id, recipient_id, carrier, description || null);
+  ).run(condoId, recipient_id, carrier, description || null);
   return ok(res, { id: row.lastInsertRowid });
 });
 

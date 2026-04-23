@@ -26,9 +26,9 @@ npm install --silent 2>&1 | tail -3
 echo "[3/4] Installing server deps (builds better-sqlite3 native module)..."
 npm --prefix server install --silent 2>&1 | tail -3
 
-# 4. Client deps (CRA + peer deps)
+# 4. Client deps (Vite + React)
 echo "[4/4] Installing client deps..."
-npm --prefix client-app install --legacy-peer-deps --silent 2>&1 | tail -3
+npm --prefix client-app install --silent 2>&1 | tail -3
 
 # 5. Seed
 echo ""

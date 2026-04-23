@@ -7,7 +7,7 @@ import GlassCard from '../../components/GlassCard';
 import Badge from '../../components/Badge';
 import Avatar from '../../components/Avatar';
 import Button from '../../components/Button';
-import { apiGet, apiPost } from '../../lib/api';
+import { apiGet, apiPatch, apiPost } from '../../lib/api';
 
 export default function BoardProposalDetail() {
   const { id } = useParams();
@@ -112,7 +112,7 @@ export default function BoardProposalDetail() {
               value={p.voter_eligibility || 'all'}
               onChange={async (e) => {
                 try {
-                  await (await import('../../lib/api')).apiPatch(`/proposals/${id}/eligibility`, { voter_eligibility: e.target.value });
+                  await apiPatch(`/proposals/${id}/eligibility`, { voter_eligibility: e.target.value });
                   load();
                 } catch (err: any) { toast.error(err?.response?.data?.error || 'Update failed'); }
               }}
@@ -130,14 +130,17 @@ export default function BoardProposalDetail() {
         <GlassCard variant="clay-sage" className="p-5 text-center">
           <div className="font-display text-4xl text-sage-700">{p.votes.yes}</div>
           <div className="text-sm text-dusk-400 mt-1">Yes</div>
+          {p.votes.yes_weight !== p.votes.yes && <div className="text-xs text-dusk-300 mt-1">{p.votes.yes_weight} weighted</div>}
         </GlassCard>
         <GlassCard variant="clay-peach" className="p-5 text-center">
           <div className="font-display text-4xl text-peach-500">{p.votes.no}</div>
           <div className="text-sm text-dusk-400 mt-1">No</div>
+          {p.votes.no_weight !== p.votes.no && <div className="text-xs text-dusk-300 mt-1">{p.votes.no_weight} weighted</div>}
         </GlassCard>
         <GlassCard className="p-5 text-center">
           <div className="font-display text-4xl text-dusk-300">{p.votes.abstain}</div>
           <div className="text-sm text-dusk-400 mt-1">Abstain</div>
+          {p.votes.abstain_weight !== p.votes.abstain && <div className="text-xs text-dusk-300 mt-1">{p.votes.abstain_weight} weighted</div>}
         </GlassCard>
       </div>
 

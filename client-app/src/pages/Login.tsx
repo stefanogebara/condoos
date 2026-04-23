@@ -19,7 +19,7 @@ export default function Login() {
 
   useEffect(() => {
     // Detect if Google sign-in is configured on the server.
-    const envClientId = process.env.REACT_APP_GOOGLE_CLIENT_ID;
+    const envClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
     if (envClientId) {
       setGoogleClientId(envClientId);
     } else {

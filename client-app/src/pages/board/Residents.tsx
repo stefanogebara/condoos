@@ -10,7 +10,19 @@ import { apiGet, apiPost } from '../../lib/api';
 
 interface Resident { id: number; first_name: string; last_name: string; unit_number: string; role: string; email: string; }
 interface Membership { status: string; condo_name: string; condo_id: number; }
-interface Invite { id: number; email: string; status: string; unit_number: string; floor: number | null; building_name: string; created_at: string; claimed_by_user_id: number | null; }
+interface Invite {
+  id: number;
+  email: string;
+  status: string;
+  relationship: 'owner' | 'tenant' | 'occupant';
+  primary_contact: number;
+  voting_weight: number;
+  unit_number: string;
+  floor: number | null;
+  building_name: string;
+  created_at: string;
+  claimed_by_user_id: number | null;
+}
 
 export default function Residents() {
   const [rows, setRows] = useState<Resident[]>([]);
@@ -19,7 +31,7 @@ export default function Residents() {
   const [inviteCode, setInviteCode] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [showImport, setShowImport] = useState(false);
-  const [csv, setCsv] = useState('email,unit,relationship\nmaria@example.com,502,tenant\njoao@example.com,101,owner\n');
+  const [csv, setCsv] = useState('email,unit,relationship,primary_contact,voting_weight\nmaria@example.com,502,tenant,no,1\njoao@example.com,101,owner,yes,1\n');
   const [importing, setImporting] = useState(false);
 
   const load = () => {
@@ -100,7 +112,7 @@ export default function Residents() {
         <GlassCard className="p-6 mb-6 animate-fade-up">
           <h3 className="font-display text-xl text-dusk-500 tracking-tight">Bulk import resident roster</h3>
           <p className="text-sm text-dusk-300 mt-1">
-            Paste a CSV below. Columns: <span className="font-mono">email,unit,relationship</span>.
+            Paste a CSV below. Columns: <span className="font-mono">email,unit,relationship,primary_contact,voting_weight</span>.
             When a resident signs in with that email, they're auto-linked to their unit — no admin approval needed.
           </p>
           <textarea
@@ -127,7 +139,9 @@ export default function Residents() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="text-sm font-medium text-dusk-500 truncate">{i.email}</div>
-                  <div className="text-xs text-dusk-300">Unit {i.unit_number}</div>
+                  <div className="text-xs text-dusk-300">
+                    Unit {i.unit_number} · {i.relationship}{i.primary_contact === 1 ? ' · primary' : ''} · weight {i.voting_weight}
+                  </div>
                 </div>
                 <Badge tone="warning">pending</Badge>
               </GlassCard>

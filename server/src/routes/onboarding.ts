@@ -6,7 +6,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import db from '../db';
-import { requireAuth, AuthedRequest } from '../lib/auth';
+import { requireAuth, requireActiveMembership, requireRole, getActiveCondoId, AuthedRequest } from '../lib/auth';
 import { ok, fail, asyncHandler } from '../lib/respond';
 
 const router = Router();
@@ -195,11 +195,11 @@ router.post('/join', requireAuth, asyncHandler(async (req: AuthedRequest, res) =
 }));
 
 // GET /api/onboarding/my-invite-code — returns invite code for the current user's condo
-router.get('/my-invite-code', requireAuth, (req: AuthedRequest, res) => {
-  const u = req.user!;
+router.get('/my-invite-code', requireAuth, requireActiveMembership, requireRole('board_admin'), (req: AuthedRequest, res) => {
+  const condoId = getActiveCondoId(req);
   const row = db.prepare(
     `SELECT invite_code FROM condominiums WHERE id = ?`
-  ).get(u.condominium_id) as { invite_code: string | null } | undefined;
+  ).get(condoId) as { invite_code: string | null } | undefined;
   return ok(res, { invite_code: row?.invite_code || null });
 });
 

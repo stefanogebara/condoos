@@ -19,6 +19,7 @@ kill_timeout = "10s"
   PORT = "8080"
   NODE_ENV = "production"
   DB_PATH = "/data/condoos.sqlite"
+  CORS_ORIGIN = "https://condoos-ten.vercel.app"
 
 [[mounts]]
   source = "condoos_data"

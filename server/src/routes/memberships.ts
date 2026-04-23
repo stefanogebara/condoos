@@ -74,7 +74,7 @@ router.post('/:id/deny', requireAuth, requireRole('board_admin'), (req: AuthedRe
 });
 
 // POST /api/memberships/import-csv — bulk-create pre-assigned invites.
-// Body: { csv: "email,unit,relationship\njordan@x.com,612,tenant\n..." }
+// Body: { csv: "email,unit,relationship,primary_contact,voting_weight\njordan@x.com,612,tenant,yes,1\n..." }
 // Each row creates an invites row (status=pending) scoped to the admin's condo.
 // When a user later signs in with a matching email, we auto-activate them.
 const csvSchema = z.object({ csv: z.string().min(3).max(100_000) });
@@ -84,7 +84,7 @@ router.post('/import-csv', requireAuth, requireRole('board_admin'), (req: Authed
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
   const u = req.user!;
 
-  // Very small CSV parser: header row optional, columns = email,unit,[relationship]
+  // Very small CSV parser: header row optional, columns = email,unit,[relationship],[primary_contact],[voting_weight]
   const lines = parsed.data.csv.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   if (lines.length === 0) return fail(res, 'empty_csv');
 
@@ -99,8 +99,8 @@ router.post('/import-csv', requireAuth, requireRole('board_admin'), (req: Authed
      WHERE b.condominium_id = ? AND LOWER(u.number) = LOWER(?)`
   );
   const insertInvite = db.prepare(
-    `INSERT INTO invites (condominium_id, email, unit_id, role, status)
-     VALUES (?, ?, ?, 'resident', 'pending')`
+    `INSERT INTO invites (condominium_id, email, unit_id, role, relationship, primary_contact, voting_weight, status)
+     VALUES (?, ?, ?, 'resident', ?, ?, ?, 'pending')`
   );
 
   const imported: any[] = [];
@@ -110,21 +110,32 @@ router.post('/import-csv', requireAuth, requireRole('board_admin'), (req: Authed
     for (let i = 0; i < dataLines.length; i++) {
       const cols = dataLines[i].split(',').map((c) => c.trim());
       if (cols.length < 2) { errors.push({ row: i + 1, error: 'need_email_and_unit' }); continue; }
-      const [email, unit, rel] = cols;
+      const [email, unit, rel, primaryRaw, weightRaw] = cols;
       if (!email || !email.includes('@')) { errors.push({ row: i + 1, error: 'invalid_email' }); continue; }
       const unitRow = findUnit.get(u.condominium_id, unit) as { id: number } | undefined;
       if (!unitRow) { errors.push({ row: i + 1, error: 'unit_not_found', unit }); continue; }
       const relationship = ['owner', 'tenant', 'occupant'].includes((rel || '').toLowerCase())
         ? (rel as string).toLowerCase()
         : 'tenant';
+      const primary = /^(1|true|yes|y)$/i.test(primaryRaw || '') ? 1 : 0;
+      const votingWeight = Number.isFinite(Number(weightRaw)) && Number(weightRaw) > 0
+        ? Number(weightRaw)
+        : 1;
       // Skip if an active pending invite already exists for this email+unit.
       const dup = db.prepare(
         `SELECT id FROM invites WHERE condominium_id=? AND email=? AND unit_id=? AND status='pending'`
       ).get(u.condominium_id, email.toLowerCase(), unitRow.id);
       if (dup) { errors.push({ row: i + 1, error: 'already_invited', email, unit }); continue; }
 
-      const inv = insertInvite.run(u.condominium_id, email.toLowerCase(), unitRow.id);
-      imported.push({ row: i + 1, invite_id: Number(inv.lastInsertRowid), email, unit, relationship });
+      const inv = insertInvite.run(
+        u.condominium_id,
+        email.toLowerCase(),
+        unitRow.id,
+        relationship,
+        primary,
+        votingWeight,
+      );
+      imported.push({ row: i + 1, invite_id: Number(inv.lastInsertRowid), email, unit, relationship, primary_contact: primary, voting_weight: votingWeight });
     }
   });
   tx();
@@ -136,7 +147,8 @@ router.post('/import-csv', requireAuth, requireRole('board_admin'), (req: Authed
 router.get('/invites', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
   const u = req.user!;
   const rows = db.prepare(
-    `SELECT i.id, i.email, i.status, i.created_at, i.claimed_by_user_id,
+    `SELECT i.id, i.email, i.status, i.relationship, i.primary_contact, i.voting_weight,
+            i.created_at, i.claimed_by_user_id,
             un.id AS unit_id, un.number AS unit_number, un.floor, b.name AS building_name
      FROM invites i
      JOIN units un ON un.id = i.unit_id

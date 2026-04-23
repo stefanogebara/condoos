@@ -23,8 +23,20 @@ import membershipsRoutes from './routes/memberships';
 
 const app = express();
 const PORT = Number(process.env.PORT || 4000);
+const allowedOrigins = (process.env.CORS_ORIGIN || process.env.CLIENT_ORIGIN || '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 
-app.use(cors({ origin: true, credentials: true }));
+app.use(cors({
+  credentials: true,
+  origin(origin, cb) {
+    if (!origin) return cb(null, true);
+    if (allowedOrigins.length === 0 && process.env.NODE_ENV !== 'production') return cb(null, true);
+    if (allowedOrigins.includes(origin)) return cb(null, true);
+    return cb(new Error('cors_origin_not_allowed'));
+  },
+}));
 app.use(express.json({ limit: '2mb' }));
 app.use(morgan('dev'));
 

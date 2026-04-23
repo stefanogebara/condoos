@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { ArrowLeft, ArrowRight, ArrowUp, Sparkles, Copy, Check } from 'lucide-react';
 import Logo from '../../components/Logo';
@@ -9,7 +9,6 @@ import Badge from '../../components/Badge';
 import { apiPost } from '../../lib/api';
 
 export default function Create() {
-  const navigate = useNavigate();
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [saving, setSaving] = useState(false);
   const [inviteCode, setInviteCode] = useState<string | null>(null);

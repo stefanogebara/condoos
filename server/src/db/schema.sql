@@ -12,7 +12,8 @@ CREATE TABLE IF NOT EXISTS condominiums (
 
 CREATE TABLE IF NOT EXISTS users (
   id               INTEGER PRIMARY KEY AUTOINCREMENT,
-  condominium_id   INTEGER NOT NULL REFERENCES condominiums(id) ON DELETE CASCADE,
+  -- Cached active condo for legacy screens. Access control uses user_unit.
+  condominium_id   INTEGER REFERENCES condominiums(id) ON DELETE SET NULL,
   email            TEXT UNIQUE NOT NULL,
   password_hash    TEXT NOT NULL,
   first_name       TEXT NOT NULL,
@@ -228,6 +229,10 @@ CREATE TABLE IF NOT EXISTS invites (
   unit_id             INTEGER REFERENCES units(id),  -- optional: pre-assigned unit
   role                TEXT NOT NULL DEFAULT 'resident'
     CHECK(role IN ('resident','board_admin')),
+  relationship        TEXT NOT NULL DEFAULT 'tenant'
+    CHECK(relationship IN ('owner','tenant','occupant')),
+  primary_contact     INTEGER NOT NULL DEFAULT 0,
+  voting_weight       REAL NOT NULL DEFAULT 1.0,
   code                TEXT,                          -- null for email-only invites; the condo-wide code lives on condominiums.invite_code
   expires_at          TEXT,
   claimed_by_user_id  INTEGER REFERENCES users(id),
@@ -237,6 +242,8 @@ CREATE TABLE IF NOT EXISTS invites (
 );
 
 CREATE INDEX IF NOT EXISTS idx_invites_code ON invites(code) WHERE code IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_invites_pending_email_unit
+  ON invites(condominium_id, email, unit_id) WHERE status = 'pending' AND email IS NOT NULL AND unit_id IS NOT NULL;
 
 -- Original indexes
 CREATE INDEX IF NOT EXISTS idx_packages_recipient ON packages(recipient_id, status);

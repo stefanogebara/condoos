@@ -26,7 +26,16 @@ interface Proposal {
   voting_closes_at: string | null;
   voter_eligibility: 'all' | 'owners_only' | 'primary_contact_only';
   comments: Comment[];
-  votes: { yes: number; no: number; abstain: number; total: number };
+  votes: {
+    yes: number;
+    no: number;
+    abstain: number;
+    total: number;
+    yes_weight: number;
+    no_weight: number;
+    abstain_weight: number;
+    total_weight: number;
+  };
   my_vote: 'yes' | 'no' | 'abstain' | null;
   voter_rights?: {
     can_vote: boolean;
@@ -97,7 +106,12 @@ export default function ProposalDetail() {
   }
 
   if (!p) return null;
-  const pct = p.votes.total ? Math.round((p.votes.yes / p.votes.total) * 100) : 0;
+  const weightedTotal = p.votes.total_weight || p.votes.total;
+  const usesWeightedTally =
+    p.votes.yes_weight !== p.votes.yes ||
+    p.votes.no_weight !== p.votes.no ||
+    p.votes.abstain_weight !== p.votes.abstain;
+  const pct = weightedTotal ? Math.round((p.votes.yes_weight / weightedTotal) * 100) : 0;
 
   return (
     <>
@@ -129,15 +143,20 @@ export default function ProposalDetail() {
             <VoteIcon className="w-8 h-8 text-dusk-300" />
           </div>
           <div className="h-3 rounded-full bg-white/60 overflow-hidden flex mb-2">
-            <div className="h-full bg-sage-500"  style={{ width: `${p.votes.total ? (p.votes.yes / p.votes.total) * 100 : 0}%` }} />
-            <div className="h-full bg-peach-400" style={{ width: `${p.votes.total ? (p.votes.no  / p.votes.total) * 100 : 0}%` }} />
-            <div className="h-full bg-dusk-200"  style={{ width: `${p.votes.total ? (p.votes.abstain / p.votes.total) * 100 : 0}%` }} />
+            <div className="h-full bg-sage-500"  style={{ width: `${weightedTotal ? (p.votes.yes_weight / weightedTotal) * 100 : 0}%` }} />
+            <div className="h-full bg-peach-400" style={{ width: `${weightedTotal ? (p.votes.no_weight  / weightedTotal) * 100 : 0}%` }} />
+            <div className="h-full bg-dusk-200"  style={{ width: `${weightedTotal ? (p.votes.abstain_weight / weightedTotal) * 100 : 0}%` }} />
           </div>
           <div className="flex items-center justify-between text-sm">
             <span className="text-sage-700 font-semibold">{p.votes.yes} yes ({pct}%)</span>
             <span className="text-peach-500 font-semibold">{p.votes.no} no</span>
             <span className="text-dusk-300">{p.votes.abstain} abstain</span>
           </div>
+          {usesWeightedTally && (
+            <div className="mt-2 text-xs text-dusk-300">
+              Weighted tally: {p.votes.yes_weight} yes · {p.votes.no_weight} no · {p.votes.abstain_weight} abstain
+            </div>
+          )}
 
           {p.voter_rights?.can_vote === false ? (
             <div className="mt-5 p-4 rounded-2xl bg-white/60 border border-white/70 text-sm text-dusk-400">

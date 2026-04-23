@@ -27,6 +27,46 @@ function addColumnIfMissing(table: string, col: string, ddl: string) {
   }
 }
 
+function migrateUsersCondoNullable() {
+  const cols = db.prepare(`PRAGMA table_info(users)`).all() as Array<{ name: string; notnull: number }>;
+  const condoCol = cols.find((c) => c.name === 'condominium_id');
+  if (!condoCol || condoCol.notnull === 0) return;
+
+  const foreignKeys = db.pragma('foreign_keys', { simple: true }) as number;
+  db.pragma('foreign_keys = OFF');
+  try {
+    db.exec(`
+      CREATE TABLE users_new (
+        id               INTEGER PRIMARY KEY AUTOINCREMENT,
+        condominium_id   INTEGER REFERENCES condominiums(id) ON DELETE SET NULL,
+        email            TEXT UNIQUE NOT NULL,
+        password_hash    TEXT NOT NULL,
+        first_name       TEXT NOT NULL,
+        last_name        TEXT NOT NULL,
+        role             TEXT NOT NULL CHECK(role IN ('resident','board_admin')),
+        unit_number      TEXT,
+        avatar_url       TEXT,
+        created_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+
+      INSERT INTO users_new (
+        id, condominium_id, email, password_hash, first_name, last_name,
+        role, unit_number, avatar_url, created_at
+      )
+      SELECT
+        id, condominium_id, email, password_hash, first_name, last_name,
+        role, unit_number, avatar_url, created_at
+      FROM users;
+
+      DROP TABLE users;
+      ALTER TABLE users_new RENAME TO users;
+    `);
+    console.log('[migrate] made users.condominium_id nullable');
+  } finally {
+    db.pragma(`foreign_keys = ${foreignKeys ? 'ON' : 'OFF'}`);
+  }
+}
+
 /**
  * Migrate legacy users.unit_number → buildings/units/user_unit.
  * Runs only when there are users but zero buildings for their condo.
@@ -86,6 +126,7 @@ function migrateLegacyUnits() {
 export function initSchema() {
   const sql = fs.readFileSync(SCHEMA_PATH, 'utf8');
   db.exec(sql);
+  migrateUsersCondoNullable();
 
   // Additive column migrations that SQLite can't express in schema.sql.
   addColumnIfMissing('condominiums', 'invite_code',        `TEXT`);
@@ -95,6 +136,9 @@ export function initSchema() {
   addColumnIfMissing('condominiums', 'created_by_user_id', `INTEGER REFERENCES users(id)`);
   // Voter eligibility on proposals: 'all' (residents + owners), 'owners_only', 'primary_contact_only'
   addColumnIfMissing('proposals',    'voter_eligibility',  `TEXT NOT NULL DEFAULT 'all'`);
+  addColumnIfMissing('invites',      'relationship',       `TEXT NOT NULL DEFAULT 'tenant'`);
+  addColumnIfMissing('invites',      'primary_contact',    `INTEGER NOT NULL DEFAULT 0`);
+  addColumnIfMissing('invites',      'voting_weight',      `REAL NOT NULL DEFAULT 1.0`);
 
   migrateLegacyUnits();
 

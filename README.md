@@ -56,7 +56,7 @@ Four additional residents (Jordan, Taylor, Riley, Sam) are seeded with password 
 
 ### Google sign-in (optional)
 
-Set `GOOGLE_CLIENT_ID` in `.env` and on Fly (and optionally `REACT_APP_GOOGLE_CLIENT_ID` for Vercel). Create the client at [console.cloud.google.com/apis/credentials](https://console.cloud.google.com/apis/credentials) with:
+Set `GOOGLE_CLIENT_ID` in `.env` and on Fly (and optionally `VITE_GOOGLE_CLIENT_ID` for Vercel). Create the client at [console.cloud.google.com/apis/credentials](https://console.cloud.google.com/apis/credentials) with:
 
 - **Type**: Web application
 - **Authorized JS origins**: `http://localhost:3000`, `https://condoos-ten.vercel.app`
@@ -159,7 +159,7 @@ condoos/
 │   │   ├── lib/          # JWT auth middleware, response helpers
 │   │   └── server.ts
 │   └── data/             # SQLite file (gitignored)
-├── client-app/           # React 18 + CRA + Tailwind
+├── client-app/           # React 18 + Vite + Tailwind
 │   ├── src/
 │   │   ├── pages/        # Landing, Login,
 │   │   │   ├── resident/ # 9 pages: Overview, Packages, Visitors,
@@ -179,7 +179,7 @@ condoos/
 
 ### Tech
 
-- **Frontend**: React 18 + TypeScript, Tailwind (custom sage/peach/cream/dusk tokens), react-router, axios, react-hot-toast, lucide-react icons, Google Fraunces + Inter fonts
+- **Frontend**: React 18 + TypeScript, Vite, Tailwind (custom sage/peach/cream/dusk tokens), react-router, axios, react-hot-toast, lucide-react icons, Google Fraunces + Inter fonts
 - **Backend**: Node 20 + Express 4 + TypeScript, `better-sqlite3` (zero-config, WAL mode), Zod, bcryptjs, jsonwebtoken, morgan, CORS
 - **AI**: OpenRouter → `anthropic/claude-3.5-haiku`; fast, cheap, and good enough for all 6 tasks
 - **Storage**: single SQLite file at `server/data/condoos.sqlite`

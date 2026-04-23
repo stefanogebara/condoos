@@ -77,13 +77,17 @@ export function fallbackExplain(title: string, description: string) {
 export function fallbackDecisionSummary(
   title: string,
   outcome: 'approved' | 'rejected' | 'inconclusive',
-  votes: { yes: number; no: number; abstain: number }
+  votes: { yes: number; no: number; abstain: number; yes_weight?: number; no_weight?: number; abstain_weight?: number }
 ) {
+  const weighted =
+    typeof votes.yes_weight === 'number' && typeof votes.no_weight === 'number'
+      ? ` Weighted result: ${votes.yes_weight} yes / ${votes.no_weight} no / ${votes.abstain_weight || 0} abstain.`
+      : '';
   return {
     headline: `${title} - ${outcome}`,
     outcome,
     vote_breakdown_text: `${votes.yes} yes, ${votes.no} no, ${votes.abstain} abstain`,
-    rationale: `The board reviewed resident feedback and voted. Final tally: ${votes.yes} yes / ${votes.no} no / ${votes.abstain} abstain.`,
+    rationale: `The board reviewed resident feedback and voted. Final tally: ${votes.yes} yes / ${votes.no} no / ${votes.abstain} abstain.${weighted}`,
     next_steps: outcome === 'approved'
       ? ['Schedule implementation', 'Communicate timeline to residents']
       : ['Archive proposal', 'Revisit if new information arises'],
