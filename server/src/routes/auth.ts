@@ -96,20 +96,23 @@ router.post('/google', asyncHandler(async (req, res) => {
   ).get(email) as any;
 
   if (!user) {
-    // For the demo: auto-join the single condo as a resident.
-    // In production this would be gated by invite code or email domain.
-    const condo = db.prepare(`SELECT id FROM condominiums LIMIT 1`).get() as any;
-    if (!condo) return fail(res, 'no_condo_configured', 500);
+    // Create a parked user with no building. They'll pick one via /onboarding
+    // (join with a code, or create a new building as the first admin).
+    // We still need *some* condominium_id because it's NOT NULL in the schema;
+    // a "pending" condo (id = 0) would require migrations, so instead we
+    // temporarily point them at the first existing condo but grant no unit access.
+    // Their real scoping starts once /onboarding/join or /create-building completes.
+    const anyCondo = db.prepare(`SELECT id FROM condominiums LIMIT 1`).get() as any;
+    if (!anyCondo) return fail(res, 'no_condo_configured', 500);
 
     const first = (info.given_name || info.name?.split(' ')[0] || email.split('@')[0]).slice(0, 60);
     const last  = (info.family_name || info.name?.split(' ').slice(1).join(' ') || '').slice(0, 60);
-    // Random password — user will only ever sign in via Google.
     const pwHash = bcrypt.hashSync(Math.random().toString(36).slice(2) + Date.now(), 10);
 
     const result = db.prepare(
       `INSERT INTO users (condominium_id, email, password_hash, first_name, last_name, role, unit_number, avatar_url)
-       VALUES (?, ?, ?, ?, ?, 'resident', ?, ?)`
-    ).run(condo.id, email, pwHash, first, last, null, info.picture || null);
+       VALUES (?, ?, ?, ?, ?, 'resident', NULL, ?)`
+    ).run(anyCondo.id, email, pwHash, first, last, info.picture || null);
 
     user = db.prepare(
       `SELECT id, email, role, condominium_id, first_name, last_name, unit_number, avatar_url

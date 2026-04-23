@@ -167,7 +167,78 @@ CREATE TABLE IF NOT EXISTS action_items (
   created_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- Indexes
+-- =====================================================================
+-- Multi-tenant onboarding layer (v2). Purely additive.
+-- =====================================================================
+
+-- Extend condominiums with onboarding fields (additive ALTERs, safe to re-run)
+-- Handled in TS migration helper because SQLite ALTER doesn't support IF NOT EXISTS.
+
+-- Buildings — a condo can have multiple towers / blocks.
+CREATE TABLE IF NOT EXISTS buildings (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  condominium_id   INTEGER NOT NULL REFERENCES condominiums(id) ON DELETE CASCADE,
+  name             TEXT NOT NULL,                     -- "Main Tower", "Block A", "North Wing"
+  floors           INTEGER NOT NULL DEFAULT 1,
+  created_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Units — structured representation of each apartment.
+CREATE TABLE IF NOT EXISTS units (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  building_id      INTEGER NOT NULL REFERENCES buildings(id) ON DELETE CASCADE,
+  floor            INTEGER,
+  number           TEXT NOT NULL,                     -- "704", "PH-1", "203-B"
+  sqft             INTEGER,                           -- optional square footage / m²
+  bedrooms         INTEGER,
+  parking_spots    INTEGER NOT NULL DEFAULT 0,
+  storage_units    INTEGER NOT NULL DEFAULT 0,
+  created_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(building_id, number)
+);
+
+-- user_unit — many-to-many over time. Captures who lives/owns what and when.
+-- A single unit can have multiple active user_units (couple, roommates).
+-- A single user can have multiple units (investor-owner of 3 apartments).
+-- Historical: status='moved_out' rows preserve audit trail.
+CREATE TABLE IF NOT EXISTS user_unit (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id          INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  unit_id          INTEGER NOT NULL REFERENCES units(id) ON DELETE CASCADE,
+  relationship     TEXT NOT NULL CHECK(relationship IN ('owner','tenant','occupant')),
+  status           TEXT NOT NULL DEFAULT 'pending'
+    CHECK(status IN ('pending','active','revoked','moved_out')),
+  primary_contact  INTEGER NOT NULL DEFAULT 0,         -- 1 for the HOA-notifications recipient of this unit
+  voting_weight    REAL NOT NULL DEFAULT 1.0,          -- 0 for occupants, 1.0 default, configurable
+  move_in_date     TEXT,
+  move_out_date    TEXT,
+  created_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_unit_user   ON user_unit(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_user_unit_unit   ON user_unit(unit_id, status);
+
+-- Invites — code-based signup for residents (whole-condo code) and
+-- pre-assigned email invites (optional, not used in MVP UI).
+CREATE TABLE IF NOT EXISTS invites (
+  id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+  condominium_id      INTEGER NOT NULL REFERENCES condominiums(id) ON DELETE CASCADE,
+  email               TEXT,                          -- optional: pre-assigned invite
+  unit_id             INTEGER REFERENCES units(id),  -- optional: pre-assigned unit
+  role                TEXT NOT NULL DEFAULT 'resident'
+    CHECK(role IN ('resident','board_admin')),
+  code                TEXT,                          -- null for email-only invites; the condo-wide code lives on condominiums.invite_code
+  expires_at          TEXT,
+  claimed_by_user_id  INTEGER REFERENCES users(id),
+  status              TEXT NOT NULL DEFAULT 'pending'
+    CHECK(status IN ('pending','claimed','revoked','expired')),
+  created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_invites_code ON invites(code) WHERE code IS NOT NULL;
+
+-- Original indexes
 CREATE INDEX IF NOT EXISTS idx_packages_recipient ON packages(recipient_id, status);
 CREATE INDEX IF NOT EXISTS idx_visitors_host ON visitors(host_id, status);
 CREATE INDEX IF NOT EXISTS idx_reservations_amenity ON amenity_reservations(amenity_id, starts_at);

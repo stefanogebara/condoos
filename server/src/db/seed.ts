@@ -26,6 +26,10 @@ function isoDaysAhead(days: number): string {
 
 function wipe() {
   const wipeOrder = [
+    'invites',
+    'user_unit',
+    'units',
+    'buildings',
     'action_items',
     'proposal_votes',
     'proposal_comments',
@@ -52,15 +56,38 @@ function run() {
   wipe();
 
   const condo = db.prepare(
-    `INSERT INTO condominiums (name, address) VALUES (?, ?)`
-  ).run('Pine Ridge Towers', '1200 Ocean Ave, Miami FL 33139');
+    `INSERT INTO condominiums (name, address, invite_code, voting_model, require_approval)
+     VALUES (?, ?, ?, 'one_per_unit', 1)`
+  ).run('Pine Ridge Towers', '1200 Ocean Ave, Miami FL 33139', 'DEMO123');
   const condoId = Number(condo.lastInsertRowid);
+
+  // Main Tower — 10 floors — placeholder scaffolding.
+  const buildingId = Number(
+    db.prepare(
+      `INSERT INTO buildings (condominium_id, name, floors) VALUES (?, ?, ?)`
+    ).run(condoId, 'Main Tower', 10).lastInsertRowid
+  );
 
   const hash = (p: string) => bcrypt.hashSync(p, 10);
   const insertUser = db.prepare(
     `INSERT INTO users (condominium_id, email, password_hash, first_name, last_name, role, unit_number)
      VALUES (?, ?, ?, ?, ?, ?, ?)`
   );
+  const insertUnit = db.prepare(
+    `INSERT INTO units (building_id, floor, number) VALUES (?, ?, ?)`
+  );
+  const insertUserUnit = db.prepare(
+    `INSERT INTO user_unit (user_id, unit_id, relationship, status, primary_contact, voting_weight, move_in_date)
+     VALUES (?, ?, ?, 'active', 1, 1.0, CURRENT_TIMESTAMP)`
+  );
+  function floorOf(unitNumber: string): number | null {
+    // 3-digit numbers like 704 → floor 7. 4-digit like 1201 → floor 12. Letter units (PH-1) → null.
+    const digits = unitNumber.match(/^(\d+)/)?.[1];
+    if (!digits) return null;
+    if (digits.length === 3) return parseInt(digits.slice(0, 1), 10);
+    if (digits.length === 4) return parseInt(digits.slice(0, 2), 10);
+    return parseInt(digits, 10);
+  }
 
   const users = [
     { email: 'admin@condoos.dev',    pw: 'admin123',    first: 'Alex',   last: 'Silva',   role: 'board_admin', unit: 'PH-1' },
@@ -73,7 +100,12 @@ function run() {
   const userIds: Record<string, number> = {};
   for (const u of users) {
     const res = insertUser.run(condoId, u.email, hash(u.pw), u.first, u.last, u.role, u.unit);
-    userIds[u.email] = Number(res.lastInsertRowid);
+    const uid = Number(res.lastInsertRowid);
+    userIds[u.email] = uid;
+
+    // Create the unit + active owner link (seeded users are all owners in the demo).
+    const unitId = Number(insertUnit.run(buildingId, floorOf(u.unit), u.unit).lastInsertRowid);
+    insertUserUnit.run(uid, unitId, 'owner');
   }
 
   const admin  = userIds['admin@condoos.dev'];

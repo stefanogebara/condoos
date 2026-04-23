@@ -29,13 +29,28 @@ export default function Login() {
     }
   }, []);
 
+  // Decide where a freshly-authenticated user should land. Seeded demo users
+  // have active memberships → straight to their dashboard. Brand-new Google users
+  // with no membership → /onboarding.
+  async function routeAfterLogin(u: { role: string; first_name: string }) {
+    try {
+      const memberships = await apiGet<Array<{ status: string }>>('/onboarding/me');
+      const hasActive = memberships.some((m) => m.status === 'active');
+      if (!hasActive) {
+        navigate('/onboarding');
+        return;
+      }
+    } catch { /* fall through to default routing */ }
+    navigate(u.role === 'board_admin' ? '/board' : '/app');
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     try {
       const u = await login(email, password);
       toast.success(`Welcome back, ${u.first_name}`);
-      navigate(u.role === 'board_admin' ? '/board' : '/app');
+      await routeAfterLogin(u);
     } catch (err: any) {
       toast.error(err?.response?.data?.error === 'invalid_credentials' ? 'Invalid credentials' : 'Sign in failed');
     } finally {
@@ -50,7 +65,7 @@ export default function Login() {
     setEmail(creds.e); setPassword(creds.p);
     setLoading(true);
     login(creds.e, creds.p)
-      .then((u) => { toast.success(`Welcome, ${u.first_name}`); navigate(u.role === 'board_admin' ? '/board' : '/app'); })
+      .then(async (u) => { toast.success(`Welcome, ${u.first_name}`); await routeAfterLogin(u); })
       .catch(() => toast.error('Login failed'))
       .finally(() => setLoading(false));
   }
@@ -61,7 +76,7 @@ export default function Login() {
     try {
       const u = await loginWithGoogle(credential);
       toast.success(`Welcome, ${u.first_name}`);
-      navigate(u.role === 'board_admin' ? '/board' : '/app');
+      await routeAfterLogin(u);
     } catch (err: any) {
       toast.error(err?.response?.data?.error || 'Google sign-in failed');
     } finally {

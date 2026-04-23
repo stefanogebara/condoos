@@ -5,6 +5,9 @@ import LandingPage from './pages/Landing';
 import LoginPage from './pages/Login';
 import DesignSystemPage from './pages/DesignSystem';
 import LogosPage from './pages/Logos';
+import OnboardingHome from './pages/onboarding/Onboarding';
+import OnboardingCreate from './pages/onboarding/Create';
+import OnboardingJoin from './pages/onboarding/Join';
 import ResidentApp from './pages/resident/ResidentApp';
 import BoardApp from './pages/board/BoardApp';
 
@@ -15,6 +18,13 @@ function RequireAuth({ role, children }: { role?: 'resident' | 'board_admin'; ch
   if (role && user.role !== role) {
     return <Navigate to={user.role === 'board_admin' ? '/board' : '/app'} replace />;
   }
+  return <>{children}</>;
+}
+
+function RequireSignedIn({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+  if (!user) return <Navigate to="/login" replace />;
   return <>{children}</>;
 }
 
@@ -33,6 +43,11 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/design" element={<DesignSystemPage />} />
         <Route path="/logos"  element={<LogosPage />} />
+
+        <Route path="/onboarding"        element={<RequireSignedIn><OnboardingHome /></RequireSignedIn>} />
+        <Route path="/onboarding/create" element={<RequireSignedIn><OnboardingCreate /></RequireSignedIn>} />
+        <Route path="/onboarding/join"   element={<RequireSignedIn><OnboardingJoin /></RequireSignedIn>} />
+
         <Route path="/app/*" element={<RequireAuth role="resident"><ResidentApp /></RequireAuth>} />
         <Route path="/board/*" element={<RequireAuth role="board_admin"><BoardApp /></RequireAuth>} />
         <Route path="*" element={<Navigate to="/" replace />} />
