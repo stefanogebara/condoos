@@ -1,86 +1,54 @@
+import * as dotenv from 'dotenv';
+import path from 'path';
+// Load root .env (shared with client), then allow server/.env to override.
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+dotenv.config();
 import express from 'express';
 import cors from 'cors';
-import { clerkClient } from '@clerk/clerk-sdk-node';
-import invitesRouter from './routes/invites';
-import helmet from 'helmet';
-import compression from 'compression';
-import rateLimit from 'express-rate-limit';
-import { createServer } from 'http';
-import { Server } from 'socket.io';
-import { setupWebSocketHandlers } from './services/websocket';
-import { errorHandler } from './middleware/errorHandler';
-import logger from './middleware/logger';
-import { validateRequest } from './middleware/validateRequest';
-import Joi from 'joi';
+import morgan from 'morgan';
+
+import authRoutes from './routes/auth';
+import packagesRoutes from './routes/packages';
+import visitorsRoutes from './routes/visitors';
+import amenitiesRoutes from './routes/amenities';
+import announcementsRoutes from './routes/announcements';
+import suggestionsRoutes from './routes/suggestions';
+import proposalsRoutes from './routes/proposals';
+import meetingsRoutes from './routes/meetings';
+import usersRoutes from './routes/users';
+import aiRoutes from './routes/ai';
 
 const app = express();
-const httpServer = createServer(app);
-const io = new Server(httpServer, {
-  cors: {
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-    methods: ['GET', 'POST']
-  }
+const PORT = Number(process.env.PORT || 4000);
+
+app.use(cors({ origin: true, credentials: true }));
+app.use(express.json({ limit: '2mb' }));
+app.use(morgan('dev'));
+
+app.get('/api/health', (_req, res) => {
+  res.json({ ok: true, service: 'condoos-api', ts: new Date().toISOString() });
 });
 
-const port = process.env.PORT || 3001;
+app.use('/api/auth', authRoutes);
+app.use('/api/packages', packagesRoutes);
+app.use('/api/visitors', visitorsRoutes);
+app.use('/api/amenities', amenitiesRoutes);
+app.use('/api/announcements', announcementsRoutes);
+app.use('/api/suggestions', suggestionsRoutes);
+app.use('/api/proposals', proposalsRoutes);
+app.use('/api/meetings', meetingsRoutes);
+app.use('/api/users', usersRoutes);
+app.use('/api/ai', aiRoutes);
 
-// Security middleware
-app.use(helmet());
-app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-  credentials: true
-}));
+// 404
+app.use((req, res) => res.status(404).json({ success: false, error: 'not_found', path: req.path }));
 
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100 // limit each IP to 100 requests per windowMs
-});
-app.use('/api/', limiter);
-
-// Performance middleware
-app.use(compression());
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-
-// Logging and monitoring
-app.use(logger);
-
-// API versioning
-const apiVersion = 'v1';
-const apiPrefix = `/api/${apiVersion}`;
-
-// Root route
-app.get('/', (req, res) => {
-  res.json({ 
-    message: 'Welcome to the Condo Management API',
-    version: '1.0.0',
-    status: 'running',
-    apiVersion
-  });
+// Error handler
+app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error('[err]', err);
+  res.status(err.status || 500).json({ success: false, error: err.message || 'internal_error' });
 });
 
-// Register routes with versioning
-app.use(`${apiPrefix}/invites`, invitesRouter);
-
-// Health check route
-app.get(`${apiPrefix}/health`, (req, res) => {
-  res.json({ 
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime()
-  });
+app.listen(PORT, () => {
+  console.log(`CondoOS API listening on http://localhost:${PORT}`);
 });
-
-// Setup WebSocket handlers
-setupWebSocketHandlers(io);
-
-// Error handling
-app.use(errorHandler);
-
-// Start server
-httpServer.listen(port, () => {
-  console.log(`Server is running on port ${port}`);
-  console.log(`API version: ${apiVersion}`);
-  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-}); 

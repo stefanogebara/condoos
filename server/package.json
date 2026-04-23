@@ -1,41 +1,40 @@
 {
-  "name": "condo-management-server",
-  "version": "1.0.0",
-  "description": "Server for condominium management system",
+  "name": "condoos-server",
+  "version": "0.1.0",
+  "description": "CondoOS API server",
   "main": "dist/server.js",
   "scripts": {
-    "start": "cross-env PORT=3001 ts-node src/server.ts",
-    "dev": "cross-env PORT=3001 nodemon --ignore client/ src/server.ts",
+    "start": "node dist/server.js",
+    "dev": "cross-env PORT=4000 nodemon --watch src --ext ts --exec \"ts-node src/server.ts\"",
     "build": "tsc",
-    "migrate": "node dist/db/migrate.js"
+    "seed": "ts-node src/db/seed.ts",
+    "db:reset": "node -e \"require('fs').rmSync('./data/condoos.sqlite',{force:true})\" && npm run seed"
   },
   "dependencies": {
-    "@clerk/backend": "^1.29.0",
-    "@clerk/clerk-sdk-node": "^4.13.23",
-    "@types/nodemailer": "^6.4.14",
-    "@types/uuid": "^9.0.8",
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^11.5.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
-    "express": "^4.18.3",
-    "nodemailer": "^6.9.12",
-    "pg": "^8.11.3",
-    "svix": "^1.64.1",
-    "uuid": "^9.0.1"
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.0",
+    "node-fetch": "^2.7.0",
+    "uuid": "^9.0.1",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/better-sqlite3": "^7.6.11",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
-    "@types/node": "^20.11.28",
-    "@types/pg": "^8.11.2",
+    "@types/jsonwebtoken": "^9.0.6",
+    "@types/morgan": "^1.9.9",
+    "@types/node": "^20.14.0",
+    "@types/node-fetch": "^2.6.11",
+    "@types/uuid": "^9.0.8",
     "cross-env": "^7.0.3",
     "nodemon": "^3.1.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.4.2"
-  },
-  "nodemonConfig": {
-    "ignore": [
-      "client/*"
-    ],
-    "delay": "2500"
   }
 }

@@ -1,82 +1,94 @@
-# Condo Management System
+# CondoOS
 
-A full-stack application for managing condominium properties, built with React, TypeScript, and Node.js.
+**An AI-powered operating system for condominiums.** Packages, visitors, amenities, meetings, voting, suggestions, and AI-drafted proposals and summaries — all in one soft, tactile interface.
 
-## Features
+Design language: **claymorphism + glassmorphism**. Muted sage / dusty peach / cream palette. Frosted glass cards layered over rich gradient backgrounds and soft 3D clay illustrations.
 
-- User authentication with Clerk
-- Role-based access control
-- Company and resident management
-- Property management
-- Maintenance request tracking
+## Quickstart
 
-## Tech Stack
-
-- Frontend: React, TypeScript, TailwindCSS
-- Backend: Node.js, Express, TypeScript
-- Authentication: Clerk
-- Database: (To be implemented)
-
-## Getting Started
-
-### Prerequisites
-
-- Node.js (v14 or higher)
-- npm or yarn
-- Clerk account for authentication
-
-### Installation
-
-1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/condo-management.git
-cd condo-management
-```
+# Install everything
+npm run install:all
 
-2. Install dependencies:
-```bash
-# Install server dependencies
-cd server
-npm install
+# Seed demo data
+npm run seed
 
-# Install client dependencies
-cd ../client
-npm install
-```
-
-3. Set up environment variables:
-- Create a `.env` file in the server directory
-- Add your Clerk secret key and other configuration
-
-4. Start the development servers:
-```bash
-# Start the backend server
-cd server
+# Run both server (4000) and client (3000)
 npm run dev
-
-# Start the frontend development server
-cd ../client
-npm start
 ```
 
-## Project Structure
+Then open `http://localhost:3000`.
+
+### Demo accounts
+
+| Role        | Email                    | Password      |
+| ----------- | ------------------------ | ------------- |
+| Board admin | `admin@condoos.dev`      | `admin123`    |
+| Resident    | `resident@condoos.dev`   | `resident123` |
+
+Four more residents (Jordan, Taylor, Riley, Sam) are seeded with password `resident123` for vote/comment demos.
+
+## The demo flow
+
+1. **Resident logs in** → overview dashboard
+2. **Submits a suggestion** ("lobby AC is broken, it's 30°C inside")
+3. **AI drafts a proposal** — title, description, category, estimated cost
+4. **Discussion** — other residents comment; AI summarizes the thread on demand
+5. **Board opens voting** — residents vote live
+6. **Board holds a meeting** → pastes raw notes → **AI produces** summary, decisions, action items, and a resident-friendly announcement
+7. **Published** as an announcement with tracked action items
+
+## Architecture
 
 ```
-condo-management/
-├── client/                 # React frontend
-├── server/                 # Node.js backend
-├── .gitignore
-└── README.md
+condoos/
+├── server/          # Express + TypeScript + SQLite (better-sqlite3)
+│   └── src/
+│       ├── db/      # schema + seed
+│       ├── routes/  # auth, packages, visitors, amenities, announcements,
+│       │           # suggestions, proposals, meetings, users, ai
+│       ├── ai/      # OpenRouter client, prompts, fallbacks
+│       └── lib/     # auth middleware, response helpers
+├── client-app/      # React 18 + CRA + Tailwind
+│   └── src/
+│       ├── pages/   # Login, Dashboard (resident), Board (admin)
+│       ├── components/
+│       └── lib/
+└── package.json     # workspace root
 ```
 
-## Contributing
+### Tech
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+- **Frontend**: React 18 + TypeScript, Tailwind (custom clay/glass tokens), react-router, axios, react-hot-toast, lucide-react
+- **Backend**: Node 20 + Express 4 + TypeScript, better-sqlite3 (zero-config, WAL mode), Zod, bcryptjs, jsonwebtoken, morgan
+- **AI**: OpenRouter → `anthropic/claude-3.5-haiku` with deterministic fallbacks so the demo never fails, even offline
+- **Storage**: SQLite file at `server/data/condoos.sqlite` (WAL). Reset with `npm run seed`.
+
+## AI features
+
+| Endpoint                                  | What it does                                                                 |
+| ----------------------------------------- | ---------------------------------------------------------------------------- |
+| `POST /api/ai/proposal-draft`             | Turns a free-text suggestion into a structured proposal                      |
+| `POST /api/ai/cluster-suggestions`        | Groups similar complaints into themed clusters                               |
+| `POST /api/ai/proposals/:id/summarize-thread` | Summarizes a discussion (agreements, disagreements, open questions)      |
+| `POST /api/ai/proposals/:id/explain`      | Plain-language, resident-facing explanation of a proposal                    |
+| `POST /api/ai/proposals/:id/decision-summary` | Board-ready decision summary after a vote closes                        |
+| `POST /api/ai/meetings/:id/summarize`     | Raw notes → summary + decisions + action items + resident announcement draft |
+
+Every AI endpoint has a **deterministic fallback** — if `OPENROUTER_API_KEY` is missing or the model errors, the endpoint returns a sensible canned response tagged with `_fallback: true`. Demos never hang.
+
+## Environment
+
+Copy `.env.example` to `.env`:
+
+```bash
+PORT=4000
+JWT_SECRET=change-me
+DB_PATH=./data/condoos.sqlite
+OPENROUTER_API_KEY=sk-or-v1-...
+OPENROUTER_MODEL=anthropic/claude-3.5-haiku
+```
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details. 
+MIT.
