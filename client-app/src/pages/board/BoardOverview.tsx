@@ -17,12 +17,18 @@ export default function BoardOverview() {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [residents, setResidents] = useState<any[]>([]);
+  const [condoName, setCondoName] = useState<string>('');
 
   useEffect(() => {
     apiGet<Proposal[]>('/proposals').then(setProposals).catch(() => {});
     apiGet<Suggestion[]>('/suggestions').then(setSuggestions).catch(() => {});
     apiGet<Meeting[]>('/meetings').then(setMeetings).catch(() => {});
     apiGet<any[]>('/users/residents').then(setResidents).catch(() => {});
+    apiGet<Array<{ status: string; condo_name: string }>>('/onboarding/me')
+      .then((rows) => {
+        const active = rows.find((r) => r.status === 'active');
+        if (active) setCondoName(active.condo_name);
+      }).catch(() => {});
   }, []);
 
   const openSuggestions = suggestions.filter((s) => s.status === 'open');
@@ -33,7 +39,7 @@ export default function BoardOverview() {
     <>
       <PageHeader
         title={`Welcome back, ${user?.first_name}.`}
-        subtitle="Everything that needs your attention at Pine Ridge Towers."
+        subtitle={condoName ? `Everything that needs your attention at ${condoName}.` : "Everything that needs your attention."}
       />
 
       <div className="grid md:grid-cols-4 gap-4 mb-8">

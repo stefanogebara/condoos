@@ -194,6 +194,15 @@ router.post('/join', requireAuth, asyncHandler(async (req: AuthedRequest, res) =
   return ok(res, { id: newId, status, condominium_id: condo.id });
 }));
 
+// GET /api/onboarding/my-invite-code — returns invite code for the current user's condo
+router.get('/my-invite-code', requireAuth, (req: AuthedRequest, res) => {
+  const u = req.user!;
+  const row = db.prepare(
+    `SELECT invite_code FROM condominiums WHERE id = ?`
+  ).get(u.condominium_id) as { invite_code: string | null } | undefined;
+  return ok(res, { invite_code: row?.invite_code || null });
+});
+
 // ---------------------------------------------------------------------------
 // Current user's memberships (pending + active) — used by first-run routing
 // ---------------------------------------------------------------------------
