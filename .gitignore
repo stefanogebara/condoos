@@ -21,6 +21,7 @@ server/data/
 # Logs
 *.log
 npm-debug.log*
+test-results/
 
 # Editors
 .vscode/

@@ -4,30 +4,40 @@ import os from 'node:os';
 import path from 'node:path';
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..').replace(/^\/([A-Za-z]:)/, '$1');
-const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+const npmCli = process.env.npm_execpath;
+const npm = npmCli ? process.execPath : (process.platform === 'win32' ? 'npm.cmd' : 'npm');
 const dbPath = path.join(os.tmpdir(), `condoos-e2e-${Date.now()}-${Math.random().toString(16).slice(2)}.sqlite`);
 const children = [];
 
+function npmArgs(args) {
+  return npmCli ? [npmCli, ...args] : args;
+}
+
 function run(args, env = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn(npm, args, {
+    const child = spawn(npm, npmArgs(args), {
       cwd: root,
       env: { ...process.env, ...env },
       stdio: 'inherit',
       shell: false,
     });
+    child.on('error', reject);
     child.on('exit', (code) => code === 0 ? resolve(undefined) : reject(new Error(`${npm} ${args.join(' ')} exited ${code}`)));
   });
 }
 
 function start(args, env = {}) {
-  const child = spawn(npm, args, {
+  const child = spawn(npm, npmArgs(args), {
     cwd: root,
     env: { ...process.env, ...env },
     stdio: 'inherit',
     shell: false,
   });
   children.push(child);
+  child.on('error', (err) => {
+    console.error(err);
+    if (!shuttingDown) process.exit(1);
+  });
   child.on('exit', (code) => {
     if (!shuttingDown && code !== 0) process.exit(code ?? 1);
   });
@@ -49,6 +59,7 @@ await run(['--prefix', 'server', 'run', 'seed'], { DB_PATH: dbPath, NODE_ENV: 'd
 start(['--prefix', 'server', 'exec', '--', 'ts-node', 'src/server.ts'], {
   DB_PATH: dbPath,
   NODE_ENV: 'production',
+  RATE_LIMIT_DISABLED: '1',
   PORT: '4312',
   JWT_SECRET: 'e2e-secret',
   CORS_ORIGIN: 'http://localhost:5175',

@@ -2,10 +2,18 @@ import { expect, test, type Page, type APIRequestContext } from '@playwright/tes
 
 const apiURL = process.env.E2E_API_URL || 'http://localhost:4312/api';
 
-async function loginApi(request: APIRequestContext, email: string, password: string) {
+// Cache sessions per worker — prod /auth/login is rate-limited.
+type Session = { token: string; user: Record<string, unknown> };
+const sessionCache = new Map<string, Session>();
+
+async function loginApi(request: APIRequestContext, email: string, password: string): Promise<Session> {
+  const cached = sessionCache.get(email);
+  if (cached) return cached;
   const response = await request.post(`${apiURL}/auth/login`, { data: { email, password } });
-  expect(response.ok()).toBeTruthy();
-  return (await response.json()).data as { token: string; user: Record<string, unknown> };
+  expect(response.ok(), `login failed for ${email}: ${response.status()} ${await response.text()}`).toBeTruthy();
+  const session = (await response.json()).data as Session;
+  sessionCache.set(email, session);
+  return session;
 }
 
 async function loginInBrowser(page: Page, request: APIRequestContext, kind: 'admin' | 'resident') {

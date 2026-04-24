@@ -14,12 +14,18 @@ interface RateLimitOptions {
 
 const buckets = new Map<string, Bucket>();
 
+function disabled(): boolean {
+  return process.env.RATE_LIMIT_DISABLED === '1' || process.env.RATE_LIMIT_DISABLED === 'true';
+}
+
 function clientIp(req: Request): string {
   return req.ip || req.socket.remoteAddress || 'unknown';
 }
 
 export function createRateLimit(options: RateLimitOptions) {
   return (req: Request, res: Response, next: NextFunction) => {
+    if (disabled()) return next();
+
     const now = Date.now();
     const identity = options.key ? options.key(req) : clientIp(req);
     const key = `${options.keyPrefix}:${identity}`;
