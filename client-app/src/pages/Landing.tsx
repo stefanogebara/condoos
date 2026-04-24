@@ -72,9 +72,9 @@ export default function Landing() {
           <div className="relative flex items-center justify-center animate-fade-up">
             <div className="relative w-full max-w-[560px] aspect-[4/3] flex items-center justify-center">
               <img
-                src="/images/hero-clay-building.jpg"
-                alt="CondoOS"
-                className="w-full h-full object-contain animate-float-slow drop-shadow-[0_30px_40px_rgba(110,80,60,0.25)]"
+                src="/images/characters/hero-community-01.jpg"
+                alt="A community of residents gathered in a warm lobby, one holding a phone with CondoOS"
+                className="w-full h-full object-cover rounded-[36px] shadow-clay-lg animate-float-slow"
               />
               <GlassCard className="absolute top-6 -left-2 p-3 px-4 hidden md:flex items-center gap-3 w-56">
                 <div className="w-9 h-9 rounded-xl bg-sage-200 flex items-center justify-center text-sage-700"><Package className="w-4 h-4" /></div>
@@ -182,18 +182,34 @@ export default function Landing() {
       {/* AGO / Brazilian section — the moat */}
       <section id="ago" className="relative px-6 lg:px-12 pb-28 scroll-mt-20">
         <div className="max-w-7xl mx-auto">
-          <div className="max-w-3xl mb-12">
-            <Badge tone="peach" className="mb-4"><Gavel className="w-3 h-3" /> Compliance brasileira</Badge>
-            <h2 className="font-display text-4xl md:text-5xl text-dusk-500 tracking-tight leading-[1.05] mt-4">
-              AGO no app.
-              <br />
-              <span className="italic text-dusk-400">Ata gerada pela IA.</span>
-            </h2>
-            <p className="text-dusk-300 mt-4 text-lg leading-relaxed">
-              Convocação com 8 dias de antecedência, procurações digitais, quórum aplicado automaticamente,
-              votação por maioria simples ou 2/3 (convenção), e a ata sai pronta no fim da sessão.
-              Tudo alinhado ao Código Civil Art. 1350.
-            </p>
+          <div className="grid lg:grid-cols-[1.05fr_1fr] gap-12 items-center mb-14">
+            <div className="max-w-xl">
+              <Badge tone="peach" className="mb-4"><Gavel className="w-3 h-3" /> Compliance brasileira</Badge>
+              <h2 className="font-display text-4xl md:text-5xl text-dusk-500 tracking-tight leading-[1.05] mt-4">
+                AGO no app.
+                <br />
+                <span className="italic text-dusk-400">Ata gerada pela IA.</span>
+              </h2>
+              <p className="text-dusk-300 mt-4 text-lg leading-relaxed">
+                Convocação com 8 dias de antecedência, procurações digitais, quórum aplicado automaticamente,
+                votação por maioria simples ou 2/3 (convenção), e a ata sai pronta no fim da sessão.
+                Tudo alinhado ao Código Civil Art. 1350.
+              </p>
+            </div>
+            <div className="relative">
+              <img
+                src="/images/characters/char-ago-assembly.jpg"
+                alt="Condo residents seated around a table at an AGO assembly meeting"
+                className="w-full rounded-[32px] shadow-clay-lg"
+              />
+              <GlassCard className="absolute -bottom-5 -left-3 p-3 px-4 flex items-center gap-3 w-56">
+                <div className="w-9 h-9 rounded-xl bg-sage-200 flex items-center justify-center text-sage-700"><ShieldCheck className="w-4 h-4" /></div>
+                <div>
+                  <div className="text-xs text-dusk-200">Quórum atingido</div>
+                  <div className="text-sm font-semibold text-dusk-500">12 de 16 presentes</div>
+                </div>
+              </GlassCard>
+            </div>
           </div>
 
           <div className="grid md:grid-cols-4 gap-4">
@@ -268,6 +284,43 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* Every resident — accessibility + Brazilian warmth */}
+      <section id="every-resident" className="relative px-6 lg:px-12 pb-28">
+        <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-12 items-center">
+          <div className="relative">
+            <img
+              src="/images/characters/char-elderly-confident.jpg"
+              alt="An older resident using CondoOS on her phone at the kitchen table"
+              className="w-full rounded-[32px] shadow-clay-lg"
+            />
+            <GlassCard className="absolute -top-4 -right-3 p-3 px-4 flex items-center gap-3 w-52">
+              <div className="w-9 h-9 rounded-xl bg-peach-100 flex items-center justify-center text-peach-500"><MessageCircle className="w-4 h-4" /></div>
+              <div>
+                <div className="text-xs text-dusk-200">Nova mensagem</div>
+                <div className="text-sm font-semibold text-dusk-500">Votação aberta</div>
+              </div>
+            </GlassCard>
+          </div>
+          <div className="max-w-xl">
+            <Badge tone="sage" className="mb-4">Para cada morador</Badge>
+            <h2 className="font-display text-4xl md:text-5xl text-dusk-500 tracking-tight leading-[1.05]">
+              Do adolescente de skate
+              <br />
+              <span className="italic text-dusk-400">à Dona Teresa de 72.</span>
+            </h2>
+            <p className="text-dusk-300 mt-4 text-lg leading-relaxed">
+              Todos votam. Todos se inteiram. Ninguém precisa virar especialista em condomínio.
+              A IA explica em linguagem humana. O WhatsApp entrega o aviso onde o morador já está.
+            </p>
+            <ul className="mt-6 space-y-3 text-dusk-400">
+              <li className="flex items-start gap-3"><Check className="w-5 h-5 text-sage-700 shrink-0 mt-0.5" /><span><strong className="text-dusk-500">Fonte grande, contraste alto</strong> — sem lupa, sem desculpa.</span></li>
+              <li className="flex items-start gap-3"><Check className="w-5 h-5 text-sage-700 shrink-0 mt-0.5" /><span><strong className="text-dusk-500">Notificação no WhatsApp</strong> — chega onde o morador já passa o dia.</span></li>
+              <li className="flex items-start gap-3"><Check className="w-5 h-5 text-sage-700 shrink-0 mt-0.5" /><span><strong className="text-dusk-500">Explicação em plain-language</strong> — a IA traduz o juridiquês antes do voto.</span></li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
       {/* FAQ */}
       <section id="faq" className="relative px-6 lg:px-12 pb-28 scroll-mt-20">
         <div className="max-w-4xl mx-auto">
@@ -301,14 +354,20 @@ export default function Landing() {
 
       {/* CTA */}
       <section className="relative px-6 lg:px-12 pb-28">
-        <div className="max-w-4xl mx-auto text-center">
-          <h2 className="font-display text-4xl md:text-5xl text-dusk-500 tracking-tight leading-[1.05]">
+        <div className="max-w-4xl mx-auto text-center relative">
+          <img
+            src="/images/characters/char-community-hands.jpg"
+            alt=""
+            aria-hidden
+            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 opacity-30 blur-[1px] pointer-events-none select-none"
+          />
+          <h2 className="font-display text-4xl md:text-5xl text-dusk-500 tracking-tight leading-[1.05] relative">
             Vai que é hoje.
           </h2>
-          <p className="text-dusk-300 mt-4 text-lg max-w-xl mx-auto">
+          <p className="text-dusk-300 mt-4 text-lg max-w-xl mx-auto relative">
             Entre com o Google em 10s. Demo pronta para mostrar ao síndico no próximo WhatsApp do condomínio.
           </p>
-          <div className="mt-8 flex items-center justify-center gap-3 flex-wrap">
+          <div className="mt-8 flex items-center justify-center gap-3 flex-wrap relative">
             <Link to="/login">
               <Button variant="primary" size="lg" rightIcon={<ArrowRight className="w-5 h-5" />}>
                 Entrar e explorar a demo
@@ -318,7 +377,7 @@ export default function Landing() {
               <Button variant="ghost" size="lg">Ver código no GitHub</Button>
             </a>
           </div>
-          <div className="mt-6 flex items-center justify-center gap-4 flex-wrap text-xs text-dusk-300">
+          <div className="mt-6 flex items-center justify-center gap-4 flex-wrap text-xs text-dusk-300 relative">
             <span className="inline-flex items-center gap-1.5"><Check className="w-3 h-3 text-sage-700" /> Google sign-in</span>
             <span className="inline-flex items-center gap-1.5"><Check className="w-3 h-3 text-sage-700" /> Dados seus ficam seus</span>
             <span className="inline-flex items-center gap-1.5"><Check className="w-3 h-3 text-sage-700" /> Sem cartão de crédito no beta</span>

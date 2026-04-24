@@ -5,9 +5,20 @@
 import fetch from 'node-fetch';
 import db from '../db';
 
-const ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
-const AUTH_TOKEN  = process.env.TWILIO_AUTH_TOKEN;
-const FROM        = process.env.TWILIO_WHATSAPP_FROM;
+type WhatsAppProvider = 'twilio' | 'waha' | 'none';
+
+function env(name: string): string | undefined {
+  const value = process.env[name];
+  return value && value.trim() ? value.trim() : undefined;
+}
+
+function configuredProvider(): WhatsAppProvider {
+  const explicit = env('WHATSAPP_PROVIDER')?.toLowerCase();
+  if (explicit === 'twilio' || explicit === 'waha' || explicit === 'none') return explicit;
+  if (env('WAHA_URL')) return 'waha';
+  if (env('TWILIO_ACCOUNT_SID') && env('TWILIO_AUTH_TOKEN') && env('TWILIO_WHATSAPP_FROM')) return 'twilio';
+  return 'none';
+}
 
 /**
  * Normalizes a raw phone input to E.164 with a `whatsapp:` prefix.
@@ -25,20 +36,29 @@ function normalizeWhatsAppNumber(raw: string): string | null {
   return `whatsapp:${withPlus}`;
 }
 
-function isConfigured(): boolean {
-  return Boolean(ACCOUNT_SID && AUTH_TOKEN && FROM);
+function normalizeDigits(raw: string): string | null {
+  const withoutPrefix = raw.trim().replace(/^whatsapp:/, '').replace(/@c\.us$/, '');
+  const digits = withoutPrefix.replace(/\D/g, '');
+  if (!digits) return null;
+  if ((digits.length === 10 || digits.length === 11) && !digits.startsWith('55')) return `55${digits}`;
+  return digits;
 }
 
 /** Public diagnostic — safe to expose (returns only booleans + masked from-number). */
 export function getWhatsAppStatus() {
-  const from = FROM || null;
+  const provider = configuredProvider();
+  const from = provider === 'twilio'
+    ? env('TWILIO_WHATSAPP_FROM') || null
+    : provider === 'waha'
+      ? env('WAHA_SESSION') || 'default'
+      : null;
   // Mask the middle of the phone number so we never leak full credentials.
   const maskedFrom = from && from.length >= 7
     ? `${from.slice(0, 6)}…${from.slice(-2)}`
     : from;
   return {
-    configured: isConfigured(),
-    provider: 'twilio' as const,
+    configured: provider !== 'none',
+    provider,
     from: maskedFrom,
   };
 }
@@ -50,21 +70,14 @@ export interface SendResult {
   error?: string;
 }
 
-/**
- * Send a WhatsApp text to a single recipient.
- * In dev (no creds), logs the payload and returns { ok: true, skipped: 'not_configured' }.
- */
-export async function sendText(to: string, body: string): Promise<SendResult> {
-  const toWa = normalizeWhatsAppNumber(to);
-  if (!toWa) return { ok: false, skipped: 'invalid_to' };
+async function sendViaTwilio(toWa: string, body: string): Promise<SendResult> {
+  const accountSid = env('TWILIO_ACCOUNT_SID');
+  const authToken = env('TWILIO_AUTH_TOKEN');
+  const from = env('TWILIO_WHATSAPP_FROM');
+  if (!accountSid || !authToken || !from) return { ok: true, skipped: 'not_configured' };
 
-  if (!isConfigured()) {
-    console.log(`[whatsapp:dev] → ${toWa}: ${body.slice(0, 120)}${body.length > 120 ? '…' : ''}`);
-    return { ok: true, skipped: 'not_configured' };
-  }
-
-  const fromWa = FROM!.startsWith('whatsapp:') ? FROM! : `whatsapp:${FROM}`;
-  const auth = Buffer.from(`${ACCOUNT_SID}:${AUTH_TOKEN}`).toString('base64');
+  const fromWa = from.startsWith('whatsapp:') ? from : `whatsapp:${from}`;
+  const auth = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
 
   const params = new URLSearchParams();
   params.set('From', fromWa);
@@ -72,7 +85,7 @@ export async function sendText(to: string, body: string): Promise<SendResult> {
   params.set('Body', body);
 
   try {
-    const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${ACCOUNT_SID}/Messages.json`, {
+    const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${auth}`,
@@ -87,9 +100,60 @@ export async function sendText(to: string, body: string): Promise<SendResult> {
     }
     return { ok: true, sid: data.sid };
   } catch (err: any) {
-    console.error('[whatsapp] send failed:', err?.message || err);
+    console.error('[whatsapp] Twilio send failed:', err?.message || err);
     return { ok: false, error: err?.message || 'network_error' };
   }
+}
+
+async function sendViaWaha(to: string, body: string): Promise<SendResult> {
+  const baseUrl = env('WAHA_URL')?.replace(/\/+$/, '');
+  if (!baseUrl) return { ok: true, skipped: 'not_configured' };
+
+  const digits = normalizeDigits(to);
+  if (!digits) return { ok: false, skipped: 'invalid_to' };
+
+  const session = env('WAHA_SESSION') || 'default';
+  const apiKey = env('WAHA_API_KEY') || env('WHATSAPP_API_KEY');
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (apiKey) headers['X-API-Key'] = apiKey;
+
+  try {
+    const res = await fetch(`${baseUrl}/sendText`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        session,
+        chatId: `${digits}@c.us`,
+        text: body,
+      }),
+    });
+    const data = await res.json().catch(() => ({})) as any;
+    if (!res.ok) {
+      console.error(`[whatsapp] WAHA ${res.status}:`, data?.message || data);
+      return { ok: false, error: data?.message || `waha_${res.status}` };
+    }
+    return { ok: true, sid: data?.id?._serialized || data?.id || data?.key?.id || undefined };
+  } catch (err: any) {
+    console.error('[whatsapp] WAHA send failed:', err?.message || err);
+    return { ok: false, error: err?.message || 'network_error' };
+  }
+}
+
+/**
+ * Send a WhatsApp text to a single recipient.
+ * In dev (no creds), logs the payload and returns { ok: true, skipped: 'not_configured' }.
+ */
+export async function sendText(to: string, body: string): Promise<SendResult> {
+  const toWa = normalizeWhatsAppNumber(to);
+  if (!toWa) return { ok: false, skipped: 'invalid_to' };
+
+  const provider = configuredProvider();
+  if (provider === 'none') {
+    console.log(`[whatsapp:dev] → ${toWa}: ${body.slice(0, 120)}${body.length > 120 ? '…' : ''}`);
+    return { ok: true, skipped: 'not_configured' };
+  }
+  if (provider === 'waha') return sendViaWaha(toWa, body);
+  return sendViaTwilio(toWa, body);
 }
 
 /**

@@ -39,3 +39,17 @@ flyctl secrets set -a condoos-api TWILIO_ACCOUNT_SID=...
 flyctl secrets set -a condoos-api TWILIO_AUTH_TOKEN=...
 flyctl secrets set -a condoos-api TWILIO_WHATSAPP_FROM=whatsapp:+14155238886
 ```
+
+WAHA outbound alternative:
+
+```bash
+flyctl secrets set -a condoos-api WHATSAPP_PROVIDER=waha
+flyctl secrets set -a condoos-api WAHA_URL=https://your-waha-app.fly.dev/api
+flyctl secrets set -a condoos-api WAHA_SESSION=default
+flyctl secrets set -a condoos-api WAHA_API_KEY=...
+```
+
+WAHA uses a WhatsApp Web session, so treat it as a channel adapter rather than
+the official WhatsApp Business API. Keep it on a dedicated account/session,
+protect the API key, and avoid repointing a WAHA webhook that belongs to another
+product.

@@ -172,7 +172,7 @@ test('board UI: create assembly → redirect to detail → add agenda → convok
 });
 
 // ---------------------------------------------------------------------------
-// Phase K — WhatsApp configuration health (delivery itself requires TWILIO_* creds)
+// Phase K — WhatsApp configuration health (delivery itself requires provider creds)
 // ---------------------------------------------------------------------------
 
 test('whatsapp status endpoint returns shape (configured boolean + masked from)', async ({ request }) => {
@@ -183,7 +183,7 @@ test('whatsapp status endpoint returns shape (configured boolean + masked from)'
   expect(r.ok()).toBeTruthy();
   const body = (await r.json()).data;
   expect(typeof body.configured).toBe('boolean');
-  expect(body.provider).toBe('twilio');
+  expect(['twilio', 'waha', 'none']).toContain(body.provider);
   // from is either null (not configured) or a masked string like "+1415…86"
   if (body.from !== null) {
     expect(body.from).toMatch(/…/);                  // masked in the middle
