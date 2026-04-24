@@ -1,6 +1,5 @@
-// Full UI smoke — click through every board + resident page, verify each
-// renders its main heading and at least one interactive element. Screenshots
-// land in test-results/ui-smoke/ so we can eyeball later if something broke.
+// Full UI smoke — click through every board + resident page and verify each
+// renders its main heading and role-appropriate navigation.
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 
 const apiURL = process.env.E2E_API_URL || 'http://127.0.0.1:4312/api';
@@ -121,15 +120,18 @@ test.describe('resident UI pages render', () => {
     { path: '/app/suggest',       heading: /Suggest|Sugerir/i },
     { path: '/app/settings',      heading: /Settings|Preferênc/i },
   ];
-  for (const p of pages) {
-    test(`${p.path} loads`, async ({ page, request }) => {
-      await browserLogin(page, request, 'resident');
-      await page.goto(p.path);
-      await expect(page.getByRole('heading').first()).toBeVisible();
-      // Sidebar must show — scope to <aside>, which is only the visible sidebar
-      await expect(page.locator('aside').getByText(/Resident/i).first()).toBeVisible();
-    });
-  }
+  test('all resident routes load', async ({ page, request }) => {
+    await browserLogin(page, request, 'resident');
+
+    for (const p of pages) {
+      await test.step(p.path, async () => {
+        await page.goto(p.path);
+        await expect(page.getByRole('heading', { name: p.heading }).first()).toBeVisible();
+        // Sidebar must show — scope to <aside>, which is only the visible sidebar.
+        await expect(page.locator('aside').getByText(/Resident/i).first()).toBeVisible();
+      });
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -147,15 +149,18 @@ test.describe('board UI pages render', () => {
     { path: '/board/announcements', heading: /Announcements|Comunic/i },
     { path: '/board/residents',     heading: /Residents|Moradores/i },
   ];
-  for (const p of pages) {
-    test(`${p.path} loads`, async ({ page, request }) => {
-      await browserLogin(page, request, 'admin');
-      await page.goto(p.path);
-      await expect(page.getByRole('heading').first()).toBeVisible();
-      // Board sidebar marker — scope to <aside> which is only the visible sidebar
-      await expect(page.locator('aside').getByText(/Board admin/i).first()).toBeVisible();
-    });
-  }
+  test('all board routes load', async ({ page, request }) => {
+    await browserLogin(page, request, 'admin');
+
+    for (const p of pages) {
+      await test.step(p.path, async () => {
+        await page.goto(p.path);
+        await expect(page.getByRole('heading', { name: p.heading }).first()).toBeVisible();
+        // Board sidebar marker — scope to <aside> which is only the visible sidebar.
+        await expect(page.locator('aside').getByText(/Board admin/i).first()).toBeVisible();
+      });
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -215,14 +220,16 @@ test('board residents: table renders + import roster button visible', async ({ p
 // Logout ends the session
 // ---------------------------------------------------------------------------
 
-test('logout: Sign out button clears session and redirects', async ({ page, request }) => {
+test('logout: Sign out button clears session and redirects', async ({ page, request, isMobile }) => {
   await browserLogin(page, request, 'resident');
   await page.goto('/app');
 
-  const openMenu = page.getByRole('button', { name: /Open menu/i });
-  if (await openMenu.isVisible()) {
+  if (isMobile) {
+    const openMenu = page.getByRole('button', { name: /Open menu/i });
+    await expect(openMenu).toBeVisible();
     await openMenu.click();
     await expect(page.getByRole('button', { name: /Close menu/i })).toBeVisible();
+    await expect(page.locator('aside')).not.toHaveAttribute('aria-hidden', 'true');
   }
 
   const signOut = page.getByRole('button', { name: /Sign out|Sair/i });

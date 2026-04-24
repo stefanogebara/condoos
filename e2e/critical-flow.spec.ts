@@ -32,8 +32,8 @@ test('signed-out landing, login, route guard, and mobile drawer work', async ({ 
   await page.goto('/');
   await page.evaluate(() => localStorage.clear());
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: /Run your building, softly/i })).toBeVisible();
-  await expect(page.getByRole('link', { name: /Sign in/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Seu condomínio/i })).toBeVisible();
+  await expect(page.getByRole('link', { name: /^(Entrar|Sign in)$/i })).toBeVisible();
 
   await loginInBrowser(page, request, 'resident');
   await page.goto('/app');

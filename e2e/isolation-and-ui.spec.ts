@@ -347,9 +347,9 @@ test('board UI: compliance editor saves quorum + datetime window', async ({ page
   // The compliance card is only rendered when status === 'discussion'.
   await expect(page.getByText(/Voting compliance/i)).toBeVisible();
 
-  // Pick 50% quorum
+  // Pick 50% quorum — match by `value` (the option's value attr is the integer)
   const quorumSelect = page.locator('select').filter({ hasText: /No quorum|25%|50%/ }).first();
-  await quorumSelect.selectOption({ label: '50%' });
+  await quorumSelect.selectOption({ value: '50' });
 
   // Set voting window — opens in 10 min, closes in 7 days.
   const now = new Date();
@@ -363,7 +363,13 @@ test('board UI: compliance editor saves quorum + datetime window', async ({ page
   await dateInputs.nth(0).fill(fmt(opens));
   await dateInputs.nth(1).fill(fmt(closes));
 
-  await page.getByRole('button', { name: /Save voting rules/i }).click();
+  // Click Save and wait for the PATCH to complete before GETing
+  await Promise.all([
+    page.waitForResponse((res) =>
+      res.url().includes(`/proposals/${target.id}/compliance`) && res.request().method() === 'PATCH' && res.ok(),
+    ),
+    page.getByRole('button', { name: /Save voting rules/i }).click(),
+  ]);
 
   // Verify via API that the PATCH landed.
   const detail = await request.get(`${apiURL}/proposals/${target.id}`, { headers: { Authorization: `Bearer ${token}` } });
