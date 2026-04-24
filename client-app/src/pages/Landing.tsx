@@ -1,10 +1,11 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Users, Vote, Sparkles, Calendar, Package, Waves } from 'lucide-react';
+import { ArrowRight, Users, Vote, Sparkles, Calendar, Package, Waves, Gavel, MessageCircle, ShieldCheck, FileText, Check } from 'lucide-react';
 import Logo from '../components/Logo';
 import Button from '../components/Button';
 import GlassCard from '../components/GlassCard';
 import Avatar from '../components/Avatar';
+import Badge from '../components/Badge';
 
 export default function Landing() {
   return (
@@ -14,8 +15,9 @@ export default function Landing() {
         <Logo />
         <div className="hidden md:flex items-center gap-1 text-sm text-dusk-300">
           <a href="#features"  className="px-3 py-1.5 rounded-full hover:bg-white/50 transition">Features</a>
-          <a href="#ai"        className="px-3 py-1.5 rounded-full hover:bg-white/50 transition">AI co-pilot</a>
-          <Link to="/design"   className="px-3 py-1.5 rounded-full hover:bg-white/50 transition">Design</Link>
+          <a href="#ago"       className="px-3 py-1.5 rounded-full hover:bg-white/50 transition">AGO</a>
+          <a href="#loop"      className="px-3 py-1.5 rounded-full hover:bg-white/50 transition">How it works</a>
+          <a href="#faq"       className="px-3 py-1.5 rounded-full hover:bg-white/50 transition">FAQ</a>
           <a href="https://github.com/stefanogebara/condoos" target="_blank" rel="noreferrer" className="px-3 py-1.5 rounded-full hover:bg-white/50 transition">GitHub</a>
         </div>
         <Link to="/login"><Button variant="primary" size="sm" rightIcon={<ArrowRight className="w-4 h-4" />}>Sign in</Button></Link>
@@ -26,14 +28,9 @@ export default function Landing() {
         <div className="max-w-7xl mx-auto grid lg:grid-cols-[1.05fr_1fr] gap-14 items-center">
           <div className="relative z-10 animate-fade-up">
             <div className="inline-flex items-center gap-3 mb-10">
-              <div className="flex -space-x-2">
-                <Avatar name="Maya Chen" size="sm" />
-                <Avatar name="Jordan Martins" size="sm" />
-                <Avatar name="Taylor Khan" size="sm" />
-              </div>
               <span className="chip">
                 <span className="w-1.5 h-1.5 rounded-full bg-sage-400" />
-                trusted by 500+ condominiums
+                Early access · Brazilian condos first
               </span>
             </div>
 
@@ -178,6 +175,153 @@ export default function Landing() {
                 <p className="text-[15px] leading-relaxed">Opens for voting → residents approve → AI publishes a resident-friendly announcement.</p>
               </GlassCard>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* AGO / Brazilian section — the moat */}
+      <section id="ago" className="relative px-6 lg:px-12 pb-28 scroll-mt-20">
+        <div className="max-w-7xl mx-auto">
+          <div className="max-w-3xl mb-12">
+            <Badge tone="peach" className="mb-4"><Gavel className="w-3 h-3" /> Compliance brasileira</Badge>
+            <h2 className="font-display text-4xl md:text-5xl text-dusk-500 tracking-tight leading-[1.05] mt-4">
+              AGO no app.
+              <br />
+              <span className="italic text-dusk-400">Ata gerada pela IA.</span>
+            </h2>
+            <p className="text-dusk-300 mt-4 text-lg leading-relaxed">
+              Convocação com 8 dias de antecedência, procurações digitais, quórum aplicado automaticamente,
+              votação por maioria simples ou 2/3 (convenção), e a ata sai pronta no fim da sessão.
+              Tudo alinhado ao Código Civil Art. 1350.
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-4 gap-4">
+            {[
+              { icon: FileText,    title: 'Pauta auto-gerada',    body: 'A IA monta a pauta a partir das propostas abertas — contas, orçamento, assuntos do síndico.' },
+              { icon: Users,       title: 'Procurações digitais', body: 'Moradores concedem procuração a outro proprietário em 10s. Voto com peso correto.' },
+              { icon: ShieldCheck, title: 'Quórum por item',      body: 'Maioria simples, 2/3 ou unanimidade — aplicado por tipo de pauta (convenção, orçamento, eleição).' },
+              { icon: Sparkles,    title: 'Ata em PT-BR',         body: 'Fechou a sessão? A ata já está escrita, com presença, votos e deliberações. Só revisar.' },
+            ].map((f, i) => (
+              <GlassCard key={i} variant="clay" hover className="p-6">
+                <div className="w-11 h-11 rounded-2xl bg-peach-100 text-peach-700 flex items-center justify-center mb-4">
+                  <f.icon className="w-5 h-5" />
+                </div>
+                <h3 className="font-display text-[18px] font-semibold text-dusk-500 tracking-tight leading-tight">{f.title}</h3>
+                <p className="text-[14px] text-dusk-300 leading-relaxed mt-2">{f.body}</p>
+              </GlassCard>
+            ))}
+          </div>
+
+          <div className="mt-8 flex items-center gap-4 flex-wrap text-xs uppercase tracking-[0.14em] text-dusk-200 font-medium">
+            <span>Código Civil Art. 1350</span>
+            <span className="w-1 h-1 rounded-full bg-dusk-200/60" />
+            <span>LGPD</span>
+            <span className="w-1 h-1 rounded-full bg-dusk-200/60" />
+            <span>Assinatura digital opcional</span>
+          </div>
+        </div>
+      </section>
+
+      {/* How it works — the full loop */}
+      <section id="loop" className="relative px-6 lg:px-12 pb-28 scroll-mt-20">
+        <div className="max-w-7xl mx-auto">
+          <div className="max-w-2xl mb-12">
+            <span className="chip mb-4"><span className="w-1.5 h-1.5 rounded-full bg-sage-400" /> uma semana no CondoOS</span>
+            <h2 className="font-display text-4xl md:text-5xl text-dusk-500 tracking-tight leading-[1.05] mt-4">
+              Da reclamação
+              <br />
+              <span className="italic text-dusk-400">ao WhatsApp.</span>
+            </h2>
+            <p className="text-dusk-300 mt-4 text-lg leading-relaxed">
+              Uma semana real. De "o ar do saguão não tá funcionando" até o morador ler a decisão no celular.
+            </p>
+          </div>
+
+          <div className="relative">
+            <div className="absolute left-[22px] top-6 bottom-6 w-px bg-dusk-200/40 hidden md:block" />
+            <div className="space-y-5">
+              {[
+                { day: 'Seg',    icon: MessageCircle, color: 'sage',  title: 'Morador reclama na aba Sugerir', body: '"O ar do saguão tá quebrado. Ontem marcou 30°C aqui dentro." A IA transforma em proposta estruturada (Maintenance · ~R$ 47.000).' },
+                { day: 'Ter',    icon: Users,         color: 'peach', title: 'Discussão entre vizinhos',        body: 'Comentários, fotos, sugestões. A IA resume a thread em pontos de acordo e desacordo para o síndico.' },
+                { day: 'Qua',    icon: Vote,          color: 'sage',  title: 'Votação abre com quórum + janela', body: 'Síndico define quórum (50%) e janela (48h). WhatsApp dispara para todos os moradores elegíveis.' },
+                { day: 'Sex',    icon: Gavel,         color: 'peach', title: 'Fechamento automático + decisão', body: 'Janela expirou, quórum batido. Outcome resolvido, síndico fecha com um clique e a IA escreve a comunicação oficial.' },
+                { day: 'Sáb',    icon: Sparkles,      color: 'sage',  title: 'Anúncio em linguagem humana',     body: 'Morador recebe no WhatsApp: "Aprovada a troca do ar do saguão. Instalação na semana do dia 5." Sem juridiquês.' },
+              ].map((step, i) => (
+                <div key={i} className="flex items-start gap-5 relative">
+                  <div className={`w-11 h-11 rounded-full flex items-center justify-center shrink-0 shadow-clay-sm bg-cream-50 border-2 ${
+                    step.color === 'sage' ? 'text-sage-700 border-sage-300' : 'text-peach-700 border-peach-300'
+                  }`}>
+                    <step.icon className="w-5 h-5" />
+                  </div>
+                  <GlassCard variant="clay" className="flex-1 p-5 flex items-start gap-4">
+                    <div className="font-mono text-xs uppercase tracking-widest text-dusk-200 shrink-0 pt-1">{step.day}</div>
+                    <div>
+                      <h4 className="font-display text-[17px] font-semibold text-dusk-500 tracking-tight">{step.title}</h4>
+                      <p className="text-[14px] text-dusk-300 mt-1 leading-relaxed">{step.body}</p>
+                    </div>
+                  </GlassCard>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* FAQ */}
+      <section id="faq" className="relative px-6 lg:px-12 pb-28 scroll-mt-20">
+        <div className="max-w-4xl mx-auto">
+          <div className="text-center mb-12">
+            <h2 className="font-display text-3xl md:text-4xl text-dusk-500 tracking-tight leading-[1.05]">
+              Dúvidas frequentes
+            </h2>
+          </div>
+          <div className="space-y-3">
+            {[
+              { q: 'Quanto custa?', a: 'Durante o beta (2026), grátis para até 50 unidades. Planos pagos a partir de R$ 2/unidade/mês quando sairmos do beta. Sem setup fee.' },
+              { q: 'Como funciona a LGPD?', a: 'Dados pessoais ficam em servidores no Brasil. Apenas dados essenciais (nome, unidade, voto) são armazenados. Morador pode exportar ou deletar a qualquer momento.' },
+              { q: 'A ata gerada pela IA tem validade legal?', a: 'A IA gera o rascunho. O síndico/secretário revisa e assina — é o ato jurídico humano que dá validade, como sempre foi.' },
+              { q: 'Funciona sem internet?', a: 'Durante a assembleia presencial, sim — os votos ficam em fila no celular e sincronizam quando a conexão voltar. Já validado em prédios com Wi-Fi ruim no saguão.' },
+              { q: 'Inquilinos votam?', a: 'Não. Por padrão, só proprietários ativos (Código Civil). Em propostas não-estatutárias, o síndico pode abrir voto para todos os residentes.' },
+              { q: 'Podemos migrar do sistema atual?', a: 'CSV de moradores → importado em 1 clique. Histórico de atas antigas → importamos em PDF na ativação. Zero digitação para o síndico.' },
+            ].map((item, i) => (
+              <details key={i} className="group">
+                <summary className="cursor-pointer list-none">
+                  <GlassCard className="p-5 flex items-start justify-between gap-4 group-hover:bg-cream-50/60 transition">
+                    <h4 className="font-display text-[17px] font-semibold text-dusk-500 tracking-tight">{item.q}</h4>
+                    <span className="text-dusk-300 group-open:rotate-45 transition-transform text-xl leading-none shrink-0">+</span>
+                  </GlassCard>
+                </summary>
+                <div className="px-5 py-4 text-[15px] text-dusk-400 leading-relaxed">{item.a}</div>
+              </details>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* CTA */}
+      <section className="relative px-6 lg:px-12 pb-28">
+        <div className="max-w-4xl mx-auto text-center">
+          <h2 className="font-display text-4xl md:text-5xl text-dusk-500 tracking-tight leading-[1.05]">
+            Vai que é hoje.
+          </h2>
+          <p className="text-dusk-300 mt-4 text-lg max-w-xl mx-auto">
+            Entre com o Google em 10s. Demo pronta para mostrar ao síndico no próximo WhatsApp do condomínio.
+          </p>
+          <div className="mt-8 flex items-center justify-center gap-3 flex-wrap">
+            <Link to="/login">
+              <Button variant="primary" size="lg" rightIcon={<ArrowRight className="w-5 h-5" />}>
+                Entrar e explorar a demo
+              </Button>
+            </Link>
+            <a href="https://github.com/stefanogebara/condoos" target="_blank" rel="noreferrer">
+              <Button variant="ghost" size="lg">Ver código no GitHub</Button>
+            </a>
+          </div>
+          <div className="mt-6 flex items-center justify-center gap-4 flex-wrap text-xs text-dusk-300">
+            <span className="inline-flex items-center gap-1.5"><Check className="w-3 h-3 text-sage-700" /> Google sign-in</span>
+            <span className="inline-flex items-center gap-1.5"><Check className="w-3 h-3 text-sage-700" /> Dados seus ficam seus</span>
+            <span className="inline-flex items-center gap-1.5"><Check className="w-3 h-3 text-sage-700" /> Sem cartão de crédito no beta</span>
           </div>
         </div>
       </section>
