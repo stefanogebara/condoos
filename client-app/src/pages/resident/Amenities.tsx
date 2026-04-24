@@ -106,7 +106,7 @@ export default function Amenities() {
             <h3 className="font-display text-xl text-dusk-500">Book: {selected.name}</h3>
             <button className="text-sm text-dusk-200 hover:text-dusk-400" onClick={() => setSelected(null)}>Cancel</button>
           </div>
-          <form onSubmit={book} className="grid md:grid-cols-2 gap-3">
+          <form onSubmit={book} noValidate className="grid md:grid-cols-2 gap-3">
             <label className="text-xs text-dusk-300">Starts
               <input type="datetime-local" className="input mt-1" value={starts} onChange={(e) => setStarts(e.target.value)} required />
             </label>
