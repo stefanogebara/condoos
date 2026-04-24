@@ -21,7 +21,7 @@ async function loginInBrowser(page: Page, request: APIRequestContext, kind: 'adm
     ? ['admin@condoos.dev', 'admin123']
     : ['resident@condoos.dev', 'resident123'];
   const session = await loginApi(request, credentials[0], credentials[1]);
-  await page.goto('/');
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
   await page.evaluate(({ token, user }) => {
     localStorage.setItem('condoos_token', token);
     localStorage.setItem('condoos_user', JSON.stringify(user));

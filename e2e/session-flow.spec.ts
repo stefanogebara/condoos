@@ -247,7 +247,7 @@ test.describe('mobile', () => {
   test('mobile drawer: hamburger opens, backdrop closes, no horizontal overflow', async ({ page, request }) => {
     // Programmatic login to skip the OAuth flow in E2E
     const session = await loginApi(request, 'resident@condoos.dev', 'resident123');
-    await page.goto('/');
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
     await page.evaluate(({ token, user }) => {
       localStorage.setItem('condoos_token', token);
       localStorage.setItem('condoos_user', JSON.stringify(user));

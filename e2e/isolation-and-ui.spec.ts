@@ -24,7 +24,7 @@ async function loginApi(request: APIRequestContext, email: string, password: str
 
 async function browserLogin(page: Page, request: APIRequestContext, email: string, password: string) {
   const s = await loginApi(request, email, password);
-  await page.goto('/');
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
   await page.evaluate(({ token, user }) => {
     localStorage.setItem('condoos_token', token);
     localStorage.setItem('condoos_user', JSON.stringify(user));
@@ -304,17 +304,27 @@ test('Google OAuth endpoint rejects invalid credentials with a known error code'
     .toContain(body.error);
 });
 
-test('login page renders Google sign-in button', async ({ page }) => {
+test('login page renders Google sign-in when configured', async ({ page, request }) => {
+  const configRes = await request.get(`${apiURL}/auth/config`);
+  expect(configRes.ok()).toBeTruthy();
+  const config = (await configRes.json()).data as { google_enabled: boolean; google_client_id: string | null };
+
   await page.goto('/login');
+
+  if (!config.google_enabled || !config.google_client_id) {
+    await expect(page.getByRole('button', { name: /Sign in/i })).toBeVisible();
+    await expect(page.getByText('or manually', { exact: true })).toBeVisible();
+    return;
+  }
+
   // The button text / element varies (Google one-tap iframe). Accept any of:
   //   - visible text "Continue with Google" or "Sign in with Google"
   //   - a Google iframe / button with role=button inside #google-signin
-  const hasButton = await page.evaluate(() => {
+  await expect.poll(async () => page.evaluate(() => {
     const iframeOrBtn = document.querySelector('iframe[src*="accounts.google.com"], [data-testid="google-signin"], [id*="google"]');
     const txt = document.body.innerText.toLowerCase();
     return Boolean(iframeOrBtn) || /continue with google|sign in with google|google/i.test(txt);
-  });
-  expect(hasButton, 'login page should surface Google sign-in').toBe(true);
+  }), { message: 'login page should surface Google sign-in' }).toBe(true);
 });
 
 test('board UI: compliance editor saves quorum + datetime window', async ({ page, request }) => {
