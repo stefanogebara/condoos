@@ -1,0 +1,36 @@
+app = "condoos-api"
+primary_region = "iad"
+kill_signal = "SIGINT"
+kill_timeout = "10s"
+
+[build]
+  dockerfile = "server/Dockerfile"
+
+[env]
+  CORS_ORIGIN = "https://condoos-ten.vercel.app"
+  DB_PATH = "/data/condoos.sqlite"
+  NODE_ENV = "production"
+  PORT = "8080"
+
+[[mounts]]
+  source = "condoos_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
+    method = "GET"
+    path = "/api/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
