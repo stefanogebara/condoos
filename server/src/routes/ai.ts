@@ -6,6 +6,7 @@ import { computeQuorum, getProposalVoteTally, resolveFinalOutcome } from '../lib
 import { chat, parseJsonLoose } from '../ai/openrouter';
 import {
   PROPOSAL_DRAFT_SYS,
+  PROPOSAL_CLASSIFY_SYS,
   CLUSTER_SYS,
   THREAD_SUMMARY_SYS,
   MEETING_SUMMARY_SYS,
@@ -30,11 +31,15 @@ const router = Router();
 async function tryAI<T>(
   messages: any[],
   fallback: () => T,
-  opts?: { jsonMode?: boolean; maxTokens?: number; label?: string }
+  opts?: { jsonMode?: boolean; maxTokens?: number; label?: string; tier?: 'quality' | 'cheap' }
 ): Promise<T> {
   const label = opts?.label || 'ai';
   try {
-    const raw = await chat(messages, { jsonMode: opts?.jsonMode, maxTokens: opts?.maxTokens });
+    const raw = await chat(messages, {
+      jsonMode: opts?.jsonMode,
+      maxTokens: opts?.maxTokens,
+      tier: opts?.tier,
+    });
     if (opts?.jsonMode) {
       const parsed = parseJsonLoose<T>(raw);
       if (!parsed) {
@@ -67,6 +72,51 @@ router.post('/proposal-draft', requireAuth, asyncHandler(async (req: AuthedReque
   return ok(res, out);
 }));
 
+// 1b. Classify a proposal title+description into one of 7 fixed categories.
+// Uses the cheap tier (DeepSeek) — pure classification doesn't need Haiku quality.
+const VALID_CATEGORIES = ['maintenance', 'infrastructure', 'safety', 'amenity', 'community', 'policy', 'financial'] as const;
+function fallbackClassify(text: string): { category: string; confidence: number; reasoning: string } {
+  const t = text.toLowerCase();
+  const hits: Array<[string, RegExp]> = [
+    ['safety',         /\b(safety|fire|smoke|camera|security|access|hazard|alarm|seguranç|cfˆmera|inc[eê]ndio)\b/i],
+    ['financial',      /\b(fee|dues|budget|reserve|assess|audit|taxa|cond[oô]mino|or[çc]ament|fundo)\b/i],
+    ['infrastructure', /\b(ev|solar|elevator|intern|upgrade|install.*(system|network)|elevador|rede)\b/i],
+    ['amenity',        /\b(pool|gym|sauna|party|bbq|grill|piscina|acad|churr|sal[aã]o)\b/i],
+    ['community',      /\b(event|party|welcome|neighbor|social|comemor|evento|vizinh)\b/i],
+    ['policy',         /\b(rule|policy|bylaw|pet|guest|noise|quiet hours|regra|convenç|regiment|anim)\b/i],
+    ['maintenance',    /\b(repair|fix|broken|replace|leak|malfunction|service|consert|quebrad|vazament|substitu)\b/i],
+  ];
+  for (const [cat, re] of hits) {
+    if (re.test(t)) return { category: cat, confidence: 0.55, reasoning: `keyword match for "${cat}"` };
+  }
+  return { category: 'maintenance', confidence: 0.3, reasoning: 'default fallback — no clear keywords' };
+}
+
+router.post('/proposal-classify', requireAuth, asyncHandler(async (req: AuthedRequest, res) => {
+  const text = typeof req.body?.text === 'string'
+    ? req.body.text
+    : [req.body?.title, req.body?.description].filter(Boolean).join('\n\n');
+  const trimmed = String(text || '').trim();
+  if (!trimmed) return fail(res, 'missing_text');
+
+  const out = await tryAI<{ category: string; confidence: number; reasoning: string }>(
+    [
+      { role: 'system', content: PROPOSAL_CLASSIFY_SYS },
+      { role: 'user', content: trimmed },
+    ],
+    () => fallbackClassify(trimmed),
+    { jsonMode: true, maxTokens: 150, tier: 'cheap', label: 'proposal-classify' }
+  );
+
+  // Guard against model hallucinating a new category
+  const category = (VALID_CATEGORIES as readonly string[]).includes(out.category)
+    ? out.category
+    : fallbackClassify(trimmed).category;
+  const confidence = Math.max(0, Math.min(1, Number(out.confidence) || 0));
+  const reasoning = typeof out.reasoning === 'string' ? out.reasoning.slice(0, 200) : '';
+  return ok(res, { category, confidence, reasoning });
+}));
+
 // 2. Cluster all open suggestions for the condo
 router.post('/cluster-suggestions', requireAuth, requireRole('board_admin'), asyncHandler(async (req: AuthedRequest, res) => {
   const u = req.user!;
@@ -85,7 +135,7 @@ router.post('/cluster-suggestions', requireAuth, requireRole('board_admin'), asy
       { role: 'user', content: `Here are the open suggestions:\n\n${payload}` },
     ],
     () => fallbackCluster(rows),
-    { jsonMode: true, maxTokens: 1200, label: 'cluster-suggestions' }
+    { jsonMode: true, maxTokens: 1200, tier: 'cheap', label: 'cluster-suggestions' }
   );
 
   // Persist clusters

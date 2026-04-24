@@ -2,8 +2,14 @@
 // Returns sensible canned output if API key is missing/errors so demo never hangs.
 import fetch from 'node-fetch';
 
-const MODEL = process.env.OPENROUTER_MODEL || 'anthropic/claude-3.5-haiku';
-const API_KEY = process.env.OPENROUTER_API_KEY || '';
+// Two-tier model strategy for cost + quality:
+//   - MODEL:       Claude 3.5 Haiku for user-facing copy (drafts, summaries, announcements, ata).
+//   - CHEAP_MODEL: DeepSeek V3 (~3x cheaper than Haiku) for pure structured tasks
+//                  (classification, clustering) where tone doesn't matter.
+// Callers opt into the cheap tier via `{ tier: 'cheap' }` in AIOpts.
+const MODEL       = process.env.OPENROUTER_MODEL       || 'anthropic/claude-3.5-haiku';
+const CHEAP_MODEL = process.env.OPENROUTER_CHEAP_MODEL || 'deepseek/deepseek-chat';
+const API_KEY     = process.env.OPENROUTER_API_KEY || '';
 const URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 export interface AIMessage {
@@ -15,6 +21,10 @@ export interface AIOpts {
   jsonMode?: boolean;
   maxTokens?: number;
   temperature?: number;
+  /** 'cheap' routes to DeepSeek-V3 for 3x cost savings. Default 'quality' uses Haiku. */
+  tier?: 'quality' | 'cheap';
+  /** Explicit model override — takes precedence over tier. */
+  model?: string;
 }
 
 export async function chat(messages: AIMessage[], opts: AIOpts = {}): Promise<string> {
@@ -22,8 +32,9 @@ export async function chat(messages: AIMessage[], opts: AIOpts = {}): Promise<st
     console.warn('[ai] OPENROUTER_API_KEY not set - using fallback');
     throw new Error('NO_API_KEY');
   }
+  const model = opts.model ?? (opts.tier === 'cheap' ? CHEAP_MODEL : MODEL);
   const body: any = {
-    model: MODEL,
+    model,
     messages,
     max_tokens: opts.maxTokens ?? 800,
     temperature: opts.temperature ?? 0.3,

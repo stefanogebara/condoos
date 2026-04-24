@@ -9,7 +9,9 @@
     "build": "tsc && node scripts/copy-assets.js",
     "test": "cross-env NODE_ENV=test DB_PATH=./data/test.sqlite node --test --test-concurrency=1 -r ts-node/register tests/*.test.ts",
     "seed": "ts-node src/db/seed.ts",
-    "db:reset": "node -e \"require('fs').rmSync('./data/condoos.sqlite',{force:true})\" && npm run seed"
+    "db:reset": "node -e \"require('fs').rmSync('./data/condoos.sqlite',{force:true})\" && npm run seed",
+    "db:backup": "node scripts/db-backup.js backup",
+    "db:restore": "node scripts/db-backup.js restore"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

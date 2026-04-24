@@ -36,6 +36,8 @@ OPENROUTER_MODEL=anthropic/claude-3.5-haiku
 
 Everything else — auth, DB, voting, packages, visitors, meetings — runs without any key.
 
+Operational notes, including SQLite backup/restore and production notification secrets, live in [`docs/ops.md`](docs/ops.md).
+
 ### Manual steps (if the script fails)
 
 ```bash
