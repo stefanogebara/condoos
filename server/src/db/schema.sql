@@ -116,13 +116,17 @@ CREATE TABLE IF NOT EXISTS proposals (
   description      TEXT NOT NULL,
   category         TEXT,
   estimated_cost   REAL,
-  status           TEXT NOT NULL DEFAULT 'discussion' CHECK(status IN ('discussion','voting','approved','rejected','completed')),
+  status           TEXT NOT NULL DEFAULT 'discussion' CHECK(status IN ('discussion','voting','approved','rejected','completed','inconclusive')),
   source_suggestion_id INTEGER REFERENCES suggestions(id),
   ai_drafted       INTEGER NOT NULL DEFAULT 0,
   ai_summary       TEXT,              -- last cached thread summary
   ai_explainer     TEXT,              -- plain-language explanation
   decision_summary TEXT,              -- board decision summary after vote
+  quorum_percent   INTEGER NOT NULL DEFAULT 0,
+  voting_opens_at  TEXT,
   voting_closes_at TEXT,
+  closed_at        TEXT,
+  close_reason     TEXT,
   created_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

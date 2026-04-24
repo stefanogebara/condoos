@@ -35,9 +35,9 @@ export default function BoardApp() {
   ];
 
   return (
-    <div className="flex min-h-screen">
+    <div className="min-h-screen lg:flex">
       <Sidebar items={nav} title="Board admin" />
-      <main className="flex-1 px-6 lg:px-10 py-8 max-w-6xl animate-fade-up">
+      <main className="w-full min-w-0 flex-1 px-4 sm:px-6 lg:px-10 py-8 max-w-6xl animate-fade-up">
         <Routes>
           <Route index                   element={<BoardOverview />} />
           <Route path="suggestions"      element={<Suggestions />} />

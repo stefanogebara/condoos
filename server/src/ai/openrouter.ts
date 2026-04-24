@@ -52,17 +52,49 @@ export async function chat(messages: AIMessage[], opts: AIOpts = {}): Promise<st
   return String(content);
 }
 
+/**
+ * Escapes literal control characters (\n, \r, \t) that appear inside JSON
+ * string literals. Claude (and other models) sometimes emits raw newlines
+ * inside multi-paragraph string fields like `resident_announcement.body`,
+ * producing technically-invalid JSON that JSON.parse rejects with "Bad
+ * control character in string literal".
+ *
+ * We walk the string with a tiny state machine so we only escape control
+ * chars that are actually inside a "..." string, not structural whitespace.
+ */
+function escapeControlCharsInStrings(s: string): string {
+  let out = '';
+  let inString = false;
+  let escape = false;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (escape) { out += ch; escape = false; continue; }
+    if (ch === '\\') { out += ch; escape = true; continue; }
+    if (ch === '"') { out += ch; inString = !inString; continue; }
+    if (inString) {
+      if (ch === '\n') { out += '\\n'; continue; }
+      if (ch === '\r') { out += '\\r'; continue; }
+      if (ch === '\t') { out += '\\t'; continue; }
+    }
+    out += ch;
+  }
+  return out;
+}
+
 export function parseJsonLoose<T = any>(text: string): T | null {
   // Strip markdown code fences if the model wraps JSON in them.
   let cleaned = text.trim();
   if (cleaned.startsWith('```')) {
     cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
   }
+  // 1. Raw parse (hits the happy path for well-formed responses)
   try { return JSON.parse(cleaned) as T; } catch {}
-  // Find first {...} block.
+  // 2. Sanitize control chars inside strings, try again
+  try { return JSON.parse(escapeControlCharsInStrings(cleaned)) as T; } catch {}
+  // 3. Try the first {...} block, also sanitized
   const match = cleaned.match(/\{[\s\S]*\}/);
   if (match) {
-    try { return JSON.parse(match[0]) as T; } catch {}
+    try { return JSON.parse(escapeControlCharsInStrings(match[0])) as T; } catch {}
   }
   return null;
 }

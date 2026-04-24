@@ -22,7 +22,7 @@ interface Props {
 export default function Sidebar({ items, title, subtitle }: Props) {
   const { user, logout } = useAuth();
   return (
-    <aside className="sticky top-0 h-screen w-72 shrink-0 p-6 flex flex-col gap-6">
+    <aside className="w-full lg:sticky lg:top-0 lg:h-screen lg:w-72 shrink-0 p-4 lg:p-6 flex flex-col gap-4 lg:gap-6">
       <div className="flex items-center justify-between">
         <Logo size={26} />
       </div>
@@ -38,14 +38,14 @@ export default function Sidebar({ items, title, subtitle }: Props) {
         <div className="mt-3 chip">{title}</div>
       </div>
 
-      <nav className="flex-1 space-y-1">
+      <nav className="flex gap-2 overflow-x-auto pb-1 lg:block lg:flex-1 lg:space-y-1 lg:overflow-visible lg:pb-0">
         {items.map((it) => (
           <NavLink
             key={it.to}
             to={it.to}
             end={it.to.endsWith('/app') || it.to.endsWith('/board')}
             className={({ isActive }) => clsx(
-              'flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-sm font-medium transition-all',
+              'flex shrink-0 items-center gap-3 px-3.5 py-2.5 rounded-2xl text-sm font-medium transition-all lg:w-full',
               isActive
                 ? 'bg-white/70 text-dusk-500 shadow-clay border border-white/80'
                 : 'text-dusk-300 hover:bg-white/40 hover:text-dusk-500',
@@ -62,7 +62,7 @@ export default function Sidebar({ items, title, subtitle }: Props) {
 
       <button
         onClick={logout}
-        className="flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-sm font-medium text-dusk-300 hover:bg-white/40 hover:text-dusk-500 transition"
+        className="flex shrink-0 items-center gap-3 px-3.5 py-2.5 rounded-2xl text-sm font-medium text-dusk-300 hover:bg-white/40 hover:text-dusk-500 transition"
       >
         <LogOut className="w-[18px] h-[18px]" />
         Sign out

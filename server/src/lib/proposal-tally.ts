@@ -135,3 +135,77 @@ export function resolveVoteOutcome(tally: ProposalVoteTally): 'approved' | 'reje
   if (tally.no_weight > tally.yes_weight) return 'rejected';
   return 'inconclusive';
 }
+
+/**
+ * Count the population of eligible voters for a condo + eligibility setting.
+ * Used for quorum calculations — the denominator in "turnout %".
+ */
+export function countEligibleVoters(condoId: number, eligibility: string | null): number {
+  if (eligibility === 'owners_only') {
+    const row = db.prepare(
+      `SELECT COUNT(DISTINCT uu.user_id) AS n
+       FROM user_unit uu
+       JOIN units un ON un.id = uu.unit_id
+       JOIN buildings b ON b.id = un.building_id
+       WHERE b.condominium_id = ? AND uu.status = 'active' AND uu.relationship = 'owner'`
+    ).get(condoId) as { n: number };
+    return row.n;
+  }
+  if (eligibility === 'primary_contact_only') {
+    const row = db.prepare(
+      `SELECT COUNT(DISTINCT uu.user_id) AS n
+       FROM user_unit uu
+       JOIN units un ON un.id = uu.unit_id
+       JOIN buildings b ON b.id = un.building_id
+       WHERE b.condominium_id = ? AND uu.status = 'active' AND uu.primary_contact = 1`
+    ).get(condoId) as { n: number };
+    return row.n;
+  }
+  // 'all' — anyone with an active membership in the condo
+  const row = db.prepare(
+    `SELECT COUNT(DISTINCT uu.user_id) AS n
+     FROM user_unit uu
+     JOIN units un ON un.id = uu.unit_id
+     JOIN buildings b ON b.id = un.building_id
+     WHERE b.condominium_id = ? AND uu.status = 'active'`
+  ).get(condoId) as { n: number };
+  return row.n;
+}
+
+export interface QuorumStatus {
+  eligible_voter_count: number;
+  votes_cast: number;             // count of eligible voters who cast a vote (any choice)
+  turnout_percent: number;        // 0..100
+  quorum_percent: number;         // required (from proposal.quorum_percent)
+  quorum_met: boolean;
+}
+
+export function computeQuorum(
+  condoId: number,
+  tally: ProposalVoteTally,
+  eligibility: string | null,
+  quorumPercent: number,
+): QuorumStatus {
+  const eligible = countEligibleVoters(condoId, eligibility);
+  const cast = tally.total;
+  const turnout = eligible > 0 ? Math.round((cast / eligible) * 100) : 0;
+  return {
+    eligible_voter_count: eligible,
+    votes_cast: cast,
+    turnout_percent: turnout,
+    quorum_percent: quorumPercent,
+    quorum_met: quorumPercent <= 0 || turnout >= quorumPercent,
+  };
+}
+
+/**
+ * Decide the final outcome of a closed proposal, honoring quorum.
+ * Quorum not met → 'inconclusive' regardless of the vote tally.
+ */
+export function resolveFinalOutcome(
+  tally: ProposalVoteTally,
+  quorum: QuorumStatus,
+): 'approved' | 'rejected' | 'inconclusive' {
+  if (!quorum.quorum_met) return 'inconclusive';
+  return resolveVoteOutcome(tally);
+}

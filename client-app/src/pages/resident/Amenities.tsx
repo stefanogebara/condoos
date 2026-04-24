@@ -13,6 +13,16 @@ interface Reservation { id: number; amenity_id: number; user_id: number; amenity
 
 const ICONS: Record<string, any> = { Waves, Dumbbell, Flame, PartyPopper };
 
+function friendlyBookingError(code: string | undefined): string {
+  const errors: Record<string, string> = {
+    invalid_time: 'Choose valid start and end times.',
+    ends_must_be_after_starts: 'End time must be after start time.',
+    outside_open_hours: 'Booking must stay within the amenity open hours.',
+    amenity_conflict: 'That time conflicts with an existing reservation.',
+  };
+  return errors[code || ''] || 'Booking failed';
+}
+
 export default function Amenities() {
   const { user } = useAuth();
   const [amenities, setAmenities]       = useState<Amenity[]>([]);
@@ -31,16 +41,38 @@ export default function Amenities() {
   async function book(e: React.FormEvent) {
     e.preventDefault();
     if (!selected || !starts || !ends) return;
+    const startDate = new Date(starts);
+    const endDate = new Date(ends);
+    if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+      toast.error('Choose valid start and end times.');
+      return;
+    }
+    if (endDate <= startDate) {
+      toast.error('End time must be after start time.');
+      return;
+    }
+    const startHour = startDate.getHours() + startDate.getMinutes() / 60;
+    const endHour = endDate.getHours() + endDate.getMinutes() / 60;
+    if (
+      startDate.toDateString() !== endDate.toDateString()
+      || startHour < selected.open_hour
+      || endHour > selected.close_hour
+    ) {
+      toast.error(`Book within open hours: ${selected.open_hour}:00-${selected.close_hour}:00.`);
+      return;
+    }
     setSaving(true);
     try {
       await apiPost('/amenities/reservations', {
         amenity_id: selected.id,
-        starts_at: new Date(starts).toISOString(),
-        ends_at:   new Date(ends).toISOString(),
+        starts_at: startDate.toISOString(),
+        ends_at:   endDate.toISOString(),
       });
       toast.success(`Booked ${selected.name}`);
       setSelected(null); setStarts(''); setEnds('');
       load();
+    } catch (err: any) {
+      toast.error(friendlyBookingError(err?.response?.data?.error));
     } finally { setSaving(false); }
   }
 
@@ -79,7 +111,7 @@ export default function Amenities() {
               <input type="datetime-local" className="input mt-1" value={starts} onChange={(e) => setStarts(e.target.value)} required />
             </label>
             <label className="text-xs text-dusk-300">Ends
-              <input type="datetime-local" className="input mt-1" value={ends}   onChange={(e) => setEnds(e.target.value)}   required />
+              <input type="datetime-local" className="input mt-1" value={ends} min={starts || undefined} onChange={(e) => setEnds(e.target.value)}   required />
             </label>
             <div className="md:col-span-2 flex justify-end">
               <Button type="submit" variant="primary" loading={saving}>Confirm booking</Button>

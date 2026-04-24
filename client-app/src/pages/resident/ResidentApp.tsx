@@ -25,9 +25,9 @@ const NAV: NavItem[] = [
 
 export default function ResidentApp() {
   return (
-    <div className="flex min-h-screen">
+    <div className="min-h-screen lg:flex">
       <Sidebar items={NAV} title="Resident" />
-      <main className="flex-1 px-6 lg:px-10 py-8 max-w-6xl animate-fade-up">
+      <main className="w-full min-w-0 flex-1 px-4 sm:px-6 lg:px-10 py-8 max-w-6xl animate-fade-up">
         <Routes>
           <Route index               element={<Overview />} />
           <Route path="packages"     element={<Packages />} />

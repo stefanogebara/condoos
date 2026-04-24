@@ -45,7 +45,7 @@ Return ONLY compact JSON matching:
   ],
   "resident_announcement": {
     "title": "short title, resident-friendly",
-    "body": "2-3 paragraphs. Plain language. What it means for residents."
+    "body": "2-3 paragraphs. Plain language. What it means for residents. Separate paragraphs with the literal two-character sequence \\n\\n — not a real newline. All newlines inside JSON strings MUST be escaped as \\n."
   }
 }
 Plain, warm, professional tone in the resident announcement. No jargon. Do not wrap in markdown.`;

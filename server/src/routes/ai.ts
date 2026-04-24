@@ -2,7 +2,7 @@ import { Router } from 'express';
 import db from '../db';
 import { requireAuth, requireRole, AuthedRequest } from '../lib/auth';
 import { ok, fail, asyncHandler } from '../lib/respond';
-import { getProposalVoteTally, resolveVoteOutcome } from '../lib/proposal-tally';
+import { computeQuorum, getProposalVoteTally, resolveFinalOutcome } from '../lib/proposal-tally';
 import { chat, parseJsonLoose } from '../ai/openrouter';
 import {
   PROPOSAL_DRAFT_SYS,
@@ -35,7 +35,9 @@ async function tryAI<T>(
     if (opts?.jsonMode) {
       const parsed = parseJsonLoose<T>(raw);
       if (!parsed) {
-        console.warn(`[${label}] JSON parse failed, using fallback. First 300 chars:`, raw.slice(0, 300));
+        // One-line log (Fly splits on newlines) so we can actually see the payload
+        console.warn(`[${label}] JSON parse failed, using fallback. First 400 chars:`,
+          raw.slice(0, 400).replace(/\r?\n/g, '\\n'));
         return fallback();
       }
       return parsed;
@@ -202,7 +204,8 @@ router.post('/proposals/:id/decision-summary', requireAuth, requireRole('board_a
   ).get(id, u.condominium_id) as any;
   if (!p) return fail(res, 'not_found', 404);
   const votes = getProposalVoteTally(p);
-  const outcome = resolveVoteOutcome(votes);
+  const quorum = computeQuorum(p.condominium_id, votes, p.voter_eligibility, p.quorum_percent || 0);
+  const outcome = resolveFinalOutcome(votes, quorum);
 
   const comments = db.prepare(
     `SELECT body FROM proposal_comments WHERE proposal_id=? ORDER BY created_at ASC LIMIT 20`
@@ -221,8 +224,14 @@ router.post('/proposals/:id/decision-summary', requireAuth, requireRole('board_a
   );
 
   db.prepare(
-    `UPDATE proposals SET decision_summary=?, status=? WHERE id=?`
-  ).run(JSON.stringify(out), outcome === 'approved' ? 'approved' : outcome === 'rejected' ? 'rejected' : p.status, id);
+    `UPDATE proposals
+     SET decision_summary = ?,
+         status = ?,
+         closed_at = CURRENT_TIMESTAMP,
+         close_reason = ?,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = ?`
+  ).run(JSON.stringify(out), outcome, quorum.quorum_met ? 'manual_decision' : 'quorum_not_met', id);
 
   return ok(res, out);
 }));

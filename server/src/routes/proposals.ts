@@ -2,7 +2,14 @@ import { Router } from 'express';
 import db from '../db';
 import { requireAuth, requireRole, getActiveCondoId, AuthedRequest } from '../lib/auth';
 import { ok, fail } from '../lib/respond';
-import { attachVoteTally, canVote, resolveVoterRights } from '../lib/proposal-tally';
+import {
+  attachVoteTally,
+  canVote,
+  resolveVoterRights,
+  getProposalVoteTally,
+  computeQuorum,
+  resolveFinalOutcome,
+} from '../lib/proposal-tally';
 
 const router = Router();
 
@@ -48,8 +55,12 @@ router.get('/:id', requireAuth, (req: AuthedRequest, res) => {
   ).get(id, req.user!.id) as any)?.choice || null;
   const rights = resolveVoterRights(req.user!.id, condoId);
   const can_vote = canVote(req.user!.id, condoId, p.voter_eligibility);
+  const tally = getProposalVoteTally(p);
+  const quorum = computeQuorum(condoId, tally, p.voter_eligibility, p.quorum_percent || 0);
   return ok(res, {
-    ...attachVoteTally(p),
+    ...p,
+    votes: tally,
+    quorum,
     comments,
     voters: votes,
     my_vote: myVote,
@@ -107,6 +118,13 @@ router.post('/:id/vote', requireAuth, (req: AuthedRequest, res) => {
   const p = getScopedProposal(id, condoId);
   if (!p) return fail(res, 'not_found', 404);
   if (p.status !== 'voting') return fail(res, 'not_in_voting', 409);
+  const now = Date.now();
+  if (p.voting_opens_at && now < new Date(p.voting_opens_at).getTime()) {
+    return fail(res, 'voting_not_open_yet', 409);
+  }
+  if (p.voting_closes_at && now >= new Date(p.voting_closes_at).getTime()) {
+    return fail(res, 'voting_closed', 409);
+  }
   if (!canVote(u.id, condoId, p.voter_eligibility)) {
     return fail(res, 'not_eligible_to_vote', 403);
   }
@@ -115,6 +133,40 @@ router.post('/:id/vote', requireAuth, (req: AuthedRequest, res) => {
      ON CONFLICT(proposal_id, user_id) DO UPDATE SET choice=excluded.choice`
   ).run(id, u.id, choice);
   return ok(res, { id, choice });
+});
+
+// PATCH /:id/compliance — set quorum + voting window while the proposal is in discussion.
+router.patch('/:id/compliance', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+  const condoId = getActiveCondoId(req);
+  const id = Number(req.params.id);
+  const p = getScopedProposal(id, condoId);
+  if (!p) return fail(res, 'not_found', 404);
+  if (p.status !== 'discussion') return fail(res, 'locked_once_voting_opens', 409);
+
+  const body = req.body || {};
+  const quorum = body.quorum_percent;
+  const opens  = body.voting_opens_at;
+  const closes = body.voting_closes_at;
+
+  if (quorum !== undefined) {
+    if (typeof quorum !== 'number' || quorum < 0 || quorum > 100) {
+      return fail(res, 'invalid_quorum');
+    }
+  }
+  if (opens !== undefined && opens !== null && isNaN(Date.parse(opens))) return fail(res, 'invalid_opens_at');
+  if (closes !== undefined && closes !== null && isNaN(Date.parse(closes))) return fail(res, 'invalid_closes_at');
+  if (opens && closes && new Date(opens) >= new Date(closes)) return fail(res, 'closes_must_be_after_opens');
+
+  const sets: string[] = [];
+  const vals: any[] = [];
+  if (quorum !== undefined) { sets.push('quorum_percent = ?');   vals.push(Math.round(quorum)); }
+  if (opens  !== undefined) { sets.push('voting_opens_at = ?');  vals.push(opens || null); }
+  if (closes !== undefined) { sets.push('voting_closes_at = ?'); vals.push(closes || null); }
+  if (sets.length === 0) return fail(res, 'nothing_to_update');
+  sets.push('updated_at = CURRENT_TIMESTAMP');
+  vals.push(id);
+  db.prepare(`UPDATE proposals SET ${sets.join(', ')} WHERE id = ?`).run(...vals);
+  return ok(res, { id, updated: sets.length - 1 });
 });
 
 // Admin can change who is allowed to vote, but only while the proposal is still in discussion.

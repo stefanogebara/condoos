@@ -23,8 +23,11 @@ interface Proposal {
   decision_summary: string | null;
   author_first: string;
   author_last: string;
+  voting_opens_at: string | null;
   voting_closes_at: string | null;
   voter_eligibility: 'all' | 'owners_only' | 'primary_contact_only';
+  quorum_percent: number;
+  close_reason: string | null;
   comments: Comment[];
   votes: {
     yes: number;
@@ -36,6 +39,13 @@ interface Proposal {
     abstain_weight: number;
     total_weight: number;
   };
+  quorum?: {
+    eligible_voter_count: number;
+    votes_cast: number;
+    turnout_percent: number;
+    quorum_percent: number;
+    quorum_met: boolean;
+  };
   my_vote: 'yes' | 'no' | 'abstain' | null;
   voter_rights?: {
     can_vote: boolean;
@@ -44,6 +54,31 @@ interface Proposal {
     voting_weight: number;
     proposal_eligibility: string;
   };
+}
+
+/** "2d 4h 31m" or "closed" or "opens in 3h 12m" */
+function formatWindow(opens_at: string | null, closes_at: string | null): { label: string; tone: 'live' | 'pre' | 'over' } {
+  const now = Date.now();
+  if (opens_at && now < new Date(opens_at).getTime()) {
+    return { label: `Opens in ${humanDelta(new Date(opens_at).getTime() - now)}`, tone: 'pre' };
+  }
+  if (closes_at) {
+    const delta = new Date(closes_at).getTime() - now;
+    if (delta <= 0) return { label: 'Voting closed', tone: 'over' };
+    return { label: `Closes in ${humanDelta(delta)}`, tone: 'live' };
+  }
+  return { label: 'Open', tone: 'live' };
+}
+
+function humanDelta(ms: number): string {
+  const s = Math.floor(ms / 1000);
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (d > 0) return `${d}d ${h}h`;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m`;
+  return '<1m';
 }
 
 export default function ProposalDetail() {
@@ -133,12 +168,25 @@ export default function ProposalDetail() {
       </GlassCard>
 
       {/* Voting */}
-      {p.status === 'voting' && (
+      {p.status === 'voting' && (() => {
+        const win = formatWindow(p.voting_opens_at, p.voting_closes_at);
+        return (
         <GlassCard variant="clay-sage" className="p-7 mb-6">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="font-display text-xl text-dusk-500">Open for voting</h3>
-              {p.voting_closes_at && <div className="text-xs text-dusk-300 mt-1">Closes {new Date(p.voting_closes_at).toLocaleDateString()}</div>}
+              <div className={`text-xs mt-1 font-medium ${win.tone === 'over' ? 'text-peach-500' : win.tone === 'pre' ? 'text-dusk-300' : 'text-sage-700'}`}>
+                {win.label}
+              </div>
+              {p.quorum && p.quorum.quorum_percent > 0 && (
+                <div className="mt-2 text-xs text-dusk-300">
+                  Quorum: <span className={`font-semibold ${p.quorum.quorum_met ? 'text-sage-700' : 'text-peach-500'}`}>
+                    {p.quorum.turnout_percent}%
+                  </span>
+                  {' / '}{p.quorum.quorum_percent}% required
+                  <span className="text-dusk-200"> · {p.quorum.votes_cast} of {p.quorum.eligible_voter_count} voted</span>
+                </div>
+              )}
             </div>
             <VoteIcon className="w-8 h-8 text-dusk-300" />
           </div>
@@ -177,6 +225,17 @@ export default function ProposalDetail() {
               {p.my_vote && <span className="ml-auto self-center text-xs text-dusk-300">You voted: <span className="font-semibold">{p.my_vote}</span></span>}
             </div>
           )}
+        </GlassCard>
+        );
+      })()}
+
+      {/* Inconclusive / quorum-failure banner */}
+      {p.status === 'inconclusive' && (
+        <GlassCard variant="clay-peach" className="p-5 mb-6 text-sm text-dusk-500">
+          <span className="font-semibold">Vote closed inconclusive.</span>{' '}
+          {p.close_reason === 'quorum_not_met'
+            ? `Quorum of ${p.quorum_percent}% wasn't reached${p.quorum ? ` — only ${p.quorum.turnout_percent}% voted.` : '.'} The board can reopen voting at a later date.`
+            : 'Not enough votes either way. Decision deferred.'}
         </GlassCard>
       )}
 

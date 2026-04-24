@@ -108,6 +108,11 @@ function run() {
     insertUserUnit.run(uid, unitId, 'owner');
   }
 
+  // Empty units used by the default roster-import sample in the board UI.
+  for (const unit of ['502', '101']) {
+    insertUnit.run(buildingId, floorOf(unit), unit);
+  }
+
   const admin  = userIds['admin@condoos.dev'];
   const maya   = userIds['resident@condoos.dev'];
   const jordan = userIds['jordan@condoos.dev'];

@@ -30,15 +30,42 @@ router.post('/reservations', requireAuth, (req: AuthedRequest, res) => {
   const u = req.user!;
   const { amenity_id, starts_at, ends_at } = req.body || {};
   if (!amenity_id || !starts_at || !ends_at) return fail(res, 'missing_fields');
+  const starts = new Date(starts_at);
+  const ends = new Date(ends_at);
+  if (Number.isNaN(starts.getTime()) || Number.isNaN(ends.getTime())) {
+    return fail(res, 'invalid_time', 400);
+  }
+  if (ends <= starts) return fail(res, 'ends_must_be_after_starts', 400);
+
   // Amenity must belong to the user's condo.
   const amenity = db.prepare(
-    `SELECT id FROM amenities WHERE id = ? AND condominium_id = ?`
-  ).get(amenity_id, u.condominium_id);
+    `SELECT id, capacity, open_hour, close_hour FROM amenities WHERE id = ? AND condominium_id = ?`
+  ).get(amenity_id, u.condominium_id) as { id: number; capacity: number; open_hour: number; close_hour: number } | undefined;
   if (!amenity) return fail(res, 'amenity_not_in_condo', 400);
+
+  const sameLocalDay = starts.toDateString() === ends.toDateString();
+  const startHour = starts.getHours() + starts.getMinutes() / 60;
+  const endHour = ends.getHours() + ends.getMinutes() / 60;
+  if (!sameLocalDay || startHour < amenity.open_hour || endHour > amenity.close_hour) {
+    return fail(res, 'outside_open_hours', 400);
+  }
+
+  const overlapping = db.prepare(
+    `SELECT COUNT(*) AS n
+     FROM amenity_reservations
+     WHERE amenity_id = ?
+       AND status = 'confirmed'
+       AND starts_at < ?
+       AND ends_at > ?`
+  ).get(amenity.id, ends.toISOString(), starts.toISOString()) as { n: number };
+  if (overlapping.n >= Math.max(1, amenity.capacity || 1)) {
+    return fail(res, 'amenity_conflict', 409);
+  }
+
   const row = db.prepare(
     `INSERT INTO amenity_reservations (amenity_id, user_id, starts_at, ends_at)
      VALUES (?, ?, ?, ?)`
-  ).run(amenity_id, u.id, starts_at, ends_at);
+  ).run(amenity.id, u.id, starts.toISOString(), ends.toISOString());
   return ok(res, { id: row.lastInsertRowid });
 });
 

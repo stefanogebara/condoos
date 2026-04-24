@@ -10,6 +10,7 @@ import { apiGet, apiPost } from '../../lib/api';
 
 interface Resident { id: number; first_name: string; last_name: string; unit_number: string; role: string; email: string; }
 interface Membership { status: string; condo_name: string; condo_id: number; }
+interface ImportError { row: number; error: string; email?: string; unit?: string; }
 interface Invite {
   id: number;
   email: string;
@@ -24,6 +25,17 @@ interface Invite {
   claimed_by_user_id: number | null;
 }
 
+function describeImportError(e: ImportError): string {
+  const details = e.unit ? ` (${e.unit})` : e.email ? ` (${e.email})` : '';
+  const labels: Record<string, string> = {
+    need_email_and_unit: 'Missing email or unit',
+    invalid_email: 'Invalid email',
+    unit_not_found: 'Unit not found',
+    already_invited: 'Already invited',
+  };
+  return `Row ${e.row}: ${labels[e.error] || e.error}${details}`;
+}
+
 export default function Residents() {
   const [rows, setRows] = useState<Resident[]>([]);
   const [invites, setInvites] = useState<Invite[]>([]);
@@ -33,6 +45,7 @@ export default function Residents() {
   const [showImport, setShowImport] = useState(false);
   const [csv, setCsv] = useState('email,unit,relationship,primary_contact,voting_weight\nmaria@example.com,502,tenant,no,1\njoao@example.com,101,owner,yes,1\n');
   const [importing, setImporting] = useState(false);
+  const [importErrors, setImportErrors] = useState<ImportError[]>([]);
 
   const load = () => {
     apiGet<Resident[]>('/users/residents').then(setRows).catch(() => {});
@@ -52,15 +65,19 @@ export default function Residents() {
 
   async function importCsv() {
     setImporting(true);
+    setImportErrors([]);
     try {
-      const res = await apiPost<{ imported_count: number; error_count: number; errors: any[] }>(
+      const res = await apiPost<{ imported_count: number; error_count: number; errors: ImportError[] }>(
         '/memberships/import-csv',
         { csv },
       );
       if (res.imported_count > 0) toast.success(`${res.imported_count} invite${res.imported_count > 1 ? 's' : ''} created`);
-      if (res.error_count > 0) toast.error(`${res.error_count} row${res.error_count > 1 ? 's' : ''} skipped — see console`);
-      if (res.errors.length > 0) console.warn('CSV errors:', res.errors);
-      setShowImport(false);
+      if (res.error_count > 0) {
+        setImportErrors(res.errors || []);
+        toast.error(`${res.error_count} row${res.error_count > 1 ? 's' : ''} skipped - details below`);
+      } else {
+        setShowImport(false);
+      }
       load();
     } catch (err: any) {
       toast.error(err?.response?.data?.error || 'Import failed');
@@ -121,6 +138,14 @@ export default function Residents() {
             onChange={(e) => setCsv(e.target.value)}
             spellCheck={false}
           />
+          {importErrors.length > 0 && (
+            <div role="alert" className="mt-4 rounded-2xl border border-peach-200 bg-peach-100/70 p-4 text-sm text-dusk-500">
+              <div className="font-semibold mb-2">Rows that need attention</div>
+              <ul className="space-y-1">
+                {importErrors.map((e, idx) => <li key={`${e.row}-${idx}`}>{describeImportError(e)}</li>)}
+              </ul>
+            </div>
+          )}
           <div className="mt-3 flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setShowImport(false)} leftIcon={<X className="w-4 h-4" />}>Cancel</Button>
             <Button variant="primary" onClick={importCsv} loading={importing} leftIcon={<Mail className="w-4 h-4" />}>Create invites</Button>

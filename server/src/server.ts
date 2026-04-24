@@ -8,6 +8,7 @@ import cors from 'cors';
 import morgan from 'morgan';
 
 import { requireAuth, requireActiveMembership } from './lib/auth';
+import { startVoteCloser } from './lib/vote-closer';
 import authRoutes from './routes/auth';
 import packagesRoutes from './routes/packages';
 import visitorsRoutes from './routes/visitors';
@@ -73,4 +74,10 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
 
 app.listen(PORT, () => {
   console.log(`CondoOS API listening on http://localhost:${PORT}`);
+  // Auto-close proposals whose voting window has expired. 60s cadence is fine —
+  // worst case a vote lands 1 minute late, which is acceptable for a 24h+ window.
+  if (process.env.NODE_ENV !== 'test') {
+    startVoteCloser(60_000);
+    console.log('[vote-closer] started (60s interval)');
+  }
 });

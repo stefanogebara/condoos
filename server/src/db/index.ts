@@ -123,10 +123,70 @@ function migrateLegacyUnits() {
   }
 }
 
+/**
+ * Widen proposals.status CHECK to include 'inconclusive' (quorum-not-met).
+ * SQLite cannot alter CHECK constraints in place, so we rebuild the table.
+ * Idempotent — skips if 'inconclusive' is already accepted.
+ */
+function migrateProposalsInconclusiveStatus() {
+  const table = db.prepare(
+    `SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'proposals'`
+  ).get() as { sql: string } | undefined;
+  if (!table || table.sql.includes("'inconclusive'")) return;
+
+  const foreignKeys = db.pragma('foreign_keys', { simple: true }) as number;
+  db.pragma('foreign_keys = OFF');
+  try {
+    const cols = db.prepare(`PRAGMA table_info(proposals)`).all() as Array<{ name: string; type: string }>;
+    const colNames = cols.map((c) => c.name);
+
+    db.exec(`CREATE TABLE proposals_new (
+      id               INTEGER PRIMARY KEY AUTOINCREMENT,
+      condominium_id   INTEGER NOT NULL REFERENCES condominiums(id) ON DELETE CASCADE,
+      author_id        INTEGER NOT NULL REFERENCES users(id),
+      title            TEXT NOT NULL,
+      description      TEXT NOT NULL,
+      category         TEXT,
+      estimated_cost   REAL,
+      status           TEXT NOT NULL DEFAULT 'discussion'
+        CHECK(status IN ('discussion','voting','approved','rejected','completed','inconclusive')),
+      source_suggestion_id INTEGER REFERENCES suggestions(id),
+      ai_drafted       INTEGER NOT NULL DEFAULT 0,
+      ai_summary       TEXT,
+      ai_explainer     TEXT,
+      decision_summary TEXT,
+      quorum_percent   INTEGER NOT NULL DEFAULT 0,
+      voting_opens_at  TEXT,
+      voting_closes_at TEXT,
+      closed_at        TEXT,
+      close_reason     TEXT,
+      created_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );`);
+
+    const baseCols = [
+      'id','condominium_id','author_id','title','description','category','estimated_cost',
+      'status','source_suggestion_id','ai_drafted','ai_summary','ai_explainer',
+      'decision_summary','quorum_percent','voting_opens_at','voting_closes_at',
+      'closed_at','close_reason','created_at','updated_at',
+    ];
+    const existingBase = baseCols.filter((c) => colNames.includes(c));
+    db.exec(`INSERT INTO proposals_new (${existingBase.join(', ')})
+             SELECT ${existingBase.join(', ')} FROM proposals`);
+    db.exec(`DROP TABLE proposals`);
+    db.exec(`ALTER TABLE proposals_new RENAME TO proposals`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_proposals_condo ON proposals(condominium_id, status)`);
+    console.log('[migrate] widened proposals.status CHECK to include inconclusive');
+  } finally {
+    db.pragma(`foreign_keys = ${foreignKeys ? 'ON' : 'OFF'}`);
+  }
+}
+
 export function initSchema() {
   const sql = fs.readFileSync(SCHEMA_PATH, 'utf8');
   db.exec(sql);
   migrateUsersCondoNullable();
+  migrateProposalsInconclusiveStatus();
 
   // Additive column migrations that SQLite can't express in schema.sql.
   addColumnIfMissing('condominiums', 'invite_code',        `TEXT`);
@@ -139,6 +199,11 @@ export function initSchema() {
   addColumnIfMissing('invites',      'relationship',       `TEXT NOT NULL DEFAULT 'tenant'`);
   addColumnIfMissing('invites',      'primary_contact',    `INTEGER NOT NULL DEFAULT 0`);
   addColumnIfMissing('invites',      'voting_weight',      `REAL NOT NULL DEFAULT 1.0`);
+  // Voting compliance — quorum + window
+  addColumnIfMissing('proposals',    'quorum_percent',     `INTEGER NOT NULL DEFAULT 0`);
+  addColumnIfMissing('proposals',    'voting_opens_at',    `TEXT`);
+  addColumnIfMissing('proposals',    'closed_at',          `TEXT`);
+  addColumnIfMissing('proposals',    'close_reason',       `TEXT`);
 
   migrateLegacyUnits();
 

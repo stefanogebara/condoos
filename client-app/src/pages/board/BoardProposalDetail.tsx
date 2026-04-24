@@ -9,6 +9,22 @@ import Avatar from '../../components/Avatar';
 import Button from '../../components/Button';
 import { apiGet, apiPatch, apiPost } from '../../lib/api';
 
+const QUORUM_OPTIONS = [0, 25, 50, 67, 75];
+
+function toLocalInput(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function fromLocalInput(v: string): string | null {
+  if (!v) return null;
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? null : d.toISOString();
+}
+
 export default function BoardProposalDetail() {
   const { id } = useParams();
   const [p, setP] = useState<any | null>(null);
@@ -16,14 +32,35 @@ export default function BoardProposalDetail() {
   const [summary, setSummary] = useState<any>(null);
   const [decision, setDecision] = useState<any>(null);
   const [explainer, setExplainer] = useState<string | null>(null);
+  const [form, setForm] = useState<{ quorum: number; opens: string; closes: string }>({ quorum: 0, opens: '', closes: '' });
 
   const load = useCallback(() => apiGet<any>(`/proposals/${id}`).then((d) => {
     setP(d);
+    setForm({
+      quorum: d.quorum_percent || 0,
+      opens:  toLocalInput(d.voting_opens_at),
+      closes: toLocalInput(d.voting_closes_at),
+    });
     if (d.ai_summary)      { try { setSummary(JSON.parse(d.ai_summary)); } catch {} }
     if (d.ai_explainer)    setExplainer(d.ai_explainer);
     if (d.decision_summary){ try { setDecision(JSON.parse(d.decision_summary)); } catch {} }
   }), [id]);
   useEffect(() => { load(); }, [load]);
+
+  async function saveCompliance() {
+    setBusy(true);
+    try {
+      await apiPatch(`/proposals/${id}/compliance`, {
+        quorum_percent:    form.quorum,
+        voting_opens_at:   fromLocalInput(form.opens),
+        voting_closes_at:  fromLocalInput(form.closes),
+      });
+      toast.success('Voting rules updated');
+      load();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || 'Update failed');
+    } finally { setBusy(false); }
+  }
 
   async function setStatus(status: string) {
     setBusy(true);
@@ -126,6 +163,50 @@ export default function BoardProposalDetail() {
         </GlassCard>
       )}
 
+      {p.status === 'discussion' && (
+        <GlassCard className="p-5 mb-6">
+          <div className="mb-4">
+            <div className="text-xs uppercase tracking-wider text-dusk-300 font-medium">Voting compliance</div>
+            <div className="text-sm text-dusk-400 mt-1">Quorum + window enforced at vote-closing time. Missed quorum → inconclusive.</div>
+          </div>
+          <div className="grid md:grid-cols-3 gap-4">
+            <div>
+              <label className="text-xs text-dusk-300 uppercase tracking-wider">Quorum</label>
+              <select
+                value={form.quorum}
+                onChange={(e) => setForm({ ...form, quorum: Number(e.target.value) })}
+                className="input mt-1"
+              >
+                {QUORUM_OPTIONS.map((q) => (
+                  <option key={q} value={q}>{q === 0 ? 'No quorum' : `${q}%`}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-dusk-300 uppercase tracking-wider">Voting opens</label>
+              <input
+                type="datetime-local"
+                value={form.opens}
+                onChange={(e) => setForm({ ...form, opens: e.target.value })}
+                className="input mt-1"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-dusk-300 uppercase tracking-wider">Voting closes</label>
+              <input
+                type="datetime-local"
+                value={form.closes}
+                onChange={(e) => setForm({ ...form, closes: e.target.value })}
+                className="input mt-1"
+              />
+            </div>
+          </div>
+          <div className="mt-4 flex justify-end">
+            <Button variant="primary" size="sm" onClick={saveCompliance} loading={busy}>Save voting rules</Button>
+          </div>
+        </GlassCard>
+      )}
+
       <div className="grid md:grid-cols-3 gap-4 mb-6">
         <GlassCard variant="clay-sage" className="p-5 text-center">
           <div className="font-display text-4xl text-sage-700">{p.votes.yes}</div>
@@ -143,6 +224,30 @@ export default function BoardProposalDetail() {
           {p.votes.abstain_weight !== p.votes.abstain && <div className="text-xs text-dusk-300 mt-1">{p.votes.abstain_weight} weighted</div>}
         </GlassCard>
       </div>
+
+      {p.quorum && (p.quorum.quorum_percent > 0 || p.status === 'voting') && (
+        <GlassCard className="p-4 mb-6">
+          <div className="flex items-center justify-between gap-3 flex-wrap text-sm">
+            <div className="text-dusk-400">
+              <span className="font-medium">Turnout:</span> {p.quorum.turnout_percent}%
+              {p.quorum.quorum_percent > 0 && <span className="text-dusk-300"> / {p.quorum.quorum_percent}% required</span>}
+              <span className="text-dusk-300"> · {p.quorum.votes_cast} of {p.quorum.eligible_voter_count} voted</span>
+            </div>
+            <Badge tone={p.quorum.quorum_met ? 'sage' : 'peach'}>
+              {p.quorum.quorum_met ? 'Quorum met' : 'Quorum not yet met'}
+            </Badge>
+          </div>
+        </GlassCard>
+      )}
+
+      {p.status === 'inconclusive' && (
+        <GlassCard variant="clay-peach" className="p-5 mb-6">
+          <Badge tone="peach" className="mb-2">Inconclusive</Badge>
+          <p className="text-dusk-500 text-sm">
+            Voting window closed without reaching the {p.quorum_percent}% quorum. No decision was recorded. You can re-open a new proposal with a wider window or lower quorum.
+          </p>
+        </GlassCard>
+      )}
 
       {decision && (
         <GlassCard variant="clay-sage" className="p-7 mb-6">
