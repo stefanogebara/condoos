@@ -14,13 +14,13 @@ export default function Landing() {
       <nav className="sticky top-0 z-30 px-6 lg:px-12 py-4 flex items-center justify-between backdrop-blur-xl bg-cream-50/40 border-b border-white/30">
         <Logo />
         <div className="hidden md:flex items-center gap-1 text-sm text-dusk-300">
-          <a href="#features"  className="px-3 py-1.5 rounded-full hover:bg-white/50 transition">Features</a>
+          <a href="#features"  className="px-3 py-1.5 rounded-full hover:bg-white/50 transition">Funcionalidades</a>
           <a href="#ago"       className="px-3 py-1.5 rounded-full hover:bg-white/50 transition">AGO</a>
-          <a href="#loop"      className="px-3 py-1.5 rounded-full hover:bg-white/50 transition">How it works</a>
-          <a href="#faq"       className="px-3 py-1.5 rounded-full hover:bg-white/50 transition">FAQ</a>
+          <a href="#loop"      className="px-3 py-1.5 rounded-full hover:bg-white/50 transition">Como funciona</a>
+          <a href="#faq"       className="px-3 py-1.5 rounded-full hover:bg-white/50 transition">Dúvidas</a>
           <a href="https://github.com/stefanogebara/condoos" target="_blank" rel="noreferrer" className="px-3 py-1.5 rounded-full hover:bg-white/50 transition">GitHub</a>
         </div>
-        <Link to="/login"><Button variant="primary" size="sm" rightIcon={<ArrowRight className="w-4 h-4" />}>Sign in</Button></Link>
+        <Link to="/login"><Button variant="primary" size="sm" rightIcon={<ArrowRight className="w-4 h-4" />}>Entrar</Button></Link>
       </nav>
 
       {/* Hero — tighter, more confident, Inter Tight first */}
@@ -30,30 +30,30 @@ export default function Landing() {
             <div className="inline-flex items-center gap-3 mb-10">
               <span className="chip">
                 <span className="w-1.5 h-1.5 rounded-full bg-sage-400" />
-                Early access · Brazilian condos first
+                Acesso antecipado · Para condomínios brasileiros
               </span>
             </div>
 
             <h1 className="font-display text-dusk-500 leading-[0.95] tracking-tightest"
                 style={{ fontSize: 'clamp(3rem, 7vw, 5.5rem)', fontWeight: 600 }}>
-              Run your building,
+              Seu condomínio,
               <br />
-              <span className="italic text-dusk-400">softly.</span>
+              <span className="italic text-dusk-400">em paz.</span>
             </h1>
 
             <p className="mt-8 text-[17px] md:text-[19px] text-dusk-300 max-w-xl leading-[1.55] tracking-tight">
-              Packages, visitors, amenities, voting — and an AI that turns resident
-              complaints into structured proposals and meeting notes into plain-language updates.
+              Encomendas, visitantes, áreas comuns, votação — e uma IA que transforma reclamações
+              em propostas prontas pra pauta e atas em linguagem humana.
             </p>
 
             <div className="mt-10 flex items-center gap-3 flex-wrap">
               <Link to="/login">
                 <Button variant="primary" size="lg" rightIcon={<ArrowRight className="w-5 h-5" />}>
-                  Try the demo
+                  Testar a demo
                 </Button>
               </Link>
               <a href="#features">
-                <Button variant="ghost" size="lg">See what's inside</Button>
+                <Button variant="ghost" size="lg">Ver por dentro</Button>
               </a>
             </div>
 
@@ -73,28 +73,30 @@ export default function Landing() {
             <div className="relative w-full max-w-[560px] aspect-[4/3] flex items-center justify-center">
               <img
                 src="/images/characters/hero-community-01.jpg"
-                alt="A community of residents gathered in a warm lobby, one holding a phone with CondoOS"
+                alt="Uma comunidade de moradores reunida no saguão, um deles segurando o celular com o CondoOS"
                 className="w-full h-full object-cover rounded-[36px] shadow-clay-lg animate-float-slow"
               />
+              {/* Subtle gradient overlay so the glass cards stay legible */}
+              <div className="absolute inset-0 rounded-[36px] bg-gradient-to-br from-cream-50/40 via-transparent to-dusk-500/15 pointer-events-none" />
               <GlassCard className="absolute top-6 -left-2 p-3 px-4 hidden md:flex items-center gap-3 w-56">
                 <div className="w-9 h-9 rounded-xl bg-sage-200 flex items-center justify-center text-sage-700"><Package className="w-4 h-4" /></div>
                 <div>
-                  <div className="text-xs text-dusk-200">2 packages waiting</div>
-                  <div className="text-sm font-semibold text-dusk-500">Unit 704 · Maya</div>
+                  <div className="text-xs text-dusk-200">2 encomendas</div>
+                  <div className="text-sm font-semibold text-dusk-500">Apto 704 · Maya</div>
                 </div>
               </GlassCard>
               <GlassCard className="absolute bottom-10 -right-2 p-3 px-4 hidden md:flex items-center gap-3 w-60">
                 <div className="w-9 h-9 rounded-xl bg-peach-100 flex items-center justify-center text-peach-500"><Vote className="w-4 h-4" /></div>
                 <div>
-                  <div className="text-xs text-dusk-200">Proposal passing</div>
-                  <div className="text-sm font-semibold text-dusk-500">Replace lobby AC · 4-1</div>
+                  <div className="text-xs text-dusk-200">Votação passando</div>
+                  <div className="text-sm font-semibold text-dusk-500">Trocar ar do saguão · 4-1</div>
                 </div>
               </GlassCard>
               <GlassCard className="absolute bottom-0 left-6 p-3 px-4 hidden lg:flex items-center gap-3 w-52">
                 <div className="w-9 h-9 rounded-xl bg-dusk-100 flex items-center justify-center text-dusk-400"><Sparkles className="w-4 h-4" /></div>
                 <div>
-                  <div className="text-xs text-dusk-200">AI drafted</div>
-                  <div className="text-sm font-semibold text-dusk-500">3 new proposals</div>
+                  <div className="text-xs text-dusk-200">IA redigiu</div>
+                  <div className="text-sm font-semibold text-dusk-500">3 novas propostas</div>
                 </div>
               </GlassCard>
             </div>
@@ -106,9 +108,9 @@ export default function Landing() {
       <section className="relative px-6 lg:px-12 pb-24">
         <div className="max-w-4xl mx-auto text-center">
           <p className="font-display text-2xl md:text-4xl leading-[1.2] tracking-tight text-dusk-400">
-            "<span className="italic text-dusk-500">Perhaps we are searching in the branches for what we only find in the roots.</span>"
+            "<span className="italic text-dusk-500">Talvez a gente procure nos galhos o que só se encontra nas raízes.</span>"
           </p>
-          <p className="mt-5 text-sm uppercase tracking-[0.16em] text-dusk-200 font-medium">a calmer way to run a building</p>
+          <p className="mt-5 text-sm uppercase tracking-[0.16em] text-dusk-200 font-medium">um jeito mais calmo de cuidar do prédio</p>
         </div>
       </section>
 
@@ -116,22 +118,22 @@ export default function Landing() {
       <section id="features" className="relative px-6 lg:px-12 pb-28 scroll-mt-20">
         <div className="max-w-7xl mx-auto">
           <div className="max-w-2xl mb-12">
-            <span className="chip mb-4"><span className="w-1.5 h-1.5 rounded-full bg-sage-400" /> everything in one OS</span>
+            <span className="chip mb-4"><span className="w-1.5 h-1.5 rounded-full bg-sage-400" /> tudo em um sistema</span>
             <h2 className="font-display text-4xl md:text-5xl text-dusk-500 tracking-tight leading-[1.05] mt-4">
-              Everything a building runs on.
+              Tudo que o prédio precisa para rodar.
             </h2>
             <p className="text-dusk-300 mt-4 text-lg leading-relaxed">
-              Replace spreadsheets, chat groups, and paper notices with one calm operating system.
+              Troque planilhas, grupos de WhatsApp e avisos em papel por um único sistema tranquilo.
             </p>
           </div>
           <div className="grid md:grid-cols-3 gap-5">
             {[
-              { icon: Package,  color: 'sage',  title: 'Packages & visitors', body: 'Real-time front-desk queue. Approve guests from your phone.' },
-              { icon: Waves,    color: 'peach', title: 'Amenities & bookings', body: 'Pool, gym, party room. Residents book. Conflicts prevented.' },
-              { icon: Vote,     color: 'sage',  title: 'Proposals & voting',   body: 'Turn complaints into decisions. Live counts. Full transparency.' },
-              { icon: Calendar, color: 'peach', title: 'Meetings',             body: 'Paste raw notes. Get summary, decisions, action items.' },
-              { icon: Sparkles, color: 'sage',  title: 'AI co-pilot',          body: 'Cluster complaints, draft proposals, explain to residents.' },
-              { icon: Users,    color: 'peach', title: 'Resident-first',       body: 'Plain-language updates. Nobody reads the bylaws.' },
+              { icon: Package,  color: 'sage',  title: 'Encomendas & visitantes', body: 'Fila da portaria em tempo real. Aprove visita pelo celular.' },
+              { icon: Waves,    color: 'peach', title: 'Áreas comuns & reservas', body: 'Piscina, academia, salão. Morador reserva. Sem conflito.' },
+              { icon: Vote,     color: 'sage',  title: 'Propostas & votação',     body: 'Reclamação vira decisão. Contagem ao vivo. Transparência total.' },
+              { icon: Calendar, color: 'peach', title: 'Reuniões',                body: 'Cole as anotações. Saia com resumo, decisões e tarefas.' },
+              { icon: Sparkles, color: 'sage',  title: 'Copiloto IA',             body: 'Agrupa reclamações, redige propostas, explica aos moradores.' },
+              { icon: Users,    color: 'peach', title: 'Morador em primeiro',     body: 'Comunicado em linguagem humana. Ninguém lê convenção.' },
             ].map((f, i) => (
               <GlassCard key={i} variant="clay" hover className="p-7">
                 <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-5 ${
@@ -153,26 +155,26 @@ export default function Landing() {
           <img src="/images/bg-dusk.jpg" alt="" className="absolute inset-0 w-full h-full object-cover" />
           <div className="absolute inset-0 bg-gradient-to-b from-dusk-500/10 via-transparent to-dusk-500/30" />
           <div className="relative p-10 md:p-16 text-cream-50">
-            <span className="chip bg-white/20 border-white/30 text-cream-50"><Sparkles className="w-3.5 h-3.5" /> AI co-pilot</span>
+            <span className="chip bg-white/20 border-white/30 text-cream-50"><Sparkles className="w-3.5 h-3.5" /> Copiloto IA</span>
             <h2 className="font-display text-4xl md:text-[56px] mt-5 max-w-3xl tracking-tightest leading-[1.02]">
-              From "the lobby AC is broken" to a board decision — in minutes.
+              De "o ar do saguão não funciona" à decisão do síndico — em minutos.
             </h2>
             <p className="mt-5 text-cream-50/80 text-lg max-w-xl leading-relaxed">
-              Six AI moments, one quiet interface. Graceful fallbacks so demos never hang.
+              Seis momentos de IA, uma interface tranquila. Fallbacks para a demo nunca travar.
             </p>
             <div className="mt-12 grid md:grid-cols-3 gap-5">
               <GlassCard variant="glass-dark" className="p-6">
-                <div className="text-xs uppercase tracking-[0.12em] opacity-70 mb-3 font-medium">01 · Resident</div>
-                <p className="text-cream-50/95 text-[15px] leading-relaxed italic">"The lobby AC is barely working. It was 30°C inside yesterday."</p>
+                <div className="text-xs uppercase tracking-[0.12em] opacity-70 mb-3 font-medium">01 · Morador</div>
+                <p className="text-cream-50/95 text-[15px] leading-relaxed italic">"O ar do saguão mal funciona. Ontem marcou 30°C aqui dentro."</p>
               </GlassCard>
               <GlassCard variant="glass-dark" className="p-6">
-                <div className="text-xs uppercase tracking-[0.12em] opacity-70 mb-3 font-medium">02 · AI drafts</div>
-                <p className="font-semibold text-[16px]">Replace lobby AC unit</p>
-                <p className="text-[13px] opacity-80 mt-2 leading-relaxed">Maintenance · ~$9,400 · 5-ton replacement quote from Cool Breeze HVAC.</p>
+                <div className="text-xs uppercase tracking-[0.12em] opacity-70 mb-3 font-medium">02 · IA redige</div>
+                <p className="font-semibold text-[16px]">Trocar o ar-condicionado do saguão</p>
+                <p className="text-[13px] opacity-80 mt-2 leading-relaxed">Manutenção · ~R$ 47.000 · orçamento de 5 TR da Cool Breeze HVAC.</p>
               </GlassCard>
               <GlassCard variant="glass-dark" className="p-6">
-                <div className="text-xs uppercase tracking-[0.12em] opacity-70 mb-3 font-medium">03 · Board votes</div>
-                <p className="text-[15px] leading-relaxed">Opens for voting → residents approve → AI publishes a resident-friendly announcement.</p>
+                <div className="text-xs uppercase tracking-[0.12em] opacity-70 mb-3 font-medium">03 · Síndico abre votação</div>
+                <p className="text-[15px] leading-relaxed">Votação abre → moradores aprovam → IA publica o anúncio em linguagem humana.</p>
               </GlassCard>
             </div>
           </div>
@@ -284,24 +286,10 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* Every resident — accessibility + Brazilian warmth */}
+      {/* Every resident — accessibility + Brazilian warmth (text-left, image-right for rhythm) */}
       <section id="every-resident" className="relative px-6 lg:px-12 pb-28">
         <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-12 items-center">
-          <div className="relative">
-            <img
-              src="/images/characters/char-elderly-confident.jpg"
-              alt="An older resident using CondoOS on her phone at the kitchen table"
-              className="w-full rounded-[32px] shadow-clay-lg"
-            />
-            <GlassCard className="absolute -top-4 -right-3 p-3 px-4 flex items-center gap-3 w-52">
-              <div className="w-9 h-9 rounded-xl bg-peach-100 flex items-center justify-center text-peach-500"><MessageCircle className="w-4 h-4" /></div>
-              <div>
-                <div className="text-xs text-dusk-200">Nova mensagem</div>
-                <div className="text-sm font-semibold text-dusk-500">Votação aberta</div>
-              </div>
-            </GlassCard>
-          </div>
-          <div className="max-w-xl">
+          <div className="max-w-xl order-2 lg:order-1">
             <Badge tone="sage" className="mb-4">Para cada morador</Badge>
             <h2 className="font-display text-4xl md:text-5xl text-dusk-500 tracking-tight leading-[1.05]">
               Do adolescente de skate
@@ -315,8 +303,46 @@ export default function Landing() {
             <ul className="mt-6 space-y-3 text-dusk-400">
               <li className="flex items-start gap-3"><Check className="w-5 h-5 text-sage-700 shrink-0 mt-0.5" /><span><strong className="text-dusk-500">Fonte grande, contraste alto</strong> — sem lupa, sem desculpa.</span></li>
               <li className="flex items-start gap-3"><Check className="w-5 h-5 text-sage-700 shrink-0 mt-0.5" /><span><strong className="text-dusk-500">Notificação no WhatsApp</strong> — chega onde o morador já passa o dia.</span></li>
-              <li className="flex items-start gap-3"><Check className="w-5 h-5 text-sage-700 shrink-0 mt-0.5" /><span><strong className="text-dusk-500">Explicação em plain-language</strong> — a IA traduz o juridiquês antes do voto.</span></li>
+              <li className="flex items-start gap-3"><Check className="w-5 h-5 text-sage-700 shrink-0 mt-0.5" /><span><strong className="text-dusk-500">Explicação em linguagem humana</strong> — a IA traduz o juridiquês antes do voto.</span></li>
             </ul>
+          </div>
+          <div className="relative order-1 lg:order-2">
+            <img
+              src="/images/characters/char-elderly-confident.jpg"
+              alt="Uma moradora mais velha usando o CondoOS no celular na mesa da cozinha"
+              className="w-full rounded-[32px] shadow-clay-lg"
+            />
+            <GlassCard className="absolute -top-4 -right-3 p-3 px-4 flex items-center gap-3 w-52">
+              <div className="w-9 h-9 rounded-xl bg-peach-100 flex items-center justify-center text-peach-500"><MessageCircle className="w-4 h-4" /></div>
+              <div>
+                <div className="text-xs text-dusk-200">Nova mensagem</div>
+                <div className="text-sm font-semibold text-dusk-500">Votação aberta</div>
+              </div>
+            </GlassCard>
+          </div>
+        </div>
+      </section>
+
+      {/* Day-to-day band — packages + visitors + WhatsApp + family, PT-BR */}
+      <section className="relative px-6 lg:px-12 pb-28">
+        <div className="max-w-7xl mx-auto">
+          <div className="grid md:grid-cols-2 gap-5">
+            <div className="relative rounded-[32px] overflow-hidden shadow-clay-lg group">
+              <img src="/images/characters/char-package-arrival.jpg" alt="Porteiro entregando uma encomenda para a moradora" className="w-full h-[340px] object-cover transition-transform duration-700 group-hover:scale-[1.02]" />
+              <div className="absolute inset-x-0 bottom-0 p-6 bg-gradient-to-t from-dusk-500/70 to-transparent">
+                <div className="text-xs uppercase tracking-[0.14em] text-cream-50/80 font-medium">Portaria</div>
+                <h3 className="font-display text-2xl text-cream-50 mt-1">Encomenda chegou? O morador sabe.</h3>
+                <p className="text-sm text-cream-50/80 mt-1">Notificação no app e no WhatsApp — sem o grupo do prédio virar caos.</p>
+              </div>
+            </div>
+            <div className="relative rounded-[32px] overflow-hidden shadow-clay-lg group">
+              <img src="/images/characters/char-whatsapp-msg.jpg" alt="Mão segurando o celular com mensagem do CondoOS no WhatsApp" className="w-full h-[340px] object-cover transition-transform duration-700 group-hover:scale-[1.02]" />
+              <div className="absolute inset-x-0 bottom-0 p-6 bg-gradient-to-t from-dusk-500/70 to-transparent">
+                <div className="text-xs uppercase tracking-[0.14em] text-cream-50/80 font-medium">WhatsApp</div>
+                <h3 className="font-display text-2xl text-cream-50 mt-1">Aviso onde o morador já está.</h3>
+                <p className="text-sm text-cream-50/80 mt-1">Convocação de AGO, abertura de votação, chegada de encomenda — direto no WhatsApp.</p>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -356,16 +382,16 @@ export default function Landing() {
       <section className="relative px-6 lg:px-12 pb-28">
         <div className="max-w-4xl mx-auto text-center relative">
           <img
-            src="/images/characters/char-community-hands.jpg"
+            src="/images/characters/char-brazilian-family.jpg"
             alt=""
             aria-hidden
-            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 opacity-30 blur-[1px] pointer-events-none select-none"
+            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[560px] max-w-full opacity-20 blur-[2px] rounded-[40px] pointer-events-none select-none"
           />
           <h2 className="font-display text-4xl md:text-5xl text-dusk-500 tracking-tight leading-[1.05] relative">
             Vai que é hoje.
           </h2>
           <p className="text-dusk-300 mt-4 text-lg max-w-xl mx-auto relative">
-            Entre com o Google em 10s. Demo pronta para mostrar ao síndico no próximo WhatsApp do condomínio.
+            Entre com o Google em 10 segundos. Demo pronta para mostrar ao síndico no próximo grupo do prédio.
           </p>
           <div className="mt-8 flex items-center justify-center gap-3 flex-wrap relative">
             <Link to="/login">
@@ -389,7 +415,7 @@ export default function Landing() {
       <footer className="px-6 lg:px-12 py-12 border-t border-white/40 bg-cream-50/30 backdrop-blur-xl">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-dusk-300">
           <Logo size={22} />
-          <p className="font-mono text-xs text-dusk-200">© 2026 CondoOS · built for hackathons, designed for humans</p>
+          <p className="font-mono text-xs text-dusk-200">© 2026 CondoOS · feito em hackathon, desenhado para humanos</p>
           <div className="flex items-center gap-4 text-xs">
             <Link to="/design" className="hover:text-dusk-500 transition">Design system</Link>
             <a href="https://github.com/stefanogebara/condoos" target="_blank" rel="noreferrer" className="hover:text-dusk-500 transition">GitHub</a>
