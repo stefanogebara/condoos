@@ -1,6 +1,6 @@
 import { expect, test, type Page, type APIRequestContext } from '@playwright/test';
 
-const apiURL = process.env.E2E_API_URL || 'http://localhost:4312/api';
+const apiURL = process.env.E2E_API_URL || 'http://127.0.0.1:4312/api';
 
 // Cache sessions per worker — prod /auth/login is rate-limited.
 type Session = { token: string; user: Record<string, unknown> };

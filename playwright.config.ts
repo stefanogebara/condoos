@@ -1,9 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const baseURL = process.env.E2E_BASE_URL || 'http://localhost:5175';
-const stackCommand = process.platform === 'win32'
-  ? 'pwsh -NoProfile -ExecutionPolicy Bypass -File e2e/start-stack.ps1'
-  : 'node e2e/start-stack.mjs';
+const baseURL = process.env.E2E_BASE_URL || 'http://127.0.0.1:5175';
+const stackCommand = 'npm run e2e:seed && npm run e2e:stack';
 
 export default defineConfig({
   testDir: './e2e',

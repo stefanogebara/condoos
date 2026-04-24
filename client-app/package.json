@@ -25,6 +25,7 @@
   },
   "scripts": {
     "start": "vite --host localhost --port 3000",
+    "start:e2e": "vite --host 127.0.0.1 --port 5175 --strictPort",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host localhost --port 3000"
   },
