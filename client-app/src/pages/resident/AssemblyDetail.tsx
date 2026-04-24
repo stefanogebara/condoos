@@ -50,7 +50,7 @@ export default function AssemblyDetail() {
 
   const load = useCallback(() => apiGet<Assembly>(`/assemblies/${id}`).then(setA).catch(() => {}), [id]);
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { apiGet<ResidentOpt[]>('/users').then(setResidents).catch(() => {}); }, []);
+  useEffect(() => { apiGet<ResidentOpt[]>('/users/residents').then(setResidents).catch(() => {}); }, []);
 
   async function grantProxy() {
     if (!proxyPick) return;

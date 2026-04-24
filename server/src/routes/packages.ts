@@ -2,6 +2,7 @@ import { Router } from 'express';
 import db from '../db';
 import { requireAuth, requireRole, getActiveCondoId, AuthedRequest } from '../lib/auth';
 import { ok, fail } from '../lib/respond';
+import { notifyUsers } from '../lib/whatsapp';
 
 const router = Router();
 
@@ -54,6 +55,11 @@ router.post('/', requireAuth, requireRole('board_admin'), (req: AuthedRequest, r
     `INSERT INTO packages (condominium_id, recipient_id, carrier, description)
      VALUES (?, ?, ?, ?)`
   ).run(condoId, recipient_id, carrier, description || null);
+
+  // WhatsApp notification (fire-and-forget; never blocks response)
+  const body = `📦 CondoOS — Uma encomenda (${carrier}) chegou para você na portaria. Passe para retirar!`;
+  notifyUsers([recipient_id], body).catch((e) => console.warn('[packages] notify failed:', e?.message));
+
   return ok(res, { id: row.lastInsertRowid });
 });
 

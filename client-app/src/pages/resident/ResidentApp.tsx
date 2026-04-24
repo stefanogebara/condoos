@@ -1,6 +1,6 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { Home, Package, DoorOpen, Waves, Megaphone, Vote, Calendar, Sparkles, Gavel } from 'lucide-react';
+import { Home, Package, DoorOpen, Waves, Megaphone, Vote, Calendar, Sparkles, Gavel, SlidersHorizontal } from 'lucide-react';
 import Sidebar, { NavItem } from '../../components/Sidebar';
 import Overview from './Overview';
 import Packages from './Packages';
@@ -13,6 +13,7 @@ import Meetings from './Meetings';
 import Suggest from './Suggest';
 import Assemblies from './Assemblies';
 import AssemblyDetail from './AssemblyDetail';
+import Settings from './Settings';
 
 const NAV: NavItem[] = [
   { to: '/app',               label: 'Overview',      icon: Home },
@@ -24,6 +25,7 @@ const NAV: NavItem[] = [
   { to: '/app/assemblies',    label: 'Assemblies',    icon: Gavel },
   { to: '/app/meetings',      label: 'Meetings',      icon: Calendar },
   { to: '/app/suggest',       label: 'Suggest',       icon: Sparkles },
+  { to: '/app/settings',      label: 'Settings',      icon: SlidersHorizontal },
 ];
 
 export default function ResidentApp() {
@@ -43,6 +45,7 @@ export default function ResidentApp() {
           <Route path="assemblies/:id" element={<AssemblyDetail />} />
           <Route path="meetings"     element={<Meetings />} />
           <Route path="suggest"      element={<Suggest />} />
+          <Route path="settings"     element={<Settings />} />
           <Route path="*"            element={<Navigate to="/app" replace />} />
         </Routes>
       </main>

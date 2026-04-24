@@ -207,6 +207,9 @@ export function initSchema() {
   addColumnIfMissing('proposals',    'voting_opens_at',    `TEXT`);
   addColumnIfMissing('proposals',    'closed_at',          `TEXT`);
   addColumnIfMissing('proposals',    'close_reason',       `TEXT`);
+  // WhatsApp notifications — phone + opt-in on users
+  addColumnIfMissing('users',        'phone',              `TEXT`);
+  addColumnIfMissing('users',        'whatsapp_opt_in',    `INTEGER NOT NULL DEFAULT 0`);
 
   migrateLegacyUnits();
 

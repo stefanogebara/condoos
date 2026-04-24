@@ -11,6 +11,7 @@ import {
   generateAtaMarkdown,
   AgendaItemRow,
 } from '../lib/assembly';
+import { notifyCondoOwners, notifyCondoResidents } from '../lib/whatsapp';
 
 const router = Router();
 
@@ -199,6 +200,12 @@ router.post('/:id/convoke', requireAuth, requireRole('board_admin'), (req: Authe
   db.prepare(
     `UPDATE assemblies SET status='convoked', convoked_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id = ?`
   ).run(id);
+
+  // WhatsApp convocation to all owners (legal requirement in BR, min 8 days notice).
+  const when = new Date(a.first_call_at).toLocaleString('pt-BR');
+  const body = `🏛️ CondoOS — Você está convocado para a ${a.kind === 'ordinary' ? 'Assembleia Geral Ordinária' : 'Assembleia Geral Extraordinária'}: "${a.title}". Primeira chamada: ${when}. Veja a pauta e conceda procuração se necessário no app.`;
+  notifyCondoOwners(condoId, body).catch((e) => console.warn('[assemblies/convoke] notify failed:', e?.message));
+
   return ok(res, { id, status: 'convoked' });
 });
 

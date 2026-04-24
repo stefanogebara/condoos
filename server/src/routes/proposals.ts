@@ -10,6 +10,7 @@ import {
   computeQuorum,
   resolveFinalOutcome,
 } from '../lib/proposal-tally';
+import { notifyCondoResidents } from '../lib/whatsapp';
 
 const router = Router();
 
@@ -194,6 +195,16 @@ router.post('/:id/status', requireAuth, requireRole('board_admin'), (req: Authed
   const p = getScopedProposal(id, condoId);
   if (!p) return fail(res, 'not_found', 404);
   db.prepare(`UPDATE proposals SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(status, id);
+
+  // When voting opens, nudge all residents. The WhatsApp stub is fire-and-forget.
+  if (status === 'voting' && p.status !== 'voting') {
+    const closesText = p.voting_closes_at
+      ? ` Fechamento: ${new Date(p.voting_closes_at).toLocaleString('pt-BR')}.`
+      : '';
+    const body = `🗳️ CondoOS — A votação está aberta para "${p.title}".${closesText} Vote pelo app.`;
+    notifyCondoResidents(condoId, body).catch((e) => console.warn('[proposals/status] notify failed:', e?.message));
+  }
+
   return ok(res, { id, status });
 });
 

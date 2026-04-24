@@ -1,9 +1,42 @@
 import { Router } from 'express';
 import db from '../db';
 import { requireAuth, getActiveCondoId, AuthedRequest } from '../lib/auth';
-import { ok } from '../lib/respond';
+import { ok, fail } from '../lib/respond';
 
 const router = Router();
+
+router.get('/me', requireAuth, (req: AuthedRequest, res) => {
+  const row = db.prepare(
+    `SELECT id, email, first_name, last_name, role, phone, whatsapp_opt_in
+     FROM users WHERE id = ?`
+  ).get(req.user!.id);
+  return ok(res, row);
+});
+
+// Update profile fields — phone + whatsapp_opt_in for notification preferences.
+router.patch('/me', requireAuth, (req: AuthedRequest, res) => {
+  const { phone, whatsapp_opt_in, first_name, last_name } = req.body || {};
+  const sets: string[] = [];
+  const vals: any[] = [];
+  if (phone !== undefined) {
+    const cleaned = typeof phone === 'string' ? phone.trim() : null;
+    // Basic E.164-ish sanity: must be digits + optional leading + and 7-18 chars
+    if (cleaned && !/^\+?[\d\s\-()]{7,24}$/.test(cleaned)) return fail(res, 'invalid_phone');
+    sets.push('phone = ?'); vals.push(cleaned || null);
+  }
+  if (whatsapp_opt_in !== undefined) {
+    sets.push('whatsapp_opt_in = ?'); vals.push(whatsapp_opt_in ? 1 : 0);
+  }
+  if (first_name !== undefined) { sets.push('first_name = ?'); vals.push(String(first_name).trim()); }
+  if (last_name  !== undefined) { sets.push('last_name = ?');  vals.push(String(last_name).trim()); }
+  if (sets.length === 0) return fail(res, 'nothing_to_update');
+  vals.push(req.user!.id);
+  db.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`).run(...vals);
+  const row = db.prepare(
+    `SELECT id, email, first_name, last_name, role, phone, whatsapp_opt_in FROM users WHERE id = ?`
+  ).get(req.user!.id);
+  return ok(res, row);
+});
 
 router.get('/residents', requireAuth, (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);

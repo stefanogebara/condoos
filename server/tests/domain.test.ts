@@ -372,3 +372,51 @@ test('AGO: listEligibleOwners excludes tenants', () => {
   assert.deepEqual(owners, [ownerA, ownerB].sort());
   assert.ok(!owners.includes(tenantC));
 });
+
+// ============================================================================
+// WhatsApp tests — use the dev fallback (no TWILIO creds in tests)
+// ============================================================================
+
+test('WhatsApp: notifyUsers skips users without phone or opt_in', async () => {
+  const { sendText, notifyUsers } = await import('../src/lib/whatsapp');
+  resetDb();
+  const { condoId, unit101 } = createCondoFixture();
+  const withPhone = createUser('phone-on@x.com');
+  const withoutPhone = createUser('no-phone@x.com');
+  const optedOut = createUser('opted-out@x.com');
+  db.prepare(`INSERT INTO user_unit (user_id, unit_id, relationship, status, primary_contact, voting_weight) VALUES (?, ?, 'owner', 'active', 1, 1.0)`).run(withPhone, unit101);
+  db.prepare(`UPDATE users SET phone = '+5511999990000', whatsapp_opt_in = 1 WHERE id = ?`).run(withPhone);
+  db.prepare(`UPDATE users SET phone = '+5511888880000', whatsapp_opt_in = 0 WHERE id = ?`).run(optedOut);
+  // withoutPhone has no phone at all
+
+  const result = await notifyUsers([withPhone, withoutPhone, optedOut], 'test');
+  assert.equal(result.attempted, 3);
+  // Under dev (no creds), sent=0 because all go through the skipped:'not_configured' branch.
+  // What we're asserting: only 1 user (withPhone) passed the WHERE filter.
+  assert.equal(result.skipped, 2 + 1); // 2 filtered out + 1 skipped due to dev config
+
+  // sendText itself should degrade gracefully in dev.
+  const send = await sendText('+5511999990000', 'hello');
+  assert.equal(send.ok, true);
+  assert.equal(send.skipped, 'not_configured');
+
+  // invalid numbers return not ok
+  const bad = await sendText('', 'hello');
+  assert.equal(bad.ok, false);
+  assert.equal(bad.skipped, 'invalid_to');
+});
+
+test('WhatsApp: notifyCondoOwners selects only active owners in the condo', async () => {
+  const { notifyCondoOwners } = await import('../src/lib/whatsapp');
+  resetDb();
+  const { condoId, unit101, unit102 } = createCondoFixture();
+  const owner1 = createUser('o1@x.com');
+  const owner2 = createUser('o2@x.com');
+  const tenant = createUser('t@x.com');
+  db.prepare(`INSERT INTO user_unit (user_id, unit_id, relationship, status, primary_contact, voting_weight) VALUES (?, ?, 'owner', 'active', 1, 1.0), (?, ?, 'owner', 'active', 1, 1.0), (?, ?, 'tenant', 'active', 0, 1.0)`).run(owner1, unit101, owner2, unit102, tenant, unit101);
+  db.prepare(`UPDATE users SET phone = '+5511111110000', whatsapp_opt_in = 1 WHERE id IN (?, ?, ?)`).run(owner1, owner2, tenant);
+
+  const result = await notifyCondoOwners(condoId, 'test');
+  // 2 owners matched + 1 tenant skipped at the SQL filter
+  assert.equal(result.attempted, 2);
+});
