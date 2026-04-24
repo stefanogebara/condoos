@@ -15,7 +15,11 @@ server/dist/
 
 # Database
 *.sqlite
+*.sqlite-shm
+*.sqlite-wal
 *.sqlite-journal
+backups/
+server/backups/
 server/data/
 
 # Logs

@@ -11,13 +11,13 @@ npm --prefix server run db:backup
 Custom output directory:
 
 ```bash
-npm --prefix server run db:backup -- --out-dir ../backups
+npm --prefix server run db:backup -- ../backups
 ```
 
 Restore from a backup:
 
 ```bash
-npm --prefix server run db:restore -- --from ./backups/condoos-YYYYMMDD-HHMMSS.sqlite
+npm --prefix server run db:restore -- ./backups/condoos-YYYYMMDD-HHMMSS.sqlite
 ```
 
 The restore command first writes a safety copy beside the current DB as `*.pre-restore-*`, then copies the selected backup into place and runs `PRAGMA integrity_check`.

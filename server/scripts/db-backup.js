@@ -9,8 +9,18 @@ const command = process.argv[2];
 const args = process.argv.slice(3);
 
 function arg(name) {
+  const inline = args.find((value) => value.startsWith(`${name}=`));
+  if (inline) return inline.slice(name.length + 1);
+
   const idx = args.indexOf(name);
-  return idx >= 0 ? args[idx + 1] : undefined;
+  if (idx >= 0) return args[idx + 1];
+
+  const envName = `npm_config_${name.replace(/^--/, '').replace(/-/g, '_')}`;
+  return process.env[envName];
+}
+
+function positionalArg() {
+  return args.find((value) => value && !value.startsWith('--'));
 }
 
 function timestamp() {
@@ -37,7 +47,7 @@ async function backup() {
   const source = dbPath();
   if (!fs.existsSync(source)) throw new Error(`DB not found: ${source}`);
 
-  const outDir = path.resolve(process.cwd(), arg('--out-dir') || './backups');
+  const outDir = path.resolve(process.cwd(), arg('--out-dir') || positionalArg() || './backups');
   fs.mkdirSync(outDir, { recursive: true });
   const dest = path.join(outDir, `condoos-${timestamp()}.sqlite`);
 
@@ -52,8 +62,10 @@ async function backup() {
 }
 
 function restore() {
-  const source = path.resolve(process.cwd(), arg('--from') || '');
-  if (!source || !fs.existsSync(source)) throw new Error('Usage: npm run db:restore -- --from <backup.sqlite>');
+  const source = path.resolve(process.cwd(), arg('--from') || positionalArg() || '');
+  if (!source || !fs.existsSync(source)) {
+    throw new Error('Usage: npm run db:restore -- <backup.sqlite>');
+  }
   ensureIntegrity(source);
 
   const target = dbPath();

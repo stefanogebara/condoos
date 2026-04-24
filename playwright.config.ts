@@ -8,6 +8,7 @@ export default defineConfig({
   timeout: 45_000,
   expect: { timeout: 10_000 },
   fullyParallel: false,
+  workers: process.env.E2E_WORKERS ? Number(process.env.E2E_WORKERS) : 1,
   retries: process.env.CI ? 2 : 0,
   reporter: [['list']],
   use: {
