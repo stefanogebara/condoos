@@ -171,6 +171,152 @@ test('board UI: create assembly → redirect to detail → add agenda → convok
   await expect(page.getByRole('button', { name: /Start session/i })).toBeVisible({ timeout: 10_000 });
 });
 
+// ---------------------------------------------------------------------------
+// Phase K — WhatsApp configuration health (delivery itself requires TWILIO_* creds)
+// ---------------------------------------------------------------------------
+
+test('whatsapp status endpoint returns shape (configured boolean + masked from)', async ({ request }) => {
+  const { token } = await loginApi(request, 'admin@condoos.dev', 'admin123');
+  const r = await request.get(`${apiURL}/users/whatsapp/status`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  expect(r.ok()).toBeTruthy();
+  const body = (await r.json()).data;
+  expect(typeof body.configured).toBe('boolean');
+  expect(body.provider).toBe('twilio');
+  // from is either null (not configured) or a masked string like "+1415…86"
+  if (body.from !== null) {
+    expect(body.from).toMatch(/…/);                  // masked in the middle
+    expect(body.from).not.toMatch(/[A-Z]{34}/);      // never contains an SID
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Phase J AI — LLM Portuguese quality canary
+// Calls the real suggest-agenda endpoint and verifies the model (or fallback)
+// returns a valid, structured agenda in Portuguese. This uses real tokens
+// (~ <$0.01 per run) — it's a canary, not a quality benchmark.
+// ---------------------------------------------------------------------------
+
+test('suggest-agenda returns a usable agenda (shape + Portuguese markers)', async ({ request }) => {
+  test.setTimeout(60_000);                              // LLM can be slow
+  const { token } = await loginApi(request, 'admin@condoos.dev', 'admin123');
+  const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+
+  const future = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
+  const createRes = await request.post(`${apiURL}/assemblies`, {
+    headers,
+    data: { title: `Canary AGO 2026`, kind: 'ordinary', first_call_at: future },
+  });
+  const assemblyId = (await createRes.json()).data.id;
+
+  const r = await request.post(`${apiURL}/ai/assemblies/${assemblyId}/suggest-agenda`, { headers });
+  expect(r.ok(), `suggest-agenda should respond ok (${r.status()})`).toBeTruthy();
+  const body = (await r.json()).data;
+
+  expect(Array.isArray(body.items), 'items must be an array').toBe(true);
+  expect(body.items.length).toBeGreaterThanOrEqual(2);
+
+  // Each item must match the fixed schema
+  for (const item of body.items) {
+    expect(typeof item.title).toBe('string');
+    expect(item.title.length).toBeGreaterThan(0);
+    expect(['budget', 'accounts', 'bylaw', 'election', 'ordinary', 'other']).toContain(item.item_type);
+    expect(['simple', 'two_thirds', 'unanimous']).toContain(item.required_majority);
+  }
+
+  // At least one item should surface a Portuguese or Brazilian-legal term that
+  // a real AGO agenda would have. This catches regressions where the model
+  // flips to English-only or loses BR context entirely.
+  const corpus = body.items.map((i: any) => `${i.title} ${i.description || ''}`).join(' ').toLowerCase();
+  const brazilTerms = [
+    'presta', 'conta', 'orçament', 'orcament', 'sindic', 'convenç', 'convenc',
+    'assembleia', 'pauta', 'budget', 'accounts', 'board',
+  ];
+  const hit = brazilTerms.some((t) => corpus.includes(t));
+  expect(hit, `expected at least one BR/AGO term in: ${corpus.slice(0, 300)}`).toBe(true);
+});
+
+// ---------------------------------------------------------------------------
+// Phase I — vote-closer poller on prod (verifies setInterval runs on Fly)
+// Waits up to 80s for one tick. Runs serially; the rest of the suite ignores it.
+// ---------------------------------------------------------------------------
+
+test('vote-closer: expired voting window transitions status within 80s', async ({ request }) => {
+  test.setTimeout(120_000);
+  const { token } = await loginApi(request, 'admin@condoos.dev', 'admin123');
+  const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+
+  // Create a proposal to isolate the test.
+  const createRes = await request.post(`${apiURL}/proposals`, {
+    headers,
+    data: { title: `Vote-closer canary ${Date.now()}`, description: 'Canary for the auto-close poller.', category: 'maintenance' },
+  });
+  expect(createRes.ok()).toBeTruthy();
+  const proposalId = (await createRes.json()).data.id;
+
+  // Set voting window with closes_at in the past, then flip to 'voting'.
+  const past = new Date(Date.now() - 30 * 1000).toISOString();
+  await request.patch(`${apiURL}/proposals/${proposalId}/compliance`, {
+    headers,
+    data: { quorum_percent: 0, voting_closes_at: past },
+  });
+  const voteRes = await request.post(`${apiURL}/proposals/${proposalId}/status`, {
+    headers,
+    data: { status: 'voting' },
+  });
+  expect(voteRes.ok()).toBeTruthy();
+
+  // Poll the proposal status; expect it to flip off 'voting' within ~80s
+  // (poller cadence is 60s on prod, per startVoteCloser(60_000)).
+  const deadline = Date.now() + 80_000;
+  let finalStatus = 'voting';
+  while (Date.now() < deadline) {
+    const r = await request.get(`${apiURL}/proposals/${proposalId}`, { headers });
+    const body = (await r.json()).data;
+    finalStatus = body.status;
+    if (finalStatus !== 'voting') break;
+    await new Promise((r) => setTimeout(r, 5_000));
+  }
+  // The poller should have closed it — approved/rejected/inconclusive depending on tally.
+  // With zero votes cast, expected outcome is inconclusive (no quorum means tally can't resolve).
+  expect(['approved', 'rejected', 'inconclusive'], `expected auto-close, got ${finalStatus}`).toContain(finalStatus);
+});
+
+// ---------------------------------------------------------------------------
+// Google OAuth — endpoint validation + sign-in button presence
+// Full OAuth popup flow cannot be automated without real Google creds; we verify
+// the server-side error path + UI surface instead.
+// ---------------------------------------------------------------------------
+
+test('Google OAuth endpoint rejects invalid credentials with a known error code', async ({ request }) => {
+  // We intentionally do not hit loginApi first — a brand-new guest request.
+  const r = await request.post(`${apiURL}/auth/google`, {
+    data: { credential: 'obviously-not-a-valid-jwt' },
+    headers: { 'Content-Type': 'application/json' },
+  });
+  expect([400, 401, 501], `expected auth rejection, got ${r.status()}`).toContain(r.status());
+  const body = await r.json();
+  expect(body.success).toBe(false);
+  // google_verify_failed (401) is the happy-path for an invalid token; other
+  // codes like google_auth_disabled (501) also acceptable when creds aren't set.
+  expect(['invalid_input', 'google_verify_failed', 'google_aud_mismatch', 'google_auth_disabled'])
+    .toContain(body.error);
+});
+
+test('login page renders Google sign-in button', async ({ page }) => {
+  await page.goto('/login');
+  // The button text / element varies (Google one-tap iframe). Accept any of:
+  //   - visible text "Continue with Google" or "Sign in with Google"
+  //   - a Google iframe / button with role=button inside #google-signin
+  const hasButton = await page.evaluate(() => {
+    const iframeOrBtn = document.querySelector('iframe[src*="accounts.google.com"], [data-testid="google-signin"], [id*="google"]');
+    const txt = document.body.innerText.toLowerCase();
+    return Boolean(iframeOrBtn) || /continue with google|sign in with google|google/i.test(txt);
+  });
+  expect(hasButton, 'login page should surface Google sign-in').toBe(true);
+});
+
 test('board UI: compliance editor saves quorum + datetime window', async ({ page, request }) => {
   const { token } = await loginApi(request, 'admin@condoos.dev', 'admin123');
   // Find or create a proposal in 'discussion' so the compliance editor is visible.

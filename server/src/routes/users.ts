@@ -2,8 +2,15 @@ import { Router } from 'express';
 import db from '../db';
 import { requireAuth, getActiveCondoId, AuthedRequest } from '../lib/auth';
 import { ok, fail } from '../lib/respond';
+import { getWhatsAppStatus } from '../lib/whatsapp';
 
 const router = Router();
+
+// Diagnostic: is WhatsApp delivery configured on this deployment?
+// Safe to expose — returns only booleans + a masked from-number, never secrets.
+router.get('/whatsapp/status', requireAuth, (_req: AuthedRequest, res) => {
+  return ok(res, getWhatsAppStatus());
+});
 
 router.get('/me', requireAuth, (req: AuthedRequest, res) => {
   const row = db.prepare(

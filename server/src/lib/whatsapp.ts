@@ -29,6 +29,20 @@ function isConfigured(): boolean {
   return Boolean(ACCOUNT_SID && AUTH_TOKEN && FROM);
 }
 
+/** Public diagnostic — safe to expose (returns only booleans + masked from-number). */
+export function getWhatsAppStatus() {
+  const from = FROM || null;
+  // Mask the middle of the phone number so we never leak full credentials.
+  const maskedFrom = from && from.length >= 7
+    ? `${from.slice(0, 6)}…${from.slice(-2)}`
+    : from;
+  return {
+    configured: isConfigured(),
+    provider: 'twilio' as const,
+    from: maskedFrom,
+  };
+}
+
 export interface SendResult {
   ok: boolean;
   skipped?: 'not_configured' | 'invalid_to';
