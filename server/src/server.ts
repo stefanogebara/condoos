@@ -25,6 +25,7 @@ import assembliesRoutes from './routes/assemblies';
 
 const app = express();
 const PORT = Number(process.env.PORT || 4000);
+app.set('trust proxy', 1);
 const allowedOrigins = (process.env.CORS_ORIGIN || process.env.CLIENT_ORIGIN || '')
   .split(',')
   .map((origin) => origin.trim())

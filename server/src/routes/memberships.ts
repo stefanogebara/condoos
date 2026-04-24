@@ -5,8 +5,10 @@ import db from '../db';
 import { requireAuth, requireRole, AuthedRequest } from '../lib/auth';
 import { ok, fail, asyncHandler } from '../lib/respond';
 import { EmailDeliveryResult, sendInviteEmail } from '../lib/email';
+import { createRateLimit } from '../lib/rate-limit';
 
 const router = Router();
+const inviteWriteRateLimit = createRateLimit({ keyPrefix: 'membership_invites', windowMs: 60 * 60_000, max: 30 });
 
 // GET /api/memberships/pending — all pending claims in admin's condo
 router.get('/pending', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
@@ -93,7 +95,7 @@ function persistInviteEmailStatus(inviteId: number, delivery: EmailDeliveryResul
   ).run(delivery.status, delivery.status, delivery.error || null, inviteId);
 }
 
-router.post('/import-csv', requireAuth, requireRole('board_admin'), asyncHandler(async (req: AuthedRequest, res) => {
+router.post('/import-csv', inviteWriteRateLimit, requireAuth, requireRole('board_admin'), asyncHandler(async (req: AuthedRequest, res) => {
   const parsed = csvSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
   const u = req.user!;
@@ -194,7 +196,7 @@ router.get('/invites', requireAuth, requireRole('board_admin'), (req: AuthedRequ
   return ok(res, rows);
 });
 
-router.post('/invites/:id/send-email', requireAuth, requireRole('board_admin'), asyncHandler(async (req: AuthedRequest, res) => {
+router.post('/invites/:id/send-email', inviteWriteRateLimit, requireAuth, requireRole('board_admin'), asyncHandler(async (req: AuthedRequest, res) => {
   const u = req.user!;
   const id = Number(req.params.id);
   const row = db.prepare(

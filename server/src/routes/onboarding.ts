@@ -8,8 +8,11 @@ import { z } from 'zod';
 import db from '../db';
 import { requireAuth, requireActiveMembership, requireRole, getActiveCondoId, AuthedRequest } from '../lib/auth';
 import { ok, fail, asyncHandler } from '../lib/respond';
+import { createRateLimit } from '../lib/rate-limit';
 
 const router = Router();
+const lookupRateLimit = createRateLimit({ keyPrefix: 'onboarding_lookup', windowMs: 60_000, max: 60 });
+const onboardingWriteRateLimit = createRateLimit({ keyPrefix: 'onboarding_write', windowMs: 60 * 60_000, max: 20 });
 
 function randomCode(): string {
   const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // avoids 0/O/1/I/L
@@ -40,7 +43,7 @@ const createSchema = z.object({
   votingModel: z.enum(['one_per_unit', 'weighted_by_sqft']).default('one_per_unit'),
 });
 
-router.post('/create-building', requireAuth, asyncHandler(async (req: AuthedRequest, res) => {
+router.post('/create-building', onboardingWriteRateLimit, requireAuth, asyncHandler(async (req: AuthedRequest, res) => {
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
   const u = req.user!;
@@ -115,7 +118,7 @@ router.post('/create-building', requireAuth, asyncHandler(async (req: AuthedRequ
 // ---------------------------------------------------------------------------
 // Look up a condo by invite code (public, so join UI can show details)
 // ---------------------------------------------------------------------------
-router.get('/by-code/:code', asyncHandler(async (req, res) => {
+router.get('/by-code/:code', lookupRateLimit, asyncHandler(async (req, res) => {
   const code = (req.params.code || '').toUpperCase().trim();
   if (!code) return fail(res, 'missing_code');
   const condo = db.prepare(
@@ -151,7 +154,7 @@ const joinSchema = z.object({
   primary_contact: z.boolean().default(true),
 });
 
-router.post('/join', requireAuth, asyncHandler(async (req: AuthedRequest, res) => {
+router.post('/join', onboardingWriteRateLimit, requireAuth, asyncHandler(async (req: AuthedRequest, res) => {
   const parsed = joinSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
   const u = req.user!;

@@ -6,15 +6,17 @@ import { signToken, requireAuth, AuthedRequest } from '../lib/auth';
 import { ok, fail, asyncHandler } from '../lib/respond';
 import { claimPendingInvitesForUser } from '../lib/invites';
 import { GoogleAuthError, verifyGoogleCredential } from '../lib/google-auth';
+import { createRateLimit } from '../lib/rate-limit';
 
 const router = Router();
+const authRateLimit = createRateLimit({ keyPrefix: 'auth', windowMs: 15 * 60_000, max: 30 });
 
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
 });
 
-router.post('/login', (req, res) => {
+router.post('/login', authRateLimit, (req, res) => {
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
 
@@ -49,7 +51,7 @@ router.get('/config', (_req, res) => {
 // Body: { credential: string } — the ID token returned by @react-oauth/google.
 const googleSchema = z.object({ credential: z.string().min(10) });
 
-router.post('/google', asyncHandler(async (req, res) => {
+router.post('/google', authRateLimit, asyncHandler(async (req, res) => {
   const parsed = googleSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
 
