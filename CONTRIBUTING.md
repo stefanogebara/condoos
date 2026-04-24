@@ -304,3 +304,63 @@ flyctl logs -a condoos-api --no-tail | tail -30
 - **Vercel dashboard**: https://vercel.com/stefanogebaras-projects/condoos
 - **Stitch project**: https://stitch.withgoogle.com/projects/1399691735525483036
 - **Stitch design-system asset id**: `7671660702723806725`
+
+---
+
+## Demo video script — 90-second pitch
+
+Read this script while screen-recording a Loom / OBS walkthrough. Click-paths on the left, narration on the right. Target: **90s ± 5s**.
+
+### Setup before recording
+
+- Browser at `1440×900`. Fresh Chrome profile (no stray tabs).
+- Two tabs pre-loaded:
+  1. `https://condoos-ten.vercel.app/` — landing
+  2. `https://condoos-ten.vercel.app/login` — login form
+- Log into admin demo once so credentials prefill, then log out. Saves ~4s on stage.
+- Quiet room, single wired mic. Record once, don't cut.
+
+### Click-path + narration
+
+**[0:00 – 0:08] Hero** — Tab 1, let the hero settle.
+> "Brazilian condomínios still run on spreadsheets, paper notices, and WhatsApp groups. CondoOS is the operating system that replaces all three."
+
+**[0:08 – 0:18] Scroll to AGO section.**
+> "Annual assemblies — the *AGO* — are mandatory by the civil code. Ours ships with digital proxies, quorum per item, and the *ata* written for you in Portuguese the minute the session closes."
+
+**[0:18 – 0:26] Scroll to the elderly-woman 'Para cada morador' section.**
+> "The product had to work for the 72-year-old owner, not just the síndico's son. Big type, WhatsApp-first, plain language — the AI translates the juridiquês."
+
+**[0:26 – 0:34] Click Entrar → login as admin@condoos.dev / admin123.**
+> "Let me show you a live condominium. This is the admin board view — six owners, one building, a real proposal from last week."
+
+**[0:34 – 0:48] Sidebar → Assemblies → New assembly → fill title / date → Create & open agenda → click 'Draft with AI'.**
+> "I'll schedule our annual assembly. Title. Date. Done. And here's the trick: the AI drafts the whole agenda from our open proposals — accounts approval, budget, the garage gate repair. The síndico skipped forty minutes of admin."
+
+**[0:48 – 1:02] Back to Proposals → open garage-gate proposal → Voting compliance card → 50% quorum, 7-day window → Save voting rules → Open voting.**
+> "Any proposal gets a quorum rule and a voting window. Fifty percent quorum, closes next Friday. If the window expires and nobody hit quorum — it auto-closes as inconclusive. No síndico twisting arms."
+
+**[1:02 – 1:16] Private tab logged in as resident@condoos.dev → Proposals → same proposal → hit Yes.**
+> "Now the resident. Notification landed on their WhatsApp — they click through, read the AI-generated plain-language explainer instead of the twelve-page proposal, vote yes in three seconds."
+
+**[1:16 – 1:30] Show the quorum progress line OR scroll the landing Day-to-day band.**
+> "Bootstrapped in four weekends. Sixty-six end-to-end tests on production. Built in Brazil for the thirty thousand condomínios still running on paper. Code's on GitHub — link in the description. Onboarding the first ten beta buildings now."
+
+### Cut-priority if time blows past 95s
+
+1. First cut: **0:18–0:26 Para cada morador** — emotional but not load-bearing.
+2. Second cut: **1:16–1:30 close-on-wins** — compress to 4-sec outro "Code's on GitHub. Onboarding ten buildings now."
+3. Never cut **0:34–1:02** — AGO creation + compliance editor are the killer moments.
+
+### 30-second LinkedIn cut
+
+1. Hero (3s): "CondoOS — operating system for Brazilian condomínios."
+2. AGO + AI agenda draft (12s).
+3. Resident vote in 3 clicks (10s).
+4. Outro (5s): "Live at condoos-ten.vercel.app."
+
+### Don'ts
+
+- Don't explain the tech stack on-camera. Technical buyers read the GitHub. Business buyers only care about what they click.
+- First 8 seconds must earn the viewer. The hero shot earns it — don't waste it on a slow intro.
+- If a build breaks mid-take, don't retry live. Re-record. Slow recovery kills pitch momentum.

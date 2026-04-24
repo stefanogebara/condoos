@@ -23,7 +23,7 @@ async function browserLogin(page: Page, request: APIRequestContext, kind: 'admin
     ? ['admin@condoos.dev', 'admin123']
     : ['resident@condoos.dev', 'resident123'];
   const s = await loginApi(request, creds[0], creds[1]);
-  await page.goto('/');
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
   await page.evaluate(({ token, user }) => {
     localStorage.setItem('condoos_token', token);
     localStorage.setItem('condoos_user', JSON.stringify(user));
@@ -34,20 +34,29 @@ async function browserLogin(page: Page, request: APIRequestContext, kind: 'admin
 // Landing — PT-BR sweep verification
 // ---------------------------------------------------------------------------
 
-test('landing is fully PT-BR, no English leaking', async ({ page }) => {
+test('landing is fully PT-BR, no English leaking', async ({ page }, testInfo) => {
   await page.goto('/');
+  const isMobile = testInfo.project.name === 'mobile';
+
   // Positive assertions — Portuguese content we expect
   await expect(page.getByRole('heading', { name: /Seu condomínio,/i })).toBeVisible();
   await expect(page.getByText(/em paz/i)).toBeVisible();
   await expect(page.getByRole('link', { name: /^Entrar$/i }).first()).toBeVisible();
-  await expect(page.getByText(/Funcionalidades/i).first()).toBeVisible();
-  await expect(page.getByText(/Como funciona/i).first()).toBeVisible();
-  await expect(page.getByText(/Dúvidas/i).first()).toBeVisible();
   await expect(page.getByText(/Testar a demo/i)).toBeVisible();
   await expect(page.getByText(/Tudo que o prédio precisa para rodar/i)).toBeVisible();
   await expect(page.getByText(/AGO no app\./i)).toBeVisible();
   await expect(page.getByText(/Do adolescente de skate/i)).toBeVisible();
   await expect(page.getByText(/Vai que é hoje\./i)).toBeVisible();
+
+  if (isMobile) {
+    await expect(page.getByText(/Funcionalidades/i).first()).toBeHidden();
+    await expect(page.getByText(/Como funciona/i).first()).toBeHidden();
+    await expect(page.getByText(/Dúvidas/i).first()).toBeHidden();
+  } else {
+    await expect(page.getByText(/Funcionalidades/i).first()).toBeVisible();
+    await expect(page.getByText(/Como funciona/i).first()).toBeVisible();
+    await expect(page.getByText(/Dúvidas/i).first()).toBeVisible();
+  }
 
   // Guard against the English we specifically replaced — must NOT appear anywhere
   const html = await page.content();
@@ -67,8 +76,17 @@ test('landing is fully PT-BR, no English leaking', async ({ page }) => {
   }
 });
 
-test('landing: nav anchors scroll to the right sections', async ({ page }) => {
+test('landing: nav anchors scroll to the right sections', async ({ page }, testInfo) => {
   await page.goto('/');
+  if (testInfo.project.name === 'mobile') {
+    for (const hash of ['ago', 'loop', 'faq']) {
+      await page.goto(`/#${hash}`);
+      await expect(page).toHaveURL(new RegExp(`#${hash}$`));
+      await expect(page.locator(`#${hash}`)).toBeVisible();
+    }
+    return;
+  }
+
   await page.getByRole('link', { name: /^AGO$/ }).first().click();
   await expect(page).toHaveURL(/#ago$/);
   await page.getByRole('link', { name: /Como funciona/i }).first().click();
@@ -200,6 +218,13 @@ test('board residents: table renders + import roster button visible', async ({ p
 test('logout: Sign out button clears session and redirects', async ({ page, request }) => {
   await browserLogin(page, request, 'resident');
   await page.goto('/app');
+
+  const openMenu = page.getByRole('button', { name: /Open menu/i });
+  if (await openMenu.isVisible()) {
+    await openMenu.click();
+    await expect(page.getByRole('button', { name: /Close menu/i })).toBeVisible();
+  }
+
   const signOut = page.getByRole('button', { name: /Sign out|Sair/i });
   await expect(signOut).toBeVisible();
   await signOut.click();

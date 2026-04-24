@@ -260,7 +260,7 @@ export default function Landing() {
             <div className="absolute left-[22px] top-6 bottom-6 w-px bg-dusk-200/40 hidden md:block" />
             <div className="space-y-5">
               {[
-                { day: 'Seg',    icon: MessageCircle, color: 'sage',  title: 'Morador reclama na aba Sugerir', body: '"O ar do saguão tá quebrado. Ontem marcou 30°C aqui dentro." A IA transforma em proposta estruturada (Maintenance · ~R$ 47.000).' },
+                { day: 'Seg',    icon: MessageCircle, color: 'sage',  title: 'Morador reclama na aba Sugerir', body: '"O ar do saguão tá quebrado. Ontem marcou 30°C aqui dentro." A IA transforma em proposta estruturada (Manutenção · ~R$ 47.000).' },
                 { day: 'Ter',    icon: Users,         color: 'peach', title: 'Discussão entre vizinhos',        body: 'Comentários, fotos, sugestões. A IA resume a thread em pontos de acordo e desacordo para o síndico.' },
                 { day: 'Qua',    icon: Vote,          color: 'sage',  title: 'Votação abre com quórum + janela', body: 'Síndico define quórum (50%) e janela (48h). WhatsApp dispara para todos os moradores elegíveis.' },
                 { day: 'Sex',    icon: Gavel,         color: 'peach', title: 'Fechamento automático + decisão', body: 'Janela expirou, quórum batido. Outcome resolvido, síndico fecha com um clique e a IA escreve a comunicação oficial.' },
@@ -319,6 +319,52 @@ export default function Landing() {
                 <div className="text-sm font-semibold text-dusk-500">Votação aberta</div>
               </div>
             </GlassCard>
+          </div>
+        </div>
+      </section>
+
+      {/* Votação no bolso — the money-shot clay-phone UI + relaxed-sofa voting */}
+      <section className="relative px-6 lg:px-12 pb-28">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center max-w-2xl mx-auto mb-12">
+            <Badge tone="sage" className="mb-4">Votação no bolso</Badge>
+            <h2 className="font-display text-4xl md:text-5xl text-dusk-500 tracking-tight leading-[1.05]">
+              3 segundos.
+              <br />
+              <span className="italic text-dusk-400">Enquanto pega o café.</span>
+            </h2>
+            <p className="text-dusk-300 mt-4 text-lg leading-relaxed">
+              Proposta abriu? O morador vota sem sair do sofá. Contagem ao vivo,
+              janela de 48 horas, fechamento automático — o síndico nem precisa ligar no grupo.
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-5 items-center">
+            <div className="relative rounded-[32px] overflow-hidden shadow-clay-lg bg-cream-50/60">
+              <img
+                src="/images/characters/char-phone-closeup-ui.jpg"
+                alt="Mão segurando o celular com a tela de votação em claymorphism — 'Vote tally' com gráfico de pizza"
+                className="w-full aspect-square object-cover"
+              />
+              <GlassCard className="absolute bottom-5 left-5 p-3 px-4 flex items-center gap-3 w-56">
+                <div className="w-9 h-9 rounded-xl bg-sage-200 flex items-center justify-center text-sage-700"><Vote className="w-4 h-4" /></div>
+                <div>
+                  <div className="text-xs text-dusk-200">Fecha em 2d 4h</div>
+                  <div className="text-sm font-semibold text-dusk-500">Sim 9 · Não 2 · Abs 1</div>
+                </div>
+              </GlassCard>
+            </div>
+            <div className="relative rounded-[32px] overflow-hidden shadow-clay-lg">
+              <img
+                src="/images/characters/char-voting-phone.jpg"
+                alt="Morador no sofá tocando no celular para votar"
+                className="w-full aspect-square object-cover"
+              />
+              <div className="absolute inset-x-0 bottom-0 p-6 bg-gradient-to-t from-dusk-500/70 to-transparent text-cream-50">
+                <div className="text-xs uppercase tracking-[0.14em] text-cream-50/80 font-medium">Sem fila, sem burocracia</div>
+                <h3 className="font-display text-2xl mt-1">Voto que cabe no dia do morador.</h3>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -404,7 +450,7 @@ export default function Landing() {
             </a>
           </div>
           <div className="mt-6 flex items-center justify-center gap-4 flex-wrap text-xs text-dusk-300 relative">
-            <span className="inline-flex items-center gap-1.5"><Check className="w-3 h-3 text-sage-700" /> Google sign-in</span>
+            <span className="inline-flex items-center gap-1.5"><Check className="w-3 h-3 text-sage-700" /> Login com Google</span>
             <span className="inline-flex items-center gap-1.5"><Check className="w-3 h-3 text-sage-700" /> Dados seus ficam seus</span>
             <span className="inline-flex items-center gap-1.5"><Check className="w-3 h-3 text-sage-700" /> Sem cartão de crédito no beta</span>
           </div>
