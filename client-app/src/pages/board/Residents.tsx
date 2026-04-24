@@ -15,6 +15,9 @@ interface Invite {
   id: number;
   email: string;
   status: string;
+  email_status: 'sent' | 'skipped' | 'failed' | null;
+  email_sent_at: string | null;
+  email_error: string | null;
   relationship: 'owner' | 'tenant' | 'occupant';
   primary_contact: number;
   voting_weight: number;
@@ -44,8 +47,10 @@ export default function Residents() {
   const [copied, setCopied] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [csv, setCsv] = useState('email,unit,relationship,primary_contact,voting_weight\nmaria@example.com,502,tenant,no,1\njoao@example.com,101,owner,yes,1\n');
+  const [sendEmails, setSendEmails] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importErrors, setImportErrors] = useState<ImportError[]>([]);
+  const [sendingInviteId, setSendingInviteId] = useState<number | null>(null);
 
   const load = () => {
     apiGet<Resident[]>('/users/residents').then(setRows).catch(() => {});
@@ -67,11 +72,16 @@ export default function Residents() {
     setImporting(true);
     setImportErrors([]);
     try {
-      const res = await apiPost<{ imported_count: number; error_count: number; errors: ImportError[] }>(
+      const res = await apiPost<{ imported_count: number; error_count: number; errors: ImportError[]; email_delivery?: Array<{ delivery: { status: string } }> }>(
         '/memberships/import-csv',
-        { csv },
+        { csv, send_emails: sendEmails },
       );
       if (res.imported_count > 0) toast.success(`${res.imported_count} invite${res.imported_count > 1 ? 's' : ''} created`);
+      if (sendEmails && res.email_delivery) {
+        const sent = res.email_delivery.filter((d) => d.delivery.status === 'sent').length;
+        if (sent > 0) toast.success(`${sent} invite email${sent > 1 ? 's' : ''} sent`);
+        if (sent < res.email_delivery.length) toast.error('Some invite emails were not sent. Check email settings.');
+      }
       if (res.error_count > 0) {
         setImportErrors(res.errors || []);
         toast.error(`${res.error_count} row${res.error_count > 1 ? 's' : ''} skipped - details below`);
@@ -90,6 +100,20 @@ export default function Residents() {
     setCopied(true);
     toast.success('Invite code copied');
     setTimeout(() => setCopied(false), 2000);
+  }
+
+  async function sendInviteEmail(invite: Invite) {
+    setSendingInviteId(invite.id);
+    try {
+      await apiPost(`/memberships/invites/${invite.id}/send-email`);
+      toast.success(`Invite email sent to ${invite.email}`);
+      load();
+    } catch (err: any) {
+      const code = err?.response?.data?.error;
+      toast.error(code === 'email_not_configured' ? 'Email delivery is not configured' : code || 'Email send failed');
+    } finally {
+      setSendingInviteId(null);
+    }
   }
 
   const pendingInvites = invites.filter((i) => i.status === 'pending');
@@ -138,6 +162,18 @@ export default function Residents() {
             onChange={(e) => setCsv(e.target.value)}
             spellCheck={false}
           />
+          <label className="mt-4 flex items-start gap-3 rounded-2xl bg-white/45 border border-white/60 p-3 text-sm text-dusk-400">
+            <input
+              type="checkbox"
+              checked={sendEmails}
+              onChange={(e) => setSendEmails(e.target.checked)}
+              className="mt-1"
+            />
+            <span>
+              Email each imported resident an invite link now.
+              <span className="block text-xs text-dusk-300 mt-0.5">Requires Resend env vars. Invites are still created if email is not configured.</span>
+            </span>
+          </label>
           {importErrors.length > 0 && (
             <div role="alert" className="mt-4 rounded-2xl border border-peach-200 bg-peach-100/70 p-4 text-sm text-dusk-500">
               <div className="font-semibold mb-2">Rows that need attention</div>
@@ -148,7 +184,9 @@ export default function Residents() {
           )}
           <div className="mt-3 flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setShowImport(false)} leftIcon={<X className="w-4 h-4" />}>Cancel</Button>
-            <Button variant="primary" onClick={importCsv} loading={importing} leftIcon={<Mail className="w-4 h-4" />}>Create invites</Button>
+            <Button variant="primary" onClick={importCsv} loading={importing} leftIcon={<Mail className="w-4 h-4" />}>
+              {sendEmails ? 'Create & email invites' : 'Create invites'}
+            </Button>
           </div>
         </GlassCard>
       )}
@@ -169,6 +207,20 @@ export default function Residents() {
                   </div>
                 </div>
                 <Badge tone="warning">pending</Badge>
+                <div className="flex flex-col items-end gap-2">
+                  {i.email_status === 'sent' && <Badge tone="sage">emailed</Badge>}
+                  {i.email_status === 'failed' && <Badge tone="warning">email failed</Badge>}
+                  {i.email_status !== 'sent' && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => sendInviteEmail(i)}
+                      loading={sendingInviteId === i.id}
+                    >
+                      Email
+                    </Button>
+                  )}
+                </div>
               </GlassCard>
             ))}
           </div>

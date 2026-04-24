@@ -3,7 +3,8 @@ import { Router } from 'express';
 import { z } from 'zod';
 import db from '../db';
 import { requireAuth, requireRole, AuthedRequest } from '../lib/auth';
-import { ok, fail } from '../lib/respond';
+import { ok, fail, asyncHandler } from '../lib/respond';
+import { EmailDeliveryResult, sendInviteEmail } from '../lib/email';
 
 const router = Router();
 
@@ -77,12 +78,29 @@ router.post('/:id/deny', requireAuth, requireRole('board_admin'), (req: AuthedRe
 // Body: { csv: "email,unit,relationship,primary_contact,voting_weight\njordan@x.com,612,tenant,yes,1\n..." }
 // Each row creates an invites row (status=pending) scoped to the admin's condo.
 // When a user later signs in with a matching email, we auto-activate them.
-const csvSchema = z.object({ csv: z.string().min(3).max(100_000) });
+const csvSchema = z.object({
+  csv: z.string().min(3).max(100_000),
+  send_emails: z.boolean().optional().default(false),
+});
 
-router.post('/import-csv', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+function persistInviteEmailStatus(inviteId: number, delivery: EmailDeliveryResult) {
+  db.prepare(
+    `UPDATE invites
+     SET email_status = ?,
+         email_sent_at = CASE WHEN ? = 'sent' THEN CURRENT_TIMESTAMP ELSE email_sent_at END,
+         email_error = ?
+     WHERE id = ?`
+  ).run(delivery.status, delivery.status, delivery.error || null, inviteId);
+}
+
+router.post('/import-csv', requireAuth, requireRole('board_admin'), asyncHandler(async (req: AuthedRequest, res) => {
   const parsed = csvSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
   const u = req.user!;
+  const condo = db.prepare(`SELECT name, invite_code FROM condominiums WHERE id = ?`).get(u.condominium_id) as
+    | { name: string; invite_code: string | null }
+    | undefined;
+  if (!condo?.invite_code) return fail(res, 'missing_invite_code', 500);
 
   // Very small CSV parser: header row optional, columns = email,unit,[relationship],[primary_contact],[voting_weight]
   const lines = parsed.data.csv.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
@@ -94,7 +112,7 @@ router.post('/import-csv', requireAuth, requireRole('board_admin'), (req: Authed
   const dataLines = hasHeader ? lines.slice(1) : lines;
 
   const findUnit = db.prepare(
-    `SELECT u.id FROM units u
+    `SELECT u.id, u.number FROM units u
      JOIN buildings b ON b.id = u.building_id
      WHERE b.condominium_id = ? AND LOWER(u.number) = LOWER(?)`
   );
@@ -112,7 +130,7 @@ router.post('/import-csv', requireAuth, requireRole('board_admin'), (req: Authed
       if (cols.length < 2) { errors.push({ row: i + 1, error: 'need_email_and_unit' }); continue; }
       const [email, unit, rel, primaryRaw, weightRaw] = cols;
       if (!email || !email.includes('@')) { errors.push({ row: i + 1, error: 'invalid_email' }); continue; }
-      const unitRow = findUnit.get(u.condominium_id, unit) as { id: number } | undefined;
+      const unitRow = findUnit.get(u.condominium_id, unit) as { id: number; number: string } | undefined;
       if (!unitRow) { errors.push({ row: i + 1, error: 'unit_not_found', unit }); continue; }
       const relationship = ['owner', 'tenant', 'occupant'].includes((rel || '').toLowerCase())
         ? (rel as string).toLowerCase()
@@ -135,19 +153,36 @@ router.post('/import-csv', requireAuth, requireRole('board_admin'), (req: Authed
         primary,
         votingWeight,
       );
-      imported.push({ row: i + 1, invite_id: Number(inv.lastInsertRowid), email, unit, relationship, primary_contact: primary, voting_weight: votingWeight });
+      imported.push({ row: i + 1, invite_id: Number(inv.lastInsertRowid), email: email.toLowerCase(), unit: unitRow.number, relationship, primary_contact: primary, voting_weight: votingWeight });
     }
   });
   tx();
 
-  return ok(res, { imported_count: imported.length, error_count: errors.length, imported, errors });
-});
+  const emailDelivery: Array<{ invite_id: number; email: string; delivery: EmailDeliveryResult }> = [];
+  if (parsed.data.send_emails) {
+    for (const invite of imported) {
+      const delivery = await sendInviteEmail({
+        to: invite.email,
+        condoName: condo.name,
+        inviteCode: condo.invite_code,
+        unitNumber: invite.unit,
+        relationship: invite.relationship,
+        senderName: `${u.first_name} ${u.last_name}`.trim(),
+      });
+      persistInviteEmailStatus(invite.invite_id, delivery);
+      emailDelivery.push({ invite_id: invite.invite_id, email: invite.email, delivery });
+    }
+  }
+
+  return ok(res, { imported_count: imported.length, error_count: errors.length, imported, errors, email_delivery: emailDelivery });
+}));
 
 // GET /api/memberships/invites — list pending invites so admin can see who's expected.
 router.get('/invites', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
   const u = req.user!;
   const rows = db.prepare(
     `SELECT i.id, i.email, i.status, i.relationship, i.primary_contact, i.voting_weight,
+            i.email_status, i.email_sent_at, i.email_error,
             i.created_at, i.claimed_by_user_id,
             un.id AS unit_id, un.number AS unit_number, un.floor, b.name AS building_name
      FROM invites i
@@ -158,6 +193,36 @@ router.get('/invites', requireAuth, requireRole('board_admin'), (req: AuthedRequ
   ).all(u.condominium_id);
   return ok(res, rows);
 });
+
+router.post('/invites/:id/send-email', requireAuth, requireRole('board_admin'), asyncHandler(async (req: AuthedRequest, res) => {
+  const u = req.user!;
+  const id = Number(req.params.id);
+  const row = db.prepare(
+    `SELECT i.id, i.email, i.status, i.relationship, i.condominium_id,
+            un.number AS unit_number, c.name AS condo_name, c.invite_code
+     FROM invites i
+     JOIN units un ON un.id = i.unit_id
+     JOIN condominiums c ON c.id = i.condominium_id
+     WHERE i.id = ?`
+  ).get(id) as any;
+  if (!row || row.condominium_id !== u.condominium_id) return fail(res, 'not_found', 404);
+  if (row.status !== 'pending') return fail(res, 'invite_not_pending', 409);
+  if (!row.email) return fail(res, 'invite_missing_email', 400);
+  if (!row.invite_code) return fail(res, 'missing_invite_code', 500);
+
+  const delivery = await sendInviteEmail({
+    to: row.email,
+    condoName: row.condo_name,
+    inviteCode: row.invite_code,
+    unitNumber: row.unit_number,
+    relationship: row.relationship,
+    senderName: `${u.first_name} ${u.last_name}`.trim(),
+  });
+  persistInviteEmailStatus(row.id, delivery);
+
+  if (delivery.status === 'sent') return ok(res, { id: row.id, delivery });
+  return fail(res, delivery.error || 'email_delivery_failed', delivery.status === 'skipped' ? 503 : 502, delivery);
+}));
 
 // POST /api/memberships/:id/reassign  — move a pending claim to a different unit
 const reassignSchema = z.object({ unit_id: z.number().int() });

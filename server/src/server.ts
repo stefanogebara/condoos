@@ -21,6 +21,7 @@ import usersRoutes from './routes/users';
 import aiRoutes from './routes/ai';
 import onboardingRoutes from './routes/onboarding';
 import membershipsRoutes from './routes/memberships';
+import assembliesRoutes from './routes/assemblies';
 
 const app = express();
 const PORT = Number(process.env.PORT || 4000);
@@ -62,6 +63,7 @@ app.use('/api/meetings',      scoped, meetingsRoutes);
 app.use('/api/users',         scoped, usersRoutes);
 app.use('/api/ai',            scoped, aiRoutes);
 app.use('/api/memberships',   scoped, membershipsRoutes);
+app.use('/api/assemblies',    scoped, assembliesRoutes);
 
 // 404
 app.use((req, res) => res.status(404).json({ success: false, error: 'not_found', path: req.path }));

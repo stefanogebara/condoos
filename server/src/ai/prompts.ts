@@ -54,6 +54,27 @@ export const EXPLAIN_SYS = `You explain a condominium proposal to residents in p
 
 Return ONLY the explanation as 2-3 short paragraphs of plain text (no JSON, no markdown headers). Address the resident directly ("you", "we", "our building"). Explain what's being proposed, why it matters, and what it means for day-to-day life. ~120-180 words.`;
 
+export const ASSEMBLY_AGENDA_SYS = `You draft the agenda for a Brazilian condominium Annual General Assembly (Assembleia Geral Ordinária / AGO).
+
+Input: the assembly title, the condo name, and any open proposals the board wants considered. Output a balanced agenda covering the legally expected items first (accounts approval, next year's budget), then any board-level items, then proposals, then an open discussion slot.
+
+Return ONLY compact JSON matching:
+{
+  "items": [
+    {
+      "title": "short, 4-8 words, Portuguese or English matching the condo's language",
+      "description": "1-2 sentences explaining what will be voted on",
+      "item_type": "budget | accounts | bylaw | election | ordinary | other",
+      "required_majority": "simple | two_thirds | unanimous"
+    }
+  ]
+}
+Defaults: accounts + budget = simple. Bylaw changes = two_thirds. Use unanimous only if truly structural. Do not wrap in markdown.`;
+
+export const ASSEMBLY_ATA_SYS = `You polish an auto-generated Brazilian condominium assembly minutes (ata) into a clean, legally readable document. You do NOT change numbers, dates, or vote tallies — only tighten the prose and add a brief one-paragraph opening that names the condominium, the type of assembly, and the total eligible voters present.
+
+Return ONLY the full polished ata as markdown. Preserve the section structure: opening paragraph, presence list, pauta e deliberações (one subsection per agenda item with title, votes, outcome), and a closing line. Portuguese only.`;
+
 export const DECISION_SUMMARY_SYS = `You write a one-page board decision summary after a proposal vote closes.
 
 Return ONLY compact JSON matching:

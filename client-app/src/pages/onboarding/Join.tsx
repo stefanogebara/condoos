@@ -17,7 +17,7 @@ interface CondoInfo {
 export default function Join() {
   const navigate = useNavigate();
   const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [code, setCode] = useState('');
+  const [code, setCode] = useState(() => new URLSearchParams(window.location.search).get('code')?.toUpperCase() || '');
   const [condoInfo, setCondoInfo] = useState<CondoInfo | null>(null);
   const [selectedUnitId, setSelectedUnitId] = useState<number | null>(null);
   const [relationship, setRelationship] = useState<'owner' | 'tenant' | 'occupant'>('tenant');

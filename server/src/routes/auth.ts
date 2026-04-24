@@ -1,11 +1,11 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
-import fetch from 'node-fetch';
 import db from '../db';
 import { signToken, requireAuth, AuthedRequest } from '../lib/auth';
 import { ok, fail, asyncHandler } from '../lib/respond';
 import { claimPendingInvitesForUser } from '../lib/invites';
+import { GoogleAuthError, verifyGoogleCredential } from '../lib/google-auth';
 
 const router = Router();
 
@@ -49,47 +49,18 @@ router.get('/config', (_req, res) => {
 // Body: { credential: string } — the ID token returned by @react-oauth/google.
 const googleSchema = z.object({ credential: z.string().min(10) });
 
-interface GoogleTokenInfo {
-  iss: string;
-  aud: string;
-  sub: string;
-  email: string;
-  email_verified: string | boolean;
-  name?: string;
-  given_name?: string;
-  family_name?: string;
-  picture?: string;
-  exp: string | number;
-}
-
 router.post('/google', asyncHandler(async (req, res) => {
   const parsed = googleSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
 
-  const clientId = process.env.GOOGLE_CLIENT_ID;
-  if (!clientId) return fail(res, 'google_auth_disabled', 501);
-
-  // Verify the ID token against Google's tokeninfo endpoint. Simple, no extra deps.
-  const verifyUrl = `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(parsed.data.credential)}`;
-  const gRes = await fetch(verifyUrl);
-  if (!gRes.ok) return fail(res, 'google_verify_failed', 401);
-  const info = (await gRes.json()) as GoogleTokenInfo;
-
-  // Audience check
-  if (info.aud !== clientId) return fail(res, 'google_aud_mismatch', 401);
-  // Issuer check
-  if (info.iss !== 'https://accounts.google.com' && info.iss !== 'accounts.google.com') {
-    return fail(res, 'google_iss_mismatch', 401);
+  let info;
+  try {
+    info = await verifyGoogleCredential(parsed.data.credential, process.env.GOOGLE_CLIENT_ID);
+  } catch (err) {
+    if (err instanceof GoogleAuthError) return fail(res, err.code, err.status);
+    throw err;
   }
-  // Expiry
-  const exp = typeof info.exp === 'string' ? parseInt(info.exp, 10) : info.exp;
-  if (!exp || exp * 1000 < Date.now()) return fail(res, 'google_token_expired', 401);
-  // Email verified
-  const emailVerified = info.email_verified === true || info.email_verified === 'true';
-  if (!emailVerified) return fail(res, 'google_email_unverified', 401);
-
-  const email = (info.email || '').toLowerCase().trim();
-  if (!email) return fail(res, 'google_no_email', 401);
+  const email = info.email;
 
   // Look up existing user
   let user = db.prepare(

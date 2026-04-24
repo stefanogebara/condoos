@@ -240,6 +240,9 @@ CREATE TABLE IF NOT EXISTS invites (
   code                TEXT,                          -- null for email-only invites; the condo-wide code lives on condominiums.invite_code
   expires_at          TEXT,
   claimed_by_user_id  INTEGER REFERENCES users(id),
+  email_status        TEXT,
+  email_sent_at       TEXT,
+  email_error         TEXT,
   status              TEXT NOT NULL DEFAULT 'pending'
     CHECK(status IN ('pending','claimed','revoked','expired')),
   created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -248,6 +251,96 @@ CREATE TABLE IF NOT EXISTS invites (
 CREATE INDEX IF NOT EXISTS idx_invites_code ON invites(code) WHERE code IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_invites_pending_email_unit
   ON invites(condominium_id, email, unit_id) WHERE status = 'pending' AND email IS NOT NULL AND unit_id IS NOT NULL;
+
+-- =====================================================================
+-- Annual Assembly (AGO) — Brazilian condo legal compliance layer
+-- =====================================================================
+
+CREATE TABLE IF NOT EXISTS assemblies (
+  id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+  condominium_id      INTEGER NOT NULL REFERENCES condominiums(id) ON DELETE CASCADE,
+  created_by_user_id  INTEGER NOT NULL REFERENCES users(id),
+  title               TEXT NOT NULL,
+  kind                TEXT NOT NULL CHECK(kind IN ('ordinary','extraordinary')),
+  status              TEXT NOT NULL DEFAULT 'draft'
+    CHECK(status IN ('draft','convoked','in_session','closed')),
+  first_call_at       TEXT NOT NULL,      -- timestamp of first scheduled convocation
+  second_call_at      TEXT,               -- usually first_call + 30min
+  convoked_at         TEXT,
+  started_at          TEXT,
+  closed_at           TEXT,
+  ata_markdown        TEXT,               -- AI-drafted minutes
+  president_user_id   INTEGER REFERENCES users(id),
+  secretary_user_id   INTEGER REFERENCES users(id),
+  created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS assembly_agenda_items (
+  id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+  assembly_id         INTEGER NOT NULL REFERENCES assemblies(id) ON DELETE CASCADE,
+  order_index         INTEGER NOT NULL,
+  title               TEXT NOT NULL,
+  description         TEXT,
+  item_type           TEXT NOT NULL
+    CHECK(item_type IN ('budget','accounts','bylaw','election','ordinary','other')),
+  source_proposal_id  INTEGER REFERENCES proposals(id),
+  required_majority   TEXT NOT NULL DEFAULT 'simple'
+    CHECK(required_majority IN ('simple','two_thirds','unanimous')),
+  status              TEXT NOT NULL DEFAULT 'pending'
+    CHECK(status IN ('pending','active','approved','rejected','inconclusive','deferred')),
+  outcome_summary     TEXT,
+  closed_at           TEXT,
+  created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Attendance roll: one row per (assembly, user) when they check in.
+-- Proxies create a second row with attended_as='proxy' and proxy_for_user_id set.
+CREATE TABLE IF NOT EXISTS assembly_attendance (
+  id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+  assembly_id         INTEGER NOT NULL REFERENCES assemblies(id) ON DELETE CASCADE,
+  user_id             INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  unit_id             INTEGER REFERENCES units(id),
+  attended_as         TEXT NOT NULL CHECK(attended_as IN ('self','proxy')),
+  proxy_for_user_id   INTEGER REFERENCES users(id),
+  is_delinquent       INTEGER NOT NULL DEFAULT 0,
+  checked_in_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_attendance_assembly ON assembly_attendance(assembly_id);
+
+-- Proxy grants. One active grant per (assembly, grantor).
+CREATE TABLE IF NOT EXISTS assembly_proxies (
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  assembly_id       INTEGER NOT NULL REFERENCES assemblies(id) ON DELETE CASCADE,
+  grantor_user_id   INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  grantee_user_id   INTEGER NOT NULL REFERENCES users(id),
+  status            TEXT NOT NULL DEFAULT 'active'
+    CHECK(status IN ('active','revoked')),
+  note              TEXT,
+  created_at        TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_proxies_active
+  ON assembly_proxies(assembly_id, grantor_user_id) WHERE status = 'active';
+
+-- Votes. effective_owner_id = the ownership stake being voted on:
+--   - if voting for self:   effective_owner_id = voter_user_id
+--   - if voting as proxy:   effective_owner_id = grantor_user_id
+-- UNIQUE(agenda_item_id, effective_owner_id) enforces one vote per ownership stake.
+CREATE TABLE IF NOT EXISTS assembly_votes (
+  id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+  assembly_id          INTEGER NOT NULL REFERENCES assemblies(id) ON DELETE CASCADE,
+  agenda_item_id       INTEGER NOT NULL REFERENCES assembly_agenda_items(id) ON DELETE CASCADE,
+  voter_user_id        INTEGER NOT NULL REFERENCES users(id),
+  effective_owner_id   INTEGER NOT NULL REFERENCES users(id),
+  choice               TEXT NOT NULL CHECK(choice IN ('yes','no','abstain')),
+  weight               REAL NOT NULL DEFAULT 1.0,
+  cast_at              TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(agenda_item_id, effective_owner_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_assembly_votes_item ON assembly_votes(agenda_item_id);
 
 -- Original indexes
 CREATE INDEX IF NOT EXISTS idx_packages_recipient ON packages(recipient_id, status);

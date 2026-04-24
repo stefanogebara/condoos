@@ -5,9 +5,22 @@ import { claimPendingInvitesForUser } from '../src/lib/invites';
 import { canVote, getProposalVoteTally, resolveVoteOutcome, computeQuorum, countEligibleVoters } from '../src/lib/proposal-tally';
 import { parseJsonLoose } from '../src/ai/openrouter';
 import { tickVoteCloser } from '../src/lib/vote-closer';
+import {
+  canVoteInAssembly,
+  resolveProxyVote,
+  resolveAgendaOutcome,
+  getAgendaTally,
+  generateAtaMarkdown,
+  listEligibleOwners,
+} from '../src/lib/assembly';
 
 function resetDb() {
   const tables = [
+    'assembly_votes',
+    'assembly_proxies',
+    'assembly_attendance',
+    'assembly_agenda_items',
+    'assemblies',
     'invites',
     'user_unit',
     'units',
@@ -226,4 +239,136 @@ test('proposal tally applies eligibility and voting weights consistently', () =>
   assert.equal(ownersOnlyTally.no, 0);
   assert.equal(canVote(ownerId, condoId, 'owners_only'), true);
   assert.equal(canVote(tenantId, condoId, 'owners_only'), false);
+});
+
+// ============================================================================
+// Annual Assembly (AGO) tests
+// ============================================================================
+
+function createAssemblyFixture() {
+  resetDb();
+  const { condoId, unit101, unit102 } = createCondoFixture();
+  const ownerA = createUser('ownerA@x.com');
+  const ownerB = createUser('ownerB@x.com');
+  const tenantC = createUser('tenantC@x.com');
+  const boardAdmin = createUser('admin@x.com', 'board_admin');
+
+  db.prepare(
+    `INSERT INTO user_unit (user_id, unit_id, relationship, status, primary_contact, voting_weight)
+     VALUES (?, ?, 'owner',  'active', 1, 1.0),
+            (?, ?, 'owner',  'active', 1, 1.0),
+            (?, ?, 'tenant', 'active', 0, 1.0)`
+  ).run(ownerA, unit101, ownerB, unit102, tenantC, unit101);
+
+  const assemblyId = Number(db.prepare(
+    `INSERT INTO assemblies (condominium_id, created_by_user_id, title, kind, first_call_at, status)
+     VALUES (?, ?, 'AGO 2026', 'ordinary', ?, 'in_session')`
+  ).run(condoId, boardAdmin, new Date().toISOString()).lastInsertRowid);
+
+  return { condoId, unit101, unit102, ownerA, ownerB, tenantC, boardAdmin, assemblyId };
+}
+
+test('AGO: tenants cannot vote in assembly (owners-only)', () => {
+  const { tenantC, assemblyId } = createAssemblyFixture();
+  const result = canVoteInAssembly(assemblyId, tenantC);
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'not_owner');
+});
+
+test('AGO: owners can vote; delinquent owners are blocked', () => {
+  const { ownerA, assemblyId } = createAssemblyFixture();
+
+  // First, owner is eligible before check-in (no attendance row yet).
+  let r = canVoteInAssembly(assemblyId, ownerA);
+  assert.equal(r.ok, true);
+  assert.equal(r.effective_owner_id, ownerA);
+  assert.equal(r.weight, 1);
+
+  // Mark delinquent via attendance row.
+  db.prepare(
+    `INSERT INTO assembly_attendance (assembly_id, user_id, attended_as, is_delinquent)
+     VALUES (?, ?, 'self', 1)`
+  ).run(assemblyId, ownerA);
+  r = canVoteInAssembly(assemblyId, ownerA);
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, 'delinquent');
+});
+
+test('AGO: proxy delegation — grantee votes with grantor weight, one vote per stake', () => {
+  const { ownerA, ownerB, assemblyId } = createAssemblyFixture();
+
+  // ownerA grants proxy to ownerB
+  db.prepare(
+    `INSERT INTO assembly_proxies (assembly_id, grantor_user_id, grantee_user_id) VALUES (?, ?, ?)`
+  ).run(assemblyId, ownerA, ownerB);
+
+  const proxy = resolveProxyVote(assemblyId, ownerB, ownerA);
+  assert.equal(proxy.ok, true);
+  assert.equal(proxy.weight, 1);
+
+  // ownerC (non-granted) cannot proxy for ownerA
+  const noGrant = resolveProxyVote(assemblyId, ownerB + 999, ownerA);
+  assert.equal(noGrant.ok, false);
+  assert.equal(noGrant.reason, 'no_active_proxy');
+});
+
+test('AGO: agenda outcome honors required_majority (two_thirds vs simple)', () => {
+  const simple = resolveAgendaOutcome(
+    { yes: 2, no: 1, abstain: 0, yes_weight: 2, no_weight: 1, abstain_weight: 0, total_weight: 3 },
+    'simple'
+  );
+  assert.equal(simple.approved, true);
+
+  // 3 yes / 2 no → 3/5 = 60% — fails two_thirds
+  const twoThirdsFail = resolveAgendaOutcome(
+    { yes: 3, no: 2, abstain: 0, yes_weight: 3, no_weight: 2, abstain_weight: 0, total_weight: 5 },
+    'two_thirds'
+  );
+  assert.equal(twoThirdsFail.approved, false);
+  assert.equal(twoThirdsFail.reason, 'two_thirds_not_met');
+
+  // 4 yes / 2 no → 4/6 = 66.7% — passes two_thirds
+  const twoThirdsPass = resolveAgendaOutcome(
+    { yes: 4, no: 2, abstain: 0, yes_weight: 4, no_weight: 2, abstain_weight: 0, total_weight: 6 },
+    'two_thirds'
+  );
+  assert.equal(twoThirdsPass.approved, true);
+
+  // 5 yes / 1 no — fails unanimous
+  const unanimousFail = resolveAgendaOutcome(
+    { yes: 5, no: 1, abstain: 0, yes_weight: 5, no_weight: 1, abstain_weight: 0, total_weight: 6 },
+    'unanimous'
+  );
+  assert.equal(unanimousFail.approved, false);
+});
+
+test('AGO: ata markdown contains per-item vote results', () => {
+  const { assemblyId, ownerA, ownerB } = createAssemblyFixture();
+
+  const itemId = Number(db.prepare(
+    `INSERT INTO assembly_agenda_items (assembly_id, order_index, title, item_type, required_majority, status, outcome_summary, closed_at)
+     VALUES (?, 1, 'Aprovar orçamento 2026', 'budget', 'simple', 'approved', '2 Sim / 0 Não', CURRENT_TIMESTAMP)`
+  ).run(assemblyId).lastInsertRowid);
+
+  db.prepare(
+    `INSERT INTO assembly_votes (assembly_id, agenda_item_id, voter_user_id, effective_owner_id, choice, weight)
+     VALUES (?, ?, ?, ?, 'yes', 1.0), (?, ?, ?, ?, 'yes', 1.0)`
+  ).run(assemblyId, itemId, ownerA, ownerA, assemblyId, itemId, ownerB, ownerB);
+
+  const tally = getAgendaTally(itemId);
+  assert.equal(tally.yes, 2);
+  assert.equal(tally.yes_weight, 2);
+
+  const ata = generateAtaMarkdown(assemblyId);
+  assert.match(ata, /Aprovar orçamento 2026/);
+  assert.match(ata, /APROVADO/);
+  assert.match(ata, /Previsão orçamentária/);
+  assert.match(ata, /2 Sim/);
+});
+
+test('AGO: listEligibleOwners excludes tenants', () => {
+  const { condoId, ownerA, ownerB, tenantC } = createAssemblyFixture();
+  const owners = listEligibleOwners(condoId).map((o) => o.user_id).sort();
+  assert.deepEqual(owners, [ownerA, ownerB].sort());
+  assert.ok(!owners.includes(tenantC));
 });

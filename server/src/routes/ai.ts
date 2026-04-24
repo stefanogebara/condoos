@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import db from '../db';
-import { requireAuth, requireRole, AuthedRequest } from '../lib/auth';
+import { requireAuth, requireRole, AuthedRequest, getActiveCondoId } from '../lib/auth';
 import { ok, fail, asyncHandler } from '../lib/respond';
 import { computeQuorum, getProposalVoteTally, resolveFinalOutcome } from '../lib/proposal-tally';
 import { chat, parseJsonLoose } from '../ai/openrouter';
@@ -11,7 +11,10 @@ import {
   MEETING_SUMMARY_SYS,
   EXPLAIN_SYS,
   DECISION_SUMMARY_SYS,
+  ASSEMBLY_AGENDA_SYS,
+  ASSEMBLY_ATA_SYS,
 } from '../ai/prompts';
+import { generateAtaMarkdown } from '../lib/assembly';
 import {
   fallbackProposalDraft,
   fallbackCluster,
@@ -234,6 +237,79 @@ router.post('/proposals/:id/decision-summary', requireAuth, requireRole('board_a
   ).run(JSON.stringify(out), outcome, quorum.quorum_met ? 'manual_decision' : 'quorum_not_met', id);
 
   return ok(res, out);
+}));
+
+// =========================================================================
+// Annual Assembly (AGO) AI routes
+// =========================================================================
+
+// Draft an agenda from the assembly title + condo's open proposals.
+router.post('/assemblies/:id/suggest-agenda', requireAuth, requireRole('board_admin'), asyncHandler(async (req: AuthedRequest, res) => {
+  const condoId = getActiveCondoId(req);
+  const id = Number(req.params.id);
+  const a = db.prepare(
+    `SELECT a.*, c.name AS condo_name FROM assemblies a JOIN condominiums c ON c.id = a.condominium_id
+     WHERE a.id = ? AND a.condominium_id = ?`
+  ).get(id, condoId) as any;
+  if (!a) return fail(res, 'not_found', 404);
+  if (a.status !== 'draft') return fail(res, 'locked_after_convocation', 409);
+
+  const openProposals = db.prepare(
+    `SELECT id, title, description FROM proposals
+     WHERE condominium_id = ? AND status IN ('discussion','voting') ORDER BY created_at DESC LIMIT 10`
+  ).all(condoId) as any[];
+
+  const payload = {
+    condo_name: a.condo_name,
+    assembly_title: a.title,
+    assembly_kind: a.kind,
+    open_proposals: openProposals,
+  };
+
+  const out = await tryAI<{ items: Array<{ title: string; description: string; item_type: string; required_majority: string }> }>(
+    [
+      { role: 'system', content: ASSEMBLY_AGENDA_SYS },
+      { role: 'user', content: JSON.stringify(payload) },
+    ],
+    () => ({
+      items: [
+        { title: 'Prestação de contas', description: 'Review and approve the prior-year accounts.', item_type: 'accounts', required_majority: 'simple' },
+        { title: 'Previsão orçamentária', description: `Approve the budget for the coming year at ${a.condo_name}.`, item_type: 'budget', required_majority: 'simple' },
+        ...openProposals.slice(0, 3).map((p) => ({
+          title: p.title,
+          description: `Bring proposal #${p.id} to a formal vote.`,
+          item_type: 'ordinary',
+          required_majority: 'simple',
+        })),
+        { title: 'Assuntos gerais', description: 'Open discussion on any remaining topic raised by residents.', item_type: 'other', required_majority: 'simple' },
+      ],
+    }),
+    { jsonMode: true, maxTokens: 800, label: 'assembly-agenda' }
+  );
+  return ok(res, out);
+}));
+
+// Polish the auto-generated ata through the LLM. Falls back to the raw markdown.
+router.post('/assemblies/:id/draft-ata', requireAuth, requireRole('board_admin'), asyncHandler(async (req: AuthedRequest, res) => {
+  const condoId = getActiveCondoId(req);
+  const id = Number(req.params.id);
+  const a = db.prepare(
+    `SELECT a.*, c.name AS condo_name FROM assemblies a JOIN condominiums c ON c.id = a.condominium_id
+     WHERE a.id = ? AND a.condominium_id = ?`
+  ).get(id, condoId) as any;
+  if (!a) return fail(res, 'not_found', 404);
+
+  const rawAta = generateAtaMarkdown(id);
+  const polished = await tryAI<string>(
+    [
+      { role: 'system', content: ASSEMBLY_ATA_SYS },
+      { role: 'user', content: rawAta },
+    ],
+    () => rawAta,
+    { jsonMode: false, maxTokens: 1500, label: 'assembly-ata' }
+  );
+  db.prepare(`UPDATE assemblies SET ata_markdown = ? WHERE id = ?`).run(polished, id);
+  return ok(res, { ata_markdown: polished });
 }));
 
 export default router;

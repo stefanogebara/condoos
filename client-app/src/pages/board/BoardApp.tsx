@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { Home, Inbox, Vote, Calendar, Megaphone, Users, UserCheck } from 'lucide-react';
+import { Home, Inbox, Vote, Calendar, Megaphone, Users, UserCheck, Gavel } from 'lucide-react';
 import Sidebar, { NavItem } from '../../components/Sidebar';
 import BoardOverview from './BoardOverview';
 import Suggestions from './Suggestions';
@@ -11,6 +11,8 @@ import BoardMeetingDetail from './BoardMeetingDetail';
 import BoardAnnouncements from './BoardAnnouncements';
 import Residents from './Residents';
 import Pending from './Pending';
+import BoardAssemblies from './BoardAssemblies';
+import BoardAssemblyDetail from './BoardAssemblyDetail';
 import { apiGet } from '../../lib/api';
 
 export default function BoardApp() {
@@ -29,6 +31,7 @@ export default function BoardApp() {
     { to: '/board/suggestions',   label: 'Suggestions',   icon: Inbox },
     { to: '/board/pending',       label: 'Pending',       icon: UserCheck, badge: pendingCount || undefined },
     { to: '/board/proposals',     label: 'Proposals',     icon: Vote },
+    { to: '/board/assemblies',    label: 'Assemblies',    icon: Gavel },
     { to: '/board/meetings',      label: 'Meetings',      icon: Calendar },
     { to: '/board/announcements', label: 'Announcements', icon: Megaphone },
     { to: '/board/residents',     label: 'Residents',     icon: Users },
@@ -46,6 +49,8 @@ export default function BoardApp() {
           <Route path="proposals/:id"    element={<BoardProposalDetail />} />
           <Route path="meetings"         element={<BoardMeetings />} />
           <Route path="meetings/:id"     element={<BoardMeetingDetail />} />
+          <Route path="assemblies"       element={<BoardAssemblies />} />
+          <Route path="assemblies/:id"   element={<BoardAssemblyDetail />} />
           <Route path="announcements"    element={<BoardAnnouncements />} />
           <Route path="residents"        element={<Residents />} />
           <Route path="*"                element={<Navigate to="/board" replace />} />

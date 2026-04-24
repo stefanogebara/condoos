@@ -61,7 +61,20 @@ Set `GOOGLE_CLIENT_ID` in `.env` and on Fly (and optionally `VITE_GOOGLE_CLIENT_
 - **Type**: Web application
 - **Authorized JS origins**: `http://localhost:3000`, `https://condoos-ten.vercel.app`
 
-When set, a "Continue with Google" button appears on the login page. First-time Google users auto-join the seeded condominium as residents. Without the env var the button hides silently — demo stays clean.
+When set, a "Continue with Google" button appears on the login page. First-time Google users land in onboarding unless their email matches a pending roster invite, in which case the invite is claimed automatically. Without the env var the button hides silently — demo stays clean.
+
+### Invite emails (optional)
+
+Roster imports always create pending email invites. To also send invite links from the Residents page, configure Resend:
+
+```bash
+APP_ORIGIN=http://localhost:3000
+EMAIL_PROVIDER=resend
+EMAIL_FROM="CondoOS <noreply@your-domain.com>"
+RESEND_API_KEY=re_...
+```
+
+Without these values, invite creation still works and email sends return a clear `email_not_configured` error instead of silently pretending delivery happened.
 
 ---
 

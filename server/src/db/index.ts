@@ -199,6 +199,9 @@ export function initSchema() {
   addColumnIfMissing('invites',      'relationship',       `TEXT NOT NULL DEFAULT 'tenant'`);
   addColumnIfMissing('invites',      'primary_contact',    `INTEGER NOT NULL DEFAULT 0`);
   addColumnIfMissing('invites',      'voting_weight',      `REAL NOT NULL DEFAULT 1.0`);
+  addColumnIfMissing('invites',      'email_status',       `TEXT`);
+  addColumnIfMissing('invites',      'email_sent_at',      `TEXT`);
+  addColumnIfMissing('invites',      'email_error',        `TEXT`);
   // Voting compliance — quorum + window
   addColumnIfMissing('proposals',    'quorum_percent',     `INTEGER NOT NULL DEFAULT 0`);
   addColumnIfMissing('proposals',    'voting_opens_at',    `TEXT`);
