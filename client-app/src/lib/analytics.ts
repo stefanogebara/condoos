@@ -41,13 +41,12 @@ export function initAnalytics() {
   getDistinctId();
 }
 
-export function identify(user: { id: number | string; email?: string; role?: string; condominium_id?: number | null }) {
+export function identify(user: { id: number | string; role?: string; has_condo?: boolean }) {
   if (!KEY) return;
   identifiedId = `user_${user.id}`;
   userProps = {
-    email: user.email,
     role: user.role,
-    condominium_id: user.condominium_id ?? null,
+    has_condo: user.has_condo ?? null,
   };
   // Send a $identify event so PostHog associates the anonymous distinct_id
   // with the new user_<id> identity.
@@ -64,6 +63,8 @@ export function reset() {
 export type AnalyticsEvent =
   | 'landing_view'
   | 'cta_clicked'
+  | 'login_viewed'
+  | 'login_completed'
   | 'signup_started'
   | 'signup_completed'
   | 'onboarding_view'

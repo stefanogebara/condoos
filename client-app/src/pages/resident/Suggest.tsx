@@ -32,7 +32,7 @@ export default function Suggest() {
     try {
       const res = await apiPost<{ id: number }>('/suggestions', { body: text });
       setSuggestionId(res.id);
-      toast.success('Sent to the board');
+      toast.success('Enviado ao síndico');
       setDrafting(true);
       try {
         const d = await apiPost<Draft>('/ai/proposal-draft', { text });
@@ -55,7 +55,7 @@ export default function Suggest() {
         source_suggestion_id: suggestionId,
       });
       track('proposal_published', { proposal_id: res.id, category: draft.category, ai_drafted: true });
-      toast.success('Proposal created — now in discussion');
+      toast.success('Proposta criada — em discussão');
       navigate(`/app/proposals/${res.id}`);
     } finally { setSaving(false); }
   }
@@ -125,10 +125,10 @@ export default function Suggest() {
       {draft && (
         <GlassCard variant="clay-sage" className="p-7 animate-fade-up">
           <div className="flex items-center gap-2 mb-4">
-            <Badge tone="sage"><Sparkles className="w-3 h-3" /> AI-drafted proposal</Badge>
-            {draft._fallback && <Badge tone="warning">offline fallback</Badge>}
+            <Badge tone="sage"><Sparkles className="w-3 h-3" /> Proposta redigida pela IA</Badge>
+            {draft._fallback && <Badge tone="warning">modo offline</Badge>}
             <Badge tone="neutral">{draft.category}</Badge>
-            {draft.estimated_cost && <Badge tone="neutral">~${draft.estimated_cost.toLocaleString()}</Badge>}
+            {draft.estimated_cost && <Badge tone="neutral">~R$ {draft.estimated_cost.toLocaleString('pt-BR')}</Badge>}
           </div>
           <h3 className="font-display text-2xl text-dusk-500 leading-tight">{draft.title}</h3>
           <p className="text-sm text-dusk-300 mt-1 italic">{draft.rationale}</p>
@@ -137,10 +137,10 @@ export default function Suggest() {
           </div>
           <div className="mt-5 flex items-center justify-end gap-2 flex-wrap">
             <Button variant="ghost" onClick={() => { setDraft(null); setSuggestionId(null); setText(''); }}>
-              Start over
+              Recomeçar
             </Button>
             <Button variant="primary" onClick={promoteToProposal} loading={saving} rightIcon={<ArrowRight className="w-4 h-4" />}>
-              Send to the board
+              Enviar ao síndico
             </Button>
           </div>
         </GlassCard>

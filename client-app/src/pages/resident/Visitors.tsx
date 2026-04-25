@@ -36,21 +36,28 @@ export default function Visitors() {
         ...form,
         expected_at: form.expected_at ? new Date(form.expected_at).toISOString() : null,
       });
-      toast.success('Visitor request sent to the front desk');
+      toast.success('Solicitação enviada à portaria');
       setForm({ visitor_name: '', visitor_type: 'guest', expected_at: '', notes: '' });
       setShowForm(false);
       load();
     } finally { setSaving(false); }
   }
 
+  const STATUS_LABEL: Record<Visitor['status'], string> = {
+    pending: 'pendente', approved: 'aprovado', denied: 'negado', arrived: 'chegou', completed: 'concluído',
+  };
+  const TYPE_LABEL: Record<string, string> = {
+    guest: 'visita', delivery: 'entrega', service: 'serviço', rideshare: 'app',
+  };
+
   return (
     <>
       <PageHeader
-        title="Visitors"
-        subtitle="Request guests, deliveries, or services. The front desk is notified instantly."
+        title="Visitantes"
+        subtitle="Avise sobre visitas, entregas ou serviços. A portaria recebe na hora."
         actions={
           <Button onClick={() => setShowForm((x) => !x)} variant={showForm ? 'ghost' : 'primary'} leftIcon={<Plus className="w-4 h-4" />}>
-            {showForm ? 'Cancel' : 'New visitor'}
+            {showForm ? 'Cancelar' : 'Novo visitante'}
           </Button>
         }
       />
@@ -58,24 +65,24 @@ export default function Visitors() {
       {showForm && (
         <GlassCard className="p-6 mb-8 animate-fade-up">
           <form onSubmit={submit} className="grid md:grid-cols-2 gap-3">
-            <input className="input" placeholder="Visitor name"   required value={form.visitor_name} onChange={(e) => setForm({ ...form, visitor_name: e.target.value })} />
+            <input className="input" placeholder="Nome do visitante"   required value={form.visitor_name} onChange={(e) => setForm({ ...form, visitor_name: e.target.value })} />
             <select className="input" value={form.visitor_type} onChange={(e) => setForm({ ...form, visitor_type: e.target.value })}>
-              <option value="guest">Guest</option>
-              <option value="delivery">Delivery</option>
-              <option value="service">Service</option>
-              <option value="rideshare">Rideshare</option>
+              <option value="guest">Visita</option>
+              <option value="delivery">Entrega</option>
+              <option value="service">Serviço</option>
+              <option value="rideshare">Aplicativo</option>
             </select>
             <input className="input" type="datetime-local" value={form.expected_at} onChange={(e) => setForm({ ...form, expected_at: e.target.value })} />
-            <input className="input" placeholder="Notes (optional)" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+            <input className="input" placeholder="Observações (opcional)" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
             <div className="md:col-span-2 flex justify-end">
-              <Button type="submit" variant="primary" loading={saving}>Submit request</Button>
+              <Button type="submit" variant="primary" loading={saving}>Enviar solicitação</Button>
             </div>
           </form>
         </GlassCard>
       )}
 
       {rows.length === 0 && !showForm && (
-        <EmptyState title="No visitors on file" body="Request guests or schedule services in advance so the front desk is ready." image="/images/clay-key.png" action={<Button onClick={() => setShowForm(true)} variant="primary">Add a visitor</Button>} />
+        <EmptyState title="Nenhum visitante registrado" body="Avise antes para a portaria estar preparada." image="/images/clay-key.png" action={<Button onClick={() => setShowForm(true)} variant="primary">Adicionar visitante</Button>} />
       )}
 
       <div className="grid md:grid-cols-2 gap-4">
@@ -87,10 +94,10 @@ export default function Visitors() {
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-semibold text-dusk-500">{v.visitor_name}</span>
-                <Badge tone={v.status === 'approved' ? 'sage' : v.status === 'pending' ? 'warning' : 'neutral'}>{v.status}</Badge>
-                <Badge tone="neutral">{v.visitor_type}</Badge>
+                <Badge tone={v.status === 'approved' ? 'sage' : v.status === 'pending' ? 'warning' : 'neutral'}>{STATUS_LABEL[v.status] || v.status}</Badge>
+                <Badge tone="neutral">{TYPE_LABEL[v.visitor_type] || v.visitor_type}</Badge>
               </div>
-              {v.expected_at && <div className="text-sm text-dusk-300 mt-1">Expected {new Date(v.expected_at).toLocaleString()}</div>}
+              {v.expected_at && <div className="text-sm text-dusk-300 mt-1">Previsto para {new Date(v.expected_at).toLocaleString('pt-BR')}</div>}
               {v.notes && <div className="text-sm text-dusk-200 mt-1 italic">"{v.notes}"</div>}
             </div>
           </GlassCard>

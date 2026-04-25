@@ -107,7 +107,7 @@ export default function ProposalDetail() {
       await apiPost(`/proposals/${id}/comments`, { body: comment });
       setComment('');
       setSummary(null);
-      toast.success('Comment posted');
+      toast.success('Comentário publicado');
       load();
     } finally { setBusy(false); }
   }
@@ -117,10 +117,10 @@ export default function ProposalDetail() {
     try {
       await apiPost(`/proposals/${id}/vote`, { choice });
       track('vote_cast', { proposal_id: Number(id), choice, surface: 'resident_proposal_detail' });
-      toast.success(`Voted ${choice}`);
+      toast.success(`Voto registrado: ${choice === 'yes' ? 'Sim' : choice === 'no' ? 'Não' : 'Abstenção'}`);
       load();
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Vote failed');
+      toast.error(err?.response?.data?.error || 'Voto falhou');
     } finally { setBusy(false); }
   }
 
@@ -129,7 +129,7 @@ export default function ProposalDetail() {
     try {
       const data = await apiPost<any>(`/ai/proposals/${id}/summarize-thread`);
       setSummary(data);
-      toast.success('Summary ready');
+      toast.success('Resumo gerado');
     } finally { setBusy(false); }
   }
 
@@ -138,7 +138,7 @@ export default function ProposalDetail() {
     try {
       const data = await apiPost<{ explainer: string }>(`/ai/proposals/${id}/explain`);
       setExplainer(data.explainer);
-      toast.success('Explanation ready');
+      toast.success('Explicação gerada');
     } finally { setBusy(false); }
   }
 
@@ -152,10 +152,10 @@ export default function ProposalDetail() {
 
   return (
     <>
-      <Link to="/app/proposals" className="inline-flex items-center gap-1 text-sm text-dusk-300 hover:text-dusk-500 mb-4"><ArrowLeft className="w-4 h-4" /> Back</Link>
+      <Link to="/app/proposals" className="inline-flex items-center gap-1 text-sm text-dusk-300 hover:text-dusk-500 mb-4"><ArrowLeft className="w-4 h-4" /> Voltar</Link>
       <PageHeader
         title={p.title}
-        subtitle={`Proposed by ${p.author_first} ${p.author_last}${p.estimated_cost ? ` · ~$${p.estimated_cost.toLocaleString()}` : ''}`}
+        subtitle={`Proposto por ${p.author_first} ${p.author_last}${p.estimated_cost ? ` · ~R$ ${p.estimated_cost.toLocaleString('pt-BR')}` : ''}`}
       />
       <div className="flex items-center gap-2 mb-6 flex-wrap">
         <Badge tone={p.status === 'voting' ? 'peach' : 'sage'}>{p.status}</Badge>
@@ -221,10 +221,10 @@ export default function ProposalDetail() {
             </div>
           ) : (
             <div className="mt-5 flex gap-2">
-              <Button variant={p.my_vote === 'yes' ? 'sage' : 'ghost'} onClick={() => cast('yes')} disabled={busy}>Yes</Button>
-              <Button variant={p.my_vote === 'no'  ? 'peach' : 'ghost'} onClick={() => cast('no')}  disabled={busy}>No</Button>
-              <Button variant="ghost" onClick={() => cast('abstain')} disabled={busy}>Abstain</Button>
-              {p.my_vote && <span className="ml-auto self-center text-xs text-dusk-300">You voted: <span className="font-semibold">{p.my_vote}</span></span>}
+              <Button variant={p.my_vote === 'yes' ? 'sage' : 'ghost'} onClick={() => cast('yes')} disabled={busy}>Sim</Button>
+              <Button variant={p.my_vote === 'no'  ? 'peach' : 'ghost'} onClick={() => cast('no')}  disabled={busy}>Não</Button>
+              <Button variant="ghost" onClick={() => cast('abstain')} disabled={busy}>Abstenção</Button>
+              {p.my_vote && <span className="ml-auto self-center text-xs text-dusk-300">Seu voto: <span className="font-semibold">{p.my_vote === 'yes' ? 'Sim' : p.my_vote === 'no' ? 'Não' : 'Abstenção'}</span></span>}
             </div>
           )}
         </GlassCard>

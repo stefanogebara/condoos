@@ -21,13 +21,24 @@ export default function Overview() {
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [anns, setAnns] = useState<Announcement[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    apiGet<Pkg[]>('/packages').then(setPkgs).catch(() => {});
-    apiGet<Visitor[]>('/visitors').then(setVisitors).catch(() => {});
-    apiGet<Reservation[]>('/amenities/reservations').then(setReservations).catch(() => {});
-    apiGet<Proposal[]>('/proposals').then(setProposals).catch(() => {});
-    apiGet<Announcement[]>('/announcements').then(setAnns).catch(() => {});
+    let alive = true;
+    const loads = [
+      apiGet<Pkg[]>('/packages').then(setPkgs),
+      apiGet<Visitor[]>('/visitors').then(setVisitors),
+      apiGet<Reservation[]>('/amenities/reservations').then(setReservations),
+      apiGet<Proposal[]>('/proposals').then(setProposals),
+      apiGet<Announcement[]>('/announcements').then(setAnns),
+    ];
+    Promise.allSettled(loads).then((results) => {
+      if (!alive) return;
+      setLoadError(results.some((r) => r.status === 'rejected')
+        ? 'Some dashboard data could not be loaded. Refresh or sign in again if it persists.'
+        : null);
+    });
+    return () => { alive = false; };
   }, []);
 
   const waiting = pkgs.filter((p) => p.status === 'waiting');
@@ -43,6 +54,11 @@ export default function Overview() {
         title={`${greeting}, ${user?.first_name}.`}
         subtitle="Here's what's happening in your building today."
       />
+      {loadError && (
+        <GlassCard variant="clay-peach" className="p-4 mb-6 text-sm text-dusk-500">
+          {loadError}
+        </GlassCard>
+      )}
 
       {/* Top stats */}
       <div className="grid md:grid-cols-4 gap-4 mb-8">

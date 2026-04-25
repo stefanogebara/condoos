@@ -57,7 +57,7 @@ export default function BoardAssemblies() {
         second_call_at: secondIso,
       });
       track('assembly_created', { assembly_id: created.id, kind: form.kind });
-      toast.success('Assembly created — add items to the agenda');
+      toast.success('Assembleia criada — adicione itens à pauta');
       setForm({ title: '', kind: 'ordinary', first_call_at: '', second_call_at: '' });
       setShowForm(false);
       await load();
@@ -109,7 +109,7 @@ export default function BoardAssemblies() {
         {rows.length === 0 && (
           <GlassCard className="p-8 text-center">
             <Gavel className="w-10 h-10 mx-auto text-dusk-200 mb-3" />
-            <p className="text-dusk-400">No assemblies yet. Start an AGO when the annual review cycle comes around.</p>
+            <p className="text-dusk-400">Nenhuma assembleia ainda. Comece a AGO quando chegar o ciclo anual.</p>
           </GlassCard>
         )}
         {rows.map((a) => (

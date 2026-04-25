@@ -44,11 +44,11 @@ export default function Amenities() {
     const startDate = new Date(starts);
     const endDate = new Date(ends);
     if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
-      toast.error('Choose valid start and end times.');
+      toast.error('Escolha horários de início e fim válidos.');
       return;
     }
     if (endDate <= startDate) {
-      toast.error('End time must be after start time.');
+      toast.error('O horário final precisa ser depois do início.');
       return;
     }
     const startHour = startDate.getHours() + startDate.getMinutes() / 60;
@@ -58,7 +58,7 @@ export default function Amenities() {
       || startHour < selected.open_hour
       || endHour > selected.close_hour
     ) {
-      toast.error(`Book within open hours: ${selected.open_hour}:00-${selected.close_hour}:00.`);
+      toast.error(`Reserve dentro do horário de funcionamento: ${selected.open_hour}h–${selected.close_hour}h.`);
       return;
     }
     setSaving(true);
@@ -68,7 +68,7 @@ export default function Amenities() {
         starts_at: startDate.toISOString(),
         ends_at:   endDate.toISOString(),
       });
-      toast.success(`Booked ${selected.name}`);
+      toast.success(`Reserva confirmada: ${selected.name}`);
       setSelected(null); setStarts(''); setEnds('');
       load();
     } catch (err: any) {
@@ -82,7 +82,7 @@ export default function Amenities() {
 
   return (
     <>
-      <PageHeader title="Amenities" subtitle="Book the pool, gym, grill, or party room. We prevent conflicts for you." />
+      <PageHeader title="Áreas comuns" subtitle="Reserve a piscina, academia, churrasqueira ou salão de festas. Sem conflitos." />
 
       <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
         {amenities.map((a) => {
@@ -94,7 +94,7 @@ export default function Amenities() {
               </div>
               <h3 className="font-display text-lg text-dusk-500">{a.name}</h3>
               <p className="text-sm text-dusk-300 mt-1 line-clamp-2">{a.description}</p>
-              <div className="mt-3 text-xs text-dusk-200">Open {a.open_hour}:00 – {a.close_hour}:00</div>
+              <div className="mt-3 text-xs text-dusk-200">Aberto {a.open_hour}h–{a.close_hour}h</div>
             </GlassCard>
           );
         })}
@@ -103,26 +103,26 @@ export default function Amenities() {
       {selected && (
         <GlassCard className="p-6 mb-10 animate-fade-up">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-display text-xl text-dusk-500">Book: {selected.name}</h3>
-            <button className="text-sm text-dusk-200 hover:text-dusk-400" onClick={() => setSelected(null)}>Cancel</button>
+            <h3 className="font-display text-xl text-dusk-500">Reservar: {selected.name}</h3>
+            <button className="text-sm text-dusk-200 hover:text-dusk-400" onClick={() => setSelected(null)}>Cancelar</button>
           </div>
           <form onSubmit={book} noValidate className="grid md:grid-cols-2 gap-3">
-            <label className="text-xs text-dusk-300">Starts
+            <label className="text-xs text-dusk-300">Início
               <input type="datetime-local" className="input mt-1" value={starts} onChange={(e) => setStarts(e.target.value)} required />
             </label>
-            <label className="text-xs text-dusk-300">Ends
+            <label className="text-xs text-dusk-300">Fim
               <input type="datetime-local" className="input mt-1" value={ends} min={starts || undefined} onChange={(e) => setEnds(e.target.value)}   required />
             </label>
             <div className="md:col-span-2 flex justify-end">
-              <Button type="submit" variant="primary" loading={saving}>Confirm booking</Button>
+              <Button type="submit" variant="primary" loading={saving}>Confirmar reserva</Button>
             </div>
           </form>
         </GlassCard>
       )}
 
-      <h2 className="font-display text-xl text-dusk-500 mb-4">Upcoming reservations</h2>
+      <h2 className="font-display text-xl text-dusk-500 mb-4">Próximas reservas</h2>
       {future.length === 0 ? (
-        <GlassCard className="p-6 text-sm text-dusk-300">No upcoming reservations in the building.</GlassCard>
+        <GlassCard className="p-6 text-sm text-dusk-300">Nenhuma reserva futura no prédio.</GlassCard>
       ) : (
         <div className="space-y-3">
           {future.map((r) => {

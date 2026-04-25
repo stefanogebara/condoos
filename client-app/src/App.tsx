@@ -10,6 +10,7 @@ import OnboardingCreate from './pages/onboarding/Create';
 import OnboardingJoin from './pages/onboarding/Join';
 import ResidentApp from './pages/resident/ResidentApp';
 import BoardApp from './pages/board/BoardApp';
+import { exposeInternalPages } from './lib/appConfig';
 
 function RequireAuth({ role, children }: { role?: 'resident' | 'board_admin'; children: React.ReactNode }) {
   const { user, loading, hasActiveMembership } = useAuth();
@@ -43,8 +44,8 @@ export default function App() {
       <Routes>
         <Route path="/" element={<RootRoute />} />
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/design" element={<DesignSystemPage />} />
-        <Route path="/logos"  element={<LogosPage />} />
+        {exposeInternalPages && <Route path="/design" element={<DesignSystemPage />} />}
+        {exposeInternalPages && <Route path="/logos"  element={<LogosPage />} />}
 
         <Route path="/onboarding"        element={<RequireSignedIn><OnboardingHome /></RequireSignedIn>} />
         <Route path="/onboarding/create" element={<RequireSignedIn><OnboardingCreate /></RequireSignedIn>} />

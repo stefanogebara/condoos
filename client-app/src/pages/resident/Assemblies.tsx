@@ -29,7 +29,7 @@ export default function Assemblies() {
         {visible.length === 0 && (
           <GlassCard className="p-8 text-center">
             <Gavel className="w-10 h-10 mx-auto text-dusk-200 mb-3" />
-            <p className="text-dusk-400">No upcoming assemblies.</p>
+            <p className="text-dusk-400">Nenhuma assembleia agendada.</p>
           </GlassCard>
         )}
         {visible.map((a) => (

@@ -183,9 +183,9 @@ export default function Residents() {
             </div>
           )}
           <div className="mt-3 flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setShowImport(false)} leftIcon={<X className="w-4 h-4" />}>Cancel</Button>
+            <Button variant="ghost" onClick={() => setShowImport(false)} leftIcon={<X className="w-4 h-4" />}>Cancelar</Button>
             <Button variant="primary" onClick={importCsv} loading={importing} leftIcon={<Mail className="w-4 h-4" />}>
-              {sendEmails ? 'Create & email invites' : 'Create invites'}
+              {sendEmails ? 'Criar e enviar convites' : 'Criar convites'}
             </Button>
           </div>
         </GlassCard>

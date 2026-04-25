@@ -8,6 +8,7 @@ import GlassCard from '../components/GlassCard';
 import Avatar from '../components/Avatar';
 import Badge from '../components/Badge';
 import Picture from '../components/Picture';
+import { exposeInternalPages } from '../lib/appConfig';
 
 export default function Landing() {
   useEffect(() => { track('landing_view'); }, []);
@@ -491,7 +492,7 @@ export default function Landing() {
           <Logo size={22} />
           <p className="font-mono text-xs text-dusk-200">© 2026 CondoOS · feito em hackathon, desenhado para humanos</p>
           <div className="flex items-center gap-4 text-xs">
-            <Link to="/design" className="hover:text-dusk-500 transition">Design system</Link>
+            {exposeInternalPages && <Link to="/design" className="hover:text-dusk-500 transition">Design system</Link>}
             <a href="https://github.com/stefanogebara/condoos" target="_blank" rel="noreferrer" className="hover:text-dusk-500 transition">GitHub</a>
           </div>
         </div>

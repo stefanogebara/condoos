@@ -39,9 +39,9 @@ export default function Settings() {
       });
       track('whatsapp_optin_set', { opt_in: form.whatsapp_opt_in, has_phone: Boolean(form.phone) });
       setMe(updated);
-      toast.success('Preferences saved');
+      toast.success('Preferências salvas');
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Save failed');
+      toast.error(err?.response?.data?.error || 'Não foi possível salvar');
     } finally { setSaving(false); }
   }
 

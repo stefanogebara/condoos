@@ -110,10 +110,10 @@ export default function BoardProposalDetail() {
 
   return (
     <>
-      <Link to="/board/proposals" className="inline-flex items-center gap-1 text-sm text-dusk-300 hover:text-dusk-500 mb-4"><ArrowLeft className="w-4 h-4" /> Back</Link>
+      <Link to="/board/proposals" className="inline-flex items-center gap-1 text-sm text-dusk-300 hover:text-dusk-500 mb-4"><ArrowLeft className="w-4 h-4" /> Voltar</Link>
       <PageHeader
         title={p.title}
-        subtitle={`${p.author_first} ${p.author_last}${p.estimated_cost ? ` · ~$${p.estimated_cost.toLocaleString()}` : ''}`}
+        subtitle={`${p.author_first} ${p.author_last}${p.estimated_cost ? ` · ~R$ ${p.estimated_cost.toLocaleString('pt-BR')}` : ''}`}
         actions={
           <div className="flex gap-2 flex-wrap">
             {p.status === 'discussion' && <Button variant="primary" onClick={() => setStatus('voting')} leftIcon={<Play className="w-4 h-4" />} loading={busy}>Open voting</Button>}
@@ -218,18 +218,18 @@ export default function BoardProposalDetail() {
       <div className="grid md:grid-cols-3 gap-4 mb-6">
         <GlassCard variant="clay-sage" className="p-5 text-center">
           <div className="font-display text-4xl text-sage-700">{p.votes.yes}</div>
-          <div className="text-sm text-dusk-400 mt-1">Yes</div>
-          {p.votes.yes_weight !== p.votes.yes && <div className="text-xs text-dusk-300 mt-1">{p.votes.yes_weight} weighted</div>}
+          <div className="text-sm text-dusk-400 mt-1">Sim</div>
+          {p.votes.yes_weight !== p.votes.yes && <div className="text-xs text-dusk-300 mt-1">peso {p.votes.yes_weight}</div>}
         </GlassCard>
         <GlassCard variant="clay-peach" className="p-5 text-center">
           <div className="font-display text-4xl text-peach-500">{p.votes.no}</div>
-          <div className="text-sm text-dusk-400 mt-1">No</div>
-          {p.votes.no_weight !== p.votes.no && <div className="text-xs text-dusk-300 mt-1">{p.votes.no_weight} weighted</div>}
+          <div className="text-sm text-dusk-400 mt-1">Não</div>
+          {p.votes.no_weight !== p.votes.no && <div className="text-xs text-dusk-300 mt-1">peso {p.votes.no_weight}</div>}
         </GlassCard>
         <GlassCard className="p-5 text-center">
           <div className="font-display text-4xl text-dusk-300">{p.votes.abstain}</div>
-          <div className="text-sm text-dusk-400 mt-1">Abstain</div>
-          {p.votes.abstain_weight !== p.votes.abstain && <div className="text-xs text-dusk-300 mt-1">{p.votes.abstain_weight} weighted</div>}
+          <div className="text-sm text-dusk-400 mt-1">Abstenção</div>
+          {p.votes.abstain_weight !== p.votes.abstain && <div className="text-xs text-dusk-300 mt-1">peso {p.votes.abstain_weight}</div>}
         </GlassCard>
       </div>
 
@@ -237,9 +237,9 @@ export default function BoardProposalDetail() {
         <GlassCard className="p-4 mb-6">
           <div className="flex items-center justify-between gap-3 flex-wrap text-sm">
             <div className="text-dusk-400">
-              <span className="font-medium">Turnout:</span> {p.quorum.turnout_percent}%
-              {p.quorum.quorum_percent > 0 && <span className="text-dusk-300"> / {p.quorum.quorum_percent}% required</span>}
-              <span className="text-dusk-300"> · {p.quorum.votes_cast} of {p.quorum.eligible_voter_count} voted</span>
+              <span className="font-medium">Comparecimento:</span> {p.quorum.turnout_percent}%
+              {p.quorum.quorum_percent > 0 && <span className="text-dusk-300"> / {p.quorum.quorum_percent}% exigido</span>}
+              <span className="text-dusk-300"> · {p.quorum.votes_cast} de {p.quorum.eligible_voter_count} votaram</span>
             </div>
             <Badge tone={p.quorum.quorum_met ? 'sage' : 'peach'}>
               {p.quorum.quorum_met ? 'Quorum met' : 'Quorum not yet met'}

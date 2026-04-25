@@ -55,13 +55,13 @@ export default function Proposals() {
               <p className="text-sm text-dusk-300 mt-2 line-clamp-2">{p.description}</p>
               <div className="flex items-center justify-between mt-4 pt-4 border-t border-white/50">
                 <div className="text-xs text-dusk-200">
-                  {p.estimated_cost ? `~$${p.estimated_cost.toLocaleString()}` : '—'}
+                  {p.estimated_cost ? `~R$ ${p.estimated_cost.toLocaleString('pt-BR')}` : '—'}
                 </div>
                 {p.status === 'voting' ? (
                   <div className="flex items-center gap-2 text-xs">
-                    <span className="text-sage-700 font-semibold">{p.votes.yes} yes</span>
+                    <span className="text-sage-700 font-semibold">{p.votes.yes} sim</span>
                     <span className="text-dusk-200">·</span>
-                    <span className="text-peach-500 font-semibold">{p.votes.no} no</span>
+                    <span className="text-peach-500 font-semibold">{p.votes.no} não</span>
                   </div>
                 ) : (
                   <div className="flex items-center gap-1 text-xs text-dusk-200">

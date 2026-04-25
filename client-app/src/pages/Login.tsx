@@ -20,7 +20,7 @@ export default function Login() {
   const [demoEnabled, setDemoEnabled] = useState(false);
 
   useEffect(() => {
-    track('signup_started');
+    track('login_viewed');
     // Detect if Google sign-in is configured on the server.
     const envClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
     if (envClientId) {

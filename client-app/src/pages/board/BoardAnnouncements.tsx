@@ -23,7 +23,7 @@ export default function BoardAnnouncements() {
     setSaving(true);
     try {
       await apiPost('/announcements', { ...form, pinned: form.pinned ? 1 : 0, source: 'manual' });
-      toast.success('Published');
+      toast.success('Comunicado publicado');
       setForm({ title: '', body: '', pinned: false });
       setShowForm(false);
       load();
@@ -33,15 +33,15 @@ export default function BoardAnnouncements() {
   return (
     <>
       <PageHeader
-        title="Announcements"
-        subtitle="Everything you've sent residents — including AI-drafted ones from meetings and decisions."
-        actions={<Button onClick={() => setShowForm((x) => !x)} variant={showForm ? 'ghost' : 'primary'} leftIcon={<Plus className="w-4 h-4" />}>{showForm ? 'Cancel' : 'New announcement'}</Button>}
+        title="Comunicados"
+        subtitle="Tudo que você enviou aos moradores — incluindo os gerados pela IA após reuniões e decisões."
+        actions={<Button onClick={() => setShowForm((x) => !x)} variant={showForm ? 'ghost' : 'primary'} leftIcon={<Plus className="w-4 h-4" />}>{showForm ? 'Cancelar' : 'Novo comunicado'}</Button>}
       />
 
       {showForm && (
         <GlassCard className="p-6 mb-6 animate-fade-up">
           <form onSubmit={post} className="space-y-3">
-            <input className="input" placeholder="Title" required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+            <input className="input" placeholder="Título" required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
             <textarea className="input min-h-[140px]" placeholder="Write your announcement..." required value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} />
             <label className="flex items-center gap-2 text-sm text-dusk-400">
               <input type="checkbox" checked={form.pinned} onChange={(e) => setForm({ ...form, pinned: e.target.checked })} />

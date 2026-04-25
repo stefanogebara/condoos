@@ -72,21 +72,21 @@ export default function BoardMeetingDetail() {
 
   return (
     <>
-      <Link to="/board/meetings" className="inline-flex items-center gap-1 text-sm text-dusk-300 hover:text-dusk-500 mb-4"><ArrowLeft className="w-4 h-4" /> Back</Link>
-      <PageHeader title={m.title} subtitle={new Date(m.scheduled_for).toLocaleString() + (m.agenda ? ` · ${m.agenda}` : '')} />
+      <Link to="/board/meetings" className="inline-flex items-center gap-1 text-sm text-dusk-300 hover:text-dusk-500 mb-4"><ArrowLeft className="w-4 h-4" /> Voltar</Link>
+      <PageHeader title={m.title} subtitle={new Date(m.scheduled_for).toLocaleString('pt-BR') + (m.agenda ? ` · ${m.agenda}` : '')} />
 
       <div className="grid lg:grid-cols-2 gap-6">
         <GlassCard className="p-6">
-          <h3 className="font-display text-lg text-dusk-500 mb-3">Raw notes</h3>
+          <h3 className="font-display text-lg text-dusk-500 mb-3">Anotações</h3>
           <textarea
             className="input min-h-[280px] font-mono text-sm"
-            placeholder="Paste your meeting notes here. Bullets, shorthand, whatever — the AI will clean it up."
+            placeholder="Cole as anotações da reunião aqui. Tópicos, abreviações, do jeito que veio — a IA arruma."
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
           />
           <div className="mt-3 flex gap-2 justify-end">
-            <Button variant="ghost" onClick={saveNotes} loading={saving} leftIcon={<Save className="w-4 h-4" />}>Save</Button>
-            <Button variant="primary" onClick={summarize} loading={saving} leftIcon={<Sparkles className="w-4 h-4" />}>Summarize</Button>
+            <Button variant="ghost" onClick={saveNotes} loading={saving} leftIcon={<Save className="w-4 h-4" />}>Salvar</Button>
+            <Button variant="primary" onClick={summarize} loading={saving} leftIcon={<Sparkles className="w-4 h-4" />}>Resumir com IA</Button>
           </div>
         </GlassCard>
 

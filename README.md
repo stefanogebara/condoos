@@ -2,7 +2,7 @@
 
 **An AI-powered operating system for condominiums.** Packages, visitors, amenities, meetings, voting, suggestions, and AI-drafted proposals, summaries, and resident announcements — all in one soft, tactile interface.
 
-**Live**: [**condoos-ten.vercel.app**](https://condoos-ten.vercel.app) · API [`condoos-api.fly.dev`](https://condoos-api.fly.dev/api/health) · design system at [`/design`](https://condoos-ten.vercel.app/design) · [GitHub](https://github.com/stefanogebara/condoos)
+**Live**: [**condoos-ten.vercel.app**](https://condoos-ten.vercel.app) · API [`condoos-api.fly.dev`](https://condoos-api.fly.dev/api/health) · [GitHub](https://github.com/stefanogebara/condoos)
 
 Sign in with one click as **admin@condoos.dev** (board) or **resident@condoos.dev** (resident). Real Claude Haiku on OpenRouter. Real SQLite on a Fly volume in `iad`.
 

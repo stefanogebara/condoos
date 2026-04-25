@@ -18,17 +18,27 @@ export default function BoardOverview() {
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [residents, setResidents] = useState<any[]>([]);
   const [condoName, setCondoName] = useState<string>('');
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    apiGet<Proposal[]>('/proposals').then(setProposals).catch(() => {});
-    apiGet<Suggestion[]>('/suggestions').then(setSuggestions).catch(() => {});
-    apiGet<Meeting[]>('/meetings').then(setMeetings).catch(() => {});
-    apiGet<any[]>('/users/residents').then(setResidents).catch(() => {});
-    apiGet<Array<{ status: string; condo_name: string }>>('/onboarding/me')
-      .then((rows) => {
+    let alive = true;
+    const loads = [
+      apiGet<Proposal[]>('/proposals').then(setProposals),
+      apiGet<Suggestion[]>('/suggestions').then(setSuggestions),
+      apiGet<Meeting[]>('/meetings').then(setMeetings),
+      apiGet<any[]>('/users/residents').then(setResidents),
+      apiGet<Array<{ status: string; condo_name: string }>>('/onboarding/me').then((rows) => {
         const active = rows.find((r) => r.status === 'active');
         if (active) setCondoName(active.condo_name);
-      }).catch(() => {});
+      }),
+    ];
+    Promise.allSettled(loads).then((results) => {
+      if (!alive) return;
+      setLoadError(results.some((r) => r.status === 'rejected')
+        ? 'Some board data could not be loaded. Refresh or sign in again if it persists.'
+        : null);
+    });
+    return () => { alive = false; };
   }, []);
 
   const openSuggestions = suggestions.filter((s) => s.status === 'open');
@@ -41,6 +51,11 @@ export default function BoardOverview() {
         title={`Welcome back, ${user?.first_name}.`}
         subtitle={condoName ? `Everything that needs your attention at ${condoName}.` : "Everything that needs your attention."}
       />
+      {loadError && (
+        <GlassCard variant="clay-peach" className="p-4 mb-6 text-sm text-dusk-500">
+          {loadError}
+        </GlassCard>
+      )}
 
       <div className="grid md:grid-cols-4 gap-4 mb-8">
         <Stat icon={Inbox}    color="peach" label="New suggestions" value={openSuggestions.length} to="/board/suggestions" />

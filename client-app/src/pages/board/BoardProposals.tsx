@@ -63,7 +63,7 @@ function Section({ title, items }: { title: string; items: any[] }) {
                     <span className="text-peach-500 font-semibold">{p.votes.no}</span>
                   </span>
                 ) : (
-                  p.estimated_cost ? <span className="text-dusk-300">~${p.estimated_cost.toLocaleString()}</span> : null
+                  p.estimated_cost ? <span className="text-dusk-300">~R$ {p.estimated_cost.toLocaleString('pt-BR')}</span> : null
                 )}
               </div>
             </GlassCard>

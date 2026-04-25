@@ -25,7 +25,7 @@ export default function Packages() {
 
   async function pickup(id: number) {
     await apiPost(`/packages/${id}/pickup`);
-    toast.success('Marked as picked up');
+    toast.success('Encomenda retirada');
     load();
   }
 
@@ -34,13 +34,13 @@ export default function Packages() {
 
   return (
     <>
-      <PageHeader title="Packages" subtitle="Everything waiting for you at the front desk." />
+      <PageHeader title="Encomendas" subtitle="Tudo aguardando você na portaria." />
 
-      {rows.length === 0 && <EmptyState title="No packages yet" body="Deliveries will show up here the moment they arrive." image="/images/clay-mail.png" />}
+      {rows.length === 0 && <EmptyState title="Nenhuma encomenda ainda" body="As entregas aparecem aqui no momento que chegam." image="/images/clay-mail.png" />}
 
       {waiting.length > 0 && (
         <>
-          <h2 className="font-display text-xl text-dusk-500 mb-4">Waiting for pickup</h2>
+          <h2 className="font-display text-xl text-dusk-500 mb-4">Aguardando retirada</h2>
           <div className="grid md:grid-cols-2 gap-4 mb-10">
             {waiting.map((p) => (
               <GlassCard key={p.id} variant="clay" className="p-5 flex items-start gap-4">
@@ -50,13 +50,13 @@ export default function Packages() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-dusk-500">{p.carrier}</span>
-                    <Badge tone="peach">waiting</Badge>
+                    <Badge tone="peach">aguardando</Badge>
                   </div>
                   <div className="text-sm text-dusk-300">{p.description || '—'}</div>
-                  <div className="text-xs text-dusk-200 mt-1">Arrived {new Date(p.arrived_at).toLocaleDateString()}</div>
+                  <div className="text-xs text-dusk-200 mt-1">Chegou em {new Date(p.arrived_at).toLocaleDateString('pt-BR')}</div>
                 </div>
                 <Button size="sm" variant="sage" onClick={() => pickup(p.id)} leftIcon={<CheckCircle2 className="w-4 h-4" />}>
-                  Picked up
+                  Retirei
                 </Button>
               </GlassCard>
             ))}
@@ -66,7 +66,7 @@ export default function Packages() {
 
       {collected.length > 0 && (
         <>
-          <h2 className="font-display text-xl text-dusk-500 mb-4">Recently picked up</h2>
+          <h2 className="font-display text-xl text-dusk-500 mb-4">Retiradas recentes</h2>
           <div className="grid md:grid-cols-2 gap-3">
             {collected.map((p) => (
               <GlassCard key={p.id} className="p-4 flex items-center gap-3 opacity-70">

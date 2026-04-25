@@ -74,9 +74,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('condoos_token', data.token);
     localStorage.setItem('condoos_user', JSON.stringify(data.user));
     setUser(data.user);
-    identify({ id: data.user.id, email: data.user.email, role: data.user.role, condominium_id: data.user.condominium_id });
-    track('signup_completed', { source, role: data.user.role, has_condo: data.user.condominium_id != null });
-    await refreshMembershipStatus();
+    const hasActiveMembership = await refreshMembershipStatus();
+    identify({ id: data.user.id, role: data.user.role, has_condo: hasActiveMembership });
+    track('login_completed', { source, role: data.user.role, has_active_membership: hasActiveMembership });
     return data.user;
   };
 
