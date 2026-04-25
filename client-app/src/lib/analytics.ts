@@ -19,6 +19,8 @@ function ph(): Promise<PostHog> | null {
       capture_pageleave: true,
       autocapture: false,
     });
+    // Tag every event so CondoOS data is filterable in shared PostHog projects.
+    m.default.register({ app_name: 'condoos' });
     return m.default;
   });
   return phPromise;
