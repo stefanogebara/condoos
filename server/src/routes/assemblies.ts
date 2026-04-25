@@ -15,6 +15,21 @@ import { notifyCondoOwners, notifyCondoResidents } from '../lib/whatsapp';
 
 const router = Router();
 
+function firstActiveUnitForUser(userId: number, condoId: number): number | null {
+  const row = db.prepare(
+    `SELECT uu.unit_id
+     FROM user_unit uu
+     JOIN units un ON un.id = uu.unit_id
+     JOIN buildings b ON b.id = un.building_id
+     WHERE uu.user_id = ?
+       AND b.condominium_id = ?
+       AND uu.status = 'active'
+     ORDER BY uu.primary_contact DESC, uu.id ASC
+     LIMIT 1`
+  ).get(userId, condoId) as { unit_id: number } | undefined;
+  return row?.unit_id || null;
+}
+
 function getScopedAssembly(id: number, condoId: number) {
   return db.prepare(
     `SELECT a.*, cr.first_name AS creator_first, cr.last_name AS creator_last
@@ -52,6 +67,7 @@ router.get('/:id', requireAuth, (req: AuthedRequest, res) => {
   const id = Number(req.params.id);
   const a = getScopedAssembly(id, condoId);
   if (!a) return fail(res, 'not_found', 404);
+  const isBoard = req.user!.role === 'board_admin';
 
   const agenda = getAgendaItems(id).map((item) => {
     const tally = getAgendaTally(item.id);
@@ -94,12 +110,17 @@ router.get('/:id', requireAuth, (req: AuthedRequest, res) => {
   const myEligibility = req.user
     ? canVoteInAssembly(id, req.user.id)
     : { ok: false, reason: 'not_authed' };
+  const myAttendance = req.user
+    ? attendance.find((r: any) => r.user_id === req.user!.id && r.attended_as === 'self') || null
+    : null;
 
   return ok(res, {
     ...a,
     agenda,
-    attendance,
-    proxies,
+    attendance: isBoard ? attendance : [],
+    proxies: isBoard ? proxies : [],
+    attendance_count: attendance.length,
+    proxies_count: proxies.length,
     eligibility: {
       eligible_owner_count: owners.length,
       eligible_total_weight,
@@ -108,6 +129,7 @@ router.get('/:id', requireAuth, (req: AuthedRequest, res) => {
     },
     my: {
       grant: myGrant,
+      attendance: myAttendance,
       can_vote: myEligibility,
     },
   });
@@ -256,37 +278,40 @@ router.post('/:id/attendance', requireAuth, (req: AuthedRequest, res) => {
   if (a.status !== 'in_session') return fail(res, 'assembly_not_in_session', 409);
 
   // Self check-in (anyone can) OR proxy check-in (only if the user has active proxies).
-  const { proxy_for_user_id, is_delinquent, unit_id } = req.body || {};
+  const { proxy_for_user_id } = req.body || {};
 
   if (proxy_for_user_id) {
+    const representedUserId = Number(proxy_for_user_id);
     const grant = db.prepare(
       `SELECT id FROM assembly_proxies
        WHERE assembly_id = ? AND grantor_user_id = ? AND grantee_user_id = ? AND status = 'active'`
-    ).get(id, proxy_for_user_id, req.user!.id);
+    ).get(id, representedUserId, req.user!.id);
     if (!grant) return fail(res, 'no_active_proxy', 403);
+    const representedUnitId = firstActiveUnitForUser(representedUserId, condoId);
 
     // Replace any existing proxy attendance for this grantor
     db.prepare(
       `DELETE FROM assembly_attendance WHERE assembly_id = ? AND attended_as = 'proxy' AND proxy_for_user_id = ?`
-    ).run(id, proxy_for_user_id);
+    ).run(id, representedUserId);
     db.prepare(
       `INSERT INTO assembly_attendance (assembly_id, user_id, unit_id, attended_as, proxy_for_user_id, is_delinquent)
        VALUES (?, ?, ?, 'proxy', ?, ?)`
-    ).run(id, req.user!.id, unit_id || null, proxy_for_user_id, is_delinquent ? 1 : 0);
+    ).run(id, req.user!.id, representedUnitId, representedUserId, 0);
     return ok(res, { ok: true, mode: 'proxy' });
   }
 
   // Self: upsert
+  const unitId = firstActiveUnitForUser(req.user!.id, condoId);
   const existing = db.prepare(
     `SELECT id FROM assembly_attendance WHERE assembly_id = ? AND user_id = ? AND attended_as = 'self'`
   ).get(id, req.user!.id) as { id: number } | undefined;
   if (existing) {
-    db.prepare(`UPDATE assembly_attendance SET is_delinquent = ? WHERE id = ?`).run(is_delinquent ? 1 : 0, existing.id);
+    db.prepare(`UPDATE assembly_attendance SET unit_id = COALESCE(?, unit_id) WHERE id = ?`).run(unitId, existing.id);
   } else {
     db.prepare(
       `INSERT INTO assembly_attendance (assembly_id, user_id, unit_id, attended_as, is_delinquent)
        VALUES (?, ?, ?, 'self', ?)`
-    ).run(id, req.user!.id, unit_id || null, is_delinquent ? 1 : 0);
+    ).run(id, req.user!.id, unitId, 0);
   }
   return ok(res, { ok: true, mode: 'self' });
 });

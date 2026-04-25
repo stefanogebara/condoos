@@ -31,9 +31,12 @@ interface Assembly {
   agenda: AgendaItem[];
   attendance: Array<any>;
   proxies: Array<any>;
+  attendance_count: number;
+  proxies_count: number;
   eligibility: { eligible_owner_count: number; turnout_percent: number; present_weight: number; eligible_total_weight: number };
   my: {
     grant: { id: number; grantee_first: string; grantee_last: string } | null;
+    attendance: { id: number; attended_as: string } | null;
     can_vote: { ok: boolean; reason?: string };
   };
 }
@@ -99,6 +102,7 @@ export default function AssemblyDetail() {
 
   const canAttend = a.status === 'in_session';
   const canGrantProxy = ['convoked', 'in_session'].includes(a.status) && !a.my.grant;
+  const hasCheckedIn = checkedIn || !!a.my.attendance;
 
   return (
     <>
@@ -149,7 +153,7 @@ export default function AssemblyDetail() {
       )}
 
       {/* Check in */}
-      {canAttend && !checkedIn && !a.attendance.some((r: any) => r.attended_as === 'self') && (
+      {canAttend && !hasCheckedIn && (
         <GlassCard variant="clay-sage" className="p-5 mb-6 flex items-center justify-between flex-wrap gap-3">
           <div>
             <div className="text-xs uppercase tracking-wider text-sage-700 font-medium">Sessão aberta</div>
@@ -190,21 +194,17 @@ export default function AssemblyDetail() {
         ))}
       </div>
 
-      {/* Attendance list */}
-      <h3 className="font-display text-lg text-dusk-500 mb-2 flex items-center gap-2"><Users className="w-4 h-4" /> Presença ({a.attendance.length})</h3>
+      {/* Attendance summary */}
+      <h3 className="font-display text-lg text-dusk-500 mb-2 flex items-center gap-2"><Users className="w-4 h-4" /> Presença ({a.attendance_count})</h3>
       <GlassCard className="p-4 mb-6">
-        {a.attendance.length === 0 ? (
-          <p className="text-sm text-dusk-300">Ninguém se registrou ainda.</p>
-        ) : (
-          <ul className="text-sm text-dusk-400 space-y-1">
-            {a.attendance.map((r: any) => (
-              <li key={r.id}>
-                • {r.first_name} {r.last_name}
-                {r.attended_as === 'proxy' && <span className="text-dusk-300"> (procurador de {r.proxy_first} {r.proxy_last})</span>}
-              </li>
-            ))}
-          </ul>
-        )}
+        <p className="text-sm text-dusk-400">
+          {a.attendance_count === 0
+            ? 'Ninguém se registrou ainda.'
+            : `${a.attendance_count} participante${a.attendance_count === 1 ? '' : 's'} registrado${a.attendance_count === 1 ? '' : 's'}.`}
+        </p>
+        <p className="text-xs text-dusk-300 mt-2">
+          A lista nominal de presença e procurações fica visível apenas para o conselho.
+        </p>
       </GlassCard>
 
       {/* Ata preview */}

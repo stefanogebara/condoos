@@ -20,6 +20,13 @@ function configuredProvider(): WhatsAppProvider {
   return 'none';
 }
 
+function notConfiguredResult(): SendResult {
+  if (process.env.NODE_ENV === 'production') {
+    return { ok: false, error: 'provider_not_configured' };
+  }
+  return { ok: true, skipped: 'not_configured' };
+}
+
 /**
  * Normalizes a raw phone input to E.164 with a `whatsapp:` prefix.
  * Accepts already-prefixed values, E.164, or BR-style local numbers
@@ -74,7 +81,7 @@ async function sendViaTwilio(toWa: string, body: string): Promise<SendResult> {
   const accountSid = env('TWILIO_ACCOUNT_SID');
   const authToken = env('TWILIO_AUTH_TOKEN');
   const from = env('TWILIO_WHATSAPP_FROM');
-  if (!accountSid || !authToken || !from) return { ok: true, skipped: 'not_configured' };
+  if (!accountSid || !authToken || !from) return notConfiguredResult();
 
   const fromWa = from.startsWith('whatsapp:') ? from : `whatsapp:${from}`;
   const auth = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
@@ -107,7 +114,7 @@ async function sendViaTwilio(toWa: string, body: string): Promise<SendResult> {
 
 async function sendViaWaha(to: string, body: string): Promise<SendResult> {
   const baseUrl = env('WAHA_URL')?.replace(/\/+$/, '');
-  if (!baseUrl) return { ok: true, skipped: 'not_configured' };
+  if (!baseUrl) return notConfiguredResult();
 
   const digits = normalizeDigits(to);
   if (!digits) return { ok: false, skipped: 'invalid_to' };
@@ -141,7 +148,9 @@ async function sendViaWaha(to: string, body: string): Promise<SendResult> {
 
 /**
  * Send a WhatsApp text to a single recipient.
- * In dev (no creds), logs the payload and returns { ok: true, skipped: 'not_configured' }.
+ * In dev/test (no creds), logs the payload and returns a safe skip. In
+ * production, missing provider config is retryable so outbox rows survive a
+ * temporary secret/config rollout issue.
  */
 export async function sendText(to: string, body: string): Promise<SendResult> {
   const toWa = normalizeWhatsAppNumber(to);
@@ -149,8 +158,10 @@ export async function sendText(to: string, body: string): Promise<SendResult> {
 
   const provider = configuredProvider();
   if (provider === 'none') {
-    console.log(`[whatsapp:dev] → ${toWa}: ${body.slice(0, 120)}${body.length > 120 ? '…' : ''}`);
-    return { ok: true, skipped: 'not_configured' };
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`[whatsapp:dev] → ${toWa}: ${body.slice(0, 120)}${body.length > 120 ? '…' : ''}`);
+    }
+    return notConfiguredResult();
   }
   if (provider === 'waha') return sendViaWaha(toWa, body);
   return sendViaTwilio(toWa, body);
@@ -270,6 +281,16 @@ export async function processWhatsAppOutbox(options: ProcessOutboxOptions = {}):
          SET status='skipped', last_error=?, updated_at=CURRENT_TIMESTAMP
          WHERE id=?`
       ).run(result.skipped, row.id);
+      continue;
+    }
+
+    if (result.error === 'provider_not_configured') {
+      failed += 1;
+      db.prepare(
+        `UPDATE notification_outbox
+         SET status='pending', attempts=?, last_error=?, next_attempt_at=?, updated_at=CURRENT_TIMESTAMP
+         WHERE id=?`
+      ).run(row.attempts, result.error, retryAt(1), row.id);
       continue;
     }
 

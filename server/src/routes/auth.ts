@@ -7,31 +7,15 @@ import { ok, fail, asyncHandler } from '../lib/respond';
 import { claimPendingInvitesForUser } from '../lib/invites';
 import { GoogleAuthError, verifyGoogleCredential } from '../lib/google-auth';
 import { createRateLimit } from '../lib/rate-limit';
+import { demoAuthEnabled, isBlockedDemoCredential } from '../lib/demo-auth';
 
 const router = Router();
 const authRateLimit = createRateLimit({ keyPrefix: 'auth', windowMs: 15 * 60_000, max: 30 });
-const demoEmails = new Set(['admin@condoos.dev', 'resident@condoos.dev']);
-const demoPasswords = new Set(['admin123', 'resident123']);
 
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
 });
-
-function truthy(value: string | undefined): boolean {
-  return ['1', 'true', 'yes', 'on'].includes(String(value || '').toLowerCase());
-}
-
-function demoAuthEnabled(): boolean {
-  if (process.env.NODE_ENV !== 'production') return true;
-  return truthy(process.env.DEMO_AUTH_ENABLED);
-}
-
-function isBlockedDemoCredential(email: string, password: string): boolean {
-  return !demoAuthEnabled()
-    && demoEmails.has(email.toLowerCase())
-    && demoPasswords.has(password);
-}
 
 router.post('/login', authRateLimit, (req, res) => {
   const parsed = loginSchema.safeParse(req.body);

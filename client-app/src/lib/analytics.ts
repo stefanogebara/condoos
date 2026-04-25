@@ -90,6 +90,8 @@ function send(event: string, properties?: Record<string, unknown>) {
     distinct_id: getDistinctId(),
     timestamp: new Date().toISOString(),
     properties: {
+      // Kept for backward-compat with any legacy filters in the dashboard.
+      // The new dedicated CondoOS project means filtering is no longer required.
       app_name: 'condoos',
       ...(userProps || {}),
       ...(properties || {}),
