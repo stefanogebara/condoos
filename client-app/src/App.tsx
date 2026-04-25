@@ -12,9 +12,10 @@ import ResidentApp from './pages/resident/ResidentApp';
 import BoardApp from './pages/board/BoardApp';
 
 function RequireAuth({ role, children }: { role?: 'resident' | 'board_admin'; children: React.ReactNode }) {
-  const { user, loading } = useAuth();
-  if (loading) return <div className="min-h-screen flex items-center justify-center text-dusk-300">Loading...</div>;
+  const { user, loading, hasActiveMembership } = useAuth();
+  if (loading || (user && hasActiveMembership === null)) return <div className="min-h-screen flex items-center justify-center text-dusk-300">Loading...</div>;
   if (!user) return <Navigate to="/login" replace />;
+  if (!hasActiveMembership) return <Navigate to="/onboarding" replace />;
   if (role && user.role !== role) {
     return <Navigate to={user.role === 'board_admin' ? '/board' : '/app'} replace />;
   }
@@ -29,9 +30,10 @@ function RequireSignedIn({ children }: { children: React.ReactNode }) {
 }
 
 function RootRoute() {
-  const { user, loading } = useAuth();
-  if (loading) return null;
+  const { user, loading, hasActiveMembership } = useAuth();
+  if (loading || (user && hasActiveMembership === null)) return null;
   if (!user) return <LandingPage />;
+  if (!hasActiveMembership) return <Navigate to="/onboarding" replace />;
   return <Navigate to={user.role === 'board_admin' ? '/board' : '/app'} replace />;
 }
 
@@ -48,7 +50,7 @@ export default function App() {
         <Route path="/onboarding/create" element={<RequireSignedIn><OnboardingCreate /></RequireSignedIn>} />
         <Route path="/onboarding/join"   element={<RequireSignedIn><OnboardingJoin /></RequireSignedIn>} />
 
-        <Route path="/app/*" element={<RequireAuth role="resident"><ResidentApp /></RequireAuth>} />
+        <Route path="/app/*" element={<RequireAuth><ResidentApp /></RequireAuth>} />
         <Route path="/board/*" element={<RequireAuth role="board_admin"><BoardApp /></RequireAuth>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { GoogleAuthError, verifyGoogleCredential } from '../src/lib/google-auth';
 import { buildInviteEmail, sendInviteEmail } from '../src/lib/email';
 import { createRateLimit, resetRateLimits } from '../src/lib/rate-limit';
+import { demoAuthEnabled, isBlockedDemoCredential } from '../src/lib/demo-auth';
 
 const futureExp = Math.floor(Date.now() / 1000) + 3600;
 
@@ -126,4 +127,28 @@ test('createRateLimit returns 429 after the configured allowance', () => {
   assert.deepEqual(responses.find((r) => r.status), { status: 429 });
   assert.equal((responses.find((r) => r.body) as any).body.error, 'rate_limited');
   resetRateLimits();
+});
+
+test('demo auth blocks every seeded demo credential in production unless explicitly enabled', () => {
+  const productionEnv = { NODE_ENV: 'production' } as NodeJS.ProcessEnv;
+  const enabledEnv = { NODE_ENV: 'production', DEMO_AUTH_ENABLED: '1' } as NodeJS.ProcessEnv;
+
+  assert.equal(demoAuthEnabled(productionEnv), false);
+  assert.equal(demoAuthEnabled(enabledEnv), true);
+
+  for (const email of [
+    'admin@condoos.dev',
+    'resident@condoos.dev',
+    'jordan@condoos.dev',
+    'taylor@condoos.dev',
+    'riley@condoos.dev',
+    'sam@condoos.dev',
+  ]) {
+    assert.equal(isBlockedDemoCredential(email, 'resident123', productionEnv), true);
+    assert.equal(isBlockedDemoCredential(email.toUpperCase(), 'resident123', productionEnv), true);
+    assert.equal(isBlockedDemoCredential(email, 'resident123', enabledEnv), false);
+  }
+
+  assert.equal(isBlockedDemoCredential('real-owner@example.com', 'resident123', productionEnv), false);
+  assert.equal(isBlockedDemoCredential('resident@condoos.dev', 'wrong-password', productionEnv), false);
 });

@@ -56,7 +56,9 @@ product.
 
 Notification delivery is written to `notification_outbox` before send. The API
 tries immediate delivery and also retries due WhatsApp rows every 60 seconds
-while the Fly machine is running.
+while the Fly machine is running. Keep at least one Fly machine warm
+(`min_machines_running = 1`) so vote auto-close and notification retries are not
+blocked by zero-traffic sleep.
 
 Production demo-login safety:
 

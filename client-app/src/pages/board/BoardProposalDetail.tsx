@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { ArrowLeft, Sparkles, Play, Check, X, MessageCircle } from 'lucide-react';
+import { ArrowLeft, Sparkles, Play, Check, X, MessageCircle, Vote } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 import GlassCard from '../../components/GlassCard';
 import Badge from '../../components/Badge';
@@ -118,6 +118,14 @@ export default function BoardProposalDetail() {
           <div className="flex gap-2 flex-wrap">
             {p.status === 'discussion' && <Button variant="primary" onClick={() => setStatus('voting')} leftIcon={<Play className="w-4 h-4" />} loading={busy}>Open voting</Button>}
             {p.status === 'voting'     && <Button variant="primary" onClick={closeDecision} leftIcon={<Check className="w-4 h-4" />} loading={busy}>Close & AI decision</Button>}
+            {p.status === 'voting' && (
+              <Link
+                to={`/app/proposals/${id}`}
+                className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold bg-white/50 backdrop-blur-md border border-white/60 text-dusk-400 hover:bg-white/70 transition-all"
+              >
+                <Vote className="w-4 h-4" /> Vote as owner
+              </Link>
+            )}
             {(['voting','discussion'].includes(p.status)) && <Button variant="ghost" onClick={() => setStatus('rejected')} leftIcon={<X className="w-4 h-4" />}>Reject</Button>}
           </div>
         }

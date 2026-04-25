@@ -11,7 +11,7 @@
     "seed": "ts-node src/db/seed.ts",
     "db:reset": "node -e \"require('fs').rmSync('./data/condoos.sqlite',{force:true})\" && npm run seed",
     "db:reset:e2e": "node -e \"for (const f of ['./data/e2e.sqlite','./data/e2e.sqlite-wal','./data/e2e.sqlite-shm']) require('fs').rmSync(f,{force:true})\" && cross-env DB_PATH=./data/e2e.sqlite NODE_ENV=development npm run seed",
-    "start:e2e": "cross-env DB_PATH=./data/e2e.sqlite NODE_ENV=production RATE_LIMIT_DISABLED=1 DEMO_AUTH_ENABLED=1 PORT=4312 JWT_SECRET=e2e-secret CORS_ORIGIN=http://127.0.0.1:5175 ts-node src/server.ts",
+    "start:e2e": "cross-env DB_PATH=./data/e2e.sqlite NODE_ENV=production RATE_LIMIT_DISABLED=1 DEMO_AUTH_ENABLED=1 OPENROUTER_API_KEY= PORT=4312 JWT_SECRET=e2e-secret CORS_ORIGIN=http://127.0.0.1:5175 ts-node src/server.ts",
     "db:backup": "node scripts/db-backup.js backup",
     "db:restore": "node scripts/db-backup.js restore"
   },

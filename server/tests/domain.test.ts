@@ -407,6 +407,40 @@ test('WhatsApp: notifyUsers skips users without phone or opt_in', async () => {
   assert.equal(bad.skipped, 'invalid_to');
 });
 
+test('WhatsApp: production provider outage keeps outbox rows retryable', async () => {
+  const { notifyUsers } = await import('../src/lib/whatsapp');
+  resetDb();
+  const { unit101 } = createCondoFixture();
+  const withPhone = createUser('retry-phone@x.com');
+  db.prepare(`INSERT INTO user_unit (user_id, unit_id, relationship, status, primary_contact, voting_weight) VALUES (?, ?, 'owner', 'active', 1, 1.0)`).run(withPhone, unit101);
+  db.prepare(`UPDATE users SET phone = '+5511999990000', whatsapp_opt_in = 1 WHERE id = ?`).run(withPhone);
+
+  const prevNodeEnv = process.env.NODE_ENV;
+  const prevProvider = process.env.WHATSAPP_PROVIDER;
+  process.env.NODE_ENV = 'production';
+  process.env.WHATSAPP_PROVIDER = 'none';
+  try {
+    const result = await notifyUsers([withPhone], 'test');
+    assert.equal(result.attempted, 1);
+    assert.equal(result.sent, 0);
+
+    const row = db.prepare(
+      `SELECT status, attempts, last_error, next_attempt_at
+       FROM notification_outbox
+       WHERE user_id = ?`
+    ).get(withPhone) as any;
+    assert.equal(row.status, 'pending');
+    assert.equal(row.attempts, 0);
+    assert.equal(row.last_error, 'provider_not_configured');
+    assert.ok(row.next_attempt_at);
+  } finally {
+    if (prevNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = prevNodeEnv;
+    if (prevProvider === undefined) delete process.env.WHATSAPP_PROVIDER;
+    else process.env.WHATSAPP_PROVIDER = prevProvider;
+  }
+});
+
 test('AI classifier fallback: keyword heuristics map to correct categories', async () => {
   // Directly exercise the fallback logic (no network). Lives inside routes/ai.ts so
   // we re-implement a tiny matching check via the same regex rules — here we just
