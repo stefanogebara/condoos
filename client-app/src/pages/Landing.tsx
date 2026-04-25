@@ -6,6 +6,7 @@ import Button from '../components/Button';
 import GlassCard from '../components/GlassCard';
 import Avatar from '../components/Avatar';
 import Badge from '../components/Badge';
+import Picture from '../components/Picture';
 
 export default function Landing() {
   return (
@@ -71,9 +72,12 @@ export default function Landing() {
           {/* Hero image + floating glass cards */}
           <div className="relative flex items-center justify-center animate-fade-up">
             <div className="relative w-full max-w-[560px] aspect-[4/3] flex items-center justify-center">
-              <img
-                src="/images/characters/hero-community-01.jpg"
+              <Picture
+                src="/images/characters/hero-community-01"
                 alt="Uma comunidade de moradores reunida no saguão, um deles segurando o celular com o CondoOS"
+                width={1408}
+                height={768}
+                priority="high"
                 className="w-full h-full object-cover rounded-[36px] shadow-clay-lg animate-float-slow"
               />
               {/* Subtle gradient overlay so the glass cards stay legible */}
@@ -152,7 +156,7 @@ export default function Landing() {
       {/* AI callout — dusk landscape with glass cards */}
       <section id="ai" className="relative px-6 lg:px-12 pb-28 scroll-mt-20">
         <div className="max-w-7xl mx-auto relative overflow-hidden rounded-[40px] shadow-clay-lg">
-          <img src="/images/bg-dusk.jpg" alt="" className="absolute inset-0 w-full h-full object-cover" />
+          <img src="/images/bg-dusk.jpg" alt="" aria-hidden loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover" />
           <div className="absolute inset-0 bg-gradient-to-b from-dusk-500/10 via-transparent to-dusk-500/30" />
           <div className="relative p-10 md:p-16 text-cream-50">
             <span className="chip bg-white/20 border-white/30 text-cream-50"><Sparkles className="w-3.5 h-3.5" /> Copiloto IA</span>
@@ -199,9 +203,11 @@ export default function Landing() {
               </p>
             </div>
             <div className="relative">
-              <img
-                src="/images/characters/char-ago-assembly.jpg"
-                alt="Condo residents seated around a table at an AGO assembly meeting"
+              <Picture
+                src="/images/characters/char-ago-assembly"
+                alt="Moradores em torno da mesa em uma assembleia geral ordinária"
+                width={1024}
+                height={585}
                 className="w-full rounded-[32px] shadow-clay-lg"
               />
               <GlassCard className="absolute -bottom-5 -left-3 p-3 px-4 flex items-center gap-3 w-56">
@@ -307,9 +313,11 @@ export default function Landing() {
             </ul>
           </div>
           <div className="relative order-1 lg:order-2">
-            <img
-              src="/images/characters/char-elderly-confident.jpg"
+            <Picture
+              src="/images/characters/char-elderly-confident"
               alt="Uma moradora mais velha usando o CondoOS no celular na mesa da cozinha"
+              width={1408}
+              height={792}
               className="w-full rounded-[32px] shadow-clay-lg"
             />
             <GlassCard className="absolute -top-4 -right-3 p-3 px-4 flex items-center gap-3 w-52">
@@ -341,9 +349,11 @@ export default function Landing() {
 
           <div className="grid md:grid-cols-2 gap-5 items-center">
             <div className="relative rounded-[32px] overflow-hidden shadow-clay-lg bg-cream-50/60">
-              <img
-                src="/images/characters/char-phone-closeup-ui.jpg"
-                alt="Mão segurando o celular com a tela de votação em claymorphism — 'Vote tally' com gráfico de pizza"
+              <Picture
+                src="/images/characters/char-phone-closeup-ui"
+                alt="Mão segurando o celular com a tela de votação em claymorphism — Vote tally com gráfico de pizza"
+                width={1024}
+                height={1024}
                 className="w-full aspect-square object-cover"
               />
               <GlassCard className="absolute bottom-5 left-5 p-3 px-4 flex items-center gap-3 w-56">
@@ -355,9 +365,11 @@ export default function Landing() {
               </GlassCard>
             </div>
             <div className="relative rounded-[32px] overflow-hidden shadow-clay-lg">
-              <img
-                src="/images/characters/char-voting-phone.jpg"
+              <Picture
+                src="/images/characters/char-voting-phone"
                 alt="Morador no sofá tocando no celular para votar"
+                width={1024}
+                height={1024}
                 className="w-full aspect-square object-cover"
               />
               <div className="absolute inset-x-0 bottom-0 p-6 bg-gradient-to-t from-dusk-500/70 to-transparent text-cream-50">
@@ -374,7 +386,13 @@ export default function Landing() {
         <div className="max-w-7xl mx-auto">
           <div className="grid md:grid-cols-2 gap-5">
             <div className="relative rounded-[32px] overflow-hidden shadow-clay-lg group">
-              <img src="/images/characters/char-package-arrival.jpg" alt="Porteiro entregando uma encomenda para a moradora" className="w-full h-[340px] object-cover transition-transform duration-700 group-hover:scale-[1.02]" />
+              <Picture
+                src="/images/characters/char-package-arrival"
+                alt="Porteiro entregando uma encomenda para a moradora"
+                width={1024}
+                height={585}
+                className="w-full h-[340px] object-cover transition-transform duration-700 group-hover:scale-[1.02]"
+              />
               <div className="absolute inset-x-0 bottom-0 p-6 bg-gradient-to-t from-dusk-500/70 to-transparent">
                 <div className="text-xs uppercase tracking-[0.14em] text-cream-50/80 font-medium">Portaria</div>
                 <h3 className="font-display text-2xl text-cream-50 mt-1">Encomenda chegou? O morador sabe.</h3>
@@ -382,7 +400,13 @@ export default function Landing() {
               </div>
             </div>
             <div className="relative rounded-[32px] overflow-hidden shadow-clay-lg group">
-              <img src="/images/characters/char-whatsapp-msg.jpg" alt="Mão segurando o celular com mensagem do CondoOS no WhatsApp" className="w-full h-[340px] object-cover transition-transform duration-700 group-hover:scale-[1.02]" />
+              <Picture
+                src="/images/characters/char-whatsapp-msg"
+                alt="Mão segurando o celular com mensagem do CondoOS no WhatsApp"
+                width={1024}
+                height={1024}
+                className="w-full h-[340px] object-cover transition-transform duration-700 group-hover:scale-[1.02]"
+              />
               <div className="absolute inset-x-0 bottom-0 p-6 bg-gradient-to-t from-dusk-500/70 to-transparent">
                 <div className="text-xs uppercase tracking-[0.14em] text-cream-50/80 font-medium">WhatsApp</div>
                 <h3 className="font-display text-2xl text-cream-50 mt-1">Aviso onde o morador já está.</h3>
@@ -427,10 +451,12 @@ export default function Landing() {
       {/* CTA */}
       <section className="relative px-6 lg:px-12 pb-28">
         <div className="max-w-4xl mx-auto text-center relative">
-          <img
-            src="/images/characters/char-brazilian-family.jpg"
+          <Picture
+            src="/images/characters/char-brazilian-family"
             alt=""
-            aria-hidden
+            decorative
+            width={1024}
+            height={585}
             className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[560px] max-w-full opacity-20 blur-[2px] rounded-[40px] pointer-events-none select-none"
           />
           <h2 className="font-display text-4xl md:text-5xl text-dusk-500 tracking-tight leading-[1.05] relative">
