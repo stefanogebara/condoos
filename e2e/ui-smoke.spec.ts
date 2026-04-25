@@ -121,6 +121,7 @@ test.describe('resident UI pages render', () => {
     { path: '/app/settings',      heading: /Settings|Preferênc/i },
   ];
   test('all resident routes load', async ({ page, request }) => {
+    test.setTimeout(120_000);  // 10 pages — same reason as board routes
     await browserLogin(page, request, 'resident');
 
     for (const p of pages) {
@@ -150,6 +151,7 @@ test.describe('board UI pages render', () => {
     { path: '/board/residents',     heading: /Residents|Moradores/i },
   ];
   test('all board routes load', async ({ page, request }) => {
+    test.setTimeout(120_000);  // 8 pages × ~5s each — needs more than the 45s default
     await browserLogin(page, request, 'admin');
 
     for (const p of pages) {
