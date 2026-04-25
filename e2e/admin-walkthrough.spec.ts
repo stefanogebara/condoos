@@ -27,18 +27,27 @@ async function adminLogin(page: Page, request: APIRequestContext) {
   }, s);
 }
 
+async function nav(page: Page, isMobile: boolean) {
+  if (isMobile) {
+    await page.getByRole('button', { name: /Open menu/i }).click();
+    await expect(page.getByRole('button', { name: /Close menu/i })).toBeVisible();
+  }
+  return page.locator('aside');
+}
+
 // ---------------------------------------------------------------------------
 // /board overview — landing page after login
 // ---------------------------------------------------------------------------
 
-test('admin: overview renders with sidebar nav', async ({ page, request }) => {
+test('admin: overview renders with sidebar nav', async ({ page, request, isMobile }) => {
   await adminLogin(page, request);
   await page.goto('/board');
-  await expect(page.locator('aside').getByText(/Board admin/i).first()).toBeVisible();
+  const menu = await nav(page, isMobile);
+  await expect(menu.getByText(/Board admin/i).first()).toBeVisible();
   // Every primary nav link should be in the sidebar
   const links = ['Overview', 'Suggestions', 'Pending', 'Proposals', 'Assemblies', 'Meetings', 'Announcements', 'Residents'];
   for (const l of links) {
-    await expect(page.locator('aside').getByRole('link', { name: new RegExp(`^${l}$`, 'i') })).toBeVisible();
+    await expect(menu.getByRole('link', { name: new RegExp(`^${l}$`, 'i') })).toBeVisible();
   }
 });
 
@@ -73,7 +82,7 @@ test('admin: proposal detail shows description + comments + voting cards', async
 test('admin: suggestions page surfaces the cluster CTA when items exist', async ({ page, request }) => {
   await adminLogin(page, request);
   await page.goto('/board/suggestions');
-  await expect(page.getByRole('heading', { name: /Suggestions|Sugest/i })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: /Suggestions|Sugest/i })).toBeVisible();
   // The cluster button is only visible if there are open suggestions; the demo seed has some.
   // Either we see it OR we see an empty state — both are valid renders.
   const clusterBtn = page.getByRole('button', { name: /cluster|agrupar/i }).first();
@@ -170,15 +179,15 @@ test('admin: residents page lists residents + has import roster button', async (
 // Cross-cutting — sidebar navigation works between any two pages
 // ---------------------------------------------------------------------------
 
-test('admin: sidebar nav links round-trip between pages', async ({ page, request }) => {
+test('admin: sidebar nav links round-trip between pages', async ({ page, request, isMobile }) => {
   await adminLogin(page, request);
   await page.goto('/board');
-  await page.locator('aside').getByRole('link', { name: /^Proposals$/i }).click();
+  await (await nav(page, isMobile)).getByRole('link', { name: /^Proposals$/i }).click();
   await expect(page).toHaveURL(/\/board\/proposals$/);
-  await page.locator('aside').getByRole('link', { name: /^Assemblies$/i }).click();
+  await (await nav(page, isMobile)).getByRole('link', { name: /^Assemblies$/i }).click();
   await expect(page).toHaveURL(/\/board\/assemblies$/);
-  await page.locator('aside').getByRole('link', { name: /^Residents$/i }).click();
+  await (await nav(page, isMobile)).getByRole('link', { name: /^Residents$/i }).click();
   await expect(page).toHaveURL(/\/board\/residents$/);
-  await page.locator('aside').getByRole('link', { name: /^Overview$/i }).click();
+  await (await nav(page, isMobile)).getByRole('link', { name: /^Overview$/i }).click();
   await expect(page).toHaveURL(/\/board$/);
 });

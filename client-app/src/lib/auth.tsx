@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { apiPost, apiGet } from './api';
+import { identify, reset, track } from './analytics';
 
 export interface User {
   id: number;
@@ -45,27 +46,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const completeLogin = (data: { token: string; user: User }): User => {
+  const completeLogin = (data: { token: string; user: User }, source: 'password' | 'google'): User => {
     localStorage.setItem('condoos_token', data.token);
     localStorage.setItem('condoos_user', JSON.stringify(data.user));
     setUser(data.user);
+    identify({ id: data.user.id, email: data.user.email, role: data.user.role, condominium_id: data.user.condominium_id });
+    track('signup_completed', { source, role: data.user.role, has_condo: data.user.condominium_id != null });
     return data.user;
   };
 
   const login = async (email: string, password: string): Promise<User> => {
     const data = await apiPost<{ token: string; user: User }>('/auth/login', { email, password });
-    return completeLogin(data);
+    return completeLogin(data, 'password');
   };
 
   const loginWithGoogle = async (credential: string): Promise<User> => {
     const data = await apiPost<{ token: string; user: User }>('/auth/google', { credential });
-    return completeLogin(data);
+    return completeLogin(data, 'google');
   };
 
   const logout = () => {
     localStorage.removeItem('condoos_token');
     localStorage.removeItem('condoos_user');
     setUser(null);
+    reset();
     window.location.href = '/login';
   };
 

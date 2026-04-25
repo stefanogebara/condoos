@@ -163,19 +163,125 @@ export async function sendText(to: string, body: string): Promise<SendResult> {
 export async function notifyUsers(userIds: number[], body: string): Promise<{ attempted: number; sent: number; skipped: number }> {
   if (userIds.length === 0) return { attempted: 0, sent: 0, skipped: 0 };
 
-  const placeholders = userIds.map(() => '?').join(',');
+  const ids = Array.from(new Set(userIds));
+  const placeholders = ids.map(() => '?').join(',');
   const rows = db.prepare(
-    `SELECT phone FROM users WHERE id IN (${placeholders}) AND whatsapp_opt_in = 1 AND phone IS NOT NULL AND phone <> ''`
-  ).all(...userIds) as Array<{ phone: string }>;
+    `SELECT id, phone, whatsapp_opt_in
+     FROM users
+     WHERE id IN (${placeholders})`
+  ).all(...ids) as Array<{ id: number; phone: string | null; whatsapp_opt_in: number }>;
+
+  const provider = configuredProvider();
+  const insert = db.prepare(
+    `INSERT INTO notification_outbox
+       (channel, provider, user_id, phone, body, status, last_error, next_attempt_at)
+     VALUES ('whatsapp', ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`
+  );
+
+  const rowById = new Map(rows.map((r) => [r.id, r]));
+  const queuedIds: number[] = [];
+  for (const id of ids) {
+    const row = rowById.get(id);
+    const canSend = !!row?.phone && row.whatsapp_opt_in === 1;
+    const status = canSend ? 'pending' : 'skipped';
+    const reason = row ? 'missing_phone_or_opt_in' : 'unknown_user';
+    const out = insert.run(provider, row?.id || null, row?.phone || null, body, status, canSend ? null : reason);
+    if (canSend) queuedIds.push(Number(out.lastInsertRowid));
+  }
+
+  await processWhatsAppOutbox({ ids: queuedIds });
+
+  if (queuedIds.length === 0) return { attempted: userIds.length, sent: 0, skipped: userIds.length };
+  const finalRows = db.prepare(
+    `SELECT status, COUNT(*) AS count
+     FROM notification_outbox
+     WHERE id IN (${queuedIds.map(() => '?').join(',')})
+     GROUP BY status`
+  ).all(...queuedIds) as Array<{ status: string; count: number }>;
+  const counts = Object.fromEntries(finalRows.map((r) => [r.status, r.count])) as Record<string, number | undefined>;
+  const sent = counts.sent || 0;
+  return {
+    attempted: userIds.length,
+    sent,
+    skipped: userIds.length - queuedIds.length + queuedIds.length - sent,
+  };
+}
+
+interface ProcessOutboxOptions {
+  ids?: number[];
+  limit?: number;
+}
+
+function retryAt(attempts: number): string | null {
+  if (attempts >= 3) return null;
+  const delayMs = Math.min(60 * 60_000, 2 ** Math.max(0, attempts - 1) * 60_000);
+  return new Date(Date.now() + delayMs).toISOString().slice(0, 19).replace('T', ' ');
+}
+
+export async function processWhatsAppOutbox(options: ProcessOutboxOptions = {}): Promise<{ processed: number; sent: number; failed: number; skipped: number }> {
+  const ids = options.ids || [];
+  const rows = ids.length > 0
+    ? db.prepare(
+        `SELECT * FROM notification_outbox
+         WHERE channel='whatsapp'
+           AND id IN (${ids.map(() => '?').join(',')})
+           AND status IN ('pending','failed')
+           AND attempts < max_attempts`
+      ).all(...ids) as any[]
+    : db.prepare(
+        `SELECT * FROM notification_outbox
+         WHERE channel='whatsapp'
+           AND status IN ('pending','failed')
+           AND attempts < max_attempts
+           AND (next_attempt_at IS NULL OR next_attempt_at <= CURRENT_TIMESTAMP)
+         ORDER BY created_at ASC
+         LIMIT ?`
+      ).all(options.limit || 25) as any[];
 
   let sent = 0;
+  let failed = 0;
   let skipped = 0;
-  for (const r of rows) {
-    const result = await sendText(r.phone, body);
-    if (result.ok && !result.skipped) sent += 1;
-    else skipped += 1;
+  for (const row of rows) {
+    db.prepare(
+      `UPDATE notification_outbox
+       SET status='sending', attempts=attempts+1, updated_at=CURRENT_TIMESTAMP
+       WHERE id=?`
+    ).run(row.id);
+
+    const nextAttempt = row.attempts + 1;
+    const result = row.phone
+      ? await sendText(row.phone, row.body)
+      : { ok: false, skipped: 'invalid_to' as const };
+
+    if (result.ok && !result.skipped) {
+      sent += 1;
+      db.prepare(
+        `UPDATE notification_outbox
+         SET status='sent', provider_message_id=?, last_error=NULL, sent_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP
+         WHERE id=?`
+      ).run(result.sid || null, row.id);
+      continue;
+    }
+
+    if (result.skipped) {
+      skipped += 1;
+      db.prepare(
+        `UPDATE notification_outbox
+         SET status='skipped', last_error=?, updated_at=CURRENT_TIMESTAMP
+         WHERE id=?`
+      ).run(result.skipped, row.id);
+      continue;
+    }
+
+    failed += 1;
+    db.prepare(
+      `UPDATE notification_outbox
+       SET status='failed', last_error=?, next_attempt_at=?, updated_at=CURRENT_TIMESTAMP
+       WHERE id=?`
+    ).run(result.error || 'send_failed', retryAt(nextAttempt), row.id);
   }
-  return { attempted: userIds.length, sent, skipped: userIds.length - rows.length + skipped };
+
+  return { processed: rows.length, sent, failed, skipped };
 }
 
 /** Notify all owners of a condo. Used by assembly convocation. */

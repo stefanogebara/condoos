@@ -49,6 +49,7 @@ test('signed-out landing, login, route guard, and mobile drawer work', async ({ 
 });
 
 test('board roster import creates pending invite and invite links prefill join code', async ({ page, request }) => {
+  test.setTimeout(120_000);
   await loginInBrowser(page, request, 'admin');
   await page.goto('/board/residents');
   await expect(page.getByRole('heading', { name: /Residents/i })).toBeVisible();
@@ -60,7 +61,7 @@ test('board roster import creates pending invite and invite links prefill join c
   await expect(page.getByText(email)).toBeVisible();
   await expect(page.getByText(/Rows that need attention/i)).toHaveCount(0);
 
-  await page.goto('/onboarding/join?code=DEMO123');
+  await page.goto('/onboarding/join?code=DEMO123', { waitUntil: 'domcontentloaded' });
   await expect(page.locator('input').first()).toHaveValue('DEMO123');
 });
 

@@ -47,14 +47,15 @@ router.patch('/me', requireAuth, (req: AuthedRequest, res) => {
 
 router.get('/residents', requireAuth, (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
+  const includeEmail = req.user?.role === 'board_admin';
   const rows = db.prepare(
     `SELECT
        usr.id,
        usr.first_name,
        usr.last_name,
        GROUP_CONCAT(DISTINCT un.number) AS unit_number,
-       usr.role,
-       usr.email
+       usr.role
+       ${includeEmail ? ', usr.email' : ''}
      FROM user_unit uu
      JOIN users usr ON usr.id = uu.user_id
      JOIN units un ON un.id = uu.unit_id

@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { Building2, ArrowRight, Shield, User } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { apiGet } from '../lib/api';
+import { track } from '../lib/analytics';
 import Logo from '../components/Logo';
 import Button from '../components/Button';
 import GlassCard from '../components/GlassCard';
@@ -16,17 +17,21 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [loading, setLoading]   = useState(false);
   const [googleClientId, setGoogleClientId] = useState<string | null>(null);
+  const [demoEnabled, setDemoEnabled] = useState(false);
 
   useEffect(() => {
+    track('signup_started');
     // Detect if Google sign-in is configured on the server.
     const envClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
     if (envClientId) {
       setGoogleClientId(envClientId);
-    } else {
-      apiGet<{ google_client_id: string | null; google_enabled: boolean }>('/auth/config')
-        .then((cfg) => { if (cfg.google_enabled && cfg.google_client_id) setGoogleClientId(cfg.google_client_id); })
-        .catch(() => {});
     }
+    apiGet<{ google_client_id: string | null; google_enabled: boolean; demo_enabled?: boolean }>('/auth/config')
+      .then((cfg) => {
+        if (!envClientId && cfg.google_enabled && cfg.google_client_id) setGoogleClientId(cfg.google_client_id);
+        setDemoEnabled(!!cfg.demo_enabled);
+      })
+      .catch(() => {});
   }, []);
 
   // Decide where a freshly-authenticated user should land. Seeded demo users
@@ -96,7 +101,9 @@ export default function Login() {
             A calm, soft place for a building to think.
           </h2>
           <p className="mt-4 text-cream-50/80 text-base">
-            Sign in with a demo account, Google, or manually. No account needed for the demo.
+            {demoEnabled
+              ? 'Sign in with a demo account, Google, or manually. No account needed for the demo.'
+              : 'Sign in with Google or your building credentials.'}
           </p>
           <div className="mt-8 flex gap-2">
             <span className="chip bg-white/15 text-cream-50 border-white/25">claymorphism</span>
@@ -113,35 +120,37 @@ export default function Login() {
           <h1 className="font-display text-4xl text-dusk-500 mb-2">Welcome back</h1>
           <p className="text-dusk-300 mb-8">Sign in to your building.</p>
 
-          <GlassCard className="p-4 mb-6">
-            <div className="text-xs uppercase tracking-wider text-dusk-200 mb-3 px-1">One-click demo</div>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => quickLogin('admin')}
-                disabled={loading}
-                className="group relative flex items-center gap-3 p-3 rounded-2xl bg-white/50 hover:bg-white/70 border border-white/60 transition text-left disabled:opacity-50"
-              >
-                <div className="w-10 h-10 rounded-xl bg-sage-200 flex items-center justify-center text-sage-700 shrink-0"><Shield className="w-5 h-5" /></div>
-                <div className="min-w-0">
-                  <div className="text-sm font-semibold text-dusk-500 truncate">Board admin</div>
-                  <div className="text-xs text-dusk-200 truncate">admin@condoos.dev</div>
-                </div>
-              </button>
-              <button
-                type="button"
-                onClick={() => quickLogin('resident')}
-                disabled={loading}
-                className="group relative flex items-center gap-3 p-3 rounded-2xl bg-white/50 hover:bg-white/70 border border-white/60 transition text-left disabled:opacity-50"
-              >
-                <div className="w-10 h-10 rounded-xl bg-peach-100 flex items-center justify-center text-peach-500 shrink-0"><User className="w-5 h-5" /></div>
-                <div className="min-w-0">
-                  <div className="text-sm font-semibold text-dusk-500 truncate">Resident</div>
-                  <div className="text-xs text-dusk-200 truncate">resident@condoos.dev</div>
-                </div>
-              </button>
-            </div>
-          </GlassCard>
+          {demoEnabled && (
+            <GlassCard className="p-4 mb-6">
+              <div className="text-xs uppercase tracking-wider text-dusk-200 mb-3 px-1">One-click demo</div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => quickLogin('admin')}
+                  disabled={loading}
+                  className="group relative flex items-center gap-3 p-3 rounded-2xl bg-white/50 hover:bg-white/70 border border-white/60 transition text-left disabled:opacity-50"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-sage-200 flex items-center justify-center text-sage-700 shrink-0"><Shield className="w-5 h-5" /></div>
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-dusk-500 truncate">Board admin</div>
+                    <div className="text-xs text-dusk-200 truncate">admin@condoos.dev</div>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => quickLogin('resident')}
+                  disabled={loading}
+                  className="group relative flex items-center gap-3 p-3 rounded-2xl bg-white/50 hover:bg-white/70 border border-white/60 transition text-left disabled:opacity-50"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-peach-100 flex items-center justify-center text-peach-500 shrink-0"><User className="w-5 h-5" /></div>
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-dusk-500 truncate">Resident</div>
+                    <div className="text-xs text-dusk-200 truncate">resident@condoos.dev</div>
+                  </div>
+                </button>
+              </div>
+            </GlassCard>
+          )}
 
           {googleClientId && (
             <>

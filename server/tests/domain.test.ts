@@ -16,6 +16,7 @@ import {
 
 function resetDb() {
   const tables = [
+    'notification_outbox',
     'assembly_votes',
     'assembly_proxies',
     'assembly_attendance',

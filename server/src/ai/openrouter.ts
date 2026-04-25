@@ -11,6 +11,7 @@ const MODEL       = process.env.OPENROUTER_MODEL       || 'anthropic/claude-3.5-
 const CHEAP_MODEL = process.env.OPENROUTER_CHEAP_MODEL || 'deepseek/deepseek-chat';
 const API_KEY     = process.env.OPENROUTER_API_KEY || '';
 const URL = 'https://openrouter.ai/api/v1/chat/completions';
+const TIMEOUT_MS = Number(process.env.OPENROUTER_TIMEOUT_MS || 20_000);
 
 export interface AIMessage {
   role: 'system' | 'user' | 'assistant';
@@ -41,16 +42,24 @@ export async function chat(messages: AIMessage[], opts: AIOpts = {}): Promise<st
   };
   if (opts.jsonMode) body.response_format = { type: 'json_object' };
 
-  const res = await fetch(URL, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${API_KEY}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://condoos.dev',
-      'X-Title': 'CondoOS',
-    },
-    body: JSON.stringify(body),
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  let res;
+  try {
+    res = await fetch(URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${API_KEY}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://condoos.dev',
+        'X-Title': 'CondoOS',
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!res.ok) {
     const txt = await res.text();

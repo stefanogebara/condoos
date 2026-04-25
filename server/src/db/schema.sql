@@ -86,6 +86,33 @@ CREATE TABLE IF NOT EXISTS announcements (
   created_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Durable notification outbox. WhatsApp sends are written here before
+-- delivery so failures can be audited and retried.
+CREATE TABLE IF NOT EXISTS notification_outbox (
+  id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+  channel             TEXT NOT NULL CHECK(channel IN ('whatsapp','email')),
+  provider            TEXT,
+  user_id             INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  phone               TEXT,
+  email               TEXT,
+  body                TEXT NOT NULL,
+  status              TEXT NOT NULL DEFAULT 'pending'
+    CHECK(status IN ('pending','sending','sent','failed','skipped')),
+  attempts            INTEGER NOT NULL DEFAULT 0,
+  max_attempts        INTEGER NOT NULL DEFAULT 3,
+  next_attempt_at     TEXT,
+  provider_message_id TEXT,
+  last_error          TEXT,
+  created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  sent_at             TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_notification_outbox_due
+  ON notification_outbox(channel, status, next_attempt_at, attempts);
+CREATE INDEX IF NOT EXISTS idx_notification_outbox_user
+  ON notification_outbox(user_id, created_at);
+
 -- Suggestions / complaints
 CREATE TABLE IF NOT EXISTS suggestions (
   id               INTEGER PRIMARY KEY AUTOINCREMENT,

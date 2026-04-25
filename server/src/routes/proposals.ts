@@ -51,6 +51,7 @@ router.get('/:id', requireAuth, (req: AuthedRequest, res) => {
      FROM proposal_votes v JOIN users usr ON usr.id = v.user_id
      WHERE v.proposal_id = ?`
   ).all(id);
+  const visibleVoters = req.user!.role === 'board_admin' ? votes : [];
   const myVote = (db.prepare(
     `SELECT choice FROM proposal_votes WHERE proposal_id=? AND user_id=?`
   ).get(id, req.user!.id) as any)?.choice || null;
@@ -63,7 +64,7 @@ router.get('/:id', requireAuth, (req: AuthedRequest, res) => {
     votes: tally,
     quorum,
     comments,
-    voters: votes,
+    voters: visibleVoters,
     my_vote: myVote,
     voter_rights: { ...rights, can_vote, proposal_eligibility: p.voter_eligibility },
   });

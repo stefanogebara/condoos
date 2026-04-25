@@ -8,6 +8,7 @@ import Badge from '../../components/Badge';
 import Avatar from '../../components/Avatar';
 import Button from '../../components/Button';
 import { apiGet, apiPost } from '../../lib/api';
+import { track } from '../../lib/analytics';
 
 interface Comment { id: number; body: string; created_at: string; first_name: string; last_name: string; unit_number: string; }
 interface Proposal {
@@ -115,6 +116,7 @@ export default function ProposalDetail() {
     setBusy(true);
     try {
       await apiPost(`/proposals/${id}/vote`, { choice });
+      track('vote_cast', { proposal_id: Number(id), choice, surface: 'resident_proposal_detail' });
       toast.success(`Voted ${choice}`);
       load();
     } catch (err: any) {

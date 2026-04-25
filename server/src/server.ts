@@ -22,6 +22,7 @@ import aiRoutes from './routes/ai';
 import onboardingRoutes from './routes/onboarding';
 import membershipsRoutes from './routes/memberships';
 import assembliesRoutes from './routes/assemblies';
+import { processWhatsAppOutbox } from './lib/whatsapp';
 
 const app = express();
 const PORT = Number(process.env.PORT || 4000);
@@ -40,6 +41,16 @@ app.use(cors({
     return cb(new Error('cors_origin_not_allowed'));
   },
 }));
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  if (process.env.NODE_ENV === 'production') {
+    res.setHeader('Strict-Transport-Security', 'max-age=15552000; includeSubDomains');
+  }
+  next();
+});
 app.use(express.json({ limit: '2mb' }));
 app.use(morgan('dev'));
 
@@ -72,7 +83,11 @@ app.use((req, res) => res.status(404).json({ success: false, error: 'not_found',
 // Error handler
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error('[err]', err);
-  res.status(err.status || 500).json({ success: false, error: err.message || 'internal_error' });
+  const status = err.status || 500;
+  const error = status >= 500 && process.env.NODE_ENV === 'production'
+    ? 'internal_error'
+    : (err.message || 'internal_error');
+  res.status(status).json({ success: false, error });
 });
 
 app.listen(PORT, () => {
@@ -81,6 +96,10 @@ app.listen(PORT, () => {
   // worst case a vote lands 1 minute late, which is acceptable for a 24h+ window.
   if (process.env.NODE_ENV !== 'test') {
     startVoteCloser(60_000);
+    setInterval(() => {
+      processWhatsAppOutbox({ limit: 25 }).catch((err) => console.warn('[notification-outbox] retry failed:', err?.message || err));
+    }, 60_000);
     console.log('[vote-closer] started (60s interval)');
+    console.log('[notification-outbox] retry loop started (60s interval)');
   }
 });

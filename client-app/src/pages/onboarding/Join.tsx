@@ -7,6 +7,7 @@ import GlassCard from '../../components/GlassCard';
 import Button from '../../components/Button';
 import Badge from '../../components/Badge';
 import { apiGet, apiPost } from '../../lib/api';
+import { track } from '../../lib/analytics';
 
 interface UnitOpt { id: number; floor: number | null; number: string; claims: number; }
 interface CondoInfo {
@@ -44,6 +45,11 @@ export default function Join() {
         unit_id: selectedUnitId,
         relationship,
         primary_contact: true,
+      });
+      track('onboarding_join_succeeded', {
+        membership_status: res.status,
+        relationship,
+        condo_name: condoInfo?.condo?.name,
       });
       if (res.status === 'active') {
         toast.success('You\'re in!');

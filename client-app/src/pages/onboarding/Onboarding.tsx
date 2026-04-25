@@ -6,6 +6,7 @@ import GlassCard from '../../components/GlassCard';
 import Badge from '../../components/Badge';
 import { apiGet } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
+import { track } from '../../lib/analytics';
 
 interface Membership {
   id: number;
@@ -24,6 +25,7 @@ export default function Onboarding() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    track('onboarding_view');
     apiGet<Membership[]>('/onboarding/me')
       .then((rows) => {
         setMemberships(rows);
@@ -74,7 +76,7 @@ export default function Onboarding() {
           )}
 
           <div className="grid md:grid-cols-2 gap-5">
-            <Link to="/onboarding/join">
+            <Link to="/onboarding/join" onClick={() => track('onboarding_join_clicked')}>
               <GlassCard variant="clay" hover className="p-8 h-full">
                 <div className="w-14 h-14 rounded-2xl bg-sage-200 text-sage-700 flex items-center justify-center mb-5">
                   <LogIn className="w-7 h-7" />
@@ -89,7 +91,7 @@ export default function Onboarding() {
               </GlassCard>
             </Link>
 
-            <Link to="/onboarding/create">
+            <Link to="/onboarding/create" onClick={() => track('onboarding_create_clicked')}>
               <GlassCard variant="clay-sage" hover className="p-8 h-full">
                 <div className="w-14 h-14 rounded-2xl bg-dusk-400/90 text-cream-50 flex items-center justify-center mb-5">
                   <Plus className="w-7 h-7" />

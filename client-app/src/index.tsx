@@ -4,6 +4,9 @@ import { BrowserRouter } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import App from './App';
 import './index.css';
+import { initAnalytics } from './lib/analytics';
+
+initAnalytics();
 
 const root = ReactDOM.createRoot(document.getElementById('root') as HTMLElement);
 root.render(

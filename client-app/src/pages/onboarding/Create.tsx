@@ -7,6 +7,7 @@ import GlassCard from '../../components/GlassCard';
 import Button from '../../components/Button';
 import Badge from '../../components/Badge';
 import { apiPost } from '../../lib/api';
+import { track } from '../../lib/analytics';
 
 export default function Create() {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
@@ -37,6 +38,12 @@ export default function Create() {
         '/onboarding/create-building',
         form,
       );
+      track('onboarding_create_succeeded', {
+        condo_id: res.condoId,
+        floors: form.floors,
+        units_per_floor: form.unitsPerFloor,
+        voting_model: form.votingModel,
+      });
       setInviteCode(res.inviteCode);
       setStep(4);
       // Refresh our JWT-bound user (role is now board_admin).

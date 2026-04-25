@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { track } from '../lib/analytics';
 import { ArrowRight, Users, Vote, Sparkles, Calendar, Package, Waves, Gavel, MessageCircle, ShieldCheck, FileText, Check } from 'lucide-react';
 import Logo from '../components/Logo';
 import Button from '../components/Button';
@@ -9,6 +10,7 @@ import Badge from '../components/Badge';
 import Picture from '../components/Picture';
 
 export default function Landing() {
+  useEffect(() => { track('landing_view'); }, []);
   return (
     <div className="relative min-h-screen overflow-x-hidden">
       {/* Nav */}
@@ -48,12 +50,12 @@ export default function Landing() {
             </p>
 
             <div className="mt-10 flex items-center gap-3 flex-wrap">
-              <Link to="/login">
+              <Link to="/login" onClick={() => track('cta_clicked', { location: 'hero', label: 'testar_a_demo' })}>
                 <Button variant="primary" size="lg" rightIcon={<ArrowRight className="w-5 h-5" />}>
                   Testar a demo
                 </Button>
               </Link>
-              <a href="#features">
+              <a href="#features" onClick={() => track('cta_clicked', { location: 'hero', label: 'ver_por_dentro' })}>
                 <Button variant="ghost" size="lg">Ver por dentro</Button>
               </a>
             </div>

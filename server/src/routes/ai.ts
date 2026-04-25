@@ -2,6 +2,7 @@ import { Router } from 'express';
 import db from '../db';
 import { requireAuth, requireRole, AuthedRequest, getActiveCondoId } from '../lib/auth';
 import { ok, fail, asyncHandler } from '../lib/respond';
+import { createRateLimit } from '../lib/rate-limit';
 import { computeQuorum, getProposalVoteTally, resolveFinalOutcome } from '../lib/proposal-tally';
 import { chat, parseJsonLoose } from '../ai/openrouter';
 import {
@@ -26,6 +27,23 @@ import {
 } from '../ai/fallbacks';
 
 const router = Router();
+const aiRateLimit = createRateLimit({
+  keyPrefix: 'ai',
+  windowMs: 60 * 60_000,
+  max: 60,
+  key: (req) => String((req as AuthedRequest).user?.id || req.ip || 'unknown'),
+});
+
+function boundedText(value: unknown, max: number): { ok: true; text: string } | { ok: false; error: 'missing_text' | 'text_too_long' } {
+  const text = String(value || '').trim();
+  if (!text) return { ok: false, error: 'missing_text' };
+  if (text.length > max) return { ok: false, error: 'text_too_long' };
+  return { ok: true, text };
+}
+
+function clip(value: unknown, max: number): string {
+  return String(value || '').slice(0, max);
+}
 
 // Helper to try AI, fall back silently on any error.
 async function tryAI<T>(
@@ -43,9 +61,7 @@ async function tryAI<T>(
     if (opts?.jsonMode) {
       const parsed = parseJsonLoose<T>(raw);
       if (!parsed) {
-        // One-line log (Fly splits on newlines) so we can actually see the payload
-        console.warn(`[${label}] JSON parse failed, using fallback. First 400 chars:`,
-          raw.slice(0, 400).replace(/\r?\n/g, '\\n'));
+        console.warn(`[${label}] JSON parse failed, using fallback. length=${raw.length}`);
         return fallback();
       }
       return parsed;
@@ -58,9 +74,10 @@ async function tryAI<T>(
 }
 
 // 1. Draft a proposal from free-text resident suggestion
-router.post('/proposal-draft', requireAuth, asyncHandler(async (req: AuthedRequest, res) => {
-  const text = (req.body?.text || '').trim();
-  if (!text) return fail(res, 'missing_text');
+router.post('/proposal-draft', requireAuth, aiRateLimit, asyncHandler(async (req: AuthedRequest, res) => {
+  const input = boundedText(req.body?.text, 4_000);
+  if (!input.ok) return fail(res, input.error, input.error === 'text_too_long' ? 413 : 400);
+  const text = input.text;
   const out = await tryAI(
     [
       { role: 'system', content: PROPOSAL_DRAFT_SYS },
@@ -92,12 +109,13 @@ function fallbackClassify(text: string): { category: string; confidence: number;
   return { category: 'maintenance', confidence: 0.3, reasoning: 'default fallback — no clear keywords' };
 }
 
-router.post('/proposal-classify', requireAuth, asyncHandler(async (req: AuthedRequest, res) => {
+router.post('/proposal-classify', requireAuth, aiRateLimit, asyncHandler(async (req: AuthedRequest, res) => {
   const text = typeof req.body?.text === 'string'
     ? req.body.text
     : [req.body?.title, req.body?.description].filter(Boolean).join('\n\n');
-  const trimmed = String(text || '').trim();
-  if (!trimmed) return fail(res, 'missing_text');
+  const input = boundedText(text, 3_000);
+  if (!input.ok) return fail(res, input.error, input.error === 'text_too_long' ? 413 : 400);
+  const trimmed = input.text;
 
   const out = await tryAI<{ category: string; confidence: number; reasoning: string }>(
     [
@@ -118,7 +136,7 @@ router.post('/proposal-classify', requireAuth, asyncHandler(async (req: AuthedRe
 }));
 
 // 2. Cluster all open suggestions for the condo
-router.post('/cluster-suggestions', requireAuth, requireRole('board_admin'), asyncHandler(async (req: AuthedRequest, res) => {
+router.post('/cluster-suggestions', requireAuth, aiRateLimit, requireRole('board_admin'), asyncHandler(async (req: AuthedRequest, res) => {
   const u = req.user!;
   const rows = db.prepare(
     `SELECT id, body FROM suggestions
@@ -128,7 +146,7 @@ router.post('/cluster-suggestions', requireAuth, requireRole('board_admin'), asy
 
   if (rows.length === 0) return ok(res, { clusters: [], unclustered_ids: [] });
 
-  const payload = rows.map((r) => `#${r.id}: ${r.body}`).join('\n');
+  const payload = rows.map((r) => `#${r.id}: ${clip(r.body, 1_000)}`).join('\n');
   const out = await tryAI<any>(
     [
       { role: 'system', content: CLUSTER_SYS },
@@ -162,7 +180,7 @@ router.post('/cluster-suggestions', requireAuth, requireRole('board_admin'), asy
 }));
 
 // 3. Summarize a proposal's discussion thread
-router.post('/proposals/:id/summarize-thread', requireAuth, asyncHandler(async (req: AuthedRequest, res) => {
+router.post('/proposals/:id/summarize-thread', requireAuth, aiRateLimit, asyncHandler(async (req: AuthedRequest, res) => {
   const u = req.user!;
   const id = Number(req.params.id);
   const prop = db.prepare(
@@ -179,11 +197,11 @@ router.post('/proposals/:id/summarize-thread', requireAuth, asyncHandler(async (
     return ok(res, { summary: 'No discussion yet.', points_of_agreement: [], points_of_disagreement: [], open_questions: [] });
   }
 
-  const formatted = comments.map((c) => `- ${c.first_name} ${c.last_name}: ${c.body}`).join('\n');
+  const formatted = comments.slice(0, 100).map((c) => `- ${c.first_name} ${c.last_name}: ${clip(c.body, 1_000)}`).join('\n');
   const out = await tryAI<any>(
     [
       { role: 'system', content: THREAD_SUMMARY_SYS },
-      { role: 'user', content: `Proposal: ${prop.title}\n\nDescription: ${prop.description}\n\nDiscussion:\n${formatted}` },
+      { role: 'user', content: `Proposal: ${clip(prop.title, 300)}\n\nDescription: ${clip(prop.description, 4_000)}\n\nDiscussion:\n${formatted}` },
     ],
     () => fallbackThreadSummary(comments.length),
     { jsonMode: true, maxTokens: 800, label: 'summarize-thread' }
@@ -194,7 +212,7 @@ router.post('/proposals/:id/summarize-thread', requireAuth, asyncHandler(async (
 }));
 
 // 4. Summarize a meeting + generate action items + draft resident announcement
-router.post('/meetings/:id/summarize', requireAuth, requireRole('board_admin'), asyncHandler(async (req: AuthedRequest, res) => {
+router.post('/meetings/:id/summarize', requireAuth, aiRateLimit, requireRole('board_admin'), asyncHandler(async (req: AuthedRequest, res) => {
   const u = req.user!;
   const id = Number(req.params.id);
   const m = db.prepare(
@@ -206,9 +224,9 @@ router.post('/meetings/:id/summarize', requireAuth, requireRole('board_admin'), 
   const out = await tryAI<any>(
     [
       { role: 'system', content: MEETING_SUMMARY_SYS },
-      { role: 'user', content: `Meeting: ${m.title}\nAgenda: ${m.agenda || '(none)'}\n\nRaw notes:\n${m.raw_notes}` },
+      { role: 'user', content: `Meeting: ${clip(m.title, 300)}\nAgenda: ${clip(m.agenda || '(none)', 2_000)}\n\nRaw notes:\n${clip(m.raw_notes, 12_000)}` },
     ],
-    () => fallbackMeetingSummary(m.raw_notes),
+    () => fallbackMeetingSummary(clip(m.raw_notes, 12_000)),
     { jsonMode: true, maxTokens: 1800, label: 'meetings/summarize' }
   );
 
@@ -227,7 +245,7 @@ router.post('/meetings/:id/summarize', requireAuth, requireRole('board_admin'), 
 }));
 
 // 5. Plain-language explainer for residents
-router.post('/proposals/:id/explain', requireAuth, asyncHandler(async (req: AuthedRequest, res) => {
+router.post('/proposals/:id/explain', requireAuth, aiRateLimit, asyncHandler(async (req: AuthedRequest, res) => {
   const u = req.user!;
   const id = Number(req.params.id);
   const p = db.prepare(
@@ -238,7 +256,7 @@ router.post('/proposals/:id/explain', requireAuth, asyncHandler(async (req: Auth
   const text = await tryAI<string>(
     [
       { role: 'system', content: EXPLAIN_SYS },
-      { role: 'user', content: `Title: ${p.title}\n\nDescription: ${p.description}` },
+      { role: 'user', content: `Title: ${clip(p.title, 300)}\n\nDescription: ${clip(p.description, 4_000)}` },
     ],
     () => fallbackExplain(p.title, p.description),
     { maxTokens: 500, label: 'explain' }
@@ -249,7 +267,7 @@ router.post('/proposals/:id/explain', requireAuth, asyncHandler(async (req: Auth
 }));
 
 // 6. Board-ready decision summary after vote closes
-router.post('/proposals/:id/decision-summary', requireAuth, requireRole('board_admin'), asyncHandler(async (req: AuthedRequest, res) => {
+router.post('/proposals/:id/decision-summary', requireAuth, aiRateLimit, requireRole('board_admin'), asyncHandler(async (req: AuthedRequest, res) => {
   const u = req.user!;
   const id = Number(req.params.id);
   const p = db.prepare(
@@ -269,7 +287,7 @@ router.post('/proposals/:id/decision-summary', requireAuth, requireRole('board_a
       { role: 'system', content: DECISION_SUMMARY_SYS },
       {
         role: 'user',
-        content: `Proposal: ${p.title}\n\nDescription: ${p.description}\n\nFinal vote: ${votes.yes} yes, ${votes.no} no, ${votes.abstain} abstain. Weighted tally: ${votes.yes_weight} yes, ${votes.no_weight} no, ${votes.abstain_weight} abstain (outcome: ${outcome}).\n\nRepresentative comments:\n${comments.map((c) => `- ${c.body}`).join('\n')}`,
+        content: `Proposal: ${clip(p.title, 300)}\n\nDescription: ${clip(p.description, 4_000)}\n\nFinal vote: ${votes.yes} yes, ${votes.no} no, ${votes.abstain} abstain. Weighted tally: ${votes.yes_weight} yes, ${votes.no_weight} no, ${votes.abstain_weight} abstain (outcome: ${outcome}).\n\nRepresentative comments:\n${comments.map((c) => `- ${clip(c.body, 1_000)}`).join('\n')}`,
       },
     ],
     () => fallbackDecisionSummary(p.title, outcome, votes),
@@ -294,7 +312,7 @@ router.post('/proposals/:id/decision-summary', requireAuth, requireRole('board_a
 // =========================================================================
 
 // Draft an agenda from the assembly title + condo's open proposals.
-router.post('/assemblies/:id/suggest-agenda', requireAuth, requireRole('board_admin'), asyncHandler(async (req: AuthedRequest, res) => {
+router.post('/assemblies/:id/suggest-agenda', requireAuth, aiRateLimit, requireRole('board_admin'), asyncHandler(async (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const id = Number(req.params.id);
   const a = db.prepare(
@@ -313,7 +331,7 @@ router.post('/assemblies/:id/suggest-agenda', requireAuth, requireRole('board_ad
     condo_name: a.condo_name,
     assembly_title: a.title,
     assembly_kind: a.kind,
-    open_proposals: openProposals,
+    open_proposals: openProposals.map((p) => ({ ...p, title: clip(p.title, 300), description: clip(p.description, 1_500) })),
   };
 
   const out = await tryAI<{ items: Array<{ title: string; description: string; item_type: string; required_majority: string }> }>(
@@ -340,7 +358,7 @@ router.post('/assemblies/:id/suggest-agenda', requireAuth, requireRole('board_ad
 }));
 
 // Polish the auto-generated ata through the LLM. Falls back to the raw markdown.
-router.post('/assemblies/:id/draft-ata', requireAuth, requireRole('board_admin'), asyncHandler(async (req: AuthedRequest, res) => {
+router.post('/assemblies/:id/draft-ata', requireAuth, aiRateLimit, requireRole('board_admin'), asyncHandler(async (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const id = Number(req.params.id);
   const a = db.prepare(
@@ -353,7 +371,7 @@ router.post('/assemblies/:id/draft-ata', requireAuth, requireRole('board_admin')
   const polished = await tryAI<string>(
     [
       { role: 'system', content: ASSEMBLY_ATA_SYS },
-      { role: 'user', content: rawAta },
+      { role: 'user', content: clip(rawAta, 12_000) },
     ],
     () => rawAta,
     { jsonMode: false, maxTokens: 1500, label: 'assembly-ata' }

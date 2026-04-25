@@ -7,6 +7,7 @@ import GlassCard from '../../components/GlassCard';
 import Button from '../../components/Button';
 import Badge from '../../components/Badge';
 import { apiPost } from '../../lib/api';
+import { track } from '../../lib/analytics';
 
 interface Draft {
   title: string;
@@ -35,6 +36,7 @@ export default function Suggest() {
       setDrafting(true);
       try {
         const d = await apiPost<Draft>('/ai/proposal-draft', { text });
+        track('proposal_drafted', { category: d.category, has_estimate: d.estimated_cost != null, fallback: !!d._fallback });
         setDraft(d);
       } finally { setDrafting(false); }
     } finally { setSaving(false); }
@@ -52,6 +54,7 @@ export default function Suggest() {
         ai_drafted: true,
         source_suggestion_id: suggestionId,
       });
+      track('proposal_published', { proposal_id: res.id, category: draft.category, ai_drafted: true });
       toast.success('Proposal created — now in discussion');
       navigate(`/app/proposals/${res.id}`);
     } finally { setSaving(false); }

@@ -26,20 +26,29 @@ async function residentLogin(page: Page, request: APIRequestContext) {
   }, s);
 }
 
+async function nav(page: Page, isMobile: boolean) {
+  if (isMobile) {
+    await page.getByRole('button', { name: /Open menu/i }).click();
+    await expect(page.getByRole('button', { name: /Close menu/i })).toBeVisible();
+  }
+  return page.locator('aside');
+}
+
 // ---------------------------------------------------------------------------
 // /app overview — greeting + sidebar
 // ---------------------------------------------------------------------------
 
-test('resident: overview greets by name + shows full sidebar', async ({ page, request }) => {
+test('resident: overview greets by name + shows full sidebar', async ({ page, request, isMobile }) => {
   await residentLogin(page, request);
   await page.goto('/app');
-  await expect(page.locator('aside').getByText(/Resident/i).first()).toBeVisible();
+  const menu = await nav(page, isMobile);
+  await expect(menu.getByText(/Resident/i).first()).toBeVisible();
   // Greet by name (Maya is the seeded resident)
   await expect(page.getByRole('heading', { name: /Good (morning|afternoon|evening), Maya|Bom dia, Maya|Boa tarde, Maya|Boa noite, Maya/i }).first()).toBeVisible();
   // All 10 nav items in sidebar
   const links = ['Overview', 'Packages', 'Visitors', 'Amenities', 'Announcements', 'Proposals', 'Assemblies', 'Meetings', 'Suggest', 'Settings'];
   for (const l of links) {
-    await expect(page.locator('aside').getByRole('link', { name: new RegExp(`^${l}$`, 'i') })).toBeVisible();
+    await expect(menu.getByRole('link', { name: new RegExp(`^${l}$`, 'i') })).toBeVisible();
   }
 });
 
@@ -151,15 +160,15 @@ test('resident: settings page has profile + WhatsApp section + Save', async ({ p
 // Sidebar nav round-trips
 // ---------------------------------------------------------------------------
 
-test('resident: sidebar nav round-trips between common pages', async ({ page, request }) => {
+test('resident: sidebar nav round-trips between common pages', async ({ page, request, isMobile }) => {
   await residentLogin(page, request);
   await page.goto('/app');
-  await page.locator('aside').getByRole('link', { name: /^Proposals$/i }).click();
+  await (await nav(page, isMobile)).getByRole('link', { name: /^Proposals$/i }).click();
   await expect(page).toHaveURL(/\/app\/proposals$/);
-  await page.locator('aside').getByRole('link', { name: /^Assemblies$/i }).click();
+  await (await nav(page, isMobile)).getByRole('link', { name: /^Assemblies$/i }).click();
   await expect(page).toHaveURL(/\/app\/assemblies$/);
-  await page.locator('aside').getByRole('link', { name: /^Settings$/i }).click();
+  await (await nav(page, isMobile)).getByRole('link', { name: /^Settings$/i }).click();
   await expect(page).toHaveURL(/\/app\/settings$/);
-  await page.locator('aside').getByRole('link', { name: /^Overview$/i }).click();
+  await (await nav(page, isMobile)).getByRole('link', { name: /^Overview$/i }).click();
   await expect(page).toHaveURL(/\/app$/);
 });

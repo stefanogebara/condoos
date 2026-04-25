@@ -7,6 +7,7 @@ import GlassCard from '../../components/GlassCard';
 import Button from '../../components/Button';
 import Badge from '../../components/Badge';
 import { apiGet, apiPost } from '../../lib/api';
+import { track } from '../../lib/analytics';
 
 interface Assembly {
   id: number;
@@ -55,6 +56,7 @@ export default function BoardAssemblies() {
         first_call_at: firstIso,
         second_call_at: secondIso,
       });
+      track('assembly_created', { assembly_id: created.id, kind: form.kind });
       toast.success('Assembly created — add items to the agenda');
       setForm({ title: '', kind: 'ordinary', first_call_at: '', second_call_at: '' });
       setShowForm(false);

@@ -126,6 +126,30 @@ test.describe('tenant isolation', () => {
       expect([404, 400, 409], `${a.method.toUpperCase()} ${a.path} must not 500 (got ${r.status()})`).toContain(r.status());
     }
   });
+
+  test('resident directory hides emails and vote identities from residents', async ({ request }) => {
+    const resident = await loginApi(request, 'resident@condoos.dev', 'resident123');
+    const admin = await loginApi(request, 'admin@condoos.dev', 'admin123');
+    const residentHeaders = { Authorization: `Bearer ${resident.token}` };
+    const adminHeaders = { Authorization: `Bearer ${admin.token}` };
+
+    const directory = await request.get(`${apiURL}/users/residents`, { headers: residentHeaders });
+    expect(directory.ok()).toBeTruthy();
+    const rows = (await directory.json()).data as any[];
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.some((r) => Object.prototype.hasOwnProperty.call(r, 'email'))).toBe(false);
+
+    const adminDirectory = await request.get(`${apiURL}/users/residents`, { headers: adminHeaders });
+    expect(adminDirectory.ok()).toBeTruthy();
+    const adminRows = (await adminDirectory.json()).data as any[];
+    expect(adminRows.some((r) => typeof r.email === 'string')).toBe(true);
+
+    const proposals = await request.get(`${apiURL}/proposals`, { headers: residentHeaders });
+    const first = ((await proposals.json()).data as any[])[0];
+    const detail = await request.get(`${apiURL}/proposals/${first.id}`, { headers: residentHeaders });
+    expect(detail.ok()).toBeTruthy();
+    expect((await detail.json()).data.voters).toEqual([]);
+  });
 });
 
 // ---------------------------------------------------------------------------
