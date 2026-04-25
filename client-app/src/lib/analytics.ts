@@ -1,54 +1,66 @@
-// PostHog wrapper. Lazy-loaded so it doesn't bloat the initial bundle —
-// posthog-js (~175KB) only ships when VITE_POSTHOG_KEY is set, and only
-// after the first paint. No-ops when the key is missing.
+// Lightweight PostHog event tracker — direct POST to /i/v0/e/.
+// No session recording, no surveys, no autocapture. Just funnel events.
+// Avoids posthog-js SDK quirks where captures silently no-op despite
+// _loaded + opted_out=false. ~1KB instead of 175KB.
+//
+// No-ops cleanly when VITE_POSTHOG_KEY is missing.
 
 const KEY  = import.meta.env.VITE_POSTHOG_KEY  as string | undefined;
 const HOST = (import.meta.env.VITE_POSTHOG_HOST as string | undefined) || 'https://us.i.posthog.com';
 
-type PostHog = typeof import('posthog-js').default;
-let phPromise: Promise<PostHog> | null = null;
+const STORAGE_KEY = 'condoos_ph_distinct_id';
+let distinctId: string | null = null;
+let identifiedId: string | null = null;
+let userProps: Record<string, unknown> | null = null;
 
-function ph(): Promise<PostHog> | null {
-  if (!KEY) return null;
-  if (phPromise) return phPromise;
-  phPromise = import('posthog-js').then((m) => {
-    m.default.init(KEY!, {
-      api_host: HOST,
-      person_profiles: 'identified_only',
-      capture_pageview: false,
-      capture_pageleave: true,
-      autocapture: false,
-    });
-    // Tag every event so CondoOS data is filterable in shared PostHog projects.
-    m.default.register({ app_name: 'condoos' });
-    return m.default;
-  });
-  return phPromise;
+function uuid(): string {
+  // RFC4122 v4-ish — good enough for distinct_id generation.
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'anon-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
-/** Initialize once on app boot. Safe to call repeatedly. No-op without a key. */
+function getDistinctId(): string {
+  if (identifiedId) return identifiedId;
+  if (distinctId) return distinctId;
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) { distinctId = stored; return stored; }
+  } catch { /* localStorage may be disabled */ }
+  const fresh = uuid();
+  distinctId = fresh;
+  try { localStorage.setItem(STORAGE_KEY, fresh); } catch { /* ignore */ }
+  return fresh;
+}
+
 export function initAnalytics() {
-  // Defer to next tick so we never block first paint on the import.
-  if (KEY) setTimeout(() => { ph(); }, 0);
+  if (!KEY) return;
+  // Eagerly read/generate the distinct_id so we have a stable id before the
+  // first track() call.
+  getDistinctId();
 }
 
-/**
- * Identify a user after auth. We use `user_<id>` as the distinct_id so we
- * never send raw email as the join key; the email is sent as a property.
- */
 export function identify(user: { id: number | string; email?: string; role?: string; condominium_id?: number | null }) {
-  ph()?.then((p) => p.identify(`user_${user.id}`, {
+  if (!KEY) return;
+  identifiedId = `user_${user.id}`;
+  userProps = {
     email: user.email,
     role: user.role,
     condominium_id: user.condominium_id ?? null,
-  }));
+  };
+  // Send a $identify event so PostHog associates the anonymous distinct_id
+  // with the new user_<id> identity.
+  send('$identify', { $set: userProps, $anon_distinct_id: distinctId });
 }
 
 export function reset() {
-  ph()?.then((p) => p.reset());
+  identifiedId = null;
+  userProps = null;
+  try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
+  distinctId = null;
 }
 
-/** Funnel events — keep names stable, they become PostHog dashboard primary keys. */
 export type AnalyticsEvent =
   | 'landing_view'
   | 'cta_clicked'
@@ -66,6 +78,48 @@ export type AnalyticsEvent =
   | 'assembly_convoked'
   | 'whatsapp_optin_set';
 
-export function track(event: AnalyticsEvent, properties?: Record<string, unknown>) {
-  ph()?.then((p) => p.capture(event, properties));
+export function track(event: AnalyticsEvent | string, properties?: Record<string, unknown>) {
+  send(event, properties);
+}
+
+function send(event: string, properties?: Record<string, unknown>) {
+  if (!KEY) return;
+  const body = {
+    api_key: KEY,
+    event,
+    distinct_id: getDistinctId(),
+    timestamp: new Date().toISOString(),
+    properties: {
+      app_name: 'condoos',
+      ...(userProps || {}),
+      ...(properties || {}),
+      $current_url: typeof window !== 'undefined' ? window.location.href : undefined,
+      $host: typeof window !== 'undefined' ? window.location.host : undefined,
+    },
+  };
+
+  // Use sendBeacon when leaving the page so the request survives unload.
+  // Otherwise use fetch with keepalive (also survives unload, but lets us
+  // see the request in DevTools / Playwright network listeners).
+  const url = `${HOST}/i/v0/e/`;
+  try {
+    const blob = JSON.stringify(body);
+    if (typeof navigator !== 'undefined' && (document.visibilityState === 'hidden' || (window as any).__phUnloading)) {
+      navigator.sendBeacon?.(url, new Blob([blob], { type: 'application/json' }));
+      return;
+    }
+    fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: blob,
+      keepalive: true,
+      mode: 'cors',
+      credentials: 'omit',
+    }).catch(() => { /* swallow — analytics must never break the app */ });
+  } catch { /* ignore */ }
+}
+
+// Hook page-unload so any final track() in flight uses sendBeacon.
+if (typeof window !== 'undefined') {
+  window.addEventListener('pagehide', () => { (window as any).__phUnloading = true; });
 }
