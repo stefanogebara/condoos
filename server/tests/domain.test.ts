@@ -13,10 +13,24 @@ import {
   generateAtaMarkdown,
   listEligibleOwners,
 } from '../src/lib/assembly';
+import {
+  listUnitMembershipHistory,
+  moveOutMembership,
+  reactivateMembership,
+  transferUnit,
+} from '../src/lib/memberships';
+import { audit, auditRowsToCsv, listAuditRows } from '../src/lib/audit';
 
 function resetDb() {
   const tables = [
+    'ticket_attachments',
+    'ticket_comments',
+    'tickets',
+    'payments',
+    'invoices',
+    'dues_schedules',
     'notification_outbox',
+    'audit_log',
     'assembly_votes',
     'assembly_proxies',
     'assembly_attendance',
@@ -240,6 +254,133 @@ test('proposal tally applies eligibility and voting weights consistently', () =>
   assert.equal(ownersOnlyTally.no, 0);
   assert.equal(canVote(ownerId, condoId, 'owners_only'), true);
   assert.equal(canVote(tenantId, condoId, 'owners_only'), false);
+});
+
+test('move-out clears active access and keeps the unit reusable through invites', () => {
+  resetDb();
+  const { condoId, unit101 } = createCondoFixture();
+  const oldResident = createUser('old@example.com');
+  db.prepare(
+    `INSERT INTO user_unit (user_id, unit_id, relationship, status, primary_contact, voting_weight, move_in_date)
+     VALUES (?, ?, 'tenant', 'active', 1, 1.0, CURRENT_TIMESTAMP)`
+  ).run(oldResident, unit101);
+  db.prepare(`UPDATE users SET condominium_id = ?, unit_number = '101' WHERE id = ?`).run(condoId, oldResident);
+  const membership = db.prepare(`SELECT id FROM user_unit WHERE user_id = ?`).get(oldResident) as { id: number };
+
+  const moved = moveOutMembership(membership.id, condoId, '2026-05-01T00:00:00.000Z');
+  assert.equal(moved.ok, true);
+
+  const after = db.prepare(
+    `SELECT status, primary_contact, move_out_date FROM user_unit WHERE id = ?`
+  ).get(membership.id) as any;
+  assert.deepEqual(after, {
+    status: 'moved_out',
+    primary_contact: 0,
+    move_out_date: '2026-05-01T00:00:00.000Z',
+  });
+  const user = db.prepare(`SELECT condominium_id, unit_number FROM users WHERE id = ?`).get(oldResident) as any;
+  assert.deepEqual(user, { condominium_id: null, unit_number: null });
+
+  const newResident = {
+    id: createUser('new@example.com'),
+    email: 'new@example.com',
+    condominium_id: null,
+    unit_number: null,
+  };
+  db.prepare(
+    `INSERT INTO invites (condominium_id, email, unit_id, role, relationship, primary_contact, voting_weight, status)
+     VALUES (?, ?, ?, 'resident', 'tenant', 1, 1.0, 'pending')`
+  ).run(condoId, newResident.email, unit101);
+
+  assert.equal(claimPendingInvitesForUser(newResident), 1);
+  const replacement = db.prepare(
+    `SELECT status, relationship, primary_contact FROM user_unit WHERE user_id = ? AND unit_id = ?`
+  ).get(newResident.id, unit101) as any;
+  assert.deepEqual(replacement, { status: 'active', relationship: 'tenant', primary_contact: 1 });
+});
+
+test('reactivate and transfer-unit preserve membership history', () => {
+  resetDb();
+  const { condoId, unit101, unit102 } = createCondoFixture();
+  const resident = createUser('resident@example.com');
+  db.prepare(
+    `INSERT INTO user_unit (user_id, unit_id, relationship, status, primary_contact, voting_weight, move_in_date)
+     VALUES (?, ?, 'owner', 'active', 1, 1.5, CURRENT_TIMESTAMP)`
+  ).run(resident, unit101);
+  db.prepare(`UPDATE users SET condominium_id = ?, unit_number = '101' WHERE id = ?`).run(condoId, resident);
+  const membership = db.prepare(`SELECT id FROM user_unit WHERE user_id = ?`).get(resident) as { id: number };
+
+  assert.equal(moveOutMembership(membership.id, condoId, '2026-05-01T00:00:00.000Z').ok, true);
+  assert.equal(reactivateMembership(membership.id, condoId).ok, true);
+  assert.equal((db.prepare(`SELECT status FROM user_unit WHERE id = ?`).get(membership.id) as any).status, 'active');
+
+  const transfer = transferUnit({
+    fromMembershipId: membership.id,
+    toUnitId: unit102,
+    condoId,
+    moveOutDate: '2026-06-01T00:00:00.000Z',
+  });
+  assert.equal(transfer.ok, true);
+
+  const oldMembership = db.prepare(`SELECT status, primary_contact FROM user_unit WHERE id = ?`).get(membership.id) as any;
+  assert.deepEqual(oldMembership, { status: 'moved_out', primary_contact: 0 });
+  const active = db.prepare(
+    `SELECT unit_id, relationship, status, primary_contact, voting_weight FROM user_unit WHERE id = ?`
+  ).get((transfer as any).new_membership_id) as any;
+  assert.deepEqual(active, {
+    unit_id: unit102,
+    relationship: 'owner',
+    status: 'active',
+    primary_contact: 1,
+    voting_weight: 1.5,
+  });
+  const user = db.prepare(`SELECT condominium_id, unit_number FROM users WHERE id = ?`).get(resident) as any;
+  assert.deepEqual(user, { condominium_id: condoId, unit_number: '102' });
+
+  const unitHistory = listUnitMembershipHistory(unit101, condoId);
+  assert.equal(unitHistory.length, 1);
+  assert.equal(unitHistory[0].status, 'moved_out');
+  assert.equal(unitHistory[0].email, 'resident@example.com');
+});
+
+test('audit log filters by action and escapes CSV metadata', () => {
+  resetDb();
+  const { condoId, unit101 } = createCondoFixture();
+  const actorId = createUser('admin@example.com', 'board_admin');
+  db.prepare(`UPDATE users SET condominium_id = ? WHERE id = ?`).run(condoId, actorId);
+  db.prepare(
+    `INSERT INTO user_unit (user_id, unit_id, relationship, status, primary_contact, voting_weight)
+     VALUES (?, ?, 'owner', 'active', 1, 1.0)`
+  ).run(actorId, unit101);
+
+  const req = {
+    user: {
+      id: actorId,
+      email: 'admin@example.com',
+      condominium_id: condoId,
+    },
+    ip: '203.0.113.25',
+    socket: {},
+  } as any;
+  const id = audit(req, {
+    action: 'test.write',
+    target_type: 'fixture',
+    target_id: 42,
+    metadata: { note: 'comma, quote " and newline\nok' },
+  });
+
+  const rows = listAuditRows({ condominium_id: condoId, action: 'test.write' });
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].id, id);
+  assert.equal(rows[0].actor_email, 'admin@example.com');
+  assert.equal(rows[0].target_id, 42);
+  assert.match(rows[0].metadata || '', /comma/);
+
+  const csv = auditRowsToCsv(rows);
+  assert.match(csv, /^id,created_at,condominium_id,actor_user_id,actor_email,action,target_type,target_id,metadata,ip\n/);
+  assert.ok(csv.includes('""note""'));
+  assert.ok(csv.includes('comma, quote'));
+  assert.ok(csv.includes('newline'));
 });
 
 // ============================================================================

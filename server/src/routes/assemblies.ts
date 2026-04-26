@@ -2,6 +2,7 @@ import { Router } from 'express';
 import db from '../db';
 import { requireAuth, requireRole, getActiveCondoId, AuthedRequest } from '../lib/auth';
 import { ok, fail } from '../lib/respond';
+import { audit } from '../lib/audit';
 import {
   listEligibleOwners,
   canVoteInAssembly,
@@ -149,6 +150,13 @@ router.post('/', requireAuth, requireRole('board_admin'), (req: AuthedRequest, r
     `INSERT INTO assemblies (condominium_id, created_by_user_id, title, kind, first_call_at, second_call_at, president_user_id, secretary_user_id)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(condoId, req.user!.id, title, kind, first_call_at, second_call_at || null, president_user_id || null, secretary_user_id || null);
+  audit(req, {
+    action: 'assembly.create',
+    target_type: 'assembly',
+    target_id: Number(r.lastInsertRowid),
+    condominium_id: condoId,
+    metadata: { kind },
+  });
   return ok(res, { id: Number(r.lastInsertRowid) }, 201);
 });
 
@@ -169,6 +177,13 @@ router.patch('/:id', requireAuth, requireRole('board_admin'), (req: AuthedReques
   sets.push('updated_at = CURRENT_TIMESTAMP');
   vals.push(id);
   db.prepare(`UPDATE assemblies SET ${sets.join(', ')} WHERE id = ?`).run(...vals);
+  audit(req, {
+    action: 'assembly.update',
+    target_type: 'assembly',
+    target_id: id,
+    condominium_id: condoId,
+    metadata: { fields: fields.filter((f) => req.body[f] !== undefined) },
+  });
   return ok(res, { id, updated: sets.length - 1 });
 });
 
@@ -193,6 +208,13 @@ router.post('/:id/agenda', requireAuth, requireRole('board_admin'), (req: Authed
     `INSERT INTO assembly_agenda_items (assembly_id, order_index, title, description, item_type, source_proposal_id, required_majority)
      VALUES (?, ?, ?, ?, ?, ?, ?)`
   ).run(id, maxRow.m + 1, title, description || null, item_type, source_proposal_id || null, majority);
+  audit(req, {
+    action: 'assembly.agenda_create',
+    target_type: 'assembly_agenda_item',
+    target_id: Number(r.lastInsertRowid),
+    condominium_id: condoId,
+    metadata: { assembly_id: id, item_type, required_majority: majority },
+  });
   return ok(res, { id: Number(r.lastInsertRowid) }, 201);
 });
 
@@ -204,6 +226,13 @@ router.delete('/:id/agenda/:itemId', requireAuth, requireRole('board_admin'), (r
   if (!a) return fail(res, 'not_found', 404);
   if (a.status !== 'draft') return fail(res, 'locked_after_convocation', 409);
   db.prepare(`DELETE FROM assembly_agenda_items WHERE id = ? AND assembly_id = ?`).run(itemId, id);
+  audit(req, {
+    action: 'assembly.agenda_delete',
+    target_type: 'assembly_agenda_item',
+    target_id: itemId,
+    condominium_id: condoId,
+    metadata: { assembly_id: id },
+  });
   return ok(res, { ok: true });
 });
 
@@ -228,6 +257,12 @@ router.post('/:id/convoke', requireAuth, requireRole('board_admin'), (req: Authe
   const body = `🏛️ CondoOS — Você está convocado para a ${a.kind === 'ordinary' ? 'Assembleia Geral Ordinária' : 'Assembleia Geral Extraordinária'}: "${a.title}". Primeira chamada: ${when}. Veja a pauta e conceda procuração se necessário no app.`;
   notifyCondoOwners(condoId, body).catch((e) => console.warn('[assemblies/convoke] notify failed:', e?.message));
 
+  audit(req, {
+    action: 'assembly.convoke',
+    target_type: 'assembly',
+    target_id: id,
+    condominium_id: condoId,
+  });
   return ok(res, { id, status: 'convoked' });
 });
 
@@ -241,6 +276,12 @@ router.post('/:id/start', requireAuth, requireRole('board_admin'), (req: AuthedR
   db.prepare(
     `UPDATE assemblies SET status='in_session', started_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id = ?`
   ).run(id);
+  audit(req, {
+    action: 'assembly.start',
+    target_type: 'assembly',
+    target_id: id,
+    condominium_id: condoId,
+  });
   return ok(res, { id, status: 'in_session' });
 });
 
@@ -265,6 +306,13 @@ router.post('/:id/close', requireAuth, requireRole('board_admin'), (req: AuthedR
   db.prepare(
     `UPDATE assemblies SET status='closed', closed_at=CURRENT_TIMESTAMP, ata_markdown=?, updated_at=CURRENT_TIMESTAMP WHERE id = ?`
   ).run(ata, id);
+  audit(req, {
+    action: 'assembly.close',
+    target_type: 'assembly',
+    target_id: id,
+    condominium_id: condoId,
+    metadata: { auto_closed_items: openItems.length },
+  });
   return ok(res, { id, status: 'closed' });
 });
 
@@ -297,6 +345,13 @@ router.post('/:id/attendance', requireAuth, (req: AuthedRequest, res) => {
       `INSERT INTO assembly_attendance (assembly_id, user_id, unit_id, attended_as, proxy_for_user_id, is_delinquent)
        VALUES (?, ?, ?, 'proxy', ?, ?)`
     ).run(id, req.user!.id, representedUnitId, representedUserId, 0);
+    audit(req, {
+      action: 'assembly.attendance_proxy',
+      target_type: 'assembly',
+      target_id: id,
+      condominium_id: condoId,
+      metadata: { proxy_for_user_id: representedUserId },
+    });
     return ok(res, { ok: true, mode: 'proxy' });
   }
 
@@ -313,6 +368,12 @@ router.post('/:id/attendance', requireAuth, (req: AuthedRequest, res) => {
        VALUES (?, ?, ?, 'self', ?)`
     ).run(id, req.user!.id, unitId, 0);
   }
+  audit(req, {
+    action: 'assembly.attendance_self',
+    target_type: 'assembly',
+    target_id: id,
+    condominium_id: condoId,
+  });
   return ok(res, { ok: true, mode: 'self' });
 });
 
@@ -327,6 +388,13 @@ router.patch('/:id/attendance/:attId', requireAuth, requireRole('board_admin'), 
   db.prepare(
     `UPDATE assembly_attendance SET is_delinquent = ? WHERE id = ? AND assembly_id = ?`
   ).run(is_delinquent ? 1 : 0, attId, id);
+  audit(req, {
+    action: 'assembly.attendance_update',
+    target_type: 'assembly_attendance',
+    target_id: attId,
+    condominium_id: condoId,
+    metadata: { assembly_id: id, is_delinquent: !!is_delinquent },
+  });
   return ok(res, { ok: true });
 });
 
@@ -351,6 +419,13 @@ router.post('/:id/proxies', requireAuth, (req: AuthedRequest, res) => {
   const r = db.prepare(
     `INSERT INTO assembly_proxies (assembly_id, grantor_user_id, grantee_user_id, note) VALUES (?, ?, ?, ?)`
   ).run(id, grantor, grantee_user_id, note || null);
+  audit(req, {
+    action: 'assembly.proxy_create',
+    target_type: 'assembly_proxy',
+    target_id: Number(r.lastInsertRowid),
+    condominium_id: condoId,
+    metadata: { assembly_id: id, grantee_user_id },
+  });
   return ok(res, { id: Number(r.lastInsertRowid) }, 201);
 });
 
@@ -367,6 +442,13 @@ router.delete('/:id/proxies/:proxyId', requireAuth, (req: AuthedRequest, res) =>
   if (!p) return fail(res, 'not_found', 404);
   if (p.grantor_user_id !== req.user!.id && req.user!.role !== 'board_admin') return fail(res, 'forbidden', 403);
   db.prepare(`UPDATE assembly_proxies SET status='revoked' WHERE id = ?`).run(proxyId);
+  audit(req, {
+    action: 'assembly.proxy_revoke',
+    target_type: 'assembly_proxy',
+    target_id: proxyId,
+    condominium_id: condoId,
+    metadata: { assembly_id: id },
+  });
   return ok(res, { ok: true });
 });
 
@@ -383,6 +465,13 @@ router.post('/:id/agenda/:itemId/open', requireAuth, requireRole('board_admin'),
   if (!item) return fail(res, 'not_found', 404);
   if (item.status !== 'pending') return fail(res, 'already_opened_or_closed', 409);
   db.prepare(`UPDATE assembly_agenda_items SET status='active' WHERE id = ?`).run(itemId);
+  audit(req, {
+    action: 'assembly.agenda_open',
+    target_type: 'assembly_agenda_item',
+    target_id: itemId,
+    condominium_id: condoId,
+    metadata: { assembly_id: id },
+  });
   return ok(res, { id: itemId, status: 'active' });
 });
 
@@ -429,6 +518,13 @@ router.post('/:id/agenda/:itemId/vote', requireAuth, (req: AuthedRequest, res) =
     ).run(id, itemId, req.user!.id, effective_owner_id, choice, weight);
   }
   const tally = getAgendaTally(itemId);
+  audit(req, {
+    action: 'assembly.vote',
+    target_type: 'assembly_agenda_item',
+    target_id: itemId,
+    condominium_id: condoId,
+    metadata: { assembly_id: id, choice, effective_owner_id },
+  });
   return ok(res, { tally });
 });
 
@@ -451,6 +547,13 @@ router.post('/:id/agenda/:itemId/close', requireAuth, requireRole('board_admin')
   db.prepare(
     `UPDATE assembly_agenda_items SET status = ?, outcome_summary = ?, closed_at = CURRENT_TIMESTAMP WHERE id = ?`
   ).run(status, summary, itemId);
+  audit(req, {
+    action: 'assembly.agenda_close',
+    target_type: 'assembly_agenda_item',
+    target_id: itemId,
+    condominium_id: condoId,
+    metadata: { assembly_id: id, status, reason: outcome.reason },
+  });
   return ok(res, { id: itemId, status, outcome });
 });
 

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import db from '../db';
 import { requireAuth, requireRole, getActiveCondoId, AuthedRequest } from '../lib/auth';
 import { ok, fail } from '../lib/respond';
+import { audit } from '../lib/audit';
 import {
   attachVoteTally,
   canVote,
@@ -93,6 +94,13 @@ router.post('/', requireAuth, (req: AuthedRequest, res) => {
     db.prepare(`UPDATE suggestions SET status='promoted', promoted_proposal_id=? WHERE id=?`)
       .run(row.lastInsertRowid, source_suggestion_id);
   }
+  audit(req, {
+    action: 'proposal.create',
+    target_type: 'proposal',
+    target_id: Number(row.lastInsertRowid),
+    condominium_id: condoId,
+    metadata: { source_suggestion_id: source_suggestion_id || null, voter_eligibility: eligibility },
+  });
   return ok(res, { id: row.lastInsertRowid });
 });
 
@@ -108,6 +116,13 @@ router.post('/:id/comments', requireAuth, (req: AuthedRequest, res) => {
     `INSERT INTO proposal_comments (proposal_id, author_id, body) VALUES (?, ?, ?)`
   ).run(id, u.id, body);
   db.prepare(`UPDATE proposals SET updated_at=CURRENT_TIMESTAMP, ai_summary=NULL WHERE id=?`).run(id);
+  audit(req, {
+    action: 'proposal.comment',
+    target_type: 'proposal_comment',
+    target_id: Number(row.lastInsertRowid),
+    condominium_id: condoId,
+    metadata: { proposal_id: id },
+  });
   return ok(res, { id: row.lastInsertRowid });
 });
 
@@ -134,6 +149,13 @@ router.post('/:id/vote', requireAuth, (req: AuthedRequest, res) => {
     `INSERT INTO proposal_votes (proposal_id, user_id, choice) VALUES (?, ?, ?)
      ON CONFLICT(proposal_id, user_id) DO UPDATE SET choice=excluded.choice`
   ).run(id, u.id, choice);
+  audit(req, {
+    action: 'proposal.vote',
+    target_type: 'proposal',
+    target_id: id,
+    condominium_id: condoId,
+    metadata: { choice },
+  });
   return ok(res, { id, choice });
 });
 
@@ -168,6 +190,13 @@ router.patch('/:id/compliance', requireAuth, requireRole('board_admin'), (req: A
   sets.push('updated_at = CURRENT_TIMESTAMP');
   vals.push(id);
   db.prepare(`UPDATE proposals SET ${sets.join(', ')} WHERE id = ?`).run(...vals);
+  audit(req, {
+    action: 'proposal.compliance_update',
+    target_type: 'proposal',
+    target_id: id,
+    condominium_id: condoId,
+    metadata: { quorum_percent: quorum, voting_opens_at: opens, voting_closes_at: closes },
+  });
   return ok(res, { id, updated: sets.length - 1 });
 });
 
@@ -184,6 +213,13 @@ router.patch('/:id/eligibility', requireAuth, requireRole('board_admin'), (req: 
   if (p.status !== 'discussion') return fail(res, 'locked_once_voting_opens', 409);
   db.prepare(`UPDATE proposals SET voter_eligibility=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`)
     .run(eligibility, id);
+  audit(req, {
+    action: 'proposal.eligibility_update',
+    target_type: 'proposal',
+    target_id: id,
+    condominium_id: condoId,
+    metadata: { voter_eligibility: eligibility },
+  });
   return ok(res, { id, voter_eligibility: eligibility });
 });
 
@@ -206,6 +242,13 @@ router.post('/:id/status', requireAuth, requireRole('board_admin'), (req: Authed
     notifyCondoResidents(condoId, body).catch((e) => console.warn('[proposals/status] notify failed:', e?.message));
   }
 
+  audit(req, {
+    action: 'proposal.status_update',
+    target_type: 'proposal',
+    target_id: id,
+    condominium_id: condoId,
+    metadata: { from: p.status, to: status },
+  });
   return ok(res, { id, status });
 });
 

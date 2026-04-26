@@ -78,6 +78,20 @@ RESEND_API_KEY=re_...
 
 Without these values, invite creation still works and email sends return a clear `email_not_configured` error instead of silently pretending delivery happened.
 
+### Production ops (optional)
+
+```bash
+SENTRY_DSN=https://...
+SENTRY_ENVIRONMENT=production
+SENTRY_TRACES_SAMPLE_RATE=0
+```
+
+Set `SENTRY_DSN` on Fly to capture server exceptions. Rate limiting is built in for login, AI, onboarding, and invite-heavy routes. For Fly operations, monitor `condoos-api` for error rate above 5 req/min or memory above 80%, and do a weekly log check with:
+
+```bash
+flyctl logs -a condoos-api --no-tail | tail -100
+```
+
 ---
 
 ## The 5-minute demo
@@ -229,8 +243,22 @@ Core entities:
 - `suggestions` + `suggestion_clusters`
 - `proposals` + `proposal_comments` + `proposal_votes`
 - `meetings` + `action_items`
+- `buildings`, `units`, `user_unit`, `invites`
+- `audit_log`
+- `dues_schedules`, `invoices`, `payments`
+- `tickets`, `ticket_comments`, `ticket_attachments`
 
 See `server/src/db/schema.sql` for full SQL.
+
+### Backend endpoints for UI wiring
+
+- `POST /api/auth/refresh` — re-reads the user and returns a fresh JWT + user object.
+- `POST /api/memberships/:id/move-out`, `POST /api/memberships/:id/reactivate`, `POST /api/memberships/transfer-unit`, `GET /api/memberships/history?unit_id=...`
+- `GET /api/me/history` — read-only historical memberships, votes, and comments for moved-out users.
+- `GET /api/audit`, `GET /api/audit/export`
+- `GET/POST /api/buildings`
+- `POST /api/finance/invoices`, `GET /api/finance/statements/:unit_id`, `POST /api/finance/payments`, plus `GET/POST /api/finance/schedules`
+- `GET/POST/PATCH /api/tickets` with comments and attachments under each ticket.
 
 ---
 
@@ -244,6 +272,7 @@ JWT_SECRET=change-me-in-prod
 DB_PATH=./data/condoos.sqlite
 OPENROUTER_API_KEY=sk-or-v1-...
 OPENROUTER_MODEL=anthropic/claude-3.5-haiku
+SENTRY_DSN=
 ```
 
 For image regeneration:

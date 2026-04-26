@@ -6,6 +6,14 @@ import { requireAuth, requireRole, AuthedRequest } from '../lib/auth';
 import { ok, fail, asyncHandler } from '../lib/respond';
 import { EmailDeliveryResult, sendInviteEmail } from '../lib/email';
 import { createRateLimit } from '../lib/rate-limit';
+import { audit } from '../lib/audit';
+import {
+  listUnitMembershipHistory,
+  moveOutMembership,
+  reactivateMembership,
+  transferUnit,
+  unitBelongsToCondo,
+} from '../lib/memberships';
 
 const router = Router();
 const inviteWriteRateLimit = createRateLimit({ keyPrefix: 'membership_invites', windowMs: 60 * 60_000, max: 30 });
@@ -56,6 +64,13 @@ router.post('/:id/approve', requireAuth, requireRole('board_admin'), (req: Authe
     ).run(row.condominium_id, row.unit_number, row.user_id);
   })();
 
+  audit(req, {
+    action: 'membership.approve',
+    target_type: 'user_unit',
+    target_id: id,
+    condominium_id: row.condominium_id,
+    metadata: { user_id: row.user_id, unit_id: row.unit_id },
+  });
   return ok(res, { id, status: 'active' });
 });
 
@@ -73,6 +88,12 @@ router.post('/:id/deny', requireAuth, requireRole('board_admin'), (req: AuthedRe
   if (!row) return fail(res, 'not_found', 404);
   if (row.condominium_id !== u.condominium_id) return fail(res, 'forbidden', 403);
   db.prepare(`UPDATE user_unit SET status = 'revoked', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(id);
+  audit(req, {
+    action: 'membership.deny',
+    target_type: 'user_unit',
+    target_id: id,
+    condominium_id: row.condominium_id,
+  });
   return ok(res, { id, status: 'revoked' });
 });
 
@@ -83,6 +104,20 @@ router.post('/:id/deny', requireAuth, requireRole('board_admin'), (req: AuthedRe
 const csvSchema = z.object({
   csv: z.string().min(3).max(100_000),
   send_emails: z.boolean().optional().default(true),
+});
+
+const moveOutSchema = z.object({
+  move_out_date: z.string().datetime().optional(),
+});
+
+const transferSchema = z.object({
+  from_membership_id: z.number().int().positive(),
+  to_unit_id: z.number().int().positive(),
+  move_out_date: z.string().datetime().optional(),
+  move_in_date: z.string().datetime().optional(),
+  relationship: z.enum(['owner', 'tenant', 'occupant']).optional(),
+  primary_contact: z.boolean().optional(),
+  voting_weight: z.number().positive().optional(),
 });
 
 function persistInviteEmailStatus(inviteId: number, delivery: EmailDeliveryResult) {
@@ -194,6 +229,12 @@ router.post('/import-csv', inviteWriteRateLimit, requireAuth, requireRole('board
     }
   }
 
+  audit(req, {
+    action: 'membership.import_csv',
+    target_type: 'invite',
+    condominium_id: u.condominium_id,
+    metadata: { imported_count: imported.length, error_count: errors.length, send_emails: parsed.data.send_emails },
+  });
   return ok(res, { imported_count: imported.length, error_count: errors.length, imported, errors, email_delivery: emailDelivery });
 }));
 
@@ -240,9 +281,81 @@ router.post('/invites/:id/send-email', inviteWriteRateLimit, requireAuth, requir
   });
   persistInviteEmailStatus(row.id, delivery);
 
+  audit(req, {
+    action: 'membership.invite_email_send',
+    target_type: 'invite',
+    target_id: row.id,
+    condominium_id: row.condominium_id,
+    metadata: { email: row.email, delivery_status: delivery.status },
+  });
   if (delivery.status === 'sent') return ok(res, { id: row.id, delivery });
   return fail(res, delivery.error || 'email_delivery_failed', delivery.status === 'skipped' ? 503 : 502, delivery);
 }));
+
+router.post('/transfer-unit', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+  const parsed = transferSchema.safeParse(req.body);
+  if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
+  const condoId = req.user!.condominium_id!;
+  const result = transferUnit({
+    fromMembershipId: parsed.data.from_membership_id,
+    toUnitId: parsed.data.to_unit_id,
+    condoId,
+    moveOutDate: parsed.data.move_out_date || new Date().toISOString(),
+    moveInDate: parsed.data.move_in_date,
+    relationship: parsed.data.relationship,
+    primaryContact: parsed.data.primary_contact,
+    votingWeight: parsed.data.voting_weight,
+  });
+  if (!result.ok) return fail(res, result.error, result.status);
+  audit(req, {
+    action: 'membership.transfer_unit',
+    target_type: 'user_unit',
+    target_id: result.new_membership_id,
+    condominium_id: condoId,
+    metadata: { moved_out_id: result.moved_out_id, user_id: result.user_id, to_unit_id: result.unit_id },
+  });
+  return ok(res, result);
+});
+
+router.get('/history', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+  const condoId = req.user!.condominium_id!;
+  const unitId = Number(req.query.unit_id);
+  if (!Number.isInteger(unitId) || unitId <= 0) return fail(res, 'invalid_unit_id', 400);
+  if (!unitBelongsToCondo(unitId, condoId)) return fail(res, 'unit_not_in_condo', 404);
+  return ok(res, listUnitMembershipHistory(unitId, condoId));
+});
+
+router.post('/:id/move-out', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+  const parsed = moveOutSchema.safeParse(req.body || {});
+  if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
+  const result = moveOutMembership(
+    Number(req.params.id),
+    req.user!.condominium_id!,
+    parsed.data.move_out_date || new Date().toISOString(),
+  );
+  if (!result.ok) return fail(res, result.error, result.status);
+  audit(req, {
+    action: 'membership.move_out',
+    target_type: 'user_unit',
+    target_id: result.id,
+    condominium_id: req.user!.condominium_id,
+    metadata: { user_id: result.user_id, unit_id: result.unit_id },
+  });
+  return ok(res, result);
+});
+
+router.post('/:id/reactivate', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+  const result = reactivateMembership(Number(req.params.id), req.user!.condominium_id!);
+  if (!result.ok) return fail(res, result.error, result.status);
+  audit(req, {
+    action: 'membership.reactivate',
+    target_type: 'user_unit',
+    target_id: result.id,
+    condominium_id: req.user!.condominium_id,
+    metadata: { user_id: result.user_id, unit_id: result.unit_id },
+  });
+  return ok(res, result);
+});
 
 // POST /api/memberships/:id/reassign  — move a pending claim to a different unit
 const reassignSchema = z.object({ unit_id: z.number().int() });
@@ -268,6 +381,13 @@ router.post('/:id/reassign', requireAuth, requireRole('board_admin'), (req: Auth
     return fail(res, 'unit_not_in_condo', 400);
   db.prepare(`UPDATE user_unit SET unit_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
     .run(parsed.data.unit_id, id);
+  audit(req, {
+    action: 'membership.reassign',
+    target_type: 'user_unit',
+    target_id: id,
+    condominium_id: u.condominium_id,
+    metadata: { unit_id: parsed.data.unit_id },
+  });
   return ok(res, { id, unit_id: parsed.data.unit_id });
 });
 

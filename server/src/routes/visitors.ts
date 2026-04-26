@@ -2,6 +2,7 @@ import { Router } from 'express';
 import db from '../db';
 import { requireAuth, requireRole, AuthedRequest } from '../lib/auth';
 import { ok, fail } from '../lib/respond';
+import { audit } from '../lib/audit';
 
 const router = Router();
 
@@ -28,6 +29,13 @@ router.post('/', requireAuth, (req: AuthedRequest, res) => {
     `INSERT INTO visitors (condominium_id, host_id, visitor_name, visitor_type, expected_at, notes)
      VALUES (?, ?, ?, ?, ?, ?)`
   ).run(u.condominium_id, u.id, visitor_name, visitor_type || 'guest', expected_at || null, notes || null);
+  audit(req, {
+    action: 'visitor.create',
+    target_type: 'visitor',
+    target_id: Number(row.lastInsertRowid),
+    condominium_id: u.condominium_id,
+    metadata: { visitor_type: visitor_type || 'guest' },
+  });
   return ok(res, { id: row.lastInsertRowid });
 });
 
@@ -39,6 +47,13 @@ router.post('/:id/decide', requireAuth, requireRole('board_admin'), (req: Authed
   const v = db.prepare(`SELECT id FROM visitors WHERE id=? AND condominium_id=?`).get(id, u.condominium_id);
   if (!v) return fail(res, 'not_found', 404);
   db.prepare(`UPDATE visitors SET status=?, decided_at=CURRENT_TIMESTAMP WHERE id=?`).run(decision, id);
+  audit(req, {
+    action: 'visitor.decide',
+    target_type: 'visitor',
+    target_id: id,
+    condominium_id: u.condominium_id,
+    metadata: { decision },
+  });
   return ok(res, { id, status: decision });
 });
 
@@ -48,6 +63,12 @@ router.post('/:id/arrived', requireAuth, (req: AuthedRequest, res) => {
   const v = db.prepare(`SELECT id FROM visitors WHERE id=? AND condominium_id=?`).get(id, u.condominium_id);
   if (!v) return fail(res, 'not_found', 404);
   db.prepare(`UPDATE visitors SET status='arrived' WHERE id=?`).run(id);
+  audit(req, {
+    action: 'visitor.arrived',
+    target_type: 'visitor',
+    target_id: id,
+    condominium_id: u.condominium_id,
+  });
   return ok(res, { id, status: 'arrived' });
 });
 

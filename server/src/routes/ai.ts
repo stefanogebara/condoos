@@ -3,6 +3,7 @@ import db from '../db';
 import { requireAuth, requireRole, AuthedRequest, getActiveCondoId } from '../lib/auth';
 import { ok, fail, asyncHandler } from '../lib/respond';
 import { createRateLimit } from '../lib/rate-limit';
+import { audit } from '../lib/audit';
 import { computeQuorum, getProposalVoteTally, resolveFinalOutcome } from '../lib/proposal-tally';
 import { chat, parseJsonLoose } from '../ai/openrouter';
 import {
@@ -29,8 +30,8 @@ import {
 const router = Router();
 const aiRateLimit = createRateLimit({
   keyPrefix: 'ai',
-  windowMs: 60 * 60_000,
-  max: 60,
+  windowMs: 60_000,
+  max: 30,
   key: (req) => String((req as AuthedRequest).user?.id || req.ip || 'unknown'),
 });
 
@@ -176,6 +177,12 @@ router.post('/cluster-suggestions', requireAuth, aiRateLimit, requireRole('board
     for (const sid of c.suggestion_ids || []) assign.run(cid, c.label || null, sid);
     persisted.push({ id: cid, label: c.label, summary: c.summary, suggestion_ids: c.suggestion_ids });
   }
+  audit(req, {
+    action: 'suggestion.cluster',
+    target_type: 'suggestion_cluster',
+    condominium_id: u.condominium_id,
+    metadata: { cluster_count: persisted.length, unclustered_count: (out.unclustered_ids || []).length },
+  });
   return ok(res, { clusters: persisted, unclustered_ids: out.unclustered_ids || [], fallback: out._fallback === true });
 }));
 
@@ -208,6 +215,13 @@ router.post('/proposals/:id/summarize-thread', requireAuth, aiRateLimit, asyncHa
   );
 
   db.prepare(`UPDATE proposals SET ai_summary=? WHERE id=?`).run(JSON.stringify(out), id);
+  audit(req, {
+    action: 'proposal.thread_summarize',
+    target_type: 'proposal',
+    target_id: id,
+    condominium_id: u.condominium_id,
+    metadata: { comment_count: comments.length },
+  });
   return ok(res, out);
 }));
 
@@ -241,6 +255,13 @@ router.post('/meetings/:id/summarize', requireAuth, aiRateLimit, requireRole('bo
     insertAI.run(id, a.description, a.owner_label || null, a.due_date || null);
   }
 
+  audit(req, {
+    action: 'meeting.summarize',
+    target_type: 'meeting',
+    target_id: id,
+    condominium_id: u.condominium_id,
+    metadata: { action_item_count: (out.action_items || []).length },
+  });
   return ok(res, out);
 }));
 
@@ -263,6 +284,12 @@ router.post('/proposals/:id/explain', requireAuth, aiRateLimit, asyncHandler(asy
   );
 
   db.prepare(`UPDATE proposals SET ai_explainer=? WHERE id=?`).run(text, id);
+  audit(req, {
+    action: 'proposal.explain',
+    target_type: 'proposal',
+    target_id: id,
+    condominium_id: u.condominium_id,
+  });
   return ok(res, { explainer: text });
 }));
 
@@ -304,6 +331,13 @@ router.post('/proposals/:id/decision-summary', requireAuth, aiRateLimit, require
      WHERE id = ?`
   ).run(JSON.stringify(out), outcome, quorum.quorum_met ? 'manual_decision' : 'quorum_not_met', id);
 
+  audit(req, {
+    action: 'proposal.decision_summary',
+    target_type: 'proposal',
+    target_id: id,
+    condominium_id: u.condominium_id,
+    metadata: { outcome, quorum_met: quorum.quorum_met },
+  });
   return ok(res, out);
 }));
 
@@ -377,6 +411,12 @@ router.post('/assemblies/:id/draft-ata', requireAuth, aiRateLimit, requireRole('
     { jsonMode: false, maxTokens: 1500, label: 'assembly-ata' }
   );
   db.prepare(`UPDATE assemblies SET ata_markdown = ? WHERE id = ?`).run(polished, id);
+  audit(req, {
+    action: 'assembly.draft_ata',
+    target_type: 'assembly',
+    target_id: id,
+    condominium_id: condoId,
+  });
   return ok(res, { ata_markdown: polished });
 }));
 
