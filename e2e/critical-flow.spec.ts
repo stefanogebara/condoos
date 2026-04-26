@@ -27,6 +27,7 @@ async function loginInBrowser(page: Page, request: APIRequestContext, kind: 'adm
     localStorage.setItem('condoos_token', token);
     localStorage.setItem('condoos_user', JSON.stringify(user));
   }, session);
+  return session;
 }
 
 test('signed-out landing, login, route guard, and mobile drawer work', async ({ page, request, isMobile }) => {
@@ -38,7 +39,7 @@ test('signed-out landing, login, route guard, and mobile drawer work', async ({ 
 
   await loginInBrowser(page, request, 'resident');
   await page.goto('/app');
-  await expect(page.getByRole('heading', { name: /Good (morning|afternoon|evening), Maya/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Good (morning|afternoon|evening), Maya|Bom dia, Maya|Boa tarde, Maya|Boa noite, Maya/i })).toBeVisible();
   await page.goto('/board');
   await expect(page).toHaveURL(/\/app$/);
 
@@ -51,13 +52,23 @@ test('signed-out landing, login, route guard, and mobile drawer work', async ({ 
 
 test('board roster import creates pending invite and invite links prefill join code', async ({ page, request }) => {
   test.setTimeout(120_000);
-  await loginInBrowser(page, request, 'admin');
+  const session = await loginInBrowser(page, request, 'admin');
   await page.goto('/board/residents');
-  await expect(page.getByRole('heading', { name: /Residents/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Residents|Moradores/i })).toBeVisible();
 
-  await page.getByRole('button', { name: /Import roster|Importar/i }).click();
+  const residentsRes = await request.get(`${apiURL}/users/residents`, {
+    headers: { Authorization: `Bearer ${session.token}` },
+  });
+  expect(residentsRes.ok()).toBeTruthy();
+  const residents = (await residentsRes.json()).data as Array<{ unit_number?: string }>;
+  const unit = residents
+    .flatMap((r) => String(r.unit_number || '').split(',').map((u) => u.trim()))
+    .find((u) => u && !/^PH/i.test(u));
+  expect(unit, 'expected at least one non-penthouse unit in production data').toBeTruthy();
+
+  await page.getByRole('button', { name: /Import roster|Importar|Importar CSV/i }).click();
   const email = `e2e-${Date.now()}@example.com`;
-  await page.locator('textarea').fill(`email,unit,relationship,primary_contact,voting_weight\n${email},502,tenant,no,1`);
+  await page.locator('textarea').fill(`email,unit,relationship,primary_contact,voting_weight\n${email},${unit},tenant,no,1`);
   await page.getByRole('button', { name: /Create invites|Criar convites/i }).click();
   await expect(page.getByText(email)).toBeVisible();
   await expect(page.getByText(/Rows that need attention/i)).toHaveCount(0);
@@ -115,9 +126,9 @@ test('backend rejects invalid bookings and closes tied manual decisions as incon
 test('assembly pages render for board and resident', async ({ page, request }) => {
   await loginInBrowser(page, request, 'admin');
   await page.goto('/board/assemblies');
-  await expect(page.getByRole('heading', { name: /Assemblies/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Assemblies|Assembleias/i })).toBeVisible();
 
   await loginInBrowser(page, request, 'resident');
   await page.goto('/app/assemblies');
-  await expect(page.getByRole('heading', { name: /Assemblies/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Assemblies|Assembleias/i })).toBeVisible();
 });

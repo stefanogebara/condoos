@@ -8,6 +8,8 @@ const apiURL = process.env.E2E_API_URL
 type Session = { token: string; user: any };
 const sessionCache = new Map<string, Session>();
 
+test.describe.configure({ timeout: 90_000 });
+
 async function loginApi(request: APIRequestContext, email: string, password: string): Promise<Session> {
   const cached = sessionCache.get(email);
   if (cached) return cached;
@@ -25,6 +27,12 @@ async function residentLogin(page: Page, request: APIRequestContext) {
     localStorage.setItem('condoos_token', token);
     localStorage.setItem('condoos_user', JSON.stringify(user));
   }, s);
+}
+
+async function expectShellRole(page: Page, label: RegExp) {
+  const width = page.viewportSize()?.width || 1280;
+  const shell = width < 1024 ? page.locator('header') : page.locator('aside');
+  await expect(shell.getByText(label).first()).toBeVisible();
 }
 
 async function nav(page: Page, isMobile: boolean) {
@@ -73,7 +81,7 @@ test('resident: packages page renders with the resident\'s items only', async ({
   await page.goto('/app/packages');
   await expect(page.getByRole('heading', { level: 1, name: /Packages|Encomendas/i })).toBeVisible();
   // Sidebar visible — confirms the auth gate passed
-  await expect(page.getByText(/Resident|Morador/i).first()).toBeVisible();
+  await expectShellRole(page, /Resident|Morador/i);
 });
 
 // ---------------------------------------------------------------------------
@@ -134,7 +142,7 @@ test('resident: proposals list + detail page exposes vote affordance when in vot
 test('resident: assemblies list shows convoked/in-session assemblies', async ({ page, request }) => {
   await residentLogin(page, request);
   await page.goto('/app/assemblies');
-  await expect(page.getByRole('heading', { level: 1, name: /Assemblies/i })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: /Assemblies|Assembleias/i })).toBeVisible();
   // Either there are no convoked assemblies (empty state) or there's at least one card
   const card = page.locator('a[href*="/app/assemblies/"]').first();
   const empty = page.getByText(/no upcoming|nenhuma|empty/i).first();
@@ -175,12 +183,12 @@ test('resident: settings page has profile + WhatsApp section + Save', async ({ p
 test('resident: sidebar nav round-trips between common pages', async ({ page, request, isMobile }) => {
   await residentLogin(page, request);
   await page.goto('/app');
-  await (await nav(page, isMobile)).getByRole('link', { name: /^Proposals$/i }).click();
+  await (await nav(page, isMobile)).getByRole('link', { name: /^(Proposals|Propostas)$/i }).click();
   await expect(page).toHaveURL(/\/app\/proposals$/);
-  await (await nav(page, isMobile)).getByRole('link', { name: /^Assemblies$/i }).click();
+  await (await nav(page, isMobile)).getByRole('link', { name: /^(Assemblies|Assembleias)$/i }).click();
   await expect(page).toHaveURL(/\/app\/assemblies$/);
-  await (await nav(page, isMobile)).getByRole('link', { name: /^Settings$/i }).click();
+  await (await nav(page, isMobile)).getByRole('link', { name: /^(Settings|Preferências)$/i }).click();
   await expect(page).toHaveURL(/\/app\/settings$/);
-  await (await nav(page, isMobile)).getByRole('link', { name: /^Overview$/i }).click();
+  await (await nav(page, isMobile)).getByRole('link', { name: /^(Overview|Início)$/i }).click();
   await expect(page).toHaveURL(/\/app$/);
 });

@@ -102,4 +102,43 @@ router.post('/google', authRateLimit, asyncHandler(async (req, res) => {
   return ok(res, { token, user });
 }));
 
+// POST /api/auth/dev-register — test-only fresh-user creation for E2E onboarding flows.
+// Disabled unless E2E_REGISTER_SECRET is set on the server AND the request supplies
+// a matching x-e2e-secret header. Creates an unaffiliated user (no condominium_id,
+// no user_unit), so onboarding routes can be exercised end-to-end against a
+// brand-new account.
+const devRegisterSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(6).max(120),
+  first_name: z.string().min(1).max(60).default('E2E'),
+  last_name: z.string().min(1).max(60).default('Tester'),
+});
+
+router.post('/dev-register', authRateLimit, (req, res) => {
+  const expected = process.env.E2E_REGISTER_SECRET;
+  if (!expected) return fail(res, 'dev_register_disabled', 404);
+  const provided = req.header('x-e2e-secret') || '';
+  if (provided !== expected) return fail(res, 'invalid_secret', 401);
+
+  const parsed = devRegisterSchema.safeParse(req.body);
+  if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
+
+  const existing = db.prepare(`SELECT id FROM users WHERE email = ?`).get(parsed.data.email);
+  if (existing) return fail(res, 'email_taken', 409);
+
+  const pwHash = bcrypt.hashSync(parsed.data.password, 10);
+  const result = db.prepare(
+    `INSERT INTO users (condominium_id, email, password_hash, first_name, last_name, role, unit_number)
+     VALUES (NULL, ?, ?, ?, ?, 'resident', NULL)`
+  ).run(parsed.data.email, pwHash, parsed.data.first_name, parsed.data.last_name);
+
+  const row = db.prepare(
+    `SELECT id, email, role, condominium_id, first_name, last_name, unit_number
+     FROM users WHERE id = ?`
+  ).get(result.lastInsertRowid) as any;
+
+  const token = signToken(row.id);
+  return ok(res, { token, user: row });
+});
+
 export default router;

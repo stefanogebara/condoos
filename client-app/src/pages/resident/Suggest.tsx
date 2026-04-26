@@ -61,16 +61,16 @@ export default function Suggest() {
   }
 
   const examples = [
-    'The lobby AC is barely working. It was 30°C inside yesterday.',
-    'Can we add EV charging stations in the garage?',
-    'Gym treadmill #3 makes a loud clanking sound when used.',
+    'O ar do saguão mal está funcionando. Ontem marcou 30°C aqui dentro.',
+    'Podemos colocar carregadores de carro elétrico na garagem?',
+    'A esteira #3 da academia faz um barulho alto quando alguém usa.',
   ];
 
   return (
     <>
       <PageHeader
-        title="Suggest something"
-        subtitle="Describe what's on your mind. AI will shape it into a proposal the board can act on."
+        title="Sugerir algo"
+        subtitle="Conta o que tá pegando. A IA transforma sua ideia numa proposta pronta pro síndico."
       />
 
       <GlassCard variant="clay" className="p-7 mb-6">
@@ -79,13 +79,13 @@ export default function Suggest() {
             <Lightbulb className="w-5 h-5" />
           </div>
           <div>
-            <h3 className="font-display text-lg text-dusk-500">What's on your mind?</h3>
-            <p className="text-xs text-dusk-300">Informal is fine. Type like you'd text a friend.</p>
+            <h3 className="font-display text-lg text-dusk-500">O que tá pegando?</h3>
+            <p className="text-xs text-dusk-300">Pode ser informal. Escreva como falaria com um vizinho.</p>
           </div>
         </div>
         <textarea
           className="input min-h-[140px] resize-none"
-          placeholder="e.g. The lobby AC is broken, it's 30°C inside..."
+          placeholder="ex: O ar do saguão tá quebrado, marca 30°C aqui dentro..."
           value={text}
           onChange={(e) => setText(e.target.value)}
           disabled={drafting || !!draft}
@@ -106,7 +106,7 @@ export default function Suggest() {
                 ))}
               </div>
               <Button onClick={submitRaw} variant="primary" loading={saving || drafting} rightIcon={<Send className="w-4 h-4" />} disabled={!text.trim()}>
-                {drafting ? 'AI is drafting...' : 'Submit'}
+                {drafting ? 'IA redigindo...' : 'Enviar'}
               </Button>
             </div>
           </>
@@ -118,7 +118,7 @@ export default function Suggest() {
           <div className="w-14 h-14 rounded-full bg-sage-200 text-sage-700 flex items-center justify-center mx-auto animate-pulse">
             <Sparkles className="w-6 h-6" />
           </div>
-          <p className="mt-4 text-dusk-400">AI is shaping your idea into a structured proposal...</p>
+          <p className="mt-4 text-dusk-400">A IA está transformando sua ideia em uma proposta estruturada...</p>
         </GlassCard>
       )}
 

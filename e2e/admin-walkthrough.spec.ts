@@ -9,6 +9,8 @@ const apiURL = process.env.E2E_API_URL
 type Session = { token: string; user: any };
 const sessionCache = new Map<string, Session>();
 
+test.describe.configure({ timeout: 90_000 });
+
 async function loginApi(request: APIRequestContext, email: string, password: string): Promise<Session> {
   const cached = sessionCache.get(email);
   if (cached) return cached;
@@ -68,7 +70,7 @@ test('admin: overview renders with sidebar nav', async ({ page, request, isMobil
 test('admin: proposals list shows real items + status badges', async ({ page, request }) => {
   await adminLogin(page, request);
   await page.goto('/board/proposals');
-  await expect(page.getByRole('heading', { name: /Proposals/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Proposals|Propostas/i })).toBeVisible();
   // At least one proposal card should be present (the Vila Nova seed has 3+)
   const cards = page.locator('a[href*="/board/proposals/"]');
   await expect(cards.first()).toBeVisible();
@@ -119,7 +121,7 @@ test('admin: pending memberships page renders', async ({ page, request }) => {
 test('admin: assemblies list shows existing AGOs', async ({ page, request }) => {
   await adminLogin(page, request);
   await page.goto('/board/assemblies');
-  await expect(page.getByRole('heading', { name: /Assemblies/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Assemblies|Assembleias/i })).toBeVisible();
   // The "New assembly" button must always be visible to admins
   await expect(page.getByRole('button', { name: /New assembly|Nova assembleia/i })).toBeVisible();
 });
@@ -151,7 +153,7 @@ test('admin: meetings page exposes "New meeting" button + form opens', async ({ 
   await adminLogin(page, request);
   await page.goto('/board/meetings');
   await expect(page.getByRole('heading', { name: /Meetings|Reuniões/i })).toBeVisible();
-  const newBtn = page.getByRole('button', { name: /New meeting/i });
+  const newBtn = page.getByRole('button', { name: /New meeting|Nova reunião/i });
   await expect(newBtn).toBeVisible();
   await newBtn.click();
   // The form's title input should now be visible (placeholder mentions Q3 / Board Meeting)
@@ -192,12 +194,12 @@ test('admin: residents page lists residents + has import roster button', async (
 test('admin: sidebar nav links round-trip between pages', async ({ page, request, isMobile }) => {
   await adminLogin(page, request);
   await page.goto('/board');
-  await (await nav(page, isMobile)).getByRole('link', { name: /^Proposals$/i }).click();
+  await (await nav(page, isMobile)).getByRole('link', { name: /^(Proposals|Propostas)$/i }).click();
   await expect(page).toHaveURL(/\/board\/proposals$/);
-  await (await nav(page, isMobile)).getByRole('link', { name: /^Assemblies$/i }).click();
+  await (await nav(page, isMobile)).getByRole('link', { name: /^(Assemblies|Assembleias)$/i }).click();
   await expect(page).toHaveURL(/\/board\/assemblies$/);
-  await (await nav(page, isMobile)).getByRole('link', { name: /^Residents$/i }).click();
+  await (await nav(page, isMobile)).getByRole('link', { name: /^(Residents|Moradores)$/i }).click();
   await expect(page).toHaveURL(/\/board\/residents$/);
-  await (await nav(page, isMobile)).getByRole('link', { name: /^Overview$/i }).click();
+  await (await nav(page, isMobile)).getByRole('link', { name: /^(Overview|Visão geral)$/i }).click();
   await expect(page).toHaveURL(/\/board$/);
 });

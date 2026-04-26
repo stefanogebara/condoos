@@ -22,6 +22,7 @@ RUN apk add --no-cache tini
 
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
+COPY --from=build /app/scripts ./scripts
 COPY server/package.json ./
 COPY server/src/db/schema.sql ./dist/db/schema.sql
 
