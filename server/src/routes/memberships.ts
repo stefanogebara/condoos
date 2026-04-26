@@ -82,7 +82,7 @@ router.post('/:id/deny', requireAuth, requireRole('board_admin'), (req: AuthedRe
 // When a user later signs in with a matching email, we auto-activate them.
 const csvSchema = z.object({
   csv: z.string().min(3).max(100_000),
-  send_emails: z.boolean().optional().default(false),
+  send_emails: z.boolean().optional().default(true),
 });
 
 function persistInviteEmailStatus(inviteId: number, delivery: EmailDeliveryResult) {
@@ -93,6 +93,25 @@ function persistInviteEmailStatus(inviteId: number, delivery: EmailDeliveryResul
          email_error = ?
      WHERE id = ?`
   ).run(delivery.status, delivery.status, delivery.error || null, inviteId);
+}
+
+function recordQueuedInviteEmail(
+  inviteId: number,
+  deliveryPromise: Promise<EmailDeliveryResult>,
+) {
+  void deliveryPromise
+    .then((delivery) => {
+      persistInviteEmailStatus(inviteId, delivery);
+    })
+    .catch((err) => {
+      const delivery: EmailDeliveryResult = {
+        status: 'failed',
+        provider: 'resend',
+        error: err instanceof Error ? err.message : 'invite_email_failed',
+      };
+      console.error(`[email] invite delivery failed for invite ${inviteId}: ${delivery.error}`);
+      persistInviteEmailStatus(inviteId, delivery);
+    });
 }
 
 router.post('/import-csv', inviteWriteRateLimit, requireAuth, requireRole('board_admin'), asyncHandler(async (req: AuthedRequest, res) => {
@@ -160,19 +179,18 @@ router.post('/import-csv', inviteWriteRateLimit, requireAuth, requireRole('board
   });
   tx();
 
-  const emailDelivery: Array<{ invite_id: number; email: string; delivery: EmailDeliveryResult }> = [];
+  const emailDelivery: Array<{ invite_id: number; email: string; queued: boolean }> = [];
   if (parsed.data.send_emails) {
     for (const invite of imported) {
-      const delivery = await sendInviteEmail({
+      recordQueuedInviteEmail(invite.invite_id, sendInviteEmail({
         to: invite.email,
         condoName: condo.name,
         inviteCode: condo.invite_code,
         unitNumber: invite.unit,
         relationship: invite.relationship,
         senderName: `${u.first_name} ${u.last_name}`.trim(),
-      });
-      persistInviteEmailStatus(invite.invite_id, delivery);
-      emailDelivery.push({ invite_id: invite.invite_id, email: invite.email, delivery });
+      }));
+      emailDelivery.push({ invite_id: invite.invite_id, email: invite.email, queued: true });
     }
   }
 
