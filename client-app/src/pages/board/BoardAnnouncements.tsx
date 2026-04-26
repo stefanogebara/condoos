@@ -64,7 +64,7 @@ export default function BoardAnnouncements() {
               <div className="flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   {a.pinned ? <Badge tone="peach"><Pin className="w-3 h-3" /> Pinned</Badge> : null}
-                  {a.source !== 'manual' && <Badge tone="sage">AI-drafted</Badge>}
+                  {a.source !== 'manual' && <Badge tone="sage">Redigido pela IA</Badge>}
                   <span className="text-xs text-dusk-200 ml-auto">{new Date(a.created_at).toLocaleDateString()}</span>
                 </div>
                 <h3 className="font-display text-lg text-dusk-500 mt-1">{a.title}</h3>

@@ -159,7 +159,7 @@ export default function ProposalDetail() {
       />
       <div className="flex items-center gap-2 mb-6 flex-wrap">
         <Badge tone={p.status === 'voting' ? 'peach' : 'sage'}>{({ discussion: 'em discussão', voting: 'em votação', approved: 'aprovada', rejected: 'reprovada', completed: 'concluída', inconclusive: 'inconclusiva' } as Record<string,string>)[p.status] || p.status}</Badge>
-        {p.ai_drafted === 1 && <Badge tone="sage">AI-drafted</Badge>}
+        {p.ai_drafted === 1 && <Badge tone="sage">Redigido pela IA</Badge>}
         {p.category && <Badge tone="neutral">{p.category}</Badge>}
         {p.voter_eligibility === 'owners_only' && <Badge tone="peach">Owners only</Badge>}
         {p.voter_eligibility === 'primary_contact_only' && <Badge tone="peach">One vote per unit</Badge>}

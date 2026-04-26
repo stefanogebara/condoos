@@ -71,9 +71,9 @@ export default function BoardAssemblies() {
   return (
     <>
       <PageHeader
-        title="Assemblies"
-        subtitle="Brazilian AGO / AGE. Owners vote. Proxies & quorum enforced. AI drafts the ata."
-        actions={<Button onClick={() => setShowForm((x) => !x)} variant={showForm ? 'ghost' : 'primary'} leftIcon={<Plus className="w-4 h-4" />}>{showForm ? 'Cancel' : 'New assembly'}</Button>}
+        title="Assembleias"
+        subtitle="AGO / AGE. Proprietários votam. Procurações e quórum aplicados. A IA redige a ata."
+        actions={<Button onClick={() => setShowForm((x) => !x)} variant={showForm ? 'ghost' : 'primary'} leftIcon={<Plus className="w-4 h-4" />}>{showForm ? 'Cancelar' : 'Nova assembleia'}</Button>}
       />
 
       {showForm && (

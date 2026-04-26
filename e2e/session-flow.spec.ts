@@ -256,15 +256,15 @@ test.describe('mobile', () => {
     await page.goto('/app');
 
     // Mobile top bar should be visible
-    const hamburger = page.getByRole('button', { name: /Open menu/i });
+    const hamburger = page.getByRole('button', { name: /Open menu|Abrir menu/i });
     await expect(hamburger).toBeVisible();
 
     // Nav drawer closed initially — close button not visible
-    await expect(page.getByRole('button', { name: /Close menu/i })).not.toBeVisible();
+    await expect(page.getByRole('button', { name: /Close menu|Fechar menu/i })).not.toBeVisible();
 
     // Open drawer
     await hamburger.click();
-    await expect(page.getByRole('button', { name: /Close menu/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Close menu|Fechar menu/i })).toBeVisible();
 
     // No horizontal overflow on the page
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);

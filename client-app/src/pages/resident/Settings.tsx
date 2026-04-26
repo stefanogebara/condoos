@@ -49,7 +49,7 @@ export default function Settings() {
 
   return (
     <>
-      <PageHeader title="Settings" subtitle="Profile + notification preferences" />
+      <PageHeader title="Preferências" subtitle="Perfil e notificações" />
 
       <GlassCard variant="clay" className="p-6 mb-6">
         <h3 className="font-display text-lg text-dusk-500 mb-3 flex items-center gap-2"><User className="w-5 h-5" /> Profile</h3>

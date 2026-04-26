@@ -30,8 +30,8 @@ async function adminLogin(page: Page, request: APIRequestContext) {
 
 async function nav(page: Page, isMobile: boolean) {
   if (isMobile) {
-    await page.getByRole('button', { name: /Open menu/i }).click();
-    await expect(page.getByRole('button', { name: /Close menu/i })).toBeVisible();
+    await page.getByRole('button', { name: /Open menu|Abrir menu/i }).click();
+    await expect(page.getByRole('button', { name: /Close menu|Fechar menu/i })).toBeVisible();
   }
   return page.locator('aside');
 }
@@ -44,11 +44,20 @@ test('admin: overview renders with sidebar nav', async ({ page, request, isMobil
   await adminLogin(page, request);
   await page.goto('/board');
   const menu = await nav(page, isMobile);
-  await expect(menu.getByText(/Board admin/i).first()).toBeVisible();
+  await expect(menu.getByText(/Board admin|Síndico/i).first()).toBeVisible();
   // Every primary nav link should be in the sidebar
-  const links = ['Overview', 'Suggestions', 'Pending', 'Proposals', 'Assemblies', 'Meetings', 'Announcements', 'Residents'];
+  const links = [
+    /^(Overview|Visão geral)$/i,
+    /^(Suggestions|Sugestões)$/i,
+    /^(Pending|Pendentes)$/i,
+    /^(Proposals|Propostas)$/i,
+    /^(Assemblies|Assembleias)$/i,
+    /^(Meetings|Reuniões)$/i,
+    /^(Announcements|Comunicados)$/i,
+    /^(Residents|Moradores)$/i,
+  ];
   for (const l of links) {
-    await expect(menu.getByRole('link', { name: new RegExp(`^${l}$`, 'i') })).toBeVisible();
+    await expect(menu.getByRole('link', { name: l })).toBeVisible();
   }
 });
 

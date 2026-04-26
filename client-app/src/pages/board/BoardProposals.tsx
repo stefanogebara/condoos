@@ -30,10 +30,10 @@ export default function BoardProposals() {
 
   return (
     <>
-      <PageHeader title="Proposals" subtitle="All decisions in motion. Open voting, discuss, summarize, close." />
-      <Section title="Open for voting" items={grouped.voting} />
-      <Section title="In discussion"   items={grouped.discussion} />
-      <Section title="Resolved"        items={grouped.done} />
+      <PageHeader title="Propostas" subtitle="Todas as decisões em andamento. Abrir votação, discutir, resumir, encerrar." />
+      <Section title="Em votação"   items={grouped.voting} />
+      <Section title="Em discussão" items={grouped.discussion} />
+      <Section title="Encerradas"   items={grouped.done} />
     </>
   );
 }
@@ -49,13 +49,13 @@ function Section({ title, items }: { title: string; items: any[] }) {
             <GlassCard variant="clay" hover className="p-5 h-full">
               <div className="flex items-center gap-2 mb-2 flex-wrap">
                 <Badge tone={p.status === 'voting' ? 'peach' : p.status === 'discussion' ? 'sage' : 'neutral'}>{({ discussion: 'em discussão', voting: 'em votação', approved: 'aprovada', rejected: 'reprovada', completed: 'concluída', inconclusive: 'inconclusiva' } as Record<string,string>)[p.status] || p.status}</Badge>
-                {p.ai_drafted === 1 && <Badge tone="sage">AI-drafted</Badge>}
+                {p.ai_drafted === 1 && <Badge tone="sage">Redigido pela IA</Badge>}
                 {p.category && <Badge tone="neutral">{p.category}</Badge>}
               </div>
               <h3 className="font-display text-lg text-dusk-500">{p.title}</h3>
               <p className="text-sm text-dusk-300 mt-2 line-clamp-2">{p.description}</p>
               <div className="flex items-center justify-between mt-4 pt-4 border-t border-white/50 text-xs">
-                <span className="text-dusk-200">by {p.author_first}</span>
+                <span className="text-dusk-200">por {p.author_first}</span>
                 {p.status === 'voting' ? (
                   <span>
                     <span className="text-sage-700 font-semibold">{p.votes.yes}</span>

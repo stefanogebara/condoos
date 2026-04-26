@@ -28,7 +28,7 @@ export default function Meetings() {
 
   return (
     <>
-      <PageHeader title="Meetings" subtitle="Board meetings, agendas, and AI-summarized recaps." />
+      <PageHeader title="Reuniões" subtitle="Reuniões do síndico, pautas e resumos gerados pela IA." />
       <div className="space-y-4">
         {rows.map((m) => {
           const summary = m.ai_summary ? JSON.parse(m.ai_summary) : null;

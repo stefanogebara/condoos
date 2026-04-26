@@ -29,8 +29,8 @@ async function residentLogin(page: Page, request: APIRequestContext) {
 
 async function nav(page: Page, isMobile: boolean) {
   if (isMobile) {
-    await page.getByRole('button', { name: /Open menu/i }).click();
-    await expect(page.getByRole('button', { name: /Close menu/i })).toBeVisible();
+    await page.getByRole('button', { name: /Open menu|Abrir menu/i }).click();
+    await expect(page.getByRole('button', { name: /Close menu|Fechar menu/i })).toBeVisible();
   }
   return page.locator('aside');
 }
@@ -43,13 +43,24 @@ test('resident: overview greets by name + shows full sidebar', async ({ page, re
   await residentLogin(page, request);
   await page.goto('/app');
   const menu = await nav(page, isMobile);
-  await expect(menu.getByText(/Resident/i).first()).toBeVisible();
+  await expect(menu.getByText(/Resident|Morador/i).first()).toBeVisible();
   // Greet by name (Maya is the seeded resident)
   await expect(page.getByRole('heading', { name: /Good (morning|afternoon|evening), Maya|Bom dia, Maya|Boa tarde, Maya|Boa noite, Maya/i }).first()).toBeVisible();
   // All 10 nav items in sidebar
-  const links = ['Overview', 'Packages', 'Visitors', 'Amenities', 'Announcements', 'Proposals', 'Assemblies', 'Meetings', 'Suggest', 'Settings'];
+  const links = [
+    /^(Overview|Início)$/i,
+    /^(Packages|Encomendas)$/i,
+    /^(Visitors|Visitantes)$/i,
+    /^(Amenities|Áreas comuns)$/i,
+    /^(Announcements|Comunicados)$/i,
+    /^(Proposals|Propostas)$/i,
+    /^(Assemblies|Assembleias)$/i,
+    /^(Meetings|Reuniões)$/i,
+    /^(Suggest|Sugerir)$/i,
+    /^(Settings|Preferências)$/i,
+  ];
   for (const l of links) {
-    await expect(menu.getByRole('link', { name: new RegExp(`^${l}$`, 'i') })).toBeVisible();
+    await expect(menu.getByRole('link', { name: l })).toBeVisible();
   }
 });
 
@@ -62,7 +73,7 @@ test('resident: packages page renders with the resident\'s items only', async ({
   await page.goto('/app/packages');
   await expect(page.getByRole('heading', { level: 1, name: /Packages|Encomendas/i })).toBeVisible();
   // Sidebar visible — confirms the auth gate passed
-  await expect(page.locator('aside').getByText(/Resident/i).first()).toBeVisible();
+  await expect(page.getByText(/Resident|Morador/i).first()).toBeVisible();
 });
 
 // ---------------------------------------------------------------------------

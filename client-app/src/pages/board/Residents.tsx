@@ -121,11 +121,11 @@ export default function Residents() {
   return (
     <>
       <PageHeader
-        title="Residents"
-        subtitle={`${rows.length} ${rows.length === 1 ? 'person' : 'people'} in ${condoName || 'your building'}.`}
+        title="Moradores"
+        subtitle={`${rows.length} ${rows.length === 1 ? 'pessoa' : 'pessoas'} no ${condoName || 'seu prédio'}.`}
         actions={
           <Button onClick={() => setShowImport((x) => !x)} variant={showImport ? 'ghost' : 'primary'} leftIcon={<Upload className="w-4 h-4" />}>
-            {showImport ? 'Cancel' : 'Import roster'}
+            {showImport ? 'Cancelar' : 'Importar CSV'}
           </Button>
         }
       />

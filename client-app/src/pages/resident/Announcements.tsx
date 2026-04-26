@@ -22,7 +22,7 @@ export default function Announcements() {
 
   return (
     <>
-      <PageHeader title="Announcements" subtitle="Updates from the board. Pinned items stay on top." />
+      <PageHeader title="Comunicados" subtitle="Avisos do síndico. Itens fixados ficam no topo." />
       <div className="space-y-4">
         {rows.map((a) => (
           <GlassCard key={a.id} variant={a.pinned ? 'clay-peach' : 'clay'} className="p-6">

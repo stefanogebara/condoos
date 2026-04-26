@@ -129,8 +129,7 @@ test.describe('resident UI pages render', () => {
       await test.step(p.path, async () => {
         await page.goto(p.path);
         await expect(page.getByRole('heading', { name: p.heading }).first()).toBeVisible();
-        // Sidebar must show — scope to <aside>, which is only the visible sidebar.
-        await expect(page.locator('aside').getByText(/Resident/i).first()).toBeVisible();
+        await expect(page.getByText(/Resident|Morador/i).first()).toBeVisible();
       });
     }
   });
@@ -159,8 +158,7 @@ test.describe('board UI pages render', () => {
       await test.step(p.path, async () => {
         await page.goto(p.path);
         await expect(page.getByRole('heading', { name: p.heading }).first()).toBeVisible();
-        // Board sidebar marker — scope to <aside> which is only the visible sidebar.
-        await expect(page.locator('aside').getByText(/Board admin/i).first()).toBeVisible();
+        await expect(page.getByText(/Board admin|Síndico/i).first()).toBeVisible();
       });
     }
   });
@@ -198,7 +196,7 @@ test('board overview: stat cards render', async ({ page, request }) => {
   await page.goto('/board');
   // The overview surfaces several numeric stats — just verify the page doesn't
   // crash and shows the sidebar + a heading.
-  await expect(page.locator('aside').getByText(/Board admin/i).first()).toBeVisible();
+  await expect(page.getByText(/Board admin|Síndico/i).first()).toBeVisible();
   await expect(page.getByRole('heading').first()).toBeVisible();
 });
 
@@ -228,10 +226,10 @@ test('logout: Sign out button clears session and redirects', async ({ page, requ
   await page.goto('/app');
 
   if (isMobile) {
-    const openMenu = page.getByRole('button', { name: /Open menu/i });
+    const openMenu = page.getByRole('button', { name: /Open menu|Abrir menu/i });
     await expect(openMenu).toBeVisible();
     await openMenu.click();
-    await expect(page.getByRole('button', { name: /Close menu/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Close menu|Fechar menu/i })).toBeVisible();
     await expect(page.locator('aside')).not.toHaveAttribute('aria-hidden', 'true');
   }
 

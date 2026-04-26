@@ -42,14 +42,14 @@ export default function Proposals() {
 
   return (
     <>
-      <PageHeader title="Proposals" subtitle="Every decision your building is making — past, present, and in-motion." />
+      <PageHeader title="Propostas" subtitle="Todas as decisões do seu prédio — passadas, atuais e em andamento." />
       <div className="grid md:grid-cols-2 gap-4">
         {rows.map((p) => (
           <Link key={p.id} to={`/app/proposals/${p.id}`}>
             <GlassCard variant="clay" hover className="p-5 h-full">
               <div className="flex items-center gap-2 mb-2 flex-wrap">
                 <Badge tone={TONE[p.status]}>{STATUS[p.status]}</Badge>
-                {p.ai_drafted === 1 && <Badge tone="sage">AI-drafted</Badge>}
+                {p.ai_drafted === 1 && <Badge tone="sage">Redigido pela IA</Badge>}
                 {p.category && <Badge tone="neutral">{p.category}</Badge>}
               </div>
               <h3 className="font-display text-lg text-dusk-500 leading-snug">{p.title}</h3>

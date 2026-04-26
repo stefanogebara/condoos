@@ -34,9 +34,9 @@ export default function BoardMeetings() {
   return (
     <>
       <PageHeader
-        title="Meetings"
-        subtitle="Schedule board meetings. Paste raw notes after — AI produces recap and action items."
-        actions={<Button onClick={() => setShowForm((x) => !x)} variant={showForm ? 'ghost' : 'primary'} leftIcon={<Plus className="w-4 h-4" />}>{showForm ? 'Cancel' : 'New meeting'}</Button>}
+        title="Reuniões"
+        subtitle="Agende as reuniões. Cole as anotações depois — a IA gera o resumo e a lista de tarefas."
+        actions={<Button onClick={() => setShowForm((x) => !x)} variant={showForm ? 'ghost' : 'primary'} leftIcon={<Plus className="w-4 h-4" />}>{showForm ? 'Cancelar' : 'Nova reunião'}</Button>}
       />
 
       {showForm && (

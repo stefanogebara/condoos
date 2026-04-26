@@ -43,7 +43,7 @@ test('signed-out landing, login, route guard, and mobile drawer work', async ({ 
   await expect(page).toHaveURL(/\/app$/);
 
   if (isMobile) {
-    await expect(page.getByRole('button', { name: /Open menu/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Open menu|Abrir menu/i })).toBeVisible();
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
     expect(overflow).toBe(false);
   }
@@ -55,7 +55,7 @@ test('board roster import creates pending invite and invite links prefill join c
   await page.goto('/board/residents');
   await expect(page.getByRole('heading', { name: /Residents/i })).toBeVisible();
 
-  await page.getByRole('button', { name: /Import roster/i }).click();
+  await page.getByRole('button', { name: /Import roster|Importar/i }).click();
   const email = `e2e-${Date.now()}@example.com`;
   await page.locator('textarea').fill(`email,unit,relationship,primary_contact,voting_weight\n${email},502,tenant,no,1`);
   await page.getByRole('button', { name: /Create invites|Criar convites/i }).click();

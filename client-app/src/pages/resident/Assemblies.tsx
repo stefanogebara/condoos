@@ -24,7 +24,7 @@ export default function Assemblies() {
 
   return (
     <>
-      <PageHeader title="Assemblies" subtitle="AGO / AGE — grant a proxy if you can't attend, or vote live." />
+      <PageHeader title="Assembleias" subtitle="AGO / AGE — conceda procuração se não puder comparecer, ou vote ao vivo." />
       <div className="space-y-4">
         {visible.length === 0 && (
           <GlassCard className="p-8 text-center">

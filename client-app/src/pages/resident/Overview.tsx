@@ -99,10 +99,10 @@ export default function Overview() {
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <h3 className="font-semibold text-dusk-500">{a.title}</h3>
-                    {a.source !== 'manual' && <Badge tone="sage">AI-drafted</Badge>}
+                    {a.source !== 'manual' && <Badge tone="sage">Redigido pela IA</Badge>}
                   </div>
                   <p className="text-sm text-dusk-300 mt-1 line-clamp-2">{a.body}</p>
-                  <div className="text-xs text-dusk-200 mt-2">{new Date(a.created_at).toLocaleDateString()}</div>
+                  <div className="text-xs text-dusk-200 mt-2">{new Date(a.created_at).toLocaleDateString('pt-BR')}</div>
                 </div>
               </div>
             </GlassCard>
