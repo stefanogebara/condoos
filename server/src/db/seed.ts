@@ -160,18 +160,18 @@ function run() {
     `INSERT INTO announcements (condominium_id, author_id, title, body, pinned, source)
      VALUES (?, ?, ?, ?, ?, ?)`
   );
-  insertAnn.run(condoId, admin, 'Pool re-opens Friday',     'The rooftop pool will re-open this Friday after quarterly maintenance. Thanks for your patience.', 1, 'manual');
-  insertAnn.run(condoId, admin, 'Fire drill Thursday 10am', 'Building-wide fire drill this Thursday at 10am. Expect alarms for ~10 minutes.', 1, 'manual');
-  insertAnn.run(condoId, admin, 'New recycling guidelines', 'Please break down cardboard before placing it in the bins. Pickup is Mondays and Thursdays.', 0, 'manual');
+  insertAnn.run(condoId, admin, 'Piscina reabre na sexta',       'A piscina volta a funcionar nesta sexta após a manutenção trimestral. Obrigado pela paciência.', 1, 'manual');
+  insertAnn.run(condoId, admin, 'Simulado de incêndio quinta 10h', 'Simulado de incêndio em todo o prédio nesta quinta às 10h. Alarmes vão tocar por uns 10 minutos.', 1, 'manual');
+  insertAnn.run(condoId, admin, 'Nova orientação de reciclagem',   'Desmonte as caixas de papelão antes de colocar no contêiner. Coleta segundas e quintas.', 0, 'manual');
 
   const insertSug = db.prepare(
     `INSERT INTO suggestions (condominium_id, author_id, body, status, created_at)
      VALUES (?, ?, ?, ?, ?)`
   );
-  insertSug.run(condoId, jordan, 'The lobby AC is barely working. It was 30C inside yesterday afternoon.', 'open', isoDaysAgo(1));
-  insertSug.run(condoId, taylor, 'Lobby feels really hot lately. Is the AC broken?',                       'open', isoDaysAgo(1));
-  insertSug.run(condoId, riley,  'Gym treadmill #3 makes a loud clanking sound when used.',                'open', isoDaysAgo(3));
-  insertSug.run(condoId, sam,    'Can we add EV charging stations? At least 2 of us drive EVs.',           'open', isoDaysAgo(2));
+  insertSug.run(condoId, jordan, 'O ar do saguão mal está funcionando. Ontem à tarde marcou 30°C aqui dentro.', 'open', isoDaysAgo(1));
+  insertSug.run(condoId, taylor, 'O saguão está muito quente ultimamente. O ar quebrou?',                          'open', isoDaysAgo(1));
+  insertSug.run(condoId, riley,  'A esteira #3 da academia faz um barulho alto quando alguém usa.',               'open', isoDaysAgo(3));
+  insertSug.run(condoId, sam,    'Podemos colocar carregadores de carro elétrico? Pelo menos 2 moradores têm EV.', 'open', isoDaysAgo(2));
 
   const insertProp = db.prepare(
     `INSERT INTO proposals (condominium_id, author_id, title, description, category, estimated_cost, status, ai_drafted, created_at)
@@ -179,26 +179,26 @@ function run() {
   );
   const propDiscussion = Number(insertProp.run(
     condoId, admin,
-    'Install 4 EV charging stations in garage',
-    'Level-2 EV chargers in the 4 visitor spots near the elevator. Estimated install + hardware $18,000. Ongoing electricity will be metered per-user via RFID card.',
-    'infrastructure', 18000, 'discussion', 0, isoDaysAgo(2)
+    'Instalar 4 carregadores de carro elétrico na garagem',
+    'Carregadores nível 2 nas 4 vagas de visitante perto do elevador. Estimativa de instalação + equipamento R$ 90.000. Energia consumida cobrada por usuário via cartão RFID.',
+    'infrastructure', 90000, 'discussion', 0, isoDaysAgo(2)
   ).lastInsertRowid);
   const propVoting = Number(insertProp.run(
     condoId, admin,
-    'Replace lobby AC unit',
-    'The lobby AC has failed twice this summer. Quote from Cool Breeze HVAC for a 5-ton replacement: $9,400 including installation and a 5-year warranty.',
-    'maintenance', 9400, 'voting', 0, isoDaysAgo(5)
+    'Trocar o ar-condicionado do saguão',
+    'O ar do saguão falhou duas vezes neste verão. Orçamento da Cool Breeze HVAC para um novo equipamento de 5 TR: R$ 47.000 incluindo instalação e 5 anos de garantia.',
+    'maintenance', 47000, 'voting', 0, isoDaysAgo(5)
   ).lastInsertRowid);
   db.prepare(`UPDATE proposals SET voting_closes_at=? WHERE id=?`).run(isoDaysAhead(3), propVoting);
 
   const insertComment = db.prepare(
     `INSERT INTO proposal_comments (proposal_id, author_id, body, created_at) VALUES (?, ?, ?, ?)`
   );
-  insertComment.run(propDiscussion, maya,   'Love this. I just bought an EV and charging at work is a hassle.', isoDaysAgo(2));
-  insertComment.run(propDiscussion, jordan, 'Who pays for electricity? I dont want my HOA fee subsidizing someone elses fuel.', isoDaysAgo(2));
-  insertComment.run(propDiscussion, taylor, 'Per-user metering should cover it. Ask for the utility breakdown from the installer.', isoDaysAgo(1));
-  insertComment.run(propDiscussion, riley,  '$18K feels high. Can we get a second quote?', isoDaysAgo(1));
-  insertComment.run(propDiscussion, sam,    'Two spots is fine for now, scale up later if demand grows.', isoDaysAgo(0));
+  insertComment.run(propDiscussion, maya,   'Adorei. Acabei de comprar um EV e carregar no trabalho é um saco.', isoDaysAgo(2));
+  insertComment.run(propDiscussion, jordan, 'Quem paga a eletricidade? Não quero ver minha taxa subsidiando o combustível de outros moradores.', isoDaysAgo(2));
+  insertComment.run(propDiscussion, taylor, 'A medição por usuário resolve. Pede a planilha de consumo da empresa que vai instalar.', isoDaysAgo(1));
+  insertComment.run(propDiscussion, riley,  'R$ 90 mil parece alto. Dá pra pegar um segundo orçamento?', isoDaysAgo(1));
+  insertComment.run(propDiscussion, sam,    'Duas vagas já basta por agora. Dá pra expandir depois se aparecer demanda.', isoDaysAgo(0));
 
   const insertVote = db.prepare(
     `INSERT INTO proposal_votes (proposal_id, user_id, choice) VALUES (?, ?, ?)`
@@ -211,8 +211,8 @@ function run() {
     `INSERT INTO meetings (condominium_id, title, scheduled_for, agenda, status)
      VALUES (?, ?, ?, ?, ?)`
   );
-  insertMeeting.run(condoId, 'Q2 Board Meeting', isoDaysAhead(2),
-    'Review pending proposals (EV chargers, lobby AC), quarterly budget, recent complaints.',
+  insertMeeting.run(condoId, 'Reunião do síndico — 2º trimestre', isoDaysAhead(2),
+    'Revisar propostas em pauta (carregadores EV, ar do saguão), orçamento trimestral, reclamações recentes.',
     'scheduled'
   );
 

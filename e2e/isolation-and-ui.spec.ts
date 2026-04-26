@@ -162,7 +162,7 @@ test('board UI: create assembly → redirect to detail → add agenda → convok
   await page.goto('/board/assemblies');
 
   // Open the create form
-  await page.getByRole('button', { name: /New assembly/i }).click();
+  await page.getByRole('button', { name: /New assembly|Nova assembleia/i }).click();
 
   const unique = `E2E UI AGO ${Date.now()}`;
   await page.getByPlaceholder(/AGO 2026/i).fill(unique);

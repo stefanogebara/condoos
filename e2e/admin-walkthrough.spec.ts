@@ -121,7 +121,7 @@ test('admin: assemblies list shows existing AGOs', async ({ page, request }) => 
   await page.goto('/board/assemblies');
   await expect(page.getByRole('heading', { name: /Assemblies/i })).toBeVisible();
   // The "New assembly" button must always be visible to admins
-  await expect(page.getByRole('button', { name: /New assembly/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /New assembly|Nova assembleia/i })).toBeVisible();
 });
 
 test('admin: assembly detail shows agenda + lifecycle buttons in correct state', async ({ page, request }) => {

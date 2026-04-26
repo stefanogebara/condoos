@@ -30,6 +30,12 @@ async function browserLogin(page: Page, request: APIRequestContext, kind: 'admin
   }, s);
 }
 
+async function expectShellRole(page: Page, label: RegExp) {
+  const width = page.viewportSize()?.width || 1280;
+  const shell = width < 1024 ? page.locator('header') : page.locator('aside');
+  await expect(shell.getByText(label).first()).toBeVisible();
+}
+
 // ---------------------------------------------------------------------------
 // Landing — PT-BR sweep verification
 // ---------------------------------------------------------------------------
@@ -129,7 +135,7 @@ test.describe('resident UI pages render', () => {
       await test.step(p.path, async () => {
         await page.goto(p.path);
         await expect(page.getByRole('heading', { name: p.heading }).first()).toBeVisible();
-        await expect(page.getByText(/Resident|Morador/i).first()).toBeVisible();
+        await expectShellRole(page, /Resident|Morador/i);
       });
     }
   });
@@ -158,7 +164,7 @@ test.describe('board UI pages render', () => {
       await test.step(p.path, async () => {
         await page.goto(p.path);
         await expect(page.getByRole('heading', { name: p.heading }).first()).toBeVisible();
-        await expect(page.getByText(/Board admin|Síndico/i).first()).toBeVisible();
+        await expectShellRole(page, /Board admin|Síndico/i);
       });
     }
   });
@@ -196,14 +202,14 @@ test('board overview: stat cards render', async ({ page, request }) => {
   await page.goto('/board');
   // The overview surfaces several numeric stats — just verify the page doesn't
   // crash and shows the sidebar + a heading.
-  await expect(page.getByText(/Board admin|Síndico/i).first()).toBeVisible();
+  await expectShellRole(page, /Board admin|Síndico/i);
   await expect(page.getByRole('heading').first()).toBeVisible();
 });
 
 test('board assemblies: "New assembly" button opens the form', async ({ page, request }) => {
   await browserLogin(page, request, 'admin');
   await page.goto('/board/assemblies');
-  const btn = page.getByRole('button', { name: /New assembly/i });
+  const btn = page.getByRole('button', { name: /New assembly|Nova assembleia/i });
   await expect(btn).toBeVisible();
   await btn.click();
   // After clicking, the title placeholder should be visible
