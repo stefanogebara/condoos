@@ -132,7 +132,7 @@ export default function BoardProposalDetail() {
       />
 
       <div className="flex items-center gap-2 mb-6 flex-wrap">
-        <Badge tone={p.status === 'voting' ? 'peach' : 'sage'}>{p.status}</Badge>
+        <Badge tone={p.status === 'voting' ? 'peach' : 'sage'}>{({ discussion: 'em discussão', voting: 'em votação', approved: 'aprovada', rejected: 'reprovada', completed: 'concluída', inconclusive: 'inconclusiva' } as Record<string,string>)[p.status] || p.status}</Badge>
         {p.ai_drafted === 1 && <Badge tone="sage">AI-drafted</Badge>}
         {p.category && <Badge tone="neutral">{p.category}</Badge>}
         <Badge tone={p.voter_eligibility === 'owners_only' ? 'peach' : 'neutral'}>

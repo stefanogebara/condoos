@@ -27,19 +27,19 @@ export default function BoardApp() {
   }, []);
 
   const nav: NavItem[] = [
-    { to: '/board',               label: 'Overview',      icon: Home },
-    { to: '/board/suggestions',   label: 'Suggestions',   icon: Inbox },
-    { to: '/board/pending',       label: 'Pending',       icon: UserCheck, badge: pendingCount || undefined },
-    { to: '/board/proposals',     label: 'Proposals',     icon: Vote },
-    { to: '/board/assemblies',    label: 'Assemblies',    icon: Gavel },
-    { to: '/board/meetings',      label: 'Meetings',      icon: Calendar },
-    { to: '/board/announcements', label: 'Announcements', icon: Megaphone },
-    { to: '/board/residents',     label: 'Residents',     icon: Users },
+    { to: '/board',               label: 'Visão geral',   icon: Home },
+    { to: '/board/suggestions',   label: 'Sugestões',     icon: Inbox },
+    { to: '/board/pending',       label: 'Pendentes',     icon: UserCheck, badge: pendingCount || undefined },
+    { to: '/board/proposals',     label: 'Propostas',     icon: Vote },
+    { to: '/board/assemblies',    label: 'Assembleias',   icon: Gavel },
+    { to: '/board/meetings',      label: 'Reuniões',      icon: Calendar },
+    { to: '/board/announcements', label: 'Comunicados',   icon: Megaphone },
+    { to: '/board/residents',     label: 'Moradores',     icon: Users },
   ];
 
   return (
     <div className="min-h-screen lg:flex">
-      <Sidebar items={nav} title="Board admin" />
+      <Sidebar items={nav} title="Síndico" />
       <main className="w-full min-w-0 flex-1 px-4 sm:px-6 lg:px-10 py-8 max-w-6xl animate-fade-up">
         <Routes>
           <Route index                   element={<BoardOverview />} />

@@ -41,7 +41,7 @@ export default function Sidebar({ items, title, subtitle }: Props) {
         <button
           onClick={() => setOpen(false)}
           className="lg:hidden w-10 h-10 rounded-2xl bg-white/60 text-dusk-500 flex items-center justify-center hover:bg-white/80 transition"
-          aria-label="Close menu"
+          aria-label="Fechar menu"
         >
           <X className="w-5 h-5" />
         </button>
@@ -85,7 +85,7 @@ export default function Sidebar({ items, title, subtitle }: Props) {
         className="flex shrink-0 items-center gap-3 px-3.5 py-2.5 rounded-2xl text-sm font-medium text-dusk-300 hover:bg-white/40 hover:text-dusk-500 transition"
       >
         <LogOut className="w-[18px] h-[18px]" />
-        Sign out
+        Sair
       </button>
     </>
   );
@@ -100,7 +100,7 @@ export default function Sidebar({ items, title, subtitle }: Props) {
           <button
             onClick={() => setOpen(true)}
             className="w-10 h-10 rounded-2xl bg-white/70 text-dusk-500 flex items-center justify-center shadow-clay-sm hover:bg-white/90 transition"
-            aria-label="Open menu"
+            aria-label="Abrir menu"
           >
             <Menu className="w-5 h-5" />
           </button>

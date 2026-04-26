@@ -48,7 +48,7 @@ function Section({ title, items }: { title: string; items: any[] }) {
           <Link key={p.id} to={`/board/proposals/${p.id}`}>
             <GlassCard variant="clay" hover className="p-5 h-full">
               <div className="flex items-center gap-2 mb-2 flex-wrap">
-                <Badge tone={p.status === 'voting' ? 'peach' : p.status === 'discussion' ? 'sage' : 'neutral'}>{p.status}</Badge>
+                <Badge tone={p.status === 'voting' ? 'peach' : p.status === 'discussion' ? 'sage' : 'neutral'}>{({ discussion: 'em discussão', voting: 'em votação', approved: 'aprovada', rejected: 'reprovada', completed: 'concluída', inconclusive: 'inconclusiva' } as Record<string,string>)[p.status] || p.status}</Badge>
                 {p.ai_drafted === 1 && <Badge tone="sage">AI-drafted</Badge>}
                 {p.category && <Badge tone="neutral">{p.category}</Badge>}
               </div>

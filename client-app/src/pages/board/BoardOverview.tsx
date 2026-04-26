@@ -35,7 +35,7 @@ export default function BoardOverview() {
     Promise.allSettled(loads).then((results) => {
       if (!alive) return;
       setLoadError(results.some((r) => r.status === 'rejected')
-        ? 'Some board data could not be loaded. Refresh or sign in again if it persists.'
+        ? 'Não foi possível carregar parte dos dados. Atualize a página ou entre novamente.'
         : null);
     });
     return () => { alive = false; };
@@ -45,11 +45,16 @@ export default function BoardOverview() {
   const openProposals = proposals.filter((p) => p.status === 'voting' || p.status === 'discussion');
   const upcoming = meetings.filter((m) => new Date(m.scheduled_for) > new Date() && m.status !== 'completed');
 
+  const STATUS_LABEL: Record<string, string> = {
+    voting: 'em votação', discussion: 'em discussão', approved: 'aprovada',
+    rejected: 'reprovada', completed: 'concluída', inconclusive: 'inconclusiva',
+  };
+
   return (
     <>
       <PageHeader
-        title={`Welcome back, ${user?.first_name}.`}
-        subtitle={condoName ? `Everything that needs your attention at ${condoName}.` : "Everything that needs your attention."}
+        title={`Bem-vindo de volta, ${user?.first_name}.`}
+        subtitle={condoName ? `Tudo que precisa da sua atenção no ${condoName}.` : 'Tudo que precisa da sua atenção.'}
       />
       {loadError && (
         <GlassCard variant="clay-peach" className="p-4 mb-6 text-sm text-dusk-500">
@@ -58,43 +63,47 @@ export default function BoardOverview() {
       )}
 
       <div className="grid md:grid-cols-4 gap-4 mb-8">
-        <Stat icon={Inbox}    color="peach" label="New suggestions" value={openSuggestions.length} to="/board/suggestions" />
-        <Stat icon={Vote}     color="sage"  label="Active proposals" value={openProposals.length}  to="/board/proposals" />
-        <Stat icon={Calendar} color="peach" label="Upcoming meetings" value={upcoming.length}     to="/board/meetings" />
-        <Stat icon={Users}    color="sage"  label="Residents"         value={residents.length}    to="/board/residents" />
+        <Stat icon={Inbox}    color="peach" label="Sugestões novas"    value={openSuggestions.length} to="/board/suggestions" />
+        <Stat icon={Vote}     color="sage"  label="Propostas ativas"   value={openProposals.length}   to="/board/proposals" />
+        <Stat icon={Calendar} color="peach" label="Reuniões agendadas" value={upcoming.length}        to="/board/meetings" />
+        <Stat icon={Users}    color="sage"  label="Moradores"          value={residents.length}       to="/board/residents" />
       </div>
 
       <div className="grid lg:grid-cols-2 gap-6">
         <GlassCard variant="clay-peach" className="p-7">
-          <Badge tone="dark" className="mb-3"><Sparkles className="w-3 h-3" /> AI inbox</Badge>
-          <h2 className="font-display text-2xl text-dusk-500 leading-tight">{openSuggestions.length} resident suggestions waiting</h2>
-          <p className="text-sm text-dusk-300 mt-2">Cluster them, turn them into proposals, or dismiss. One click each.</p>
+          <Badge tone="dark" className="mb-3"><Sparkles className="w-3 h-3" /> Caixa de IA</Badge>
+          <h2 className="font-display text-2xl text-dusk-500 leading-tight">
+            {openSuggestions.length === 1
+              ? '1 sugestão de morador esperando'
+              : `${openSuggestions.length} sugestões de moradores esperando`}
+          </h2>
+          <p className="text-sm text-dusk-300 mt-2">Agrupe, transforme em proposta ou descarte. Um clique cada.</p>
           <Link to="/board/suggestions" className="mt-5 inline-flex items-center gap-1 font-semibold text-dusk-500">
-            Open inbox <ArrowRight className="w-4 h-4" />
+            Abrir caixa <ArrowRight className="w-4 h-4" />
           </Link>
         </GlassCard>
 
         <GlassCard variant="clay-sage" className="p-7">
-          <Badge tone="dark" className="mb-3">Meeting ready?</Badge>
-          <h2 className="font-display text-2xl text-dusk-500 leading-tight">Paste raw notes. Get a recap, action items, and a resident announcement.</h2>
+          <Badge tone="dark" className="mb-3">Reunião pronta?</Badge>
+          <h2 className="font-display text-2xl text-dusk-500 leading-tight">Cole as anotações. Receba o resumo, tarefas e o comunicado pros moradores.</h2>
           <Link to="/board/meetings" className="mt-5 inline-flex items-center gap-1 font-semibold text-dusk-500">
-            View meetings <ArrowRight className="w-4 h-4" />
+            Ver reuniões <ArrowRight className="w-4 h-4" />
           </Link>
         </GlassCard>
       </div>
 
-      <h2 className="font-display text-xl text-dusk-500 mt-10 mb-4">Active proposals</h2>
+      <h2 className="font-display text-xl text-dusk-500 mt-10 mb-4">Propostas ativas</h2>
       <div className="grid md:grid-cols-2 gap-4">
         {openProposals.map((p) => (
           <Link key={p.id} to={`/board/proposals/${p.id}`}>
             <GlassCard variant="clay" hover className="p-5">
-              <Badge tone={p.status === 'voting' ? 'peach' : 'sage'}>{p.status}</Badge>
+              <Badge tone={p.status === 'voting' ? 'peach' : 'sage'}>{STATUS_LABEL[p.status] || p.status}</Badge>
               <h3 className="font-semibold text-dusk-500 mt-2">{p.title}</h3>
               {p.status === 'voting' && (
                 <div className="mt-3 flex items-center justify-between text-xs">
-                  <span className="text-sage-700 font-semibold">{p.votes.yes} yes</span>
-                  <span className="text-peach-500 font-semibold">{p.votes.no} no</span>
-                  <span className="text-dusk-200">{p.votes.abstain} abstain</span>
+                  <span className="text-sage-700 font-semibold">{p.votes.yes} sim</span>
+                  <span className="text-peach-500 font-semibold">{p.votes.no} não</span>
+                  <span className="text-dusk-200">{p.votes.abstain} abst.</span>
                 </div>
               )}
             </GlassCard>

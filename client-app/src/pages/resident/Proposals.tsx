@@ -21,11 +21,12 @@ interface Proposal {
 }
 
 const STATUS: Record<string, string> = {
-  discussion: 'In discussion',
-  voting:     'Open for voting',
-  approved:   'Approved',
-  rejected:   'Rejected',
-  completed:  'Completed',
+  discussion:    'em discussão',
+  voting:        'em votação',
+  approved:      'aprovada',
+  rejected:      'reprovada',
+  completed:     'concluída',
+  inconclusive:  'inconclusiva',
 };
 const TONE: Record<string, any> = {
   discussion: 'sage',

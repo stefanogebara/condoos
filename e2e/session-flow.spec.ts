@@ -6,7 +6,8 @@
 // All tests talk to the real API; browser tests hit the deployed UI.
 import { expect, test, type APIRequestContext } from '@playwright/test';
 
-const apiURL = process.env.E2E_API_URL || 'http://127.0.0.1:4312/api';
+const apiURL = process.env.E2E_API_URL
+  || (process.env.E2E_BASE_URL ? `${process.env.E2E_BASE_URL.replace(/\/$/, '')}/api` : 'http://127.0.0.1:4312/api');
 
 // Prod has a rate-limited /auth/login (429 after ~5 attempts/min). Cache sessions
 // per worker so the whole suite logs in each role at most once.

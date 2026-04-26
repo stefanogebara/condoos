@@ -7,7 +7,8 @@
 // fabricated-IDs + list-filter assertions rather than a second real tenant.
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 
-const apiURL = process.env.E2E_API_URL || 'http://127.0.0.1:4312/api';
+const apiURL = process.env.E2E_API_URL
+  || (process.env.E2E_BASE_URL ? `${process.env.E2E_BASE_URL.replace(/\/$/, '')}/api` : 'http://127.0.0.1:4312/api');
 
 type Session = { token: string; user: any };
 const sessionCache = new Map<string, Session>();

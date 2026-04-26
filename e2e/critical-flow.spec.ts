@@ -1,6 +1,7 @@
 import { expect, test, type Page, type APIRequestContext } from '@playwright/test';
 
-const apiURL = process.env.E2E_API_URL || 'http://127.0.0.1:4312/api';
+const apiURL = process.env.E2E_API_URL
+  || (process.env.E2E_BASE_URL ? `${process.env.E2E_BASE_URL.replace(/\/$/, '')}/api` : 'http://127.0.0.1:4312/api');
 
 // Cache sessions per worker — prod /auth/login is rate-limited.
 type Session = { token: string; user: Record<string, unknown> };
@@ -57,7 +58,7 @@ test('board roster import creates pending invite and invite links prefill join c
   await page.getByRole('button', { name: /Import roster/i }).click();
   const email = `e2e-${Date.now()}@example.com`;
   await page.locator('textarea').fill(`email,unit,relationship,primary_contact,voting_weight\n${email},502,tenant,no,1`);
-  await page.getByRole('button', { name: /Create invites/i }).click();
+  await page.getByRole('button', { name: /Create invites|Criar convites/i }).click();
   await expect(page.getByText(email)).toBeVisible();
   await expect(page.getByText(/Rows that need attention/i)).toHaveCount(0);
 

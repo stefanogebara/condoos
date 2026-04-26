@@ -16,22 +16,22 @@ import AssemblyDetail from './AssemblyDetail';
 import Settings from './Settings';
 
 const NAV: NavItem[] = [
-  { to: '/app',               label: 'Overview',      icon: Home },
-  { to: '/app/packages',      label: 'Packages',      icon: Package },
-  { to: '/app/visitors',      label: 'Visitors',      icon: DoorOpen },
-  { to: '/app/amenities',     label: 'Amenities',     icon: Waves },
-  { to: '/app/announcements', label: 'Announcements', icon: Megaphone },
-  { to: '/app/proposals',     label: 'Proposals',     icon: Vote },
-  { to: '/app/assemblies',    label: 'Assemblies',    icon: Gavel },
-  { to: '/app/meetings',      label: 'Meetings',      icon: Calendar },
-  { to: '/app/suggest',       label: 'Suggest',       icon: Sparkles },
-  { to: '/app/settings',      label: 'Settings',      icon: SlidersHorizontal },
+  { to: '/app',               label: 'Início',        icon: Home },
+  { to: '/app/packages',      label: 'Encomendas',    icon: Package },
+  { to: '/app/visitors',      label: 'Visitantes',    icon: DoorOpen },
+  { to: '/app/amenities',     label: 'Áreas comuns',  icon: Waves },
+  { to: '/app/announcements', label: 'Comunicados',   icon: Megaphone },
+  { to: '/app/proposals',     label: 'Propostas',     icon: Vote },
+  { to: '/app/assemblies',    label: 'Assembleias',   icon: Gavel },
+  { to: '/app/meetings',      label: 'Reuniões',      icon: Calendar },
+  { to: '/app/suggest',       label: 'Sugerir',       icon: Sparkles },
+  { to: '/app/settings',      label: 'Preferências',  icon: SlidersHorizontal },
 ];
 
 export default function ResidentApp() {
   return (
     <div className="min-h-screen lg:flex">
-      <Sidebar items={NAV} title="Resident" />
+      <Sidebar items={NAV} title="Morador" />
       <main className="w-full min-w-0 flex-1 px-4 sm:px-6 lg:px-10 py-8 max-w-6xl animate-fade-up">
         <Routes>
           <Route index               element={<Overview />} />
