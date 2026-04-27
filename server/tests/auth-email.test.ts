@@ -51,7 +51,7 @@ test('verifyGoogleCredential rejects unsafe Google tokeninfo responses', async (
   );
 });
 
-test('buildInviteEmail creates a join link with the configured app origin', () => {
+test('buildInviteEmail creates both a sign-in URL and a deep-link with the invite code', () => {
   const email = buildInviteEmail({
     to: 'owner@example.com',
     condoName: 'Pine Ridge Towers',
@@ -62,10 +62,14 @@ test('buildInviteEmail creates a join link with the configured app origin', () =
   }, { APP_ORIGIN: 'https://condoos.example' } as NodeJS.ProcessEnv);
 
   assert.equal(email.loginUrl, 'https://condoos.example/login');
+  // Landing reads ?code= and forwards it through the join CTA into the wizard.
+  assert.equal(email.joinUrl, 'https://condoos.example/?code=DEMO123');
   assert.match(email.subject, /Pine Ridge Towers/);
   assert.match(email.text, /Alex Silva invited you to join Pine Ridge Towers/);
   assert.match(email.text, /Your unit: 502/);
   assert.match(email.text, /Invite code: DEMO123/);
+  assert.match(email.text, /https:\/\/condoos\.example\/\?code=DEMO123/);
+  assert.match(email.html, /tap here to claim your unit/);
 });
 
 test('sendInviteEmail skips safely when email delivery is not configured', async () => {

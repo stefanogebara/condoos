@@ -37,7 +37,15 @@ function escapeHtml(value: string): string {
 }
 
 export function buildInviteEmail(input: InviteEmailInput, env: NodeJS.ProcessEnv = process.env) {
-  const loginUrl = `${appOrigin(env)}/login`;
+  const origin = appOrigin(env);
+  const loginUrl = `${origin}/login`;
+  // Deep-link into the landing — the landing reads ?code= and forwards it into
+  // the "Sou morador" CTA, which carries the code all the way through login
+  // into the join wizard's first step pre-filled. Two paths are kept side-by-
+  // side: invitees whose email matches what the board entered get auto-linked
+  // on sign-in (loginUrl path); invitees with a different email or sharing the
+  // mail with someone else can still tap through to claim their unit (joinUrl).
+  const joinUrl = `${origin}/?code=${encodeURIComponent(input.inviteCode)}`;
   const subject = `You're invited to ${input.condoName} on CondoOS`;
   const adminName = input.senderName || 'The board';
   const text = [
@@ -47,14 +55,16 @@ export function buildInviteEmail(input: InviteEmailInput, env: NodeJS.ProcessEnv
     `Invite code: ${input.inviteCode}`,
     '',
     `Sign in at ${loginUrl} with this email - we'll connect you to your unit automatically.`,
+    `Or skip ahead and join with the code already filled in: ${joinUrl}`,
   ].filter(Boolean).join('\n');
   const html = `
     <p>${escapeHtml(adminName)} invited you to join <strong>${escapeHtml(input.condoName)}</strong> on CondoOS.</p>
     <p><strong>Your unit:</strong> ${escapeHtml(input.unitNumber)}<br />
     <strong>Invite code:</strong> ${escapeHtml(input.inviteCode)}</p>
     <p><a href="${escapeHtml(loginUrl)}">Sign in to CondoOS</a> with this email and we'll connect you to your unit automatically.</p>
+    <p>Or <a href="${escapeHtml(joinUrl)}">tap here to claim your unit</a> — your invite code is already filled in.</p>
   `;
-  return { subject, text, html, loginUrl };
+  return { subject, text, html, loginUrl, joinUrl };
 }
 
 export async function sendInviteEmail(
