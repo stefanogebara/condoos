@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { timingSafeEqual } from 'crypto';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import db from '../db';
@@ -114,11 +115,34 @@ const devRegisterSchema = z.object({
   last_name: z.string().min(1).max(60).default('Tester'),
 });
 
-router.post('/dev-register', authRateLimit, (req, res) => {
-  const expected = process.env.E2E_REGISTER_SECRET;
-  if (!expected) return fail(res, 'dev_register_disabled', 404);
+function devRegisterSecretIsConfigured(): string | null {
+  const raw = (process.env.E2E_REGISTER_SECRET || '').trim();
+  // Reject empty / whitespace-only / too-short secrets at request time so a
+  // misconfigured deploy can't accidentally enable a wide-open registration
+  // endpoint with a weak gate.
+  if (raw.length < 16) return null;
+  return raw;
+}
+
+function constantTimeMatch(provided: string, expected: string): boolean {
+  const a = Buffer.from(provided);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length) {
+    // timingSafeEqual throws on length mismatch; do a dummy comparison so the
+    // total time spent is comparable to the equal-length case.
+    timingSafeEqual(b, b);
+    return false;
+  }
+  return timingSafeEqual(a, b);
+}
+
+router.post('/dev-register', authRateLimit, asyncHandler(async (req, res) => {
+  const expected = devRegisterSecretIsConfigured();
+  // Same 404 in both "disabled" and "wrong secret" cases — never confirm to
+  // unauthenticated callers that the endpoint is live.
+  if (!expected) return fail(res, 'not_found', 404);
   const provided = req.header('x-e2e-secret') || '';
-  if (provided !== expected) return fail(res, 'invalid_secret', 401);
+  if (!constantTimeMatch(provided, expected)) return fail(res, 'not_found', 404);
 
   const parsed = devRegisterSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
@@ -126,7 +150,9 @@ router.post('/dev-register', authRateLimit, (req, res) => {
   const existing = db.prepare(`SELECT id FROM users WHERE email = ?`).get(parsed.data.email);
   if (existing) return fail(res, 'email_taken', 409);
 
-  const pwHash = bcrypt.hashSync(parsed.data.password, 10);
+  // Async hash at cost 12 — avoids blocking the event loop and matches current
+  // OWASP guidance for new code.
+  const pwHash = await bcrypt.hash(parsed.data.password, 12);
   const result = db.prepare(
     `INSERT INTO users (condominium_id, email, password_hash, first_name, last_name, role, unit_number)
      VALUES (NULL, ?, ?, ?, ?, 'resident', NULL)`
@@ -137,8 +163,12 @@ router.post('/dev-register', authRateLimit, (req, res) => {
      FROM users WHERE id = ?`
   ).get(result.lastInsertRowid) as any;
 
+  // Mirror /login + /google: claim any pending invites that match this email
+  // so an E2E run can exercise invite-claim flows without extra plumbing.
+  claimPendingInvitesForUser(row);
+
   const token = signToken(row.id);
   return ok(res, { token, user: row });
-});
+}));
 
 export default router;

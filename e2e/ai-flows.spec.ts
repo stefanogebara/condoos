@@ -41,8 +41,10 @@ test('AI: resident suggest → AI drafts a proposal → promote', async ({ page,
   await browserLogin(page, request, 'resident');
   await page.goto('/app/suggest');
 
-  // Type a free-text complaint
-  await page.locator('textarea').fill('A iluminação do hall do 3º andar fica piscando à noite, parece que vai apagar a qualquer momento.');
+  // Type a free-text complaint. Prefix with "E2E " so the cleanup script can
+  // match by body LIKE 'E2E %' instead of an exact-sentence pattern that
+  // silently leaks rows the moment anyone edits the test copy.
+  await page.locator('textarea').fill('E2E A iluminação do hall do 3º andar fica piscando à noite, parece que vai apagar a qualquer momento.');
 
   // Click Submit ("Enviar")
   await page.getByRole('button', { name: /^Enviar$|^Submit$/i }).click();
@@ -63,26 +65,36 @@ test('AI: resident suggest → AI drafts a proposal → promote', async ({ page,
 // 2. Admin → Cluster suggestions
 // ---------------------------------------------------------------------------
 
+// The keyword-based fallback in server/src/ai/fallbacks.ts:fallbackCluster only
+// matches English terms ("ac", "ev", "gym"), but the seeded demo suggestions are
+// PT-BR. So locally without a real OPENROUTER_API_KEY clustering returns 0 — the
+// test would correctly fail. Set E2E_HAS_LLM=1 (used in test:e2e:prod) to run.
 test('AI: admin clusters open suggestions', async ({ page, request }) => {
+  test.skip(process.env.E2E_HAS_LLM !== '1', 'set E2E_HAS_LLM=1 to run against a stack with a live OpenRouter key');
   test.setTimeout(75_000);
+  const { token } = await loginApi(request, 'admin@condoos.dev', 'admin123');
+  const headers = { Authorization: `Bearer ${token}` };
+
   await browserLogin(page, request, 'admin');
   await page.goto('/board/suggestions');
 
-  // The cluster button copy can be EN or PT-BR depending on translation state
-  const clusterBtn = page.getByRole('button', { name: /cluster|agrupar/i }).first();
+  // The cluster button copy can be EN or PT-BR depending on translation state.
   // It only renders when there are open suggestions; demo has 4 seeded.
+  const clusterBtn = page.getByRole('button', { name: /cluster|agrupar/i }).first();
   await expect(clusterBtn).toBeVisible({ timeout: 10_000 });
   await clusterBtn.click();
 
-  // Wait for clusters to appear OR a toast confirming success
-  // After clustering, suggestions get assigned to a cluster_id and the UI re-renders
-  // with grouped cards. We'll wait for either a "cluster" badge or a fresh re-render.
-  await page.waitForTimeout(8_000);  // give the LLM time to respond
+  // The cluster card renders a "Cluster" badge for each AI-grouped bucket.
+  // Wait on the actual rendered badge instead of a fixed sleep, so a broken
+  // clustering pipeline fails the test instead of silently passing.
+  await expect(page.getByText('Cluster', { exact: true }).first()).toBeVisible({ timeout: 45_000 });
 
-  // Re-load to confirm persistence
-  await page.reload();
-  // Page should still render cleanly
-  await expect(page.getByRole('heading', { name: /Suggestions|Sugest/i }).first()).toBeVisible();
+  // Cross-check via the API that clusters were persisted, not just rendered
+  // from a transient response.
+  const clustersRes = await request.get(`${apiURL}/suggestions/clusters`, { headers });
+  expect(clustersRes.ok()).toBeTruthy();
+  const clusters = (await clustersRes.json()).data as any[];
+  expect(clusters.length, 'expected at least one persisted cluster').toBeGreaterThanOrEqual(1);
 });
 
 // ---------------------------------------------------------------------------

@@ -51,25 +51,25 @@ test('Onboarding: create-building wizard renders invite code and dashboard route
   const condoName = `E2E Condo ${Date.now()}`;
   const nameInput = page.locator('input').nth(0);
   await nameInput.fill(condoName);
-  await expect(page.getByRole('heading', { name: /What's your building called/i })).toBeVisible();
-  await page.getByRole('button', { name: /^Continue$/i }).click();
+  await expect(page.getByRole('heading', { name: /Como o prédio se chama|What's your building called/i })).toBeVisible();
+  await page.getByRole('button', { name: /^Continuar$|^Continue$/i }).click();
 
   // Step 2 — Floors + units + owner unit
-  await expect(page.getByRole('heading', { name: /Structure & your unit/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Estrutura e sua unidade|Structure & your unit/i })).toBeVisible();
   await page.locator('input[type="number"]').nth(0).fill('5');
   await page.locator('input[type="number"]').nth(1).fill('3');
-  // Owner unit — last text input on the step
-  const ownerInput = page.getByPlaceholder(/801|PH-1/);
+  // Owner unit — text input with the example placeholder
+  const ownerInput = page.getByPlaceholder(/801|PH-1|Cobertura/);
   await ownerInput.fill('301');
-  await page.getByRole('button', { name: /^Continue$/i }).click();
+  await page.getByRole('button', { name: /^Continuar$|^Continue$/i }).click();
 
   // Step 3 — Preferences (defaults are fine) → submit
-  await expect(page.getByRole('heading', { name: /Preferences/i })).toBeVisible();
-  await page.getByRole('button', { name: /Create building/i }).click();
+  await expect(page.getByRole('heading', { name: /Preferências|Preferences/i })).toBeVisible();
+  await page.getByRole('button', { name: /Criar prédio|Create building/i }).click();
 
   // Step 4 — Success card with invite code
-  await expect(page.getByRole('heading', { name: /You're in/i })).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByText(/Invite code/i)).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Tudo pronto|You're in/i })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText(/Código de convite|Invite code/i)).toBeVisible();
   // Invite code is a 6-character A-Z2-9 string in a font-mono div
   const codeEl = page.locator('div.font-mono').filter({ hasText: /^[A-Z2-9]{6}$/ }).first();
   await expect(codeEl).toBeVisible();
@@ -113,24 +113,24 @@ test('Onboarding: join wizard claims a unit using the demo invite code', async (
   await page.goto('/onboarding/join');
 
   // Step 1 — invite code
-  await expect(page.getByRole('heading', { name: /Enter your invite code/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Insira o código de convite|Enter your invite code/i })).toBeVisible();
   await page.locator('input').first().fill(inviteCode);
-  await page.getByRole('button', { name: /^Continue$/i }).click();
+  await page.getByRole('button', { name: /^Continuar$|^Continue$/i }).click();
 
   // Step 2 — building found → pick a unit + relationship
-  await expect(page.getByText(/Building found/i)).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText(/Prédio encontrado|Building found/i)).toBeVisible({ timeout: 10_000 });
   // Click the first available unit tile (font-mono unit number)
   await page.locator('button:has(div.font-mono)').first().click();
-  // Pick "Tenant" — relationship buttons render "Tenant" + a hint sub-line, so
-  // target by the visible label rather than an exact-name role match.
-  await page.locator('button', { hasText: 'I rent this unit' }).first().click();
+  // Pick "Inquilino" — relationship buttons render label + hint sub-line, so
+  // target by the visible hint rather than an exact-name role match.
+  await page.locator('button', { hasText: /Alugo a unidade|I rent this unit/ }).first().click();
 
   // Submit — demo condo has require_approval = true → membership lands in pending
-  await page.getByRole('button', { name: /Request to join|Join now/i }).click();
+  await page.getByRole('button', { name: /Pedir entrada|Entrar agora|Request to join|Join now/i }).click();
 
   // Step 3 — request-sent confirmation OR /app redirect (auto-approved)
-  // The seeded demo has require_approval = 1, so we expect "Request sent"
-  await expect(page.getByRole('heading', { name: /Request sent|You're in/i })).toBeVisible({ timeout: 15_000 });
+  // The seeded demo has require_approval = 1, so we expect "Pedido enviado"
+  await expect(page.getByRole('heading', { name: /Pedido enviado|Request sent|Tudo pronto|You're in/i })).toBeVisible({ timeout: 15_000 });
 
   // Verify via API that the membership exists
   const meRes = await request.get(`${apiURL}/onboarding/me`, {

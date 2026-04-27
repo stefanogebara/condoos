@@ -11,7 +11,7 @@ const propWhere = "(title LIKE 'Isolation probe%' OR title LIKE 'E2E %' OR title
 const asmWhere  = "(title LIKE 'Canary AGO%' OR title LIKE 'walkthrough %' OR title LIKE 'E2E %')";
 const meetingWhere = "(title LIKE 'E2E %' OR title LIKE 'walkthrough %')";
 const inviteWhere = "(email LIKE 'e2e-%@example.com' OR email LIKE 'e2e+%@condoos.test')";
-const suggestionWhere = "(body LIKE 'A iluminação do hall do 3º andar fica piscando%')";
+const suggestionWhere = "(body LIKE 'E2E %' OR body LIKE 'A iluminação do hall do 3º andar fica piscando%')";
 
 const propBefore = db.prepare('SELECT COUNT(*) AS c FROM proposals').get().c;
 const asmBefore  = db.prepare('SELECT COUNT(*) AS c FROM assemblies').get().c;
