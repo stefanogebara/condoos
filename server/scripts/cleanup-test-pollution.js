@@ -63,8 +63,18 @@ const userBefore  = db.prepare('SELECT COUNT(*) AS c FROM users').get().c;
 const e2eCondoIds = db.prepare("SELECT id FROM condominiums WHERE name LIKE 'E2E %'").all().map((r) => r.id);
 const e2eUserIds  = db.prepare("SELECT id FROM users WHERE email LIKE 'e2e+%@condoos.test'").all().map((r) => r.id);
 
+// audit_log was added by the cofounder backend track and references both
+// users(id) and condominiums(id). Strip rows for our E2E artifacts before
+// the parent deletions, otherwise FK constraints reject the wipe.
+function tableExists(name) {
+  return !!db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name=?`).get(name);
+}
+
 if (e2eCondoIds.length > 0) {
   const placeholders = e2eCondoIds.map(() => '?').join(',');
+  if (tableExists('audit_log')) {
+    db.prepare(`DELETE FROM audit_log WHERE condominium_id IN (${placeholders})`).run(...e2eCondoIds);
+  }
   // Cascade: kill anything that references these condos before nuking the condos themselves.
   db.prepare(`DELETE FROM amenity_reservations WHERE amenity_id IN (SELECT id FROM amenities WHERE condominium_id IN (${placeholders}))`).run(...e2eCondoIds);
   db.prepare(`DELETE FROM amenities WHERE condominium_id IN (${placeholders})`).run(...e2eCondoIds);
@@ -76,6 +86,9 @@ if (e2eCondoIds.length > 0) {
 
 if (e2eUserIds.length > 0) {
   const placeholders = e2eUserIds.map(() => '?').join(',');
+  if (tableExists('audit_log')) {
+    db.prepare(`DELETE FROM audit_log WHERE actor_user_id IN (${placeholders})`).run(...e2eUserIds);
+  }
   db.prepare(`DELETE FROM user_unit WHERE user_id IN (${placeholders})`).run(...e2eUserIds);
   db.prepare(`DELETE FROM users WHERE id IN (${placeholders})`).run(...e2eUserIds);
 }
