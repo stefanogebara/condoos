@@ -15,6 +15,9 @@ interface CondoInfo {
   units: UnitOpt[];
 }
 
+const relationshipPt = (k: 'owner' | 'tenant' | 'occupant') =>
+  ({ owner: 'proprietário', tenant: 'inquilino', occupant: 'ocupante' }[k]);
+
 export default function Join() {
   const navigate = useNavigate();
   const [step, setStep] = useState<1 | 2 | 3>(1);
@@ -32,7 +35,7 @@ export default function Join() {
       setCondoInfo(info);
       setStep(2);
     } catch (err: any) {
-      toast.error(err?.response?.data?.error === 'unknown_code' ? "That code doesn't match any building" : 'Lookup failed');
+      toast.error(err?.response?.data?.error === 'unknown_code' ? 'Esse código não corresponde a nenhum prédio' : 'Falha na busca');
     } finally { setBusy(false); }
   }
 
@@ -52,13 +55,13 @@ export default function Join() {
         condo_name: condoInfo?.condo?.name,
       });
       if (res.status === 'active') {
-        toast.success('You\'re in!');
+        toast.success('Você entrou!');
         window.location.href = '/app';
       } else {
         setStep(3);
       }
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Join failed');
+      toast.error(err?.response?.data?.error || 'Falha ao entrar');
     } finally { setBusy(false); }
   }
 
@@ -70,7 +73,7 @@ export default function Join() {
         <Link to="/onboarding" className="flex items-center gap-4 text-dusk-300 hover:text-dusk-500">
           <ArrowLeft className="w-4 h-4" /> <Logo size={22} />
         </Link>
-        <Badge tone="peach">Join a building</Badge>
+        <Badge tone="peach">Entrar num prédio</Badge>
       </nav>
 
       <main className="flex-1 flex items-center justify-center px-6 py-12">
@@ -81,8 +84,8 @@ export default function Join() {
                 <div className="w-14 h-14 rounded-2xl bg-peach-100 text-peach-500 flex items-center justify-center mx-auto mb-5">
                   <Key className="w-7 h-7" />
                 </div>
-                <h1 className="font-display text-3xl text-dusk-500 tracking-tight text-center">Enter your invite code</h1>
-                <p className="text-dusk-300 mt-2 text-sm text-center">A 6-character code your board sent you.</p>
+                <h1 className="font-display text-3xl text-dusk-500 tracking-tight text-center">Insira o código de convite</h1>
+                <p className="text-dusk-300 mt-2 text-sm text-center">Um código de 6 caracteres que o síndico te mandou.</p>
                 <div className="mt-6 max-w-xs mx-auto">
                   <input
                     className="input text-center font-mono text-2xl tracking-[0.3em] uppercase"
@@ -94,10 +97,10 @@ export default function Join() {
                   />
                 </div>
                 <div className="mt-8 flex justify-center">
-                  <Button variant="primary" onClick={lookup} loading={busy} rightIcon={<ArrowRight className="w-4 h-4" />} disabled={code.trim().length < 4}>Continue</Button>
+                  <Button variant="primary" onClick={lookup} loading={busy} rightIcon={<ArrowRight className="w-4 h-4" />} disabled={code.trim().length < 4}>Continuar</Button>
                 </div>
                 <p className="mt-8 text-xs text-dusk-200 text-center">
-                  Don't have a code? <Link to="/onboarding/create" className="underline hover:text-dusk-400">Create your own building</Link> instead.
+                  Não tem código? <Link to="/onboarding/create" className="underline hover:text-dusk-400">Crie seu próprio prédio</Link>.
                 </p>
               </>
             )}
@@ -105,13 +108,13 @@ export default function Join() {
             {step === 2 && condoInfo && (
               <>
                 <div className="mb-6 p-4 rounded-2xl bg-sage-100 border border-white/70">
-                  <Badge tone="sage" className="mb-1">Building found</Badge>
+                  <Badge tone="sage" className="mb-1">Prédio encontrado</Badge>
                   <div className="font-display text-2xl text-dusk-500">{condoInfo.condo.name}</div>
                   <div className="text-xs text-dusk-300 mt-0.5">{condoInfo.condo.address} · {condoInfo.condo.building_name}</div>
                 </div>
 
-                <h2 className="font-display text-xl text-dusk-500 tracking-tight flex items-center gap-2"><Home className="w-5 h-5" /> Pick your unit</h2>
-                <p className="text-xs text-dusk-300 mt-1 mb-4">Units with claimants are marked — you can still select them if you're moving in / sharing.</p>
+                <h2 className="font-display text-xl text-dusk-500 tracking-tight flex items-center gap-2"><Home className="w-5 h-5" /> Escolha sua unidade</h2>
+                <p className="text-xs text-dusk-300 mt-1 mb-4">Unidades já reivindicadas estão marcadas — você ainda pode escolhê-las se está se mudando ou dividindo.</p>
 
                 <div className="max-h-72 overflow-auto -mx-1 pr-2 grid grid-cols-3 md:grid-cols-4 gap-2">
                   {condoInfo.units.map((u) => {
@@ -127,19 +130,19 @@ export default function Join() {
                       >
                         <div className="font-mono font-semibold">{u.number}</div>
                         <div className={`text-[11px] ${active ? 'text-cream-50/70' : 'text-dusk-300'}`}>
-                          {u.floor !== null ? `Floor ${u.floor}` : 'Special'}{u.claims > 0 && ` · ${u.claims} here`}
+                          {u.floor !== null ? `Andar ${u.floor}` : 'Especial'}{u.claims > 0 && ` · ${u.claims} aqui`}
                         </div>
                       </button>
                     );
                   })}
                 </div>
 
-                <h2 className="font-display text-xl text-dusk-500 tracking-tight mt-8 flex items-center gap-2"><Users className="w-5 h-5" /> How are you connected?</h2>
+                <h2 className="font-display text-xl text-dusk-500 tracking-tight mt-8 flex items-center gap-2"><Users className="w-5 h-5" /> Qual seu vínculo?</h2>
                 <div className="mt-3 grid grid-cols-3 gap-2">
                   {[
-                    { k: 'owner', label: 'Owner', hint: 'I own this unit' },
-                    { k: 'tenant', label: 'Tenant', hint: 'I rent this unit' },
-                    { k: 'occupant', label: 'Occupant', hint: 'Family / other' },
+                    { k: 'owner', label: 'Proprietário', hint: 'Sou dono da unidade' },
+                    { k: 'tenant', label: 'Inquilino', hint: 'Alugo a unidade' },
+                    { k: 'occupant', label: 'Ocupante', hint: 'Família / outro' },
                   ].map((r) => (
                     <button
                       key={r.k}
@@ -155,9 +158,9 @@ export default function Join() {
                 </div>
 
                 <div className="mt-8 flex justify-between items-center">
-                  <Button variant="ghost" onClick={() => { setStep(1); setCondoInfo(null); setSelectedUnitId(null); }} leftIcon={<ArrowLeft className="w-4 h-4" />}>Back</Button>
+                  <Button variant="ghost" onClick={() => { setStep(1); setCondoInfo(null); setSelectedUnitId(null); }} leftIcon={<ArrowLeft className="w-4 h-4" />}>Voltar</Button>
                   <Button variant="primary" onClick={submit} loading={busy} rightIcon={<ArrowRight className="w-4 h-4" />} disabled={!selectedUnitId}>
-                    {condoInfo.condo.require_approval ? 'Request to join' : 'Join now'}
+                    {condoInfo.condo.require_approval ? 'Pedir entrada' : 'Entrar agora'}
                   </Button>
                 </div>
               </>
@@ -168,12 +171,12 @@ export default function Join() {
                 <div className="w-14 h-14 rounded-2xl bg-peach-100 text-peach-500 flex items-center justify-center mx-auto">
                   <Clock className="w-7 h-7" />
                 </div>
-                <h1 className="font-display text-3xl text-dusk-500 tracking-tight mt-5">Request sent</h1>
+                <h1 className="font-display text-3xl text-dusk-500 tracking-tight mt-5">Pedido enviado</h1>
                 <p className="text-dusk-300 mt-3 text-sm max-w-md mx-auto">
-                  You claimed <span className="font-semibold text-dusk-500">Unit {selectedUnit.number}</span> at {condoInfo.condo.name} as <span className="font-semibold text-dusk-500">{relationship}</span>.
-                  The board will review your request. You'll get access as soon as they approve.
+                  Você reivindicou <span className="font-semibold text-dusk-500">Unidade {selectedUnit.number}</span> em {condoInfo.condo.name} como <span className="font-semibold text-dusk-500">{relationshipPt(relationship)}</span>.
+                  O síndico vai analisar. Você terá acesso assim que ele aprovar.
                 </p>
-                <Button variant="ghost" onClick={() => navigate('/onboarding')} className="mt-8">Back to onboarding</Button>
+                <Button variant="ghost" onClick={() => navigate('/onboarding')} className="mt-8">Voltar</Button>
               </div>
             )}
           </GlassCard>

@@ -5,6 +5,7 @@ import PageHeader from '../../components/PageHeader';
 import GlassCard from '../../components/GlassCard';
 import Badge from '../../components/Badge';
 import { apiGet } from '../../lib/api';
+import { formatDateTime } from '../../lib/i18n';
 
 interface Assembly {
   id: number;
@@ -45,7 +46,7 @@ export default function Assemblies() {
                     {a.status.replace('_', ' ')}
                   </Badge>
                 </div>
-                <div className="text-sm text-dusk-300 mt-1">{new Date(a.first_call_at).toLocaleString('pt-BR')}</div>
+                <div className="text-sm text-dusk-300 mt-1">{formatDateTime(a.first_call_at)}</div>
               </div>
             </GlassCard>
           </Link>

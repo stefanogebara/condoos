@@ -4,6 +4,7 @@ import PageHeader from '../../components/PageHeader';
 import GlassCard from '../../components/GlassCard';
 import Badge from '../../components/Badge';
 import { apiGet } from '../../lib/api';
+import { formatDate, formatDateTime } from '../../lib/i18n';
 
 interface ActionItem { id: number; description: string; status: string; owner_label: string | null; due_date: string | null; }
 interface Meeting {
@@ -43,7 +44,7 @@ export default function Meetings() {
                     <h3 className="font-display text-xl text-dusk-500">{m.title}</h3>
                     <Badge tone={m.status === 'completed' ? 'sage' : 'peach'}>{m.status}</Badge>
                   </div>
-                  <div className="text-sm text-dusk-300 mt-1">{new Date(m.scheduled_for).toLocaleString()}</div>
+                  <div className="text-sm text-dusk-300 mt-1">{formatDateTime(m.scheduled_for)}</div>
                   {m.agenda && <p className="text-sm text-dusk-400 mt-3">{m.agenda}</p>}
 
                   {summary && (
@@ -69,7 +70,7 @@ export default function Meetings() {
                             <span className={a.status === 'done' ? 'line-through text-dusk-200' : 'text-dusk-400'}>
                               {a.description}
                               {a.owner_label && <span className="text-dusk-200"> · {a.owner_label}</span>}
-                              {a.due_date && <span className="text-dusk-200"> · due {new Date(a.due_date).toLocaleDateString()}</span>}
+                              {a.due_date && <span className="text-dusk-200"> · due {formatDate(a.due_date)}</span>}
                             </span>
                           </li>
                         ))}

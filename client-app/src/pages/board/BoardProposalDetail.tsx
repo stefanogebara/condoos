@@ -8,6 +8,7 @@ import Badge from '../../components/Badge';
 import Avatar from '../../components/Avatar';
 import Button from '../../components/Button';
 import { apiGet, apiPatch, apiPost } from '../../lib/api';
+import { formatCurrency, formatDate } from '../../lib/i18n';
 
 const QUORUM_OPTIONS = [0, 25, 50, 67, 75];
 
@@ -113,7 +114,7 @@ export default function BoardProposalDetail() {
       <Link to="/board/proposals" className="inline-flex items-center gap-1 text-sm text-dusk-300 hover:text-dusk-500 mb-4"><ArrowLeft className="w-4 h-4" /> Voltar</Link>
       <PageHeader
         title={p.title}
-        subtitle={`${p.author_first} ${p.author_last}${p.estimated_cost ? ` · ~R$ ${p.estimated_cost.toLocaleString('pt-BR')}` : ''}`}
+        subtitle={`${p.author_first} ${p.author_last}${p.estimated_cost ? ` · ~${formatCurrency(p.estimated_cost)}` : ''}`}
         actions={
           <div className="flex gap-2 flex-wrap">
             {p.status === 'discussion' && <Button variant="primary" onClick={() => setStatus('voting')} leftIcon={<Play className="w-4 h-4" />} loading={busy}>Open voting</Button>}
@@ -305,7 +306,7 @@ export default function BoardProposalDetail() {
               <div className="flex items-center gap-2 text-xs text-dusk-200">
                 <span className="font-medium text-dusk-400">{c.first_name} {c.last_name}</span>
                 <span>Unit {c.unit_number}</span>
-                <span className="ml-auto">{new Date(c.created_at).toLocaleDateString()}</span>
+                <span className="ml-auto">{formatDate(c.created_at)}</span>
               </div>
               <p className="text-sm text-dusk-400 mt-1">{c.body}</p>
             </div>

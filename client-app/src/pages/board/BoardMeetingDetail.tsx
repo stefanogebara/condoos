@@ -7,6 +7,7 @@ import GlassCard from '../../components/GlassCard';
 import Badge from '../../components/Badge';
 import Button from '../../components/Button';
 import { apiGet, apiPost, apiPatch } from '../../lib/api';
+import { formatDate, formatDateTime } from '../../lib/i18n';
 
 interface ActionItem { id: number; description: string; status: string; owner_label: string | null; due_date: string | null; }
 interface Meeting {
@@ -73,7 +74,7 @@ export default function BoardMeetingDetail() {
   return (
     <>
       <Link to="/board/meetings" className="inline-flex items-center gap-1 text-sm text-dusk-300 hover:text-dusk-500 mb-4"><ArrowLeft className="w-4 h-4" /> Voltar</Link>
-      <PageHeader title={m.title} subtitle={new Date(m.scheduled_for).toLocaleString('pt-BR') + (m.agenda ? ` · ${m.agenda}` : '')} />
+      <PageHeader title={m.title} subtitle={formatDateTime(m.scheduled_for) + (m.agenda ? ` · ${m.agenda}` : '')} />
 
       <div className="grid lg:grid-cols-2 gap-6">
         <GlassCard className="p-6">
@@ -138,7 +139,7 @@ export default function BoardMeetingDetail() {
                   </div>
                   <div className="text-xs text-dusk-200 mt-0.5">
                     {a.owner_label && <span>{a.owner_label}</span>}
-                    {a.due_date && <span> · due {new Date(a.due_date).toLocaleDateString()}</span>}
+                    {a.due_date && <span> · due {formatDate(a.due_date)}</span>}
                   </div>
                 </div>
               </GlassCard>

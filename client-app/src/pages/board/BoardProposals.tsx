@@ -4,6 +4,7 @@ import PageHeader from '../../components/PageHeader';
 import GlassCard from '../../components/GlassCard';
 import Badge from '../../components/Badge';
 import { apiGet } from '../../lib/api';
+import { formatCurrency } from '../../lib/i18n';
 
 interface Proposal {
   id: number;
@@ -63,7 +64,7 @@ function Section({ title, items }: { title: string; items: any[] }) {
                     <span className="text-peach-500 font-semibold">{p.votes.no}</span>
                   </span>
                 ) : (
-                  p.estimated_cost ? <span className="text-dusk-300">~R$ {p.estimated_cost.toLocaleString('pt-BR')}</span> : null
+                  p.estimated_cost ? <span className="text-dusk-300">~{formatCurrency(p.estimated_cost)}</span> : null
                 )}
               </div>
             </GlassCard>

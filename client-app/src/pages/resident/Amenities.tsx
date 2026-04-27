@@ -7,6 +7,7 @@ import Badge from '../../components/Badge';
 import Button from '../../components/Button';
 import { apiGet, apiPost } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
+import { formatDateTime } from '../../lib/i18n';
 
 interface Amenity { id: number; name: string; description: string; icon: string; capacity: number; open_hour: number; close_hour: number; }
 interface Reservation { id: number; amenity_id: number; user_id: number; amenity_name: string; amenity_icon: string; starts_at: string; ends_at: string; first_name: string; last_name: string; unit_number: string; status: string; }
@@ -138,7 +139,7 @@ export default function Amenities() {
                     <span className="font-semibold text-dusk-500">{r.amenity_name}</span>
                     {mine && <Badge tone="sage">You</Badge>}
                   </div>
-                  <div className="text-xs text-dusk-200">{new Date(r.starts_at).toLocaleString()} · {r.first_name} {r.last_name} (Unit {r.unit_number})</div>
+                  <div className="text-xs text-dusk-200">{formatDateTime(r.starts_at)} · {r.first_name} {r.last_name} (Unit {r.unit_number})</div>
                 </div>
               </GlassCard>
             );

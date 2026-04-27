@@ -8,6 +8,7 @@ import Button from '../../components/Button';
 import Badge from '../../components/Badge';
 import { apiGet, apiPost } from '../../lib/api';
 import { track } from '../../lib/analytics';
+import { formatDateTime } from '../../lib/i18n';
 
 interface Assembly {
   id: number;
@@ -125,7 +126,7 @@ export default function BoardAssemblies() {
                   <Badge tone="neutral">{KIND_LABEL[a.kind]}</Badge>
                 </div>
                 <div className="text-sm text-dusk-300 mt-1">
-                  {new Date(a.first_call_at).toLocaleString('pt-BR')} · {a.agenda_count} item{a.agenda_count === 1 ? '' : 's'} on agenda
+                  {formatDateTime(a.first_call_at)} · {a.agenda_count} item{a.agenda_count === 1 ? '' : 's'} on agenda
                 </div>
               </div>
             </GlassCard>

@@ -7,6 +7,7 @@ import GlassCard from '../../components/GlassCard';
 import Button from '../../components/Button';
 import Badge from '../../components/Badge';
 import { apiGet, apiPost } from '../../lib/api';
+import { formatDateTime } from '../../lib/i18n';
 
 interface Meeting { id: number; title: string; scheduled_for: string; agenda: string | null; status: string; ai_summary: string | null; raw_notes: string | null; }
 
@@ -66,7 +67,7 @@ export default function BoardMeetings() {
                   {m.ai_summary && <Badge tone="sage">AI recap</Badge>}
                   {m.raw_notes && !m.ai_summary && <Badge tone="warning">notes pending</Badge>}
                 </div>
-                <div className="text-sm text-dusk-300 mt-1">{new Date(m.scheduled_for).toLocaleString()}</div>
+                <div className="text-sm text-dusk-300 mt-1">{formatDateTime(m.scheduled_for)}</div>
               </div>
             </GlassCard>
           </Link>

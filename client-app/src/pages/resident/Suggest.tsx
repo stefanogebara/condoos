@@ -8,6 +8,7 @@ import Button from '../../components/Button';
 import Badge from '../../components/Badge';
 import { apiPost } from '../../lib/api';
 import { track } from '../../lib/analytics';
+import { formatCurrency } from '../../lib/i18n';
 
 interface Draft {
   title: string;
@@ -128,7 +129,7 @@ export default function Suggest() {
             <Badge tone="sage"><Sparkles className="w-3 h-3" /> Proposta redigida pela IA</Badge>
             {draft._fallback && <Badge tone="warning">modo offline</Badge>}
             <Badge tone="neutral">{draft.category}</Badge>
-            {draft.estimated_cost && <Badge tone="neutral">~R$ {draft.estimated_cost.toLocaleString('pt-BR')}</Badge>}
+            {draft.estimated_cost && <Badge tone="neutral">~{formatCurrency(draft.estimated_cost)}</Badge>}
           </div>
           <h3 className="font-display text-2xl text-dusk-500 leading-tight">{draft.title}</h3>
           <p className="text-sm text-dusk-300 mt-1 italic">{draft.rationale}</p>

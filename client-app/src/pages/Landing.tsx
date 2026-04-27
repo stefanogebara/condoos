@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { track } from '../lib/analytics';
 import { ArrowRight, Users, Vote, Sparkles, Calendar, Package, Waves, Gavel, MessageCircle, ShieldCheck, FileText, Check } from 'lucide-react';
@@ -12,6 +12,19 @@ import { exposeInternalPages } from '../lib/appConfig';
 
 export default function Landing() {
   useEffect(() => { track('landing_view'); }, []);
+
+  // Forward any ?code=ABC123 the visitor arrived with so the resident-with-invite
+  // CTA preserves it through the login redirect into the join wizard.
+  const inviteCode = useMemo(() => {
+    if (typeof window === 'undefined') return '';
+    return new URLSearchParams(window.location.search).get('code') || '';
+  }, []);
+  const loginHref = (intent: 'create' | 'join' | 'demo') => {
+    const params = new URLSearchParams({ intent });
+    if (intent === 'join' && inviteCode) params.set('code', inviteCode);
+    return `/login?${params.toString()}`;
+  };
+
   return (
     <div className="relative min-h-screen overflow-x-hidden">
       {/* Nav */}
@@ -51,14 +64,19 @@ export default function Landing() {
             </p>
 
             <div className="mt-10 flex items-center gap-3 flex-wrap">
-              <Link to="/login" onClick={() => track('cta_clicked', { location: 'hero', label: 'testar_a_demo' })}>
+              <Link to={loginHref('create')} onClick={() => track('cta_clicked', { location: 'hero', label: 'sou_sindico' })}>
                 <Button variant="primary" size="lg" rightIcon={<ArrowRight className="w-5 h-5" />}>
-                  Testar a demo
+                  Sou síndico — montar meu prédio
                 </Button>
               </Link>
-              <a href="#features" onClick={() => track('cta_clicked', { location: 'hero', label: 'ver_por_dentro' })}>
-                <Button variant="ghost" size="lg">Ver por dentro</Button>
-              </a>
+              <Link to={loginHref('join')} onClick={() => track('cta_clicked', { location: 'hero', label: 'sou_morador' })}>
+                <Button variant="ghost" size="lg">
+                  Sou morador — tenho um código
+                </Button>
+              </Link>
+              <Link to={loginHref('demo')} onClick={() => track('cta_clicked', { location: 'hero', label: 'so_explorar' })}>
+                <Button variant="ghost" size="lg">Só explorar (demo)</Button>
+              </Link>
             </div>
 
             <div className="mt-14 flex items-center gap-6 flex-wrap text-xs uppercase tracking-[0.14em] text-dusk-200 font-medium">
@@ -466,17 +484,20 @@ export default function Landing() {
             Vai que é hoje.
           </h2>
           <p className="text-dusk-300 mt-4 text-lg max-w-xl mx-auto relative">
-            Entre com o Google em 10 segundos. Demo pronta para mostrar ao síndico no próximo grupo do prédio.
+            Entre com o Google em 10 segundos. Sem cartão, sem setup — escolha o caminho certo abaixo.
           </p>
           <div className="mt-8 flex items-center justify-center gap-3 flex-wrap relative">
-            <Link to="/login">
+            <Link to={loginHref('create')} onClick={() => track('cta_clicked', { location: 'footer', label: 'sou_sindico' })}>
               <Button variant="primary" size="lg" rightIcon={<ArrowRight className="w-5 h-5" />}>
-                Entrar e explorar a demo
+                Sou síndico — montar meu prédio
               </Button>
             </Link>
-            <a href="https://github.com/stefanogebara/condoos" target="_blank" rel="noreferrer">
-              <Button variant="ghost" size="lg">Ver código no GitHub</Button>
-            </a>
+            <Link to={loginHref('join')} onClick={() => track('cta_clicked', { location: 'footer', label: 'sou_morador' })}>
+              <Button variant="ghost" size="lg">Tenho um código</Button>
+            </Link>
+            <Link to={loginHref('demo')} onClick={() => track('cta_clicked', { location: 'footer', label: 'so_explorar' })}>
+              <Button variant="ghost" size="lg">Testar a demo</Button>
+            </Link>
           </div>
           <div className="mt-6 flex items-center justify-center gap-4 flex-wrap text-xs text-dusk-300 relative">
             <span className="inline-flex items-center gap-1.5"><Check className="w-3 h-3 text-sage-700" /> Login com Google</span>

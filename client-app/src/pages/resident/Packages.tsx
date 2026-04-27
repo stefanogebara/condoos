@@ -7,6 +7,7 @@ import EmptyState from '../../components/EmptyState';
 import Badge from '../../components/Badge';
 import Button from '../../components/Button';
 import { apiGet, apiPost } from '../../lib/api';
+import { formatDate } from '../../lib/i18n';
 
 interface Pkg {
   id: number;
@@ -53,7 +54,7 @@ export default function Packages() {
                     <Badge tone="peach">aguardando</Badge>
                   </div>
                   <div className="text-sm text-dusk-300">{p.description || '—'}</div>
-                  <div className="text-xs text-dusk-200 mt-1">Chegou em {new Date(p.arrived_at).toLocaleDateString('pt-BR')}</div>
+                  <div className="text-xs text-dusk-200 mt-1">Chegou em {formatDate(p.arrived_at)}</div>
                 </div>
                 <Button size="sm" variant="sage" onClick={() => pickup(p.id)} leftIcon={<CheckCircle2 className="w-4 h-4" />}>
                   Retirei

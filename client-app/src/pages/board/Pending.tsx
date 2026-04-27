@@ -8,6 +8,7 @@ import Avatar from '../../components/Avatar';
 import Button from '../../components/Button';
 import EmptyState from '../../components/EmptyState';
 import { apiGet, apiPost } from '../../lib/api';
+import { formatDate } from '../../lib/i18n';
 
 interface PendingRequest {
   id: number;
@@ -71,7 +72,7 @@ export default function Pending() {
                 <div className="text-sm text-dusk-300 mt-1">{r.email}</div>
                 <div className="text-xs text-dusk-200 mt-1">
                   Claiming <span className="font-semibold text-dusk-400">Unit {r.unit_number}</span>
-                  {r.floor !== null && ` · Floor ${r.floor}`} · {r.building_name} · requested {new Date(r.created_at).toLocaleDateString()}
+                  {r.floor !== null && ` · Floor ${r.floor}`} · {r.building_name} · requested {formatDate(r.created_at)}
                 </div>
               </div>
               <div className="flex gap-2 shrink-0">

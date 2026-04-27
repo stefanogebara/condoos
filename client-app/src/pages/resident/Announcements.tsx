@@ -4,6 +4,7 @@ import PageHeader from '../../components/PageHeader';
 import GlassCard from '../../components/GlassCard';
 import Badge from '../../components/Badge';
 import { apiGet } from '../../lib/api';
+import { formatDate } from '../../lib/i18n';
 
 interface Announcement {
   id: number;
@@ -35,7 +36,7 @@ export default function Announcements() {
                   {a.pinned ? <Badge tone="peach"><Pin className="w-3 h-3" /> Pinned</Badge> : null}
                   {a.source === 'ai_meeting'  && <Badge tone="sage">AI meeting recap</Badge>}
                   {a.source === 'ai_decision' && <Badge tone="sage">AI decision</Badge>}
-                  <span className="text-xs text-dusk-200 ml-auto">{new Date(a.created_at).toLocaleDateString()}</span>
+                  <span className="text-xs text-dusk-200 ml-auto">{formatDate(a.created_at)}</span>
                 </div>
                 <h3 className="font-display text-xl text-dusk-500 mt-2">{a.title}</h3>
                 <p className="text-dusk-300 mt-2 whitespace-pre-line leading-relaxed">{a.body}</p>

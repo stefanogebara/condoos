@@ -7,6 +7,7 @@ import GlassCard from '../../components/GlassCard';
 import Button from '../../components/Button';
 import Badge from '../../components/Badge';
 import { apiDelete, apiGet, apiPost } from '../../lib/api';
+import { formatDateTime } from '../../lib/i18n';
 
 interface AgendaItem {
   id: number;
@@ -140,7 +141,7 @@ export default function BoardAssemblyDetail() {
       </Link>
       <PageHeader
         title={a.title}
-        subtitle={`${a.kind === 'ordinary' ? 'AGO' : 'AGE'} · ${new Date(a.first_call_at).toLocaleString('pt-BR')}`}
+        subtitle={`${a.kind === 'ordinary' ? 'AGO' : 'AGE'} · ${formatDateTime(a.first_call_at)}`}
         actions={
           <div className="flex gap-2 flex-wrap">
             {a.status === 'draft' && <Button variant="primary" onClick={convoke} loading={busy} leftIcon={<Gavel className="w-4 h-4" />}>Convoke</Button>}

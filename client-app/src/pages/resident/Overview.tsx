@@ -7,6 +7,7 @@ import Badge from '../../components/Badge';
 import Button from '../../components/Button';
 import { apiGet } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
+import { formatDate } from '../../lib/i18n';
 
 interface Pkg { id: number; carrier: string; description: string; status: string; arrived_at: string; }
 interface Visitor { id: number; visitor_name: string; visitor_type: string; status: string; expected_at: string; }
@@ -102,7 +103,7 @@ export default function Overview() {
                     {a.source !== 'manual' && <Badge tone="sage">Redigido pela IA</Badge>}
                   </div>
                   <p className="text-sm text-dusk-300 mt-1 line-clamp-2">{a.body}</p>
-                  <div className="text-xs text-dusk-200 mt-2">{new Date(a.created_at).toLocaleDateString('pt-BR')}</div>
+                  <div className="text-xs text-dusk-200 mt-2">{formatDate(a.created_at)}</div>
                 </div>
               </div>
             </GlassCard>

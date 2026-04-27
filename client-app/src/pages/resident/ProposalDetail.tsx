@@ -9,6 +9,7 @@ import Avatar from '../../components/Avatar';
 import Button from '../../components/Button';
 import { apiGet, apiPost } from '../../lib/api';
 import { track } from '../../lib/analytics';
+import { formatCurrency, formatDate } from '../../lib/i18n';
 
 interface Comment { id: number; body: string; created_at: string; first_name: string; last_name: string; unit_number: string; }
 interface Proposal {
@@ -155,7 +156,7 @@ export default function ProposalDetail() {
       <Link to="/app/proposals" className="inline-flex items-center gap-1 text-sm text-dusk-300 hover:text-dusk-500 mb-4"><ArrowLeft className="w-4 h-4" /> Voltar</Link>
       <PageHeader
         title={p.title}
-        subtitle={`Proposto por ${p.author_first} ${p.author_last}${p.estimated_cost ? ` · ~R$ ${p.estimated_cost.toLocaleString('pt-BR')}` : ''}`}
+        subtitle={`Proposto por ${p.author_first} ${p.author_last}${p.estimated_cost ? ` · ~${formatCurrency(p.estimated_cost)}` : ''}`}
       />
       <div className="flex items-center gap-2 mb-6 flex-wrap">
         <Badge tone={p.status === 'voting' ? 'peach' : 'sage'}>{({ discussion: 'em discussão', voting: 'em votação', approved: 'aprovada', rejected: 'reprovada', completed: 'concluída', inconclusive: 'inconclusiva' } as Record<string,string>)[p.status] || p.status}</Badge>
@@ -279,7 +280,7 @@ export default function ProposalDetail() {
               <div className="flex items-center gap-2">
                 <span className="font-semibold text-dusk-500 text-sm">{c.first_name} {c.last_name}</span>
                 <span className="text-xs text-dusk-200">Unit {c.unit_number}</span>
-                <span className="text-xs text-dusk-200 ml-auto">{new Date(c.created_at).toLocaleDateString()}</span>
+                <span className="text-xs text-dusk-200 ml-auto">{formatDate(c.created_at)}</span>
               </div>
               <p className="text-sm text-dusk-400 mt-1 whitespace-pre-line">{c.body}</p>
             </div>

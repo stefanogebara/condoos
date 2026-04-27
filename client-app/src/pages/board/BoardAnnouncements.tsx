@@ -6,6 +6,7 @@ import GlassCard from '../../components/GlassCard';
 import Badge from '../../components/Badge';
 import Button from '../../components/Button';
 import { apiGet, apiPost } from '../../lib/api';
+import { formatDate } from '../../lib/i18n';
 
 interface Announcement { id: number; title: string; body: string; pinned: number; source: string; created_at: string; }
 
@@ -65,7 +66,7 @@ export default function BoardAnnouncements() {
                 <div className="flex items-center gap-2 flex-wrap">
                   {a.pinned ? <Badge tone="peach"><Pin className="w-3 h-3" /> Pinned</Badge> : null}
                   {a.source !== 'manual' && <Badge tone="sage">Redigido pela IA</Badge>}
-                  <span className="text-xs text-dusk-200 ml-auto">{new Date(a.created_at).toLocaleDateString()}</span>
+                  <span className="text-xs text-dusk-200 ml-auto">{formatDate(a.created_at)}</span>
                 </div>
                 <h3 className="font-display text-lg text-dusk-500 mt-1">{a.title}</h3>
                 <p className="text-sm text-dusk-400 mt-1 whitespace-pre-line">{a.body}</p>

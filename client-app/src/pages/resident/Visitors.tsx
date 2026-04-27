@@ -7,6 +7,7 @@ import EmptyState from '../../components/EmptyState';
 import Badge from '../../components/Badge';
 import Button from '../../components/Button';
 import { apiGet, apiPost } from '../../lib/api';
+import { formatDateTime } from '../../lib/i18n';
 
 interface Visitor {
   id: number;
@@ -97,7 +98,7 @@ export default function Visitors() {
                 <Badge tone={v.status === 'approved' ? 'sage' : v.status === 'pending' ? 'warning' : 'neutral'}>{STATUS_LABEL[v.status] || v.status}</Badge>
                 <Badge tone="neutral">{TYPE_LABEL[v.visitor_type] || v.visitor_type}</Badge>
               </div>
-              {v.expected_at && <div className="text-sm text-dusk-300 mt-1">Previsto para {new Date(v.expected_at).toLocaleString('pt-BR')}</div>}
+              {v.expected_at && <div className="text-sm text-dusk-300 mt-1">Previsto para {formatDateTime(v.expected_at)}</div>}
               {v.notes && <div className="text-sm text-dusk-200 mt-1 italic">"{v.notes}"</div>}
             </div>
           </GlassCard>
