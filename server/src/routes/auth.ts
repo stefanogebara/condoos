@@ -11,7 +11,7 @@ import { createRateLimit } from '../lib/rate-limit';
 import { demoAuthEnabled, isBlockedDemoCredential } from '../lib/demo-auth';
 
 const router = Router();
-const authRateLimit = createRateLimit({ keyPrefix: 'auth', windowMs: 15 * 60_000, max: 30 });
+const authRateLimit = createRateLimit({ keyPrefix: 'auth', windowMs: 15 * 60_000, max: 5 });
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -42,6 +42,16 @@ router.post('/login', authRateLimit, (req, res) => {
 
 router.get('/me', requireAuth, (req: AuthedRequest, res) => {
   return ok(res, { user: req.user });
+});
+
+router.post('/refresh', requireAuth, (req: AuthedRequest, res) => {
+  const row = db.prepare(
+    `SELECT id, email, role, condominium_id, first_name, last_name, unit_number, avatar_url
+     FROM users WHERE id = ?`
+  ).get(req.user!.id) as any;
+  if (!row) return fail(res, 'user_not_found', 401);
+  const token = signToken(row.id);
+  return ok(res, { token, user: row });
 });
 
 // GET /api/auth/config — tells the client which sign-in methods are enabled.

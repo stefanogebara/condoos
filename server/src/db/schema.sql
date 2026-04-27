@@ -113,6 +113,26 @@ CREATE INDEX IF NOT EXISTS idx_notification_outbox_due
 CREATE INDEX IF NOT EXISTS idx_notification_outbox_user
   ON notification_outbox(user_id, created_at);
 
+CREATE TABLE IF NOT EXISTS audit_log (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  condominium_id  INTEGER,
+  actor_user_id   INTEGER REFERENCES users(id),
+  actor_email     TEXT,
+  action          TEXT NOT NULL,
+  target_type     TEXT,
+  target_id       INTEGER,
+  metadata        TEXT,
+  ip              TEXT,
+  created_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_log_condo_created
+  ON audit_log(condominium_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_audit_log_action
+  ON audit_log(condominium_id, action, created_at);
+CREATE INDEX IF NOT EXISTS idx_audit_log_target
+  ON audit_log(condominium_id, target_type, target_id);
+
 -- Suggestions / complaints
 CREATE TABLE IF NOT EXISTS suggestions (
   id               INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -368,6 +388,105 @@ CREATE TABLE IF NOT EXISTS assembly_votes (
 );
 
 CREATE INDEX IF NOT EXISTS idx_assembly_votes_item ON assembly_votes(agenda_item_id);
+
+-- =====================================================================
+-- Finance module — dues, invoices, payments.
+-- =====================================================================
+
+CREATE TABLE IF NOT EXISTS dues_schedules (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  condominium_id   INTEGER NOT NULL REFERENCES condominiums(id) ON DELETE CASCADE,
+  name             TEXT NOT NULL,
+  amount_cents     INTEGER NOT NULL,
+  currency         TEXT NOT NULL DEFAULT 'BRL',
+  frequency        TEXT NOT NULL DEFAULT 'monthly'
+    CHECK(frequency IN ('monthly','quarterly','annual','one_time')),
+  due_day          INTEGER NOT NULL DEFAULT 10 CHECK(due_day BETWEEN 1 AND 28),
+  active           INTEGER NOT NULL DEFAULT 1,
+  created_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS invoices (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  condominium_id   INTEGER NOT NULL REFERENCES condominiums(id) ON DELETE CASCADE,
+  unit_id          INTEGER NOT NULL REFERENCES units(id) ON DELETE CASCADE,
+  schedule_id      INTEGER REFERENCES dues_schedules(id) ON DELETE SET NULL,
+  amount_cents     INTEGER NOT NULL,
+  currency         TEXT NOT NULL DEFAULT 'BRL',
+  period           TEXT NOT NULL,
+  due_date         TEXT NOT NULL,
+  status           TEXT NOT NULL DEFAULT 'open'
+    CHECK(status IN ('open','paid','void','overdue')),
+  notes            TEXT,
+  created_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_unit_period_schedule
+  ON invoices(unit_id, period, schedule_id);
+CREATE INDEX IF NOT EXISTS idx_invoices_condo_status
+  ON invoices(condominium_id, status, due_date);
+
+CREATE TABLE IF NOT EXISTS payments (
+  id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+  condominium_id     INTEGER NOT NULL REFERENCES condominiums(id) ON DELETE CASCADE,
+  invoice_id         INTEGER NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+  amount_cents       INTEGER NOT NULL,
+  method             TEXT NOT NULL DEFAULT 'manual',
+  paid_at            TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  reference          TEXT,
+  created_by_user_id INTEGER REFERENCES users(id),
+  created_at         TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_payments_invoice ON payments(invoice_id);
+
+-- =====================================================================
+-- Maintenance tickets.
+-- =====================================================================
+
+CREATE TABLE IF NOT EXISTS tickets (
+  id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+  condominium_id      INTEGER NOT NULL REFERENCES condominiums(id) ON DELETE CASCADE,
+  unit_id             INTEGER REFERENCES units(id) ON DELETE SET NULL,
+  reporter_id         INTEGER NOT NULL REFERENCES users(id),
+  assigned_to_user_id INTEGER REFERENCES users(id),
+  title               TEXT NOT NULL,
+  description         TEXT NOT NULL,
+  category            TEXT NOT NULL DEFAULT 'maintenance',
+  priority            TEXT NOT NULL DEFAULT 'normal'
+    CHECK(priority IN ('low','normal','high','urgent')),
+  status              TEXT NOT NULL DEFAULT 'open'
+    CHECK(status IN ('open','in_progress','waiting','resolved','closed')),
+  created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  resolved_at         TEXT,
+  closed_at           TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_tickets_condo_status
+  ON tickets(condominium_id, status, updated_at);
+CREATE INDEX IF NOT EXISTS idx_tickets_unit
+  ON tickets(unit_id, created_at);
+
+CREATE TABLE IF NOT EXISTS ticket_comments (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  ticket_id        INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+  author_id        INTEGER NOT NULL REFERENCES users(id),
+  body             TEXT NOT NULL,
+  internal         INTEGER NOT NULL DEFAULT 0,
+  created_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS ticket_attachments (
+  id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+  ticket_id           INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+  uploaded_by_user_id INTEGER NOT NULL REFERENCES users(id),
+  url                 TEXT NOT NULL,
+  filename            TEXT,
+  content_type        TEXT,
+  created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 
 -- Original indexes
 CREATE INDEX IF NOT EXISTS idx_packages_recipient ON packages(recipient_id, status);

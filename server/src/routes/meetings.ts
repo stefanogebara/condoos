@@ -2,6 +2,7 @@ import { Router } from 'express';
 import db from '../db';
 import { requireAuth, requireRole, getActiveCondoId, AuthedRequest } from '../lib/auth';
 import { ok, fail } from '../lib/respond';
+import { audit } from '../lib/audit';
 
 const router = Router();
 
@@ -37,6 +38,12 @@ router.post('/', requireAuth, requireRole('board_admin'), (req: AuthedRequest, r
   const row = db.prepare(
     `INSERT INTO meetings (condominium_id, title, scheduled_for, agenda) VALUES (?, ?, ?, ?)`
   ).run(condoId, title, scheduled_for, agenda || null);
+  audit(req, {
+    action: 'meeting.create',
+    target_type: 'meeting',
+    target_id: Number(row.lastInsertRowid),
+    condominium_id: condoId,
+  });
   return ok(res, { id: row.lastInsertRowid });
 });
 
@@ -46,6 +53,12 @@ router.patch('/:id/notes', requireAuth, requireRole('board_admin'), (req: Authed
   if (!getScopedMeeting(id, condoId)) return fail(res, 'not_found', 404);
   const { raw_notes } = req.body || {};
   db.prepare(`UPDATE meetings SET raw_notes=?, ai_summary=NULL WHERE id=?`).run(raw_notes || '', id);
+  audit(req, {
+    action: 'meeting.notes_update',
+    target_type: 'meeting',
+    target_id: id,
+    condominium_id: condoId,
+  });
   return ok(res, { id });
 });
 
@@ -54,6 +67,12 @@ router.post('/:id/complete', requireAuth, requireRole('board_admin'), (req: Auth
   const id = Number(req.params.id);
   if (!getScopedMeeting(id, condoId)) return fail(res, 'not_found', 404);
   db.prepare(`UPDATE meetings SET status='completed' WHERE id=?`).run(id);
+  audit(req, {
+    action: 'meeting.complete',
+    target_type: 'meeting',
+    target_id: id,
+    condominium_id: condoId,
+  });
   return ok(res, { id, status: 'completed' });
 });
 
@@ -66,6 +85,13 @@ router.post('/:id/action-items', requireAuth, requireRole('board_admin'), (req: 
   const row = db.prepare(
     `INSERT INTO action_items (meeting_id, description, owner_label, owner_id, due_date) VALUES (?, ?, ?, ?, ?)`
   ).run(id, description, owner_label || null, owner_id || null, due_date || null);
+  audit(req, {
+    action: 'meeting.action_item_create',
+    target_type: 'action_item',
+    target_id: Number(row.lastInsertRowid),
+    condominium_id: condoId,
+    metadata: { meeting_id: id },
+  });
   return ok(res, { id: row.lastInsertRowid });
 });
 
@@ -81,6 +107,13 @@ router.post('/action-items/:id/toggle', requireAuth, requireRole('board_admin'),
   if (!row || row.condominium_id !== condoId) return fail(res, 'not_found', 404);
   const next = row.status === 'open' ? 'done' : 'open';
   db.prepare(`UPDATE action_items SET status=? WHERE id=?`).run(next, id);
+  audit(req, {
+    action: 'meeting.action_item_toggle',
+    target_type: 'action_item',
+    target_id: id,
+    condominium_id: condoId,
+    metadata: { status: next },
+  });
   return ok(res, { id, status: next });
 });
 

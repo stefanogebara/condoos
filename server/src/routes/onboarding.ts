@@ -9,6 +9,7 @@ import db from '../db';
 import { requireAuth, requireActiveMembership, requireRole, getActiveCondoId, AuthedRequest } from '../lib/auth';
 import { ok, fail, asyncHandler } from '../lib/respond';
 import { createRateLimit } from '../lib/rate-limit';
+import { audit } from '../lib/audit';
 
 const router = Router();
 const lookupRateLimit = createRateLimit({ keyPrefix: 'onboarding_lookup', windowMs: 60_000, max: 60 });
@@ -37,6 +38,11 @@ const createSchema = z.object({
   buildingName: z.string().min(1).max(60).default('Main Building'),
   floors: z.number().int().min(1).max(80),
   unitsPerFloor: z.number().int().min(1).max(40),
+  buildings: z.array(z.object({
+    name: z.string().min(1).max(60),
+    floors: z.number().int().min(1).max(80),
+    unitsPerFloor: z.number().int().min(1).max(40),
+  })).max(12).optional(),
   ownerUnitNumber: z.string().min(1).max(20),       // admin's own unit
   seedAmenities: z.boolean().default(true),
   requireApproval: z.boolean().default(true),
@@ -59,30 +65,37 @@ router.post('/create-building', onboardingWriteRateLimit, requireAuth, asyncHand
       ).run(body.condoName, body.address, inviteCode, body.votingModel, body.requireApproval ? 1 : 0, u.id).lastInsertRowid
     );
 
-    // 2. Create building
-    const buildingId = Number(
-      db.prepare(
-        `INSERT INTO buildings (condominium_id, name, floors) VALUES (?, ?, ?)`
-      ).run(condoId, body.buildingName, body.floors).lastInsertRowid
-    );
-
-    // 3. Generate units — floor N, units N01..N{unitsPerFloor}
+    // 2. Create building(s)
     const insertUnit = db.prepare(
       `INSERT INTO units (building_id, floor, number) VALUES (?, ?, ?)`
     );
+    const buildingInputs = body.buildings?.length
+      ? body.buildings
+      : [{ name: body.buildingName, floors: body.floors, unitsPerFloor: body.unitsPerFloor }];
+    const buildingIds: number[] = [];
     let ownerUnitId: number | null = null;
-    for (let f = 1; f <= body.floors; f++) {
-      for (let i = 1; i <= body.unitsPerFloor; i++) {
-        const number = `${f}${i.toString().padStart(2, '0')}`;
-        const unitId = Number(insertUnit.run(buildingId, f, number).lastInsertRowid);
-        if (number === body.ownerUnitNumber) ownerUnitId = unitId;
+    for (const building of buildingInputs) {
+      const buildingId = Number(
+        db.prepare(
+          `INSERT INTO buildings (condominium_id, name, floors) VALUES (?, ?, ?)`
+        ).run(condoId, building.name, building.floors).lastInsertRowid
+      );
+      buildingIds.push(buildingId);
+
+      // 3. Generate units — floor N, units N01..N{unitsPerFloor}
+      for (let f = 1; f <= building.floors; f++) {
+        for (let i = 1; i <= building.unitsPerFloor; i++) {
+          const number = `${f}${i.toString().padStart(2, '0')}`;
+          const unitId = Number(insertUnit.run(buildingId, f, number).lastInsertRowid);
+          if (number === body.ownerUnitNumber && !ownerUnitId) ownerUnitId = unitId;
+        }
       }
     }
 
     // If creator's unit wasn't inside the generated range, add it manually.
     if (!ownerUnitId) {
       ownerUnitId = Number(
-        insertUnit.run(buildingId, null, body.ownerUnitNumber).lastInsertRowid
+        insertUnit.run(buildingIds[0], null, body.ownerUnitNumber).lastInsertRowid
       );
     }
 
@@ -108,10 +121,17 @@ router.post('/create-building', onboardingWriteRateLimit, requireAuth, asyncHand
       }
     }
 
-    return { condoId, buildingId, inviteCode };
+    return { condoId, buildingId: buildingIds[0], buildingIds, inviteCode };
   });
 
   const out = tx();
+  audit(req, {
+    action: 'onboarding.create_building',
+    target_type: 'condominium',
+    target_id: out.condoId,
+    condominium_id: out.condoId,
+    metadata: { building_id: out.buildingId, building_ids: out.buildingIds, invite_code: out.inviteCode },
+  });
   return ok(res, out);
 }));
 
@@ -194,6 +214,13 @@ router.post('/join', onboardingWriteRateLimit, requireAuth, asyncHandler(async (
     ).run(condo.id, unit.number, u.id);
   }
 
+  audit(req, {
+    action: 'onboarding.join',
+    target_type: 'user_unit',
+    target_id: newId,
+    condominium_id: condo.id,
+    metadata: { unit_id, relationship, status },
+  });
   return ok(res, { id: newId, status, condominium_id: condo.id });
 }));
 

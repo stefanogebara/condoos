@@ -3,6 +3,7 @@ import db from '../db';
 import { requireAuth, getActiveCondoId, AuthedRequest } from '../lib/auth';
 import { ok, fail } from '../lib/respond';
 import { getWhatsAppStatus } from '../lib/whatsapp';
+import { audit } from '../lib/audit';
 
 const router = Router();
 
@@ -39,6 +40,13 @@ router.patch('/me', requireAuth, (req: AuthedRequest, res) => {
   if (sets.length === 0) return fail(res, 'nothing_to_update');
   vals.push(req.user!.id);
   db.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`).run(...vals);
+  audit(req, {
+    action: 'user.profile_update',
+    target_type: 'user',
+    target_id: req.user!.id,
+    condominium_id: req.user!.condominium_id,
+    metadata: { fields: sets.map((set) => set.split(' = ')[0]) },
+  });
   const row = db.prepare(
     `SELECT id, email, first_name, last_name, role, phone, whatsapp_opt_in FROM users WHERE id = ?`
   ).get(req.user!.id);

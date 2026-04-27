@@ -2,6 +2,7 @@ import { Router } from 'express';
 import db from '../db';
 import { requireAuth, AuthedRequest } from '../lib/auth';
 import { ok, fail } from '../lib/respond';
+import { audit } from '../lib/audit';
 
 const router = Router();
 
@@ -66,6 +67,13 @@ router.post('/reservations', requireAuth, (req: AuthedRequest, res) => {
     `INSERT INTO amenity_reservations (amenity_id, user_id, starts_at, ends_at)
      VALUES (?, ?, ?, ?)`
   ).run(amenity.id, u.id, starts.toISOString(), ends.toISOString());
+  audit(req, {
+    action: 'amenity.reservation_create',
+    target_type: 'amenity_reservation',
+    target_id: Number(row.lastInsertRowid),
+    condominium_id: u.condominium_id,
+    metadata: { amenity_id: amenity.id, starts_at: starts.toISOString(), ends_at: ends.toISOString() },
+  });
   return ok(res, { id: row.lastInsertRowid });
 });
 
@@ -79,6 +87,13 @@ router.delete('/reservations/:id', requireAuth, (req: AuthedRequest, res) => {
   if (!row || row.condominium_id !== u.condominium_id) return fail(res, 'not_found', 404);
   if (u.role !== 'board_admin' && row.user_id !== u.id) return fail(res, 'forbidden', 403);
   db.prepare(`UPDATE amenity_reservations SET status='cancelled' WHERE id = ?`).run(id);
+  audit(req, {
+    action: 'amenity.reservation_cancel',
+    target_type: 'amenity_reservation',
+    target_id: id,
+    condominium_id: u.condominium_id,
+    metadata: { amenity_id: row.amenity_id },
+  });
   return ok(res, { id, status: 'cancelled' });
 });
 

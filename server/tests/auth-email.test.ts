@@ -51,30 +51,45 @@ test('verifyGoogleCredential rejects unsafe Google tokeninfo responses', async (
   );
 });
 
-test('buildInviteEmail creates a join link with the configured app origin', () => {
+test('buildInviteEmail creates both a sign-in URL and a deep-link with the invite code', () => {
   const email = buildInviteEmail({
     to: 'owner@example.com',
     condoName: 'Pine Ridge Towers',
     inviteCode: 'DEMO123',
     unitNumber: '502',
     relationship: 'owner',
+    senderName: 'Alex Silva',
   }, { APP_ORIGIN: 'https://condoos.example' } as NodeJS.ProcessEnv);
 
-  assert.equal(email.joinUrl, 'https://condoos.example/onboarding/join?code=DEMO123');
+  assert.equal(email.loginUrl, 'https://condoos.example/login');
+  // Landing reads ?code= and forwards it through the join CTA into the wizard.
+  assert.equal(email.joinUrl, 'https://condoos.example/?code=DEMO123');
   assert.match(email.subject, /Pine Ridge Towers/);
-  assert.match(email.text, /Unit: 502/);
+  assert.match(email.text, /Alex Silva invited you to join Pine Ridge Towers/);
+  assert.match(email.text, /Your unit: 502/);
+  assert.match(email.text, /Invite code: DEMO123/);
+  assert.match(email.text, /https:\/\/condoos\.example\/\?code=DEMO123/);
+  assert.match(email.html, /tap here to claim your unit/);
 });
 
 test('sendInviteEmail skips safely when email delivery is not configured', async () => {
-  const delivery = await sendInviteEmail({
-    to: 'owner@example.com',
-    condoName: 'Pine Ridge Towers',
-    inviteCode: 'DEMO123',
-    unitNumber: '502',
-    relationship: 'owner',
-  }, {} as NodeJS.ProcessEnv);
+  const logs: string[] = [];
+  const originalLog = console.log;
+  console.log = (message?: unknown) => { logs.push(String(message)); };
+  try {
+    const delivery = await sendInviteEmail({
+      to: 'owner@example.com',
+      condoName: 'Pine Ridge Towers',
+      inviteCode: 'DEMO123',
+      unitNumber: '502',
+      relationship: 'owner',
+    }, {} as NodeJS.ProcessEnv);
 
-  assert.deepEqual(delivery, { status: 'skipped', provider: 'none', error: 'email_not_configured' });
+    assert.deepEqual(delivery, { status: 'skipped', provider: 'none', error: 'email_not_configured' });
+    assert.deepEqual(logs, ['[email] invite skipped: email_not_configured']);
+  } finally {
+    console.log = originalLog;
+  }
 });
 
 test('sendInviteEmail posts to Resend when configured', async () => {
@@ -97,9 +112,15 @@ test('sendInviteEmail posts to Resend when configured', async () => {
   assert.equal(delivery.status, 'sent');
   assert.equal(delivery.message_id, 'email_123');
   assert.equal(calls[0].url, 'https://api.resend.com/emails');
+  assert.equal(calls[0].init.method, 'POST');
+  assert.equal(calls[0].init.headers.Authorization, 'Bearer re_test');
+  assert.equal(calls[0].init.headers['Content-Type'], 'application/json');
+  assert.equal(calls[0].init.headers['User-Agent'], 'CondoOS/0.1');
   const payload = JSON.parse(calls[0].init.body);
+  assert.equal(payload.from, 'CondoOS <noreply@condoos.example>');
   assert.deepEqual(payload.to, ['owner@example.com']);
-  assert.match(payload.text, /https:\/\/condoos\.example\/onboarding\/join\?code=DEMO123/);
+  assert.match(payload.text, /Invite code: DEMO123/);
+  assert.match(payload.text, /https:\/\/condoos\.example\/login/);
 });
 
 test('createRateLimit returns 429 after the configured allowance', () => {

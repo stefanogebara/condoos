@@ -3,6 +3,7 @@ import db from '../db';
 import { requireAuth, requireRole, getActiveCondoId, AuthedRequest } from '../lib/auth';
 import { ok, fail } from '../lib/respond';
 import { notifyUsers } from '../lib/whatsapp';
+import { audit } from '../lib/audit';
 
 const router = Router();
 
@@ -31,6 +32,13 @@ router.post('/:id/pickup', requireAuth, (req: AuthedRequest, res) => {
   if (!pkg) return fail(res, 'not_found', 404);
   if (u.role !== 'board_admin' && pkg.recipient_id !== u.id) return fail(res, 'forbidden', 403);
   db.prepare(`UPDATE packages SET status='picked_up', picked_up_at=CURRENT_TIMESTAMP WHERE id=?`).run(id);
+  audit(req, {
+    action: 'package.pickup',
+    target_type: 'package',
+    target_id: id,
+    condominium_id: u.condominium_id,
+    metadata: { recipient_id: pkg.recipient_id },
+  });
   return ok(res, { id, status: 'picked_up' });
 });
 
@@ -60,6 +68,13 @@ router.post('/', requireAuth, requireRole('board_admin'), (req: AuthedRequest, r
   const body = `📦 CondoOS — Uma encomenda (${carrier}) chegou para você na portaria. Passe para retirar!`;
   notifyUsers([recipient_id], body).catch((e) => console.warn('[packages] notify failed:', e?.message));
 
+  audit(req, {
+    action: 'package.create',
+    target_type: 'package',
+    target_id: Number(row.lastInsertRowid),
+    condominium_id: condoId,
+    metadata: { recipient_id, carrier },
+  });
   return ok(res, { id: row.lastInsertRowid });
 });
 

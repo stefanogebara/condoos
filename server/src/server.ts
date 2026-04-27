@@ -9,6 +9,7 @@ import morgan from 'morgan';
 
 import { requireAuth, requireActiveMembership } from './lib/auth';
 import { startVoteCloser } from './lib/vote-closer';
+import { captureException, initSentry } from './lib/sentry';
 import authRoutes from './routes/auth';
 import packagesRoutes from './routes/packages';
 import visitorsRoutes from './routes/visitors';
@@ -22,8 +23,14 @@ import aiRoutes from './routes/ai';
 import onboardingRoutes from './routes/onboarding';
 import membershipsRoutes from './routes/memberships';
 import assembliesRoutes from './routes/assemblies';
+import meRoutes from './routes/me';
+import auditRoutes from './routes/audit';
+import buildingsRoutes from './routes/buildings';
+import financeRoutes from './routes/finance';
+import ticketsRoutes from './routes/tickets';
 import { processWhatsAppOutbox } from './lib/whatsapp';
 
+initSentry();
 const app = express();
 const PORT = Number(process.env.PORT || 4000);
 app.set('trust proxy', 1);
@@ -62,6 +69,7 @@ app.get('/api/health', (_req, res) => {
 // not have claimed a unit yet).
 app.use('/api/auth', authRoutes);
 app.use('/api/onboarding', onboardingRoutes);
+app.use('/api/me', meRoutes);
 
 // All real data routes require an active user_unit membership.
 const scoped = [requireAuth, requireActiveMembership];
@@ -76,6 +84,10 @@ app.use('/api/users',         scoped, usersRoutes);
 app.use('/api/ai',            scoped, aiRoutes);
 app.use('/api/memberships',   scoped, membershipsRoutes);
 app.use('/api/assemblies',    scoped, assembliesRoutes);
+app.use('/api/audit',         scoped, auditRoutes);
+app.use('/api/buildings',     scoped, buildingsRoutes);
+app.use('/api/finance',       scoped, financeRoutes);
+app.use('/api/tickets',       scoped, ticketsRoutes);
 
 // 404
 app.use((req, res) => res.status(404).json({ success: false, error: 'not_found', path: req.path }));
@@ -83,6 +95,7 @@ app.use((req, res) => res.status(404).json({ success: false, error: 'not_found',
 // Error handler
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error('[err]', err);
+  captureException(err);
   const status = err.status || 500;
   const error = status >= 500 && process.env.NODE_ENV === 'production'
     ? 'internal_error'

@@ -211,6 +211,15 @@ export function initSchema() {
   addColumnIfMissing('users',        'phone',              `TEXT`);
   addColumnIfMissing('users',        'whatsapp_opt_in',    `INTEGER NOT NULL DEFAULT 0`);
 
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_audit_log_condo_created
+      ON audit_log(condominium_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_audit_log_action
+      ON audit_log(condominium_id, action, created_at);
+    CREATE INDEX IF NOT EXISTS idx_audit_log_target
+      ON audit_log(condominium_id, target_type, target_id);
+  `);
+
   migrateLegacyUnits();
 
   // Ensure Pine Ridge has an invite code so the demo condo is joinable via code too.

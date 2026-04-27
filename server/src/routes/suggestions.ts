@@ -2,6 +2,7 @@ import { Router } from 'express';
 import db from '../db';
 import { requireAuth, requireRole, AuthedRequest } from '../lib/auth';
 import { ok, fail } from '../lib/respond';
+import { audit } from '../lib/audit';
 
 const router = Router();
 
@@ -26,6 +27,12 @@ router.post('/', requireAuth, (req: AuthedRequest, res) => {
   const row = db.prepare(
     `INSERT INTO suggestions (condominium_id, author_id, body) VALUES (?, ?, ?)`
   ).run(u.condominium_id, u.id, body.trim());
+  audit(req, {
+    action: 'suggestion.create',
+    target_type: 'suggestion',
+    target_id: Number(row.lastInsertRowid),
+    condominium_id: u.condominium_id,
+  });
   return ok(res, { id: row.lastInsertRowid });
 });
 
@@ -51,6 +58,12 @@ router.post('/:id/dismiss', requireAuth, requireRole('board_admin'), (req: Authe
   const s = db.prepare(`SELECT id FROM suggestions WHERE id=? AND condominium_id=?`).get(id, u.condominium_id);
   if (!s) return fail(res, 'not_found', 404);
   db.prepare(`UPDATE suggestions SET status='dismissed' WHERE id=?`).run(id);
+  audit(req, {
+    action: 'suggestion.dismiss',
+    target_type: 'suggestion',
+    target_id: id,
+    condominium_id: u.condominium_id,
+  });
   return ok(res, { id, status: 'dismissed' });
 });
 
