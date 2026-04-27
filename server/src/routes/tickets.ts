@@ -4,6 +4,7 @@ import db from '../db';
 import { requireAuth, requireRole, getActiveCondoId, AuthedRequest } from '../lib/auth';
 import { ok, fail } from '../lib/respond';
 import { audit } from '../lib/audit';
+import { canAssignTicketToUser } from '../lib/tickets';
 
 const router = Router();
 
@@ -140,6 +141,11 @@ router.patch('/:id', requireAuth, requireRole('board_admin'), (req: AuthedReques
   const ticket = getScopedTicket(id, condoId);
   if (!ticket) return fail(res, 'not_found', 404);
   const fields = parsed.data;
+  if (fields.assigned_to_user_id !== undefined && fields.assigned_to_user_id !== null) {
+    if (!canAssignTicketToUser(fields.assigned_to_user_id, condoId)) {
+      return fail(res, 'assignee_not_in_condo', 400);
+    }
+  }
   const sets: string[] = [];
   const vals: any[] = [];
   for (const [key, value] of Object.entries(fields)) {

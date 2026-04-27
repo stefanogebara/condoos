@@ -192,6 +192,21 @@ export function transferUnit(input: {
   };
 }
 
+export function reassignPendingMembership(id: number, unitId: number, condoId: number) {
+  const membership = getMembershipInCondo(id, condoId);
+  if (!membership) return { ok: false as const, error: 'not_found', status: 404 };
+  if (membership.status !== 'pending') {
+    return { ok: false as const, error: 'not_pending', status: 409 };
+  }
+
+  const unit = unitBelongsToCondo(unitId, condoId);
+  if (!unit) return { ok: false as const, error: 'unit_not_in_condo', status: 400 };
+
+  db.prepare(`UPDATE user_unit SET unit_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+    .run(unitId, id);
+  return { ok: true as const, id, unit_id: unitId, user_id: membership.user_id };
+}
+
 export function listUnitMembershipHistory(unitId: number, condoId: number): MembershipHistoryRow[] {
   return db.prepare(
     `SELECT uu.id, uu.user_id, usr.email, usr.first_name, usr.last_name,

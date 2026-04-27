@@ -10,6 +10,7 @@ import { audit } from '../lib/audit';
 import {
   listUnitMembershipHistory,
   moveOutMembership,
+  reassignPendingMembership,
   reactivateMembership,
   transferUnit,
   unitBelongsToCondo,
@@ -130,25 +131,6 @@ function persistInviteEmailStatus(inviteId: number, delivery: EmailDeliveryResul
   ).run(delivery.status, delivery.status, delivery.error || null, inviteId);
 }
 
-function recordQueuedInviteEmail(
-  inviteId: number,
-  deliveryPromise: Promise<EmailDeliveryResult>,
-) {
-  void deliveryPromise
-    .then((delivery) => {
-      persistInviteEmailStatus(inviteId, delivery);
-    })
-    .catch((err) => {
-      const delivery: EmailDeliveryResult = {
-        status: 'failed',
-        provider: 'resend',
-        error: err instanceof Error ? err.message : 'invite_email_failed',
-      };
-      console.error(`[email] invite delivery failed for invite ${inviteId}: ${delivery.error}`);
-      persistInviteEmailStatus(inviteId, delivery);
-    });
-}
-
 router.post('/import-csv', inviteWriteRateLimit, requireAuth, requireRole('board_admin'), asyncHandler(async (req: AuthedRequest, res) => {
   const parsed = csvSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
@@ -214,18 +196,19 @@ router.post('/import-csv', inviteWriteRateLimit, requireAuth, requireRole('board
   });
   tx();
 
-  const emailDelivery: Array<{ invite_id: number; email: string; queued: boolean }> = [];
+  const emailDelivery: Array<{ invite_id: number; email: string; delivery: EmailDeliveryResult }> = [];
   if (parsed.data.send_emails) {
     for (const invite of imported) {
-      recordQueuedInviteEmail(invite.invite_id, sendInviteEmail({
+      const delivery = await sendInviteEmail({
         to: invite.email,
         condoName: condo.name,
         inviteCode: condo.invite_code,
         unitNumber: invite.unit,
         relationship: invite.relationship,
         senderName: `${u.first_name} ${u.last_name}`.trim(),
-      }));
-      emailDelivery.push({ invite_id: invite.invite_id, email: invite.email, queued: true });
+      });
+      persistInviteEmailStatus(invite.invite_id, delivery);
+      emailDelivery.push({ invite_id: invite.invite_id, email: invite.email, delivery });
     }
   }
 
@@ -364,23 +347,8 @@ router.post('/:id/reassign', requireAuth, requireRole('board_admin'), (req: Auth
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
   const id = Number(req.params.id);
   const u = req.user!;
-  const row = db.prepare(
-    `SELECT uu.id, uu.status, b.condominium_id
-     FROM user_unit uu
-     JOIN units un ON un.id = uu.unit_id
-     JOIN buildings b ON b.id = un.building_id
-     WHERE uu.id = ?`
-  ).get(id) as any;
-  if (!row) return fail(res, 'not_found', 404);
-  if (row.condominium_id !== u.condominium_id) return fail(res, 'forbidden', 403);
-
-  const newUnit = db.prepare(
-    `SELECT u.id, b.condominium_id FROM units u JOIN buildings b ON b.id = u.building_id WHERE u.id = ?`
-  ).get(parsed.data.unit_id) as any;
-  if (!newUnit || newUnit.condominium_id !== u.condominium_id)
-    return fail(res, 'unit_not_in_condo', 400);
-  db.prepare(`UPDATE user_unit SET unit_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
-    .run(parsed.data.unit_id, id);
+  const result = reassignPendingMembership(id, parsed.data.unit_id, u.condominium_id!);
+  if (!result.ok) return fail(res, result.error, result.status);
   audit(req, {
     action: 'membership.reassign',
     target_type: 'user_unit',
@@ -388,7 +356,7 @@ router.post('/:id/reassign', requireAuth, requireRole('board_admin'), (req: Auth
     condominium_id: u.condominium_id,
     metadata: { unit_id: parsed.data.unit_id },
   });
-  return ok(res, { id, unit_id: parsed.data.unit_id });
+  return ok(res, result);
 });
 
 export default router;

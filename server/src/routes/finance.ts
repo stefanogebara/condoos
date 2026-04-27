@@ -4,6 +4,7 @@ import db from '../db';
 import { requireAuth, requireRole, getActiveCondoId, AuthedRequest } from '../lib/auth';
 import { ok, fail } from '../lib/respond';
 import { audit } from '../lib/audit';
+import { generateInvoices, recordPayment, unitInCondo, userCanSeeUnit } from '../lib/finance';
 
 const router = Router();
 
@@ -32,26 +33,6 @@ const paymentSchema = z.object({
   paid_at: z.string().datetime().optional(),
   reference: z.string().max(120).optional(),
 });
-
-function unitInCondo(unitId: number, condoId: number): boolean {
-  return !!db.prepare(
-    `SELECT 1
-     FROM units u
-     JOIN buildings b ON b.id = u.building_id
-     WHERE u.id = ? AND b.condominium_id = ?`
-  ).get(unitId, condoId);
-}
-
-function userCanSeeUnit(req: AuthedRequest, unitId: number, condoId: number): boolean {
-  if (req.user!.role === 'board_admin') return true;
-  return !!db.prepare(
-    `SELECT 1
-     FROM user_unit uu
-     JOIN units u ON u.id = uu.unit_id
-     JOIN buildings b ON b.id = u.building_id
-     WHERE uu.user_id = ? AND uu.unit_id = ? AND uu.status = 'active' AND b.condominium_id = ?`
-  ).get(req.user!.id, unitId, condoId);
-}
 
 router.get('/schedules', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
@@ -85,63 +66,21 @@ router.post('/invoices', requireAuth, requireRole('board_admin'), (req: AuthedRe
   const parsed = invoiceSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
   const condoId = getActiveCondoId(req);
-  const body = parsed.data;
-
-  const schedule = body.schedule_id
-    ? db.prepare(`SELECT * FROM dues_schedules WHERE id = ? AND condominium_id = ? AND active = 1`)
-        .get(body.schedule_id, condoId) as any
-    : null;
-  if (body.schedule_id && !schedule) return fail(res, 'schedule_not_found', 404);
-
-  const amount = body.amount_cents || schedule?.amount_cents;
-  if (!amount) return fail(res, 'missing_amount_cents', 400);
-  const currency = body.currency || schedule?.currency || 'BRL';
-  const dueDate = body.due_date || `${body.period}-10T12:00:00.000Z`;
-
-  let units = db.prepare(
-    `SELECT u.id
-     FROM units u
-     JOIN buildings b ON b.id = u.building_id
-     WHERE b.condominium_id = ?
-     ORDER BY b.name, u.number`
-  ).all(condoId) as Array<{ id: number }>;
-  if (body.unit_ids?.length) {
-    const allowed = new Set(units.map((u) => u.id));
-    if (body.unit_ids.some((id) => !allowed.has(id))) return fail(res, 'unit_not_in_condo', 400);
-    units = body.unit_ids.map((id) => ({ id }));
-  }
-
-  const created: number[] = [];
-  const skipped: number[] = [];
-  const tx = db.transaction(() => {
-    const insert = db.prepare(
-      `INSERT OR IGNORE INTO invoices (condominium_id, unit_id, schedule_id, amount_cents, currency, period, due_date, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    );
-    for (const unit of units) {
-      const result = insert.run(
-        condoId,
-        unit.id,
-        schedule?.id || null,
-        amount,
-        currency,
-        body.period,
-        dueDate,
-        body.notes || null,
-      );
-      if (result.changes > 0) created.push(Number(result.lastInsertRowid));
-      else skipped.push(unit.id);
-    }
-  });
-  tx();
+  const result = generateInvoices({ condoId, ...parsed.data });
+  if (!result.ok) return fail(res, result.error, result.status, result.details);
 
   audit(req, {
     action: 'finance.invoices_generate',
     target_type: 'invoice',
     condominium_id: condoId,
-    metadata: { period: body.period, created_count: created.length, skipped_count: skipped.length },
+    metadata: { period: parsed.data.period, created_count: result.created_count, skipped_count: result.skipped_count },
   });
-  return ok(res, { created_count: created.length, skipped_count: skipped.length, invoice_ids: created, skipped_unit_ids: skipped }, 201);
+  return ok(res, {
+    created_count: result.created_count,
+    skipped_count: result.skipped_count,
+    invoice_ids: result.invoice_ids,
+    skipped_unit_ids: result.skipped_unit_ids,
+  }, 201);
 });
 
 router.get('/statements/:unit_id', requireAuth, (req: AuthedRequest, res) => {
@@ -149,7 +88,7 @@ router.get('/statements/:unit_id', requireAuth, (req: AuthedRequest, res) => {
   const unitId = Number(req.params.unit_id);
   if (!Number.isInteger(unitId) || unitId <= 0) return fail(res, 'invalid_unit_id', 400);
   if (!unitInCondo(unitId, condoId)) return fail(res, 'not_found', 404);
-  if (!userCanSeeUnit(req, unitId, condoId)) return fail(res, 'forbidden', 403);
+  if (!userCanSeeUnit(req.user!.id, req.user!.role, unitId, condoId)) return fail(res, 'forbidden', 403);
 
   const unit = db.prepare(
     `SELECT u.*, b.name AS building_name FROM units u JOIN buildings b ON b.id = u.building_id WHERE u.id = ?`
@@ -179,40 +118,27 @@ router.post('/payments', requireAuth, requireRole('board_admin'), (req: AuthedRe
   const parsed = paymentSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
   const condoId = getActiveCondoId(req);
-  const body = parsed.data;
-  const invoice = db.prepare(
-    `SELECT * FROM invoices WHERE id = ? AND condominium_id = ?`
-  ).get(body.invoice_id, condoId) as any;
-  if (!invoice) return fail(res, 'invoice_not_found', 404);
-  if (invoice.status === 'void') return fail(res, 'invoice_void', 409);
-
-  const result = db.prepare(
-    `INSERT INTO payments (condominium_id, invoice_id, amount_cents, method, paid_at, reference, created_by_user_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
-  ).run(
+  const result = recordPayment({
     condoId,
-    invoice.id,
-    body.amount_cents,
-    body.method,
-    body.paid_at || new Date().toISOString(),
-    body.reference || null,
-    req.user!.id,
-  );
-  const paid = db.prepare(
-    `SELECT COALESCE(SUM(amount_cents), 0) AS total FROM payments WHERE invoice_id = ?`
-  ).get(invoice.id) as { total: number };
-  if (paid.total >= invoice.amount_cents) {
-    db.prepare(`UPDATE invoices SET status='paid', updated_at=CURRENT_TIMESTAMP WHERE id = ?`).run(invoice.id);
-  }
-  const id = Number(result.lastInsertRowid);
+    ...parsed.data,
+    created_by_user_id: req.user!.id,
+  });
+  if (!result.ok) return fail(res, result.error, result.status, result.details);
+
   audit(req, {
     action: 'finance.payment_create',
     target_type: 'payment',
-    target_id: id,
+    target_id: result.id,
     condominium_id: condoId,
-    metadata: { invoice_id: invoice.id, amount_cents: body.amount_cents },
+    metadata: { invoice_id: result.invoice_id, amount_cents: parsed.data.amount_cents, duplicate: !!result.duplicate },
   });
-  return ok(res, { id, invoice_id: invoice.id, invoice_status: paid.total >= invoice.amount_cents ? 'paid' : invoice.status }, 201);
+  return ok(res, {
+    id: result.id,
+    invoice_id: result.invoice_id,
+    invoice_status: result.invoice_status,
+    duplicate: !!result.duplicate,
+    remaining_cents: result.remaining_cents,
+  }, result.duplicate ? 200 : 201);
 });
 
 export default router;

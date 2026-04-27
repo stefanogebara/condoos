@@ -16,10 +16,13 @@ import {
 import {
   listUnitMembershipHistory,
   moveOutMembership,
+  reassignPendingMembership,
   reactivateMembership,
   transferUnit,
 } from '../src/lib/memberships';
 import { audit, auditRowsToCsv, listAuditRows } from '../src/lib/audit';
+import { generateInvoices, recordPayment } from '../src/lib/finance';
+import { canAssignTicketToUser } from '../src/lib/tickets';
 
 function resetDb() {
   const tables = [
@@ -381,6 +384,152 @@ test('audit log filters by action and escapes CSV metadata', () => {
   assert.ok(csv.includes('""note""'));
   assert.ok(csv.includes('comma, quote'));
   assert.ok(csv.includes('newline'));
+});
+
+test('finance: manual invoice generation skips duplicate null-schedule invoices', () => {
+  resetDb();
+  const { condoId, unit101 } = createCondoFixture();
+
+  const first = generateInvoices({
+    condoId,
+    amount_cents: 125000,
+    currency: 'BRL',
+    period: '2026-05',
+    unit_ids: [unit101],
+  });
+  assert.equal(first.ok, true);
+  assert.equal((first as any).created_count, 1);
+
+  const duplicate = generateInvoices({
+    condoId,
+    amount_cents: 125000,
+    currency: 'BRL',
+    period: '2026-05',
+    unit_ids: [unit101],
+  });
+  assert.equal(duplicate.ok, true);
+  assert.equal((duplicate as any).created_count, 0);
+  assert.deepEqual((duplicate as any).skipped_unit_ids, [unit101]);
+
+  const count = db.prepare(
+    `SELECT COUNT(*) AS count FROM invoices WHERE unit_id = ? AND period = ? AND schedule_id IS NULL`
+  ).get(unit101, '2026-05') as { count: number };
+  assert.equal(count.count, 1);
+});
+
+test('finance: payments are reference-idempotent and cannot overpay invoices', () => {
+  resetDb();
+  const { condoId, unit101 } = createCondoFixture();
+  const boardId = createUser('finance-board@example.com', 'board_admin');
+  const invoiceId = Number(db.prepare(
+    `INSERT INTO invoices (condominium_id, unit_id, amount_cents, currency, period, due_date)
+     VALUES (?, ?, 10000, 'BRL', '2026-05', '2026-05-10T12:00:00.000Z')`
+  ).run(condoId, unit101).lastInsertRowid);
+
+  const first = recordPayment({
+    condoId,
+    invoice_id: invoiceId,
+    amount_cents: 4000,
+    method: 'pix',
+    reference: 'PIX-123',
+    created_by_user_id: boardId,
+  });
+  assert.equal(first.ok, true);
+  assert.equal((first as any).invoice_status, 'open');
+  assert.equal((first as any).remaining_cents, 6000);
+
+  const duplicate = recordPayment({
+    condoId,
+    invoice_id: invoiceId,
+    amount_cents: 4000,
+    method: 'pix',
+    reference: 'PIX-123',
+    created_by_user_id: boardId,
+  });
+  assert.equal(duplicate.ok, true);
+  assert.equal((duplicate as any).duplicate, true);
+  assert.equal((duplicate as any).id, (first as any).id);
+
+  const overpay = recordPayment({
+    condoId,
+    invoice_id: invoiceId,
+    amount_cents: 7000,
+    method: 'pix',
+    reference: 'PIX-124',
+    created_by_user_id: boardId,
+  });
+  assert.equal(overpay.ok, false);
+  assert.equal((overpay as any).error, 'payment_exceeds_balance');
+  assert.equal((overpay as any).details.remaining_cents, 6000);
+
+  const final = recordPayment({
+    condoId,
+    invoice_id: invoiceId,
+    amount_cents: 6000,
+    method: 'pix',
+    reference: 'PIX-125',
+    created_by_user_id: boardId,
+  });
+  assert.equal(final.ok, true);
+  assert.equal((final as any).invoice_status, 'paid');
+  assert.equal((final as any).remaining_cents, 0);
+
+  const payments = db.prepare(`SELECT COUNT(*) AS count FROM payments WHERE invoice_id = ?`).get(invoiceId) as { count: number };
+  assert.equal(payments.count, 2);
+
+  const extra = recordPayment({
+    condoId,
+    invoice_id: invoiceId,
+    amount_cents: 1,
+    method: 'pix',
+    reference: 'PIX-126',
+    created_by_user_id: boardId,
+  });
+  assert.equal(extra.ok, false);
+  assert.equal((extra as any).error, 'invoice_already_paid');
+});
+
+test('tickets: assignees must be active board users in the same condo', () => {
+  resetDb();
+  const { condoId, unit101 } = createCondoFixture();
+  const boardId = createUser('board@example.com', 'board_admin');
+  const residentId = createUser('resident@example.com');
+  const inactiveBoardId = createUser('inactive-board@example.com', 'board_admin');
+  db.prepare(`UPDATE users SET condominium_id = ? WHERE id IN (?, ?, ?)`).run(condoId, boardId, residentId, inactiveBoardId);
+  db.prepare(
+    `INSERT INTO user_unit (user_id, unit_id, relationship, status, primary_contact, voting_weight)
+     VALUES (?, ?, 'owner', 'active', 1, 1.0),
+            (?, ?, 'tenant', 'active', 0, 1.0)`
+  ).run(boardId, unit101, residentId, unit101);
+
+  assert.equal(canAssignTicketToUser(boardId, condoId), true);
+  assert.equal(canAssignTicketToUser(residentId, condoId), false);
+  assert.equal(canAssignTicketToUser(inactiveBoardId, condoId), false);
+});
+
+test('memberships: reassign only moves pending claims', () => {
+  resetDb();
+  const { condoId, unit101, unit102 } = createCondoFixture();
+  const activeUser = createUser('active@example.com');
+  const pendingUser = createUser('pending@example.com');
+  const activeMembershipId = Number(db.prepare(
+    `INSERT INTO user_unit (user_id, unit_id, relationship, status, primary_contact, voting_weight)
+     VALUES (?, ?, 'owner', 'active', 1, 1.0)`
+  ).run(activeUser, unit101).lastInsertRowid);
+  const pendingMembershipId = Number(db.prepare(
+    `INSERT INTO user_unit (user_id, unit_id, relationship, status, primary_contact, voting_weight)
+     VALUES (?, ?, 'tenant', 'pending', 0, 1.0)`
+  ).run(pendingUser, unit101).lastInsertRowid);
+
+  const activeResult = reassignPendingMembership(activeMembershipId, unit102, condoId);
+  assert.equal(activeResult.ok, false);
+  assert.equal((activeResult as any).error, 'not_pending');
+  assert.equal((db.prepare(`SELECT unit_id FROM user_unit WHERE id = ?`).get(activeMembershipId) as any).unit_id, unit101);
+
+  const pendingResult = reassignPendingMembership(pendingMembershipId, unit102, condoId);
+  assert.equal(pendingResult.ok, true);
+  assert.equal((pendingResult as any).unit_id, unit102);
+  assert.equal((db.prepare(`SELECT unit_id FROM user_unit WHERE id = ?`).get(pendingMembershipId) as any).unit_id, unit102);
 });
 
 // ============================================================================
