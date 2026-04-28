@@ -1,10 +1,12 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 
 export type AppLocale = 'pt-BR' | 'en-US' | 'es-ES' | 'fr-FR';
 
 type Copy = Record<AppLocale, string>;
 
 const STORAGE_KEY = 'condoos_locale';
+const LOCATION_STORAGE_KEY = 'condoos_locale_source';
 
 export const LOCALE_OPTIONS: Array<{ locale: AppLocale; label: string; short: string }> = [
   { locale: 'pt-BR', label: 'Português', short: 'PT' },
@@ -17,10 +19,144 @@ function normalize(value: string) {
   return value.replace(/\s+/g, ' ').trim();
 }
 
-function detectLocale(): AppLocale {
+function readManualLocale(): AppLocale | null {
   const stored = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
+  const source = readLocaleSource();
+  if (source === 'location') return null;
   if (stored && isAppLocale(stored)) return stored;
+  return null;
+}
 
+function readLocationOverride(): AppLocale | null {
+  const stored = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
+  if (readLocaleSource() === 'location' && stored && isAppLocale(stored)) return stored;
+  return null;
+}
+
+function readLocaleSource(): 'manual' | 'location' | null {
+  const source = typeof localStorage !== 'undefined'
+    ? localStorage.getItem(LOCATION_STORAGE_KEY)
+    : null;
+  if (source === 'manual' || source === 'location') return source;
+  return null;
+}
+
+function localeFromTimeZone(timeZone?: string): AppLocale | null {
+  if (!timeZone) return null;
+  const zone = timeZone.toLowerCase();
+
+  if ([
+    'america/araguaina',
+    'america/bahia',
+    'america/belem',
+    'america/boa_vista',
+    'america/campo_grande',
+    'america/cuiaba',
+    'america/eirunepe',
+    'america/fortaleza',
+    'america/maceio',
+    'america/manaus',
+    'america/noronha',
+    'america/porto_velho',
+    'america/recife',
+    'america/rio_branco',
+    'america/santarem',
+    'america/sao_paulo',
+  ].includes(zone)) return 'pt-BR';
+
+  if ([
+    'america/adak',
+    'america/anchorage',
+    'america/boise',
+    'america/chicago',
+    'america/denver',
+    'america/detroit',
+    'america/indiana/indianapolis',
+    'america/indiana/knox',
+    'america/indiana/marengo',
+    'america/indiana/petersburg',
+    'america/indiana/tell_city',
+    'america/indiana/vevay',
+    'america/indiana/vincennes',
+    'america/indiana/winamac',
+    'america/juneau',
+    'america/kentucky/louisville',
+    'america/kentucky/monticello',
+    'america/los_angeles',
+    'america/menominee',
+    'america/metlakatla',
+    'america/new_york',
+    'america/nome',
+    'america/north_dakota/beulah',
+    'america/north_dakota/center',
+    'america/north_dakota/new_salem',
+    'america/phoenix',
+    'america/sitka',
+    'america/yakutat',
+    'pacific/honolulu',
+  ].includes(zone)) return 'en-US';
+
+  if (zone === 'europe/paris' || zone === 'europe/monaco') return 'fr-FR';
+  if (zone === 'europe/madrid' || zone === 'africa/ceuta' || zone === 'atlantic/canary') return 'es-ES';
+
+  if ([
+    'america/argentina/buenos_aires',
+    'america/argentina/catamarca',
+    'america/argentina/cordoba',
+    'america/argentina/jujuy',
+    'america/argentina/la_rioja',
+    'america/argentina/mendoza',
+    'america/argentina/rio_gallegos',
+    'america/argentina/salta',
+    'america/argentina/san_juan',
+    'america/argentina/san_luis',
+    'america/argentina/tucuman',
+    'america/argentina/ushuaia',
+    'america/asuncion',
+    'america/bogota',
+    'america/cancun',
+    'america/caracas',
+    'america/costa_rica',
+    'america/el_salvador',
+    'america/guatemala',
+    'america/guayaquil',
+    'america/havana',
+    'america/la_paz',
+    'america/lima',
+    'america/managua',
+    'america/mexico_city',
+    'america/monterrey',
+    'america/montevideo',
+    'america/panama',
+    'america/santiago',
+    'america/santo_domingo',
+    'america/tegucigalpa',
+  ].includes(zone)) return 'es-ES';
+
+  if ([
+    'america/cayenne',
+    'america/guadeloupe',
+    'america/martinique',
+    'america/port-au-prince',
+    'america/st_barthelemy',
+    'america/st_martin',
+    'indian/reunion',
+    'pacific/noumea',
+    'pacific/tahiti',
+  ].includes(zone)) return 'fr-FR';
+
+  return null;
+}
+
+function localeFromCoordinates(latitude: number, longitude: number): AppLocale | null {
+  if (latitude >= -34 && latitude <= 6 && longitude >= -74 && longitude <= -34) return 'pt-BR';
+  if (latitude >= 18 && latitude <= 72 && longitude >= -170 && longitude <= -60) return 'en-US';
+  if (latitude >= 35 && latitude <= 44.5 && longitude >= -10 && longitude <= 5) return 'es-ES';
+  if (latitude >= 41 && latitude <= 52 && longitude >= -5.5 && longitude <= 10) return 'fr-FR';
+  return null;
+}
+
+function browserLocale(): AppLocale {
   const languages = typeof navigator !== 'undefined' && navigator.languages?.length
     ? navigator.languages
     : [typeof navigator !== 'undefined' ? navigator.language : 'pt-BR'];
@@ -33,6 +169,40 @@ function detectLocale(): AppLocale {
     if (lang.startsWith('en')) return 'en-US';
   }
   return 'en-US';
+}
+
+function locationLocale(): AppLocale | null {
+  const timeZone = typeof Intl !== 'undefined'
+    ? Intl.DateTimeFormat().resolvedOptions().timeZone
+    : undefined;
+  return localeFromTimeZone(timeZone);
+}
+
+function detectAutoLocale(): AppLocale {
+  return locationLocale() || browserLocale();
+}
+
+function detectLocale(): AppLocale {
+  const manual = readManualLocale();
+  if (manual) return manual;
+  const locationOverride = readLocationOverride();
+  if (locationOverride) return locationOverride;
+  return detectAutoLocale();
+}
+
+async function detectPreciseLocationLocale(): Promise<AppLocale> {
+  const fallback = detectAutoLocale();
+  if (typeof navigator === 'undefined' || !navigator.geolocation) return fallback;
+
+  return new Promise((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        resolve(localeFromCoordinates(position.coords.latitude, position.coords.longitude) || fallback);
+      },
+      () => resolve(fallback),
+      { enableHighAccuracy: false, maximumAge: 24 * 60 * 60 * 1000, timeout: 3000 },
+    );
+  });
 }
 
 function isAppLocale(value: string): value is AppLocale {
@@ -71,6 +241,11 @@ const phrases: Copy[] = [
   c('Entrar', 'Sign in', 'Entrar', 'Connexion'),
   c('Testar a demo', 'Try the demo', 'Probar la demo', 'Essayer la démo'),
   c('Ver por dentro', 'See inside', 'Ver por dentro', 'Voir l’intérieur'),
+  c('Controles de idioma', 'Language controls', 'Controles de idioma', 'Contrôles de langue'),
+  c('Idioma', 'Language', 'Idioma', 'Langue'),
+  c('Usar localização', 'Use location', 'Usar ubicación', 'Utiliser la localisation'),
+  c('Usando localização', 'Using location', 'Usando ubicación', 'Localisation utilisée'),
+  c('Detectando localização...', 'Detecting location...', 'Detectando ubicación...', 'Détection de la localisation...'),
 
   // Login
   c('Sou síndico', 'I am the board admin', 'Soy administrador', 'Je suis syndic'),
@@ -159,6 +334,96 @@ const phrases: Copy[] = [
   c('Dados seus ficam seus', 'Your data stays yours', 'Tus datos siguen siendo tuyos', 'Vos données restent à vous'),
   c('Sem cartão de crédito no beta', 'No credit card in beta', 'Sin tarjeta durante la beta', 'Pas de carte bancaire en bêta'),
   c('feito em hackathon, desenhado para humanos', 'built in a hackathon, designed for humans', 'hecho en hackathon, diseñado para humanos', 'créé en hackathon, conçu pour les humains'),
+  c('AGO', 'Annual meeting', 'Asamblea anual', 'AG annuelle'),
+  c('Sou síndico — montar meu prédio', 'I manage a building — set it up', 'Administro un edificio — configurarlo', 'Je gère un immeuble — le configurer'),
+  c('Sou morador — tenho um código', 'I am a resident — I have a code', 'Soy residente — tengo un código', 'Je suis résident — j’ai un code'),
+  c('Só explorar (demo)', 'Just explore (demo)', 'Solo explorar (demo)', 'Explorer seulement (démo)'),
+  c('Uma comunidade de moradores reunida no saguão, um deles segurando o celular com o CondoOS', 'A resident community gathered in the lobby, one person holding a phone with CondoOS', 'Una comunidad de residentes reunida en el vestíbulo, una persona sosteniendo un celular con CondoOS', 'Une communauté de résidents réunie dans le hall, une personne tenant un téléphone avec CondoOS'),
+  c('Apto 704 · Maya', 'Unit 704 · Maya', 'Unidad 704 · Maya', 'Lot 704 · Maya'),
+  c('Cole as anotações. Saia com resumo, decisões e tarefas.', 'Paste the notes. Leave with a summary, decisions, and tasks.', 'Pega las notas. Sal con resumen, decisiones y tareas.', 'Collez les notes. Repartez avec résumé, décisions et tâches.'),
+  c('Agrupa reclamações, redige propostas, explica aos moradores.', 'Clusters complaints, drafts proposals, explains them to residents.', 'Agrupa quejas, redacta propuestas y las explica a residentes.', 'Regroupe les plaintes, rédige les propositions et les explique aux résidents.'),
+  c('Morador em primeiro', 'Resident first', 'Residente primero', 'Le résident d’abord'),
+  c('Comunicado em linguagem humana. Ninguém lê convenção.', 'Plain-language notices. Nobody reads bylaws for fun.', 'Avisos en lenguaje claro. Nadie lee el reglamento por gusto.', 'Annonces en langage clair. Personne ne lit le règlement par plaisir.'),
+  c('De "o ar do saguão não funciona" à decisão do síndico — em minutos.', 'From "the lobby AC is not working" to a board decision — in minutes.', 'De "el aire del vestíbulo no funciona" a la decisión del administrador — en minutos.', 'De « la clim du hall ne marche pas » à la décision du syndic — en quelques minutes.'),
+  c('Seis momentos de IA, uma interface tranquila. Fallbacks para a demo nunca travar.', 'Six AI moments, one calm interface. Demo fallbacks keep everything running.', 'Seis momentos de IA, una interfaz tranquila. Fallbacks para que la demo nunca se bloquee.', 'Six moments d’IA, une interface calme. Des fallbacks pour que la démo ne bloque jamais.'),
+  c('01 · Morador', '01 · Resident', '01 · Residente', '01 · Résident'),
+  c('"O ar do saguão mal funciona. Ontem marcou 30°C aqui dentro."', '"The lobby AC barely works. Yesterday it hit 30°C in here."', '"El aire del vestíbulo casi no funciona. Ayer llegó a 30°C aquí dentro."', '« La clim du hall fonctionne à peine. Hier il faisait 30°C ici. »'),
+  c('02 · IA redige', '02 · AI drafts', '02 · IA redacta', '02 · L’IA rédige'),
+  c('Trocar o ar-condicionado do saguão', 'Replace the lobby air conditioner', 'Cambiar el aire acondicionado del vestíbulo', 'Remplacer la climatisation du hall'),
+  c('Manutenção · ~R$ 47.000 · orçamento de 5 TR da Cool Breeze HVAC.', 'Maintenance · ~R$ 47,000 · 5 TR quote from Cool Breeze HVAC.', 'Mantenimiento · ~R$ 47.000 · presupuesto de 5 TR de Cool Breeze HVAC.', 'Maintenance · ~47 000 R$ · devis 5 TR de Cool Breeze HVAC.'),
+  c('03 · Síndico abre votação', '03 · Board opens voting', '03 · El administrador abre la votación', '03 · Le syndic ouvre le vote'),
+  c('Votação abre → moradores aprovam → IA publica o anúncio em linguagem humana.', 'Voting opens -> residents approve -> AI publishes a plain-language announcement.', 'Se abre la votación -> residentes aprueban -> la IA publica un aviso claro.', 'Le vote s’ouvre -> les résidents approuvent -> l’IA publie une annonce claire.'),
+  c('AGO no app.', 'Annual meeting in the app.', 'Asamblea anual en la app.', 'AG annuelle dans l’app.'),
+  c('Moradores em torno da mesa em uma assembleia geral ordinária', 'Residents around a table during an annual meeting', 'Residentes alrededor de una mesa en una asamblea anual', 'Résidents autour d’une table pendant une assemblée annuelle'),
+  c('Convocação com 8 dias de antecedência, procurações digitais, quórum aplicado automaticamente, votação por maioria simples ou 2/3 (convenção), e a ata sai pronta no fim da sessão. Tudo alinhado ao Código Civil Art. 1350.', 'Eight-day notice, digital proxies, automatic quorum, simple majority or two-thirds voting when bylaws require it, and minutes ready at the end. Aligned with Brazilian Civil Code Art. 1350.', 'Convocatoria con 8 días de anticipación, poderes digitales, quórum automático, mayoría simple o 2/3 según el reglamento, y acta lista al final. Alineado con el Código Civil brasileño Art. 1350.', 'Convocation 8 jours à l’avance, procurations numériques, quorum automatique, majorité simple ou 2/3 selon le règlement, et procès-verbal prêt à la fin. Conforme au Code civil brésilien art. 1350.'),
+  c('Pauta auto-gerada', 'Auto-generated agenda', 'Agenda autogenerada', 'Ordre du jour généré automatiquement'),
+  c('A IA monta a pauta a partir das propostas abertas — contas, orçamento, assuntos do síndico.', 'AI builds the agenda from open proposals — accounts, budget, and board topics.', 'La IA arma la agenda desde las propuestas abiertas: cuentas, presupuesto y temas del administrador.', 'L’IA prépare l’ordre du jour à partir des propositions ouvertes : comptes, budget et sujets du syndic.'),
+  c('Procurações digitais', 'Digital proxies', 'Poderes digitales', 'Procurations numériques'),
+  c('Moradores concedem procuração a outro proprietário em 10s. Voto com peso correto.', 'Residents grant a proxy to another owner in 10 seconds. Votes keep the correct weight.', 'Los residentes dan poder a otro propietario en 10 segundos. El voto mantiene el peso correcto.', 'Les résidents donnent procuration à un autre propriétaire en 10 s. Le vote garde le bon poids.'),
+  c('Quórum por item', 'Quorum per item', 'Quórum por punto', 'Quorum par point'),
+  c('Maioria simples, 2/3 ou unanimidade — aplicado por tipo de pauta (convenção, orçamento, eleição).', 'Simple majority, two-thirds, or unanimity — applied by agenda type (bylaws, budget, election).', 'Mayoría simple, 2/3 o unanimidad, aplicada por tipo de punto (reglamento, presupuesto, elección).', 'Majorité simple, 2/3 ou unanimité, appliquée par type de point (règlement, budget, élection).'),
+  c('Ata em PT-BR', 'Minutes in plain language', 'Acta en lenguaje claro', 'Procès-verbal en langage clair'),
+  c('Fechou a sessão? A ata já está escrita, com presença, votos e deliberações. Só revisar.', 'Closed the session? The minutes are already written with attendance, votes, and decisions. Just review.', '¿Cerraste la sesión? El acta ya está escrita con asistencia, votos y decisiones. Solo revisa.', 'Session terminée ? Le procès-verbal est déjà rédigé avec présence, votes et décisions. Il suffit de relire.'),
+  c('Assinatura digital opcional', 'Optional digital signature', 'Firma digital opcional', 'Signature numérique facultative'),
+  c('uma semana no CondoOS', 'one week in CondoOS', 'una semana en CondoOS', 'une semaine dans CondoOS'),
+  c('Da reclamação', 'From complaint', 'De la queja', 'De la plainte'),
+  c('ao WhatsApp.', 'to WhatsApp.', 'a WhatsApp.', 'à WhatsApp.'),
+  c('Uma semana real. De "o ar do saguão não tá funcionando" até o morador ler a decisão no celular.', 'A real week. From "the lobby AC is not working" to the resident reading the decision on their phone.', 'Una semana real. Desde "el aire del vestíbulo no funciona" hasta que el residente lee la decisión en el celular.', 'Une vraie semaine. De « la clim du hall ne marche pas » jusqu’à la décision lue sur le téléphone.'),
+  c('Seg', 'Mon', 'Lun', 'Lun'),
+  c('Ter', 'Tue', 'Mar', 'Mar'),
+  c('Qua', 'Wed', 'Mié', 'Mer'),
+  c('Sex', 'Fri', 'Vie', 'Ven'),
+  c('Sáb', 'Sat', 'Sáb', 'Sam'),
+  c('Morador reclama na aba Sugerir', 'Resident complains in the Suggest tab', 'El residente reclama en la pestaña Sugerir', 'Le résident signale dans l’onglet Suggérer'),
+  c('"O ar do saguão tá quebrado. Ontem marcou 30°C aqui dentro." A IA transforma em proposta estruturada (Manutenção · ~R$ 47.000).', '"The lobby AC is broken. Yesterday it hit 30°C in here." AI turns it into a structured proposal (Maintenance · ~R$ 47,000).', '"El aire del vestíbulo está roto. Ayer llegó a 30°C aquí dentro." La IA lo convierte en una propuesta estructurada (Mantenimiento · ~R$ 47.000).', '« La clim du hall est cassée. Hier il faisait 30°C ici. » L’IA le transforme en proposition structurée (Maintenance · ~47 000 R$).'),
+  c('Discussão entre vizinhos', 'Neighbor discussion', 'Discusión entre vecinos', 'Discussion entre voisins'),
+  c('Comentários, fotos, sugestões. A IA resume a thread em pontos de acordo e desacordo para o síndico.', 'Comments, photos, suggestions. AI summarizes the thread into agreement and disagreement points for the board.', 'Comentarios, fotos, sugerencias. La IA resume el hilo en acuerdos y desacuerdos para el administrador.', 'Commentaires, photos, suggestions. L’IA résume le fil en points d’accord et de désaccord pour le syndic.'),
+  c('Votação abre com quórum + janela', 'Voting opens with quorum + window', 'Votación abierta con quórum + plazo', 'Vote ouvert avec quorum + fenêtre'),
+  c('Síndico define quórum (50%) e janela (48h). WhatsApp dispara para todos os moradores elegíveis.', 'The board sets quorum (50%) and a 48-hour window. WhatsApp notifies every eligible resident.', 'El administrador define quórum (50%) y plazo (48h). WhatsApp avisa a todos los residentes elegibles.', 'Le syndic définit le quorum (50 %) et la fenêtre (48 h). WhatsApp prévient tous les résidents éligibles.'),
+  c('Fechamento automático + decisão', 'Automatic closing + decision', 'Cierre automático + decisión', 'Clôture automatique + décision'),
+  c('Janela expirou, quórum batido. Outcome resolvido, síndico fecha com um clique e a IA escreve a comunicação oficial.', 'The window expires and quorum is met. The outcome is resolved, the board closes with one click, and AI writes the official notice.', 'El plazo termina y se alcanza el quórum. Resultado resuelto, el administrador cierra con un clic y la IA redacta el aviso oficial.', 'La fenêtre expire et le quorum est atteint. Résultat décidé, le syndic clôture en un clic et l’IA rédige l’annonce officielle.'),
+  c('Anúncio em linguagem humana', 'Plain-language announcement', 'Aviso en lenguaje claro', 'Annonce en langage clair'),
+  c('Morador recebe no WhatsApp: "Aprovada a troca do ar do saguão. Instalação na semana do dia 5." Sem juridiquês.', 'Residents get a WhatsApp message: "Lobby AC replacement approved. Installation during the week of the 5th." No legalese.', 'El residente recibe en WhatsApp: "Aprobado el cambio del aire del vestíbulo. Instalación la semana del día 5." Sin lenguaje legal.', 'Le résident reçoit sur WhatsApp : « Remplacement de la clim du hall approuvé. Installation la semaine du 5. » Sans jargon juridique.'),
+  c('Do adolescente de skate', 'From the teen on a skateboard', 'Del adolescente en skate', 'De l’ado en skate'),
+  c('à Dona Teresa de 72.', 'to 72-year-old Dona Teresa.', 'a Doña Teresa de 72.', 'à Dona Teresa, 72 ans.'),
+  c('Todos votam. Todos se inteiram. Ninguém precisa virar especialista em condomínio. A IA explica em linguagem humana. O WhatsApp entrega o aviso onde o morador já está.', 'Everyone votes. Everyone understands. Nobody needs to become a condo expert. AI explains in plain language. WhatsApp delivers notices where residents already are.', 'Todos votan. Todos entienden. Nadie necesita volverse experto en condominios. La IA explica en lenguaje claro. WhatsApp entrega el aviso donde el residente ya está.', 'Tout le monde vote. Tout le monde comprend. Personne n’a besoin de devenir expert en copropriété. L’IA explique simplement. WhatsApp livre l’avis là où les résidents sont déjà.'),
+  c('— sem lupa, sem desculpa.', '— no magnifier, no excuses.', '— sin lupa, sin excusas.', '— sans loupe, sans excuse.'),
+  c('— chega onde o morador já passa o dia.', '— reaches residents where they already spend the day.', '— llega donde el residente ya pasa el día.', '— arrive là où les résidents passent déjà la journée.'),
+  c('— a IA traduz o juridiquês antes do voto.', '— AI translates legalese before the vote.', '— la IA traduce el lenguaje legal antes del voto.', '— l’IA traduit le jargon juridique avant le vote.'),
+  c('Uma moradora mais velha usando o CondoOS no celular na mesa da cozinha', 'An older resident using CondoOS on her phone at the kitchen table', 'Una residente mayor usando CondoOS en el celular en la mesa de la cocina', 'Une résidente âgée utilisant CondoOS sur son téléphone à la table de cuisine'),
+  c('Nova mensagem', 'New message', 'Nuevo mensaje', 'Nouveau message'),
+  c('3 segundos.', '3 seconds.', '3 segundos.', '3 secondes.'),
+  c('Enquanto pega o café.', 'While grabbing coffee.', 'Mientras toma café.', 'Le temps de prendre un café.'),
+  c('Proposta abriu? O morador vota sem sair do sofá. Contagem ao vivo, janela de 48 horas, fechamento automático — o síndico nem precisa ligar no grupo.', 'A proposal opens? Residents vote without leaving the sofa. Live tally, 48-hour window, automatic closing — the board does not need to chase the group chat.', '¿Se abrió una propuesta? El residente vota sin salir del sofá. Conteo en vivo, plazo de 48 horas, cierre automático: el administrador ni necesita escribir al grupo.', 'Une proposition s’ouvre ? Les résidents votent sans quitter le canapé. Décompte en direct, fenêtre de 48 h, clôture automatique : le syndic n’a pas besoin de relancer le groupe.'),
+  c('Mão segurando o celular com a tela de votação em claymorphism — Vote tally com gráfico de pizza', 'Hand holding a phone with a claymorphism voting screen — vote tally with pie chart', 'Mano sosteniendo el celular con pantalla de votación claymorphism — conteo con gráfico circular', 'Main tenant un téléphone avec écran de vote claymorphism — décompte avec graphique circulaire'),
+  c('Fecha em 2d 4h', 'Closes in 2d 4h', 'Cierra en 2d 4h', 'Se clôture dans 2 j 4 h'),
+  c('Sim 9 · Não 2 · Abs 1', 'Yes 9 · No 2 · Abs 1', 'Sí 9 · No 2 · Abs 1', 'Oui 9 · Non 2 · Abs 1'),
+  c('Morador no sofá tocando no celular para votar', 'Resident on the sofa tapping a phone to vote', 'Residente en el sofá tocando el celular para votar', 'Résident sur le canapé utilisant son téléphone pour voter'),
+  c('Sem fila, sem burocracia', 'No lines, no bureaucracy', 'Sin fila, sin burocracia', 'Sans file, sans bureaucratie'),
+  c('Voto que cabe no dia do morador.', 'Voting that fits a resident’s day.', 'Un voto que cabe en el día del residente.', 'Un vote qui tient dans la journée du résident.'),
+  c('Porteiro entregando uma encomenda para a moradora', 'Doorman handing a package to a resident', 'Portero entregando un paquete a una residente', 'Gardien remettant un colis à une résidente'),
+  c('Encomenda chegou? O morador sabe.', 'Package arrived? The resident knows.', '¿Llegó un paquete? El residente lo sabe.', 'Colis arrivé ? Le résident le sait.'),
+  c('Notificação no app e no WhatsApp — sem o grupo do prédio virar caos.', 'Notification in the app and on WhatsApp — without turning the building group into chaos.', 'Notificación en la app y en WhatsApp, sin que el grupo del edificio se vuelva un caos.', 'Notification dans l’app et sur WhatsApp, sans transformer le groupe de l’immeuble en chaos.'),
+  c('Mão segurando o celular com mensagem do CondoOS no WhatsApp', 'Hand holding a phone with a CondoOS WhatsApp message', 'Mano sosteniendo un celular con mensaje de CondoOS en WhatsApp', 'Main tenant un téléphone avec un message CondoOS sur WhatsApp'),
+  c('Aviso onde o morador já está.', 'Notices where residents already are.', 'Avisos donde el residente ya está.', 'Avis là où les résidents sont déjà.'),
+  c('Convocação de AGO, abertura de votação, chegada de encomenda — direto no WhatsApp.', 'Annual meeting notices, voting opens, package arrivals — straight to WhatsApp.', 'Convocatoria de asamblea anual, apertura de votación, llegada de paquete: directo a WhatsApp.', 'Convocation d’assemblée annuelle, ouverture de vote, arrivée de colis : directement sur WhatsApp.'),
+  c('Dúvidas frequentes', 'Frequently asked questions', 'Preguntas frecuentes', 'Questions fréquentes'),
+  c('Quanto custa?', 'How much does it cost?', '¿Cuánto cuesta?', 'Combien ça coûte ?'),
+  c('Durante o beta (2026), grátis para até 50 unidades. Planos pagos a partir de R$ 2/unidade/mês quando sairmos do beta. Sem setup fee.', 'During beta (2026), free for up to 50 units. Paid plans start at R$ 2/unit/month after beta. No setup fee.', 'Durante el beta (2026), gratis hasta 50 unidades. Planes pagos desde R$ 2/unidad/mes al salir del beta. Sin costo de instalación.', 'Pendant la bêta (2026), gratuit jusqu’à 50 lots. Les offres payantes commencent à 2 R$/lot/mois après la bêta. Pas de frais de mise en place.'),
+  c('Como funciona a LGPD?', 'How does LGPD work?', '¿Cómo funciona la LGPD?', 'Comment fonctionne la LGPD ?'),
+  c('Dados pessoais ficam em servidores no Brasil. Apenas dados essenciais (nome, unidade, voto) são armazenados. Morador pode exportar ou deletar a qualquer momento.', 'Personal data stays on servers in Brazil. Only essential data (name, unit, vote) is stored. Residents can export or delete it anytime.', 'Los datos personales quedan en servidores en Brasil. Solo se almacenan datos esenciales (nombre, unidad, voto). El residente puede exportarlos o eliminarlos cuando quiera.', 'Les données personnelles restent sur des serveurs au Brésil. Seules les données essentielles (nom, lot, vote) sont stockées. Les résidents peuvent les exporter ou les supprimer à tout moment.'),
+  c('A ata gerada pela IA tem validade legal?', 'Are AI-generated minutes legally valid?', '¿El acta generada por IA tiene validez legal?', 'Le procès-verbal généré par IA a-t-il une valeur légale ?'),
+  c('A IA gera o rascunho. O síndico/secretário revisa e assina — é o ato jurídico humano que dá validade, como sempre foi.', 'AI generates the draft. The board admin or secretary reviews and signs it — the human legal act gives it validity, as always.', 'La IA genera el borrador. El administrador o secretario revisa y firma: el acto jurídico humano le da validez, como siempre.', 'L’IA génère le brouillon. Le syndic ou secrétaire relit et signe : l’acte juridique humain donne la validité, comme toujours.'),
+  c('Funciona sem internet?', 'Does it work without internet?', '¿Funciona sin internet?', 'Cela fonctionne-t-il sans internet ?'),
+  c('Durante a assembleia presencial, sim — os votos ficam em fila no celular e sincronizam quando a conexão voltar. Já validado em prédios com Wi-Fi ruim no saguão.', 'During an in-person meeting, yes — votes queue on the phone and sync when the connection returns. Already validated in buildings with poor lobby Wi-Fi.', 'Durante la asamblea presencial, sí: los votos quedan en cola en el celular y se sincronizan cuando vuelve la conexión. Ya validado en edificios con mal Wi-Fi en el vestíbulo.', 'Pendant une assemblée en présentiel, oui : les votes restent en file sur le téléphone et se synchronisent au retour de la connexion. Déjà validé dans des immeubles avec mauvais Wi-Fi dans le hall.'),
+  c('Inquilinos votam?', 'Can tenants vote?', '¿Los inquilinos votan?', 'Les locataires votent-ils ?'),
+  c('Não. Por padrão, só proprietários ativos (Código Civil). Em propostas não-estatutárias, o síndico pode abrir voto para todos os residentes.', 'No. By default, only active owners vote under the Civil Code. For non-statutory proposals, the board can open voting to all residents.', 'No. Por defecto, solo propietarios activos (Código Civil). En propuestas no estatutarias, el administrador puede abrir voto a todos los residentes.', 'Non. Par défaut, seuls les propriétaires actifs votent selon le Code civil. Pour les propositions non statutaires, le syndic peut ouvrir le vote à tous les résidents.'),
+  c('Podemos migrar do sistema atual?', 'Can we migrate from our current system?', '¿Podemos migrar desde el sistema actual?', 'Peut-on migrer depuis notre système actuel ?'),
+  c('CSV de moradores → importado em 1 clique. Histórico de atas antigas → importamos em PDF na ativação. Zero digitação para o síndico.', 'Resident CSV -> imported in one click. Old minutes -> imported as PDFs during activation. Zero typing for the board.', 'CSV de residentes -> importado en 1 clic. Histórico de actas antiguas -> importamos PDFs en la activación. Cero digitación para el administrador.', 'CSV des résidents -> importé en 1 clic. Anciennes minutes -> PDF importés à l’activation. Aucune ressaisie pour le syndic.'),
+  c('Vai que é hoje.', 'Maybe today is the day.', 'Quizá hoy sea el día.', 'Et si c’était aujourd’hui ?'),
+  c('Entre com o Google em 10 segundos. Sem cartão, sem setup — escolha o caminho certo abaixo.', 'Sign in with Google in 10 seconds. No card, no setup — choose the right path below.', 'Entra con Google en 10 segundos. Sin tarjeta, sin configuración: elige el camino correcto abajo.', 'Connectez-vous avec Google en 10 secondes. Pas de carte, pas de configuration : choisissez le bon chemin ci-dessous.'),
+  c('© 2026 CondoOS · feito em hackathon, desenhado para humanos', '© 2026 CondoOS · built in a hackathon, designed for humans', '© 2026 CondoOS · hecho en hackathon, diseñado para humanos', '© 2026 CondoOS · créé en hackathon, conçu pour les humains'),
+  c('Design system', 'Design system', 'Sistema de diseño', 'Système de design'),
 
   // Resident app
   c('Tudo aguardando você na portaria.', 'Everything waiting for you at the front desk.', 'Todo esperando por ti en portería.', 'Tout ce qui vous attend à la conciergerie.'),
@@ -342,7 +607,7 @@ function unitLabel(locale: AppLocale) {
 function shouldSkip(node: Node) {
   const parent = node.parentElement;
   if (!parent) return true;
-  return !!parent.closest('script,style,textarea,code,pre,.font-mono,[data-i18n-skip]');
+  return !!parent.closest('script,style,textarea,code,pre,[data-i18n-skip]');
 }
 
 function translateElement(root: ParentNode, locale: AppLocale) {
@@ -375,25 +640,44 @@ function translateElement(root: ParentNode, locale: AppLocale) {
 
 type LocaleContextValue = {
   locale: AppLocale;
+  source: 'manual' | 'location';
   setLocale: (locale: AppLocale) => void;
+  useLocationLocale: () => Promise<void>;
 };
 
 const LocaleContext = createContext<LocaleContextValue>({
   locale: 'pt-BR',
+  source: 'location',
   setLocale: () => {},
+  useLocationLocale: async () => {},
 });
 
 export function LocaleProvider({ children }: { children: React.ReactNode }) {
   const [locale, setLocaleState] = useState<AppLocale>(() => detectLocale());
+  const [source, setSource] = useState<'manual' | 'location'>(() => (
+    readLocaleSource() === 'manual' || readManualLocale() ? 'manual' : 'location'
+  ));
 
   const value = useMemo<LocaleContextValue>(() => ({
     locale,
+    source,
     setLocale(next) {
+      localStorage.setItem(STORAGE_KEY, next);
+      localStorage.setItem(LOCATION_STORAGE_KEY, 'manual');
+      setSource('manual');
+      setLocaleState(next);
+      window.location.reload();
+    },
+    async useLocationLocale() {
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.setItem(LOCATION_STORAGE_KEY, 'location');
+      setSource('location');
+      const next = await detectPreciseLocationLocale();
       localStorage.setItem(STORAGE_KEY, next);
       setLocaleState(next);
       window.location.reload();
     },
-  }), [locale]);
+  }), [locale, source]);
 
   useEffect(() => {
     document.documentElement.lang = locale;
@@ -458,21 +742,54 @@ export function formatCurrency(value: number, currency = 'BRL') {
 }
 
 export function LanguageSwitcher() {
-  const { locale, setLocale } = useLocale();
+  const { locale, source, setLocale, useLocationLocale } = useLocale();
+  const location = useLocation();
+  const [detecting, setDetecting] = useState(false);
+  const active = LOCALE_OPTIONS.find((option) => option.locale === locale);
+  const appSurface = location.pathname.startsWith('/app') || location.pathname.startsWith('/board');
+
+  const handleLocation = async () => {
+    setDetecting(true);
+    try {
+      await useLocationLocale();
+    } finally {
+      setDetecting(false);
+    }
+  };
+
   return (
-    <label className="fixed bottom-4 right-4 z-[80] flex items-center gap-2 rounded-full border border-white/60 bg-cream-50/80 px-3 py-2 text-xs font-semibold text-dusk-400 shadow-clay backdrop-blur-xl">
-      <span className="sr-only">Language</span>
-      <span aria-hidden>{LOCALE_OPTIONS.find((o) => o.locale === locale)?.short}</span>
-      <select
-        className="bg-transparent text-xs outline-none"
-        value={locale}
-        onChange={(e) => setLocale(e.target.value as AppLocale)}
-        aria-label="Language"
+    <div
+      className={`${appSurface ? 'hidden sm:flex' : 'flex'} fixed left-1/2 top-16 z-[80] max-w-[calc(100vw-1.5rem)] -translate-x-1/2 flex-row flex-wrap items-center gap-2 rounded-3xl border border-white/60 bg-cream-50/85 p-2 text-xs font-semibold text-dusk-400 shadow-clay backdrop-blur-xl sm:bottom-4 sm:left-auto sm:right-4 sm:top-auto sm:translate-x-0`}
+      aria-label="Language controls"
+    >
+      <label className="flex items-center gap-2 rounded-full bg-white/45 px-3 py-2">
+        <span className="hidden text-[11px] uppercase tracking-[0.14em] text-dusk-300 sm:inline">Language</span>
+        <span aria-hidden className="rounded-full bg-dusk-500 px-2 py-0.5 text-[11px] text-cream-50">
+          {active?.short}
+        </span>
+        <select
+          className="max-w-24 bg-transparent text-xs outline-none sm:max-w-none"
+          value={locale}
+          onChange={(e) => setLocale(e.target.value as AppLocale)}
+          aria-label="Language"
+        >
+          {LOCALE_OPTIONS.map((option) => (
+            <option key={option.locale} value={option.locale}>{option.label}</option>
+          ))}
+        </select>
+      </label>
+      <button
+        type="button"
+        className="rounded-full border border-dusk-200/20 bg-sage-200/70 px-3 py-2 text-[11px] uppercase tracking-[0.12em] text-sage-900 transition hover:bg-sage-300 disabled:cursor-wait disabled:opacity-70"
+        onClick={handleLocation}
+        disabled={detecting}
+        aria-label={source === 'manual' ? 'Use location' : 'Using location'}
       >
-        {LOCALE_OPTIONS.map((option) => (
-          <option key={option.locale} value={option.locale}>{option.label}</option>
-        ))}
-      </select>
-    </label>
+        <span className="hidden sm:inline">
+          {detecting ? 'Detecting location...' : source === 'manual' ? 'Use location' : 'Using location'}
+        </span>
+        <span className="sm:hidden">{detecting ? '...' : 'Auto'}</span>
+      </button>
+    </div>
   );
 }

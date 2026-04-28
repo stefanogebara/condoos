@@ -51,7 +51,7 @@ test('admin: overview renders with sidebar nav', async ({ page, request, isMobil
   const links = [
     /^(Overview|Visão geral)$/i,
     /^(Suggestions|Sugestões)$/i,
-    /^(Pending|Pendentes)$/i,
+    /Pending|Pendentes/i,
     /^(Proposals|Propostas)$/i,
     /^(Assemblies|Assembleias)$/i,
     /^(Meetings|Reuniões)$/i,
@@ -139,10 +139,10 @@ test('admin: assembly detail shows agenda + lifecycle buttons in correct state',
   await adminLogin(page, request);
   await page.goto(`/board/assemblies/${id}`);
   // Empty agenda state + the AI-draft CTA + "Add item" form should all be visible
-  await expect(page.getByRole('button', { name: /Convoke/i })).toBeVisible();
-  await expect(page.getByPlaceholder(/Item title/i)).toBeVisible();
+  await expect(page.getByRole('button', { name: /Convoke|Convocar/i })).toBeVisible();
+  await expect(page.getByPlaceholder(/Item title|Título do item/i)).toBeVisible();
   // The "Draft with AI" CTA shows only when agenda is empty
-  await expect(page.getByRole('button', { name: /Draft with AI/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Draft with AI|Redigir com IA/i })).toBeVisible();
 });
 
 // ---------------------------------------------------------------------------
@@ -157,7 +157,7 @@ test('admin: meetings page exposes "New meeting" button + form opens', async ({ 
   await expect(newBtn).toBeVisible();
   await newBtn.click();
   // The form's title input should now be visible (placeholder mentions Q3 / Board Meeting)
-  await expect(page.getByPlaceholder(/Q3|Title|Board Meeting/i).first()).toBeVisible();
+  await expect(page.getByPlaceholder(/Q3|Title|Board Meeting|Título|Reunião do síndico/i).first()).toBeVisible();
 });
 
 // ---------------------------------------------------------------------------

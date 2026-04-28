@@ -19,8 +19,8 @@ export default defineConfig({
     channel: process.env.PLAYWRIGHT_CHANNEL || 'chrome',
   },
   projects: [
-    { name: 'desktop', use: { ...devices['Desktop Chrome'], locale: 'pt-BR' } },
-    { name: 'mobile', use: { ...devices['Pixel 7'], locale: 'pt-BR' } },
+    { name: 'desktop', use: { ...devices['Desktop Chrome'], locale: 'pt-BR', timezoneId: 'America/Sao_Paulo' } },
+    { name: 'mobile', use: { ...devices['Pixel 7'], locale: 'pt-BR', timezoneId: 'America/Sao_Paulo' } },
   ],
   webServer: process.env.E2E_BASE_URL
     ? undefined

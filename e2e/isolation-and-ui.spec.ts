@@ -183,17 +183,17 @@ test('board UI: create assembly → redirect to detail → add agenda → convok
   await expect(page.getByRole('heading', { name: new RegExp(unique, 'i') })).toBeVisible();
 
   // Add an agenda item through the UI (not the AI draft, deterministic)
-  await page.getByPlaceholder(/Item title/i).fill('UI click-path accounts review');
-  await page.getByRole('button', { name: /^Add item$/i }).click();
+  await page.getByPlaceholder(/Item title|Título do item/i).fill('UI click-path accounts review');
+  await page.getByRole('button', { name: /^Add item$|^Adicionar item$/i }).click();
 
   // The newly added item should appear in the list
   await expect(page.getByRole('heading', { name: /UI click-path accounts review/i })).toBeVisible();
 
   // Convoke — there must be at least one item (we just added one)
-  await page.getByRole('button', { name: /^Convoke$/i }).click();
+  await page.getByRole('button', { name: /^Convoke$|^Convocar$/i }).click();
 
   // Back-end transitioned to 'convoked'; UI now shows Start session instead.
-  await expect(page.getByRole('button', { name: /Start session/i })).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole('button', { name: /Start session|Iniciar sessão|Abrir sessão/i })).toBeVisible({ timeout: 10_000 });
 });
 
 // ---------------------------------------------------------------------------
@@ -337,8 +337,8 @@ test('login page renders Google sign-in when configured', async ({ page, request
   await page.goto('/login');
 
   if (!config.google_enabled || !config.google_client_id) {
-    await expect(page.getByRole('button', { name: /Sign in/i })).toBeVisible();
-    await expect(page.getByText('or manually', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Sign in|Entrar|Connexion/i })).toBeVisible();
+    await expect(page.getByText(/^(or manually|ou manualmente|o manualmente|ou manuellement)$/i)).toBeVisible();
     return;
   }
 
@@ -370,10 +370,10 @@ test('board UI: compliance editor saves quorum + datetime window', async ({ page
   await page.goto(`/board/proposals/${target.id}`);
 
   // The compliance card is only rendered when status === 'discussion'.
-  await expect(page.getByText(/Voting compliance/i)).toBeVisible();
+  await expect(page.getByText(/Voting compliance|Quórum e janela/i)).toBeVisible();
 
   // Pick 50% quorum — match by `value` (the option's value attr is the integer)
-  const quorumSelect = page.locator('select').filter({ hasText: /No quorum|25%|50%/ }).first();
+  const quorumSelect = page.locator('select').filter({ hasText: /No quorum|Sem quórum|25%|50%/ }).first();
   await quorumSelect.selectOption({ value: '50' });
 
   // Set voting window — opens in 10 min, closes in 7 days.
@@ -393,7 +393,7 @@ test('board UI: compliance editor saves quorum + datetime window', async ({ page
     page.waitForResponse((res) =>
       res.url().includes(`/proposals/${target.id}/compliance`) && res.request().method() === 'PATCH' && res.ok(),
     ),
-    page.getByRole('button', { name: /Save voting rules/i }).click(),
+    page.getByRole('button', { name: /Save voting rules|Salvar regras de votação/i }).click(),
   ]);
 
   // Verify via API that the PATCH landed.
