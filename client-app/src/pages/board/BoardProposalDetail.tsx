@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { ArrowLeft, Sparkles, Play, Check, X, MessageCircle, Vote } from 'lucide-react';
+import { ArrowLeft, Sparkles, Play, Check, X, MessageCircle, Vote, AlertTriangle, Calculator } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 import GlassCard from '../../components/GlassCard';
 import Badge from '../../components/Badge';
@@ -74,6 +74,24 @@ export default function BoardProposalDetail() {
       await apiPost(`/proposals/${id}/status`, { status });
       toast.success(`Status: ${PROPOSAL_STATUS_LABEL[status] || status}`);
       load();
+    } catch (err: any) {
+      const code = err?.response?.data?.error;
+      if (code === 'missing_cost_estimate') {
+        toast.error('Adicione um custo estimado antes de abrir a votação. Use "Analisar com IA" se preferir.');
+      } else {
+        toast.error(code || 'Falha ao atualizar status');
+      }
+    } finally { setBusy(false); }
+  }
+
+  async function analyzeCost() {
+    setBusy(true);
+    try {
+      await apiPost<{ estimated_cost: number; cost_breakdown: string; risk_summary: string }>(`/ai/proposals/${id}/analyze-cost`);
+      toast.success('Análise gerada');
+      load();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || 'Falha ao analisar com IA');
     } finally { setBusy(false); }
   }
 
@@ -151,6 +169,45 @@ export default function BoardProposalDetail() {
       <GlassCard variant="clay" className="p-7 mb-6">
         <p className="text-dusk-400 whitespace-pre-line leading-relaxed">{p.description}</p>
       </GlassCard>
+
+      {/* Pre-vote analysis (#13) — block opening voting until estimated_cost is set. */}
+      {(p.status === 'discussion' || p.cost_breakdown || p.risk_summary) && (
+        <GlassCard variant={p.estimated_cost > 0 ? 'clay-sage' : 'clay'} className="p-6 mb-6">
+          <div className="flex items-start justify-between gap-3 mb-3 flex-wrap">
+            <div className="flex items-center gap-2">
+              <Calculator className="w-5 h-5 text-dusk-400" />
+              <h3 className="font-display text-lg text-dusk-500">Análise pré-votação</h3>
+              {p.estimated_cost > 0 && <Badge tone="sage">~{formatCurrency(p.estimated_cost)}</Badge>}
+              {(!p.estimated_cost || p.estimated_cost <= 0) && p.status === 'discussion' && (
+                <Badge tone="warning">Custo não definido</Badge>
+              )}
+            </div>
+            {p.status === 'discussion' && (
+              <Button size="sm" variant="ghost" onClick={analyzeCost} loading={busy} leftIcon={<Sparkles className="w-4 h-4" />}>
+                {p.cost_breakdown ? 'Re-analisar com IA' : 'Analisar com IA'}
+              </Button>
+            )}
+          </div>
+          {p.cost_breakdown ? (
+            <div>
+              <div className="text-xs uppercase tracking-wider text-dusk-300 mb-1 font-medium">Custos</div>
+              <pre className="text-sm text-dusk-400 whitespace-pre-wrap font-sans leading-relaxed">{p.cost_breakdown}</pre>
+            </div>
+          ) : (
+            <p className="text-sm text-dusk-300">
+              Os moradores precisam de uma estimativa de custo + riscos antes de votar. A IA gera tudo a partir do título e descrição — só revisar.
+            </p>
+          )}
+          {p.risk_summary && (
+            <div className="mt-4 pt-4 border-t border-white/60">
+              <div className="text-xs uppercase tracking-wider text-dusk-300 mb-1 font-medium flex items-center gap-1">
+                <AlertTriangle className="w-3 h-3" /> Riscos e considerações
+              </div>
+              <p className="text-sm text-dusk-400 leading-relaxed whitespace-pre-line">{p.risk_summary}</p>
+            </div>
+          )}
+        </GlassCard>
+      )}
 
       {p.status === 'discussion' && (
         <GlassCard className="p-5 mb-6">

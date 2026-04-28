@@ -207,6 +207,11 @@ export function initSchema() {
   addColumnIfMissing('proposals',    'voting_opens_at',    `TEXT`);
   addColumnIfMissing('proposals',    'closed_at',          `TEXT`);
   addColumnIfMissing('proposals',    'close_reason',       `TEXT`);
+  // Pre-vote cost + risk analysis (#13). cost_breakdown is a list of line
+  // items as plaintext (e.g. "Mão de obra: R$ 12.000\nMaterial: R$ 8.000").
+  // risk_summary is plaintext too — AI-generated then admin-editable.
+  addColumnIfMissing('proposals',    'cost_breakdown',     `TEXT`);
+  addColumnIfMissing('proposals',    'risk_summary',       `TEXT`);
   // WhatsApp notifications — phone + opt-in on users
   addColumnIfMissing('users',        'phone',              `TEXT`);
   addColumnIfMissing('users',        'whatsapp_opt_in',    `INTEGER NOT NULL DEFAULT 0`);

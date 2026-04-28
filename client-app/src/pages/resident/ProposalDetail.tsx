@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { ArrowLeft, Sparkles, Vote as VoteIcon, MessageCircle } from 'lucide-react';
+import { ArrowLeft, Sparkles, Vote as VoteIcon, MessageCircle, Calculator, AlertTriangle } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 import GlassCard from '../../components/GlassCard';
 import Badge from '../../components/Badge';
@@ -23,6 +23,8 @@ interface Proposal {
   ai_summary: string | null;
   ai_explainer: string | null;
   decision_summary: string | null;
+  cost_breakdown: string | null;
+  risk_summary: string | null;
   author_first: string;
   author_last: string;
   voting_opens_at: string | null;
@@ -169,6 +171,32 @@ export default function ProposalDetail() {
       <GlassCard variant="clay" className="p-7 mb-6">
         <p className="text-dusk-400 leading-relaxed whitespace-pre-line">{p.description}</p>
       </GlassCard>
+
+      {/* Cost + risk analysis (#13) — surfaces above the vote buttons so
+          residents have the numbers + risks before deciding. */}
+      {(p.cost_breakdown || p.risk_summary || (p.estimated_cost && p.estimated_cost > 0)) && (
+        <GlassCard variant="clay-sage" className="p-6 mb-6">
+          <div className="flex items-center gap-2 mb-3 flex-wrap">
+            <Calculator className="w-5 h-5 text-dusk-400" />
+            <h3 className="font-display text-lg text-dusk-500">Análise técnica</h3>
+            {p.estimated_cost ? <Badge tone="sage">~{formatCurrency(p.estimated_cost)}</Badge> : null}
+          </div>
+          {p.cost_breakdown && (
+            <div className="mb-3">
+              <div className="text-xs uppercase tracking-wider text-dusk-300 mb-1 font-medium">Custos</div>
+              <pre className="text-sm text-dusk-400 whitespace-pre-wrap font-sans leading-relaxed">{p.cost_breakdown}</pre>
+            </div>
+          )}
+          {p.risk_summary && (
+            <div className={p.cost_breakdown ? 'pt-3 border-t border-white/60' : ''}>
+              <div className="text-xs uppercase tracking-wider text-dusk-300 mb-1 font-medium flex items-center gap-1">
+                <AlertTriangle className="w-3 h-3" /> Riscos e considerações
+              </div>
+              <p className="text-sm text-dusk-400 leading-relaxed whitespace-pre-line">{p.risk_summary}</p>
+            </div>
+          )}
+        </GlassCard>
+      )}
 
       {/* Voting */}
       {p.status === 'voting' && (() => {

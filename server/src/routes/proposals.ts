@@ -231,6 +231,15 @@ router.post('/:id/status', requireAuth, requireRole('board_admin'), (req: Authed
   if (!valid.includes(status)) return fail(res, 'invalid_status');
   const p = getScopedProposal(id, condoId);
   if (!p) return fail(res, 'not_found', 404);
+
+  // Pre-vote cost analysis (#13): block discussion → voting unless the
+  // proposal has at least an estimated_cost. Voters need a number on screen
+  // to make an informed call. Admin can fill it manually or hit the
+  // "Analisar com IA" button which calls /api/ai/proposals/:id/analyze-cost.
+  if (status === 'voting' && p.status === 'discussion' && (!p.estimated_cost || p.estimated_cost <= 0)) {
+    return fail(res, 'missing_cost_estimate', 409);
+  }
+
   db.prepare(`UPDATE proposals SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(status, id);
 
   // When voting opens, nudge all residents. The WhatsApp stub is fire-and-forget.

@@ -14,6 +14,7 @@ import {
   MEETING_SUMMARY_SYS,
   EXPLAIN_SYS,
   DECISION_SUMMARY_SYS,
+  PROPOSAL_COST_ANALYSIS_SYS,
   ASSEMBLY_AGENDA_SYS,
   ASSEMBLY_ATA_SYS,
 } from '../ai/prompts';
@@ -263,6 +264,61 @@ router.post('/meetings/:id/summarize', requireAuth, aiRateLimit, requireRole('bo
     metadata: { action_item_count: (out.action_items || []).length },
   });
   return ok(res, out);
+}));
+
+// 4b. Pre-vote cost + risk analysis (#13)
+// Admin-only. Uses the proposal's title + description to generate an
+// estimated_cost (BRL), itemized cost_breakdown, and a short risk_summary.
+// The output is persisted on the proposal so residents see it before voting.
+interface CostAnalysis {
+  estimated_cost: number;
+  cost_breakdown: string;
+  risk_summary: string;
+}
+
+function fallbackCostAnalysis(): CostAnalysis {
+  return {
+    estimated_cost: 0,
+    cost_breakdown: '—',
+    risk_summary: 'Análise automática indisponível. Adicione o orçamento e os riscos manualmente antes de abrir a votação.',
+  };
+}
+
+router.post('/proposals/:id/analyze-cost', requireAuth, aiRateLimit, requireRole('board_admin'), asyncHandler(async (req: AuthedRequest, res) => {
+  const u = req.user!;
+  const id = Number(req.params.id);
+  const p = db.prepare(
+    `SELECT title, description, category FROM proposals WHERE id=? AND condominium_id=?`
+  ).get(id, u.condominium_id) as { title: string; description: string; category: string | null } | undefined;
+  if (!p) return fail(res, 'not_found', 404);
+
+  const out = await tryAI<CostAnalysis>(
+    [
+      { role: 'system', content: PROPOSAL_COST_ANALYSIS_SYS },
+      { role: 'user', content: `Title: ${clip(p.title, 300)}\nCategoria: ${p.category || 'não definida'}\n\nDescription:\n${clip(p.description, 4_000)}` },
+    ],
+    fallbackCostAnalysis,
+    { jsonMode: true, maxTokens: 600, label: 'analyze-cost', tier: 'quality' }
+  );
+
+  // Sanitize: clamp cost into a reasonable range, trim long fields.
+  const safeCost = Number.isFinite(out.estimated_cost) ? Math.max(0, Math.min(50_000_000, Math.round(out.estimated_cost))) : 0;
+  const breakdown = String(out.cost_breakdown || '').slice(0, 2_000);
+  const risks = String(out.risk_summary || '').slice(0, 1_500);
+
+  db.prepare(
+    `UPDATE proposals SET estimated_cost=?, cost_breakdown=?, risk_summary=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`
+  ).run(safeCost, breakdown, risks, id);
+
+  audit(req, {
+    action: 'proposal.analyze_cost',
+    target_type: 'proposal',
+    target_id: id,
+    condominium_id: u.condominium_id,
+    metadata: { estimated_cost: safeCost, has_breakdown: !!breakdown && breakdown !== '—', has_risks: !!risks },
+  });
+
+  return ok(res, { estimated_cost: safeCost, cost_breakdown: breakdown, risk_summary: risks });
 }));
 
 // 5. Plain-language explainer for residents
