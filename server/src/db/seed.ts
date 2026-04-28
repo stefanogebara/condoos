@@ -91,6 +91,7 @@ function run() {
 
   const users = [
     { email: 'admin@condoos.dev',    pw: 'admin123',    first: 'Alex',   last: 'Silva',   role: 'board_admin', unit: 'PH-1' },
+    { email: 'porteiro@condoos.dev', pw: 'porteiro123', first: 'Seu',    last: 'João',    role: 'concierge',   unit: '' },
     { email: 'resident@condoos.dev', pw: 'resident123', first: 'Maya',   last: 'Chen',    role: 'resident',    unit: '704' },
     { email: 'jordan@condoos.dev',   pw: 'resident123', first: 'Jordan', last: 'Martins', role: 'resident',    unit: '612' },
     { email: 'taylor@condoos.dev',   pw: 'resident123', first: 'Taylor', last: 'Khan',    role: 'resident',    unit: '305' },
@@ -99,11 +100,14 @@ function run() {
   ];
   const userIds: Record<string, number> = {};
   for (const u of users) {
-    const res = insertUser.run(condoId, u.email, hash(u.pw), u.first, u.last, u.role, u.unit);
+    const res = insertUser.run(condoId, u.email, hash(u.pw), u.first, u.last, u.role, u.unit || null);
     const uid = Number(res.lastInsertRowid);
     userIds[u.email] = uid;
 
-    // Create the unit + active owner link (seeded users are all owners in the demo).
+    // Concierges are staff — no unit, no user_unit link. Skip the seed.
+    if (u.role === 'concierge') continue;
+
+    // Create the unit + active owner link (seeded residents/admins are all owners in the demo).
     const unitId = Number(insertUnit.run(buildingId, floorOf(u.unit), u.unit).lastInsertRowid);
     insertUserUnit.run(uid, unitId, 'owner');
   }

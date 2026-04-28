@@ -74,13 +74,20 @@ export default function Login() {
   //     marketing page shouldn't be sent through the create wizard again).
   //   - Otherwise route by intent. No intent → choose-your-path /onboarding.
   async function routeAfterLogin(u: { role: string; first_name: string }) {
+    // Staff (board_admin / concierge) skip the membership check — they don't
+    // own a unit, but their condominium_id is set when they're created.
+    if (u.role === 'concierge') {
+      navigate('/concierge');
+      return;
+    }
+
     let hasActive = false;
     try {
       const memberships = await apiGet<Array<{ status: string }>>('/onboarding/me');
       hasActive = memberships.some((m) => m.status === 'active');
     } catch { /* treat as no membership */ }
 
-    if (hasActive) {
+    if (hasActive || u.role === 'board_admin') {
       navigate(u.role === 'board_admin' ? '/board' : '/app');
       return;
     }

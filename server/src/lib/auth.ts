@@ -15,7 +15,7 @@ const JWT_SECRET = getJwtSecret();
 export interface AuthUser {
   id: number;
   email: string;
-  role: 'resident' | 'board_admin';
+  role: 'resident' | 'board_admin' | 'concierge';
   condominium_id: number | null;
   first_name: string;
   last_name: string;
@@ -70,10 +70,10 @@ export function requireAuth(req: AuthedRequest, res: Response, next: NextFunctio
   next();
 }
 
-export function requireRole(role: AuthUser['role']) {
+export function requireRole(...roles: AuthUser['role'][]) {
   return (req: AuthedRequest, res: Response, next: NextFunction) => {
     if (!req.user) return res.status(401).json({ success: false, error: 'not_authenticated' });
-    if (req.user.role !== role) {
+    if (!roles.includes(req.user.role)) {
       return res.status(403).json({ success: false, error: 'forbidden' });
     }
     next();
@@ -99,14 +99,14 @@ export function requireActiveMembership(req: AuthedRequest, res: Response, next:
      WHERE uu.user_id = ? AND uu.status = 'active'`
   ).all(req.user.id) as ActiveMembership[];
 
-  // Special case: a board_admin who manages the building without owning a unit
-  // (e.g., a professional síndico / administradora) has no user_unit row but
-  // still needs to access /board/* routes. Their condominium_id is set when
-  // they create the building. Voting eligibility for AGOs is enforced
-  // elsewhere via user_unit.relationship='owner', so a no-unit admin can run
-  // the building but cannot vote — matching Brazilian condo law.
+  // Special case: staff who run the building without owning a unit. Either
+  // a professional síndico / administradora (board_admin) or a porteiro
+  // (concierge). Both have users.condominium_id set but no user_unit row.
+  // Voting eligibility in AGOs is gated separately via user_unit.relationship,
+  // so no-unit staff can run the building but cannot vote — matching law.
   if (rows.length === 0) {
-    if (req.user.role === 'board_admin' && req.user.condominium_id) {
+    const isStaff = req.user.role === 'board_admin' || req.user.role === 'concierge';
+    if (isStaff && req.user.condominium_id) {
       req.memberships = [];
       return next();
     }

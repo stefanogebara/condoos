@@ -27,6 +27,7 @@ import meRoutes from './routes/me';
 import auditRoutes from './routes/audit';
 import buildingsRoutes from './routes/buildings';
 import unitsRoutes from './routes/units';
+import conciergeRoutes from './routes/concierge';
 import financeRoutes from './routes/finance';
 import ticketsRoutes from './routes/tickets';
 import { processWhatsAppOutbox } from './lib/whatsapp';
@@ -88,6 +89,7 @@ app.use('/api/assemblies',    scoped, assembliesRoutes);
 app.use('/api/audit',         scoped, auditRoutes);
 app.use('/api/buildings',     scoped, buildingsRoutes);
 app.use('/api/units',         scoped, unitsRoutes);
+app.use('/api/concierge',     scoped, conciergeRoutes);
 app.use('/api/finance',       scoped, financeRoutes);
 app.use('/api/tickets',       scoped, ticketsRoutes);
 

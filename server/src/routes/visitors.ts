@@ -52,7 +52,7 @@ router.post('/', requireAuth, (req: AuthedRequest, res) => {
   return ok(res, { id: row.lastInsertRowid, status });
 });
 
-router.post('/:id/decide', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.post('/:id/decide', requireAuth, requireRole('board_admin', 'concierge'), (req: AuthedRequest, res) => {
   const u = req.user!;
   const id = Number(req.params.id);
   const decision = req.body?.decision;

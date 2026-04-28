@@ -27,6 +27,52 @@ function addColumnIfMissing(table: string, col: string, ddl: string) {
   }
 }
 
+// Widens the users.role CHECK to include 'concierge' (#11). Safe to run on
+// fresh DBs (the table created by schema.sql still has the old CHECK; this
+// fn detects it and rebuilds). Idempotent.
+function migrateUsersRoleConcierge() {
+  // Find the create-statement to see whether the CHECK already includes concierge.
+  const ddl = (db.prepare(`SELECT sql FROM sqlite_master WHERE type='table' AND name='users'`)
+    .get() as { sql?: string } | undefined)?.sql || '';
+  if (ddl.includes("'concierge'")) return;
+
+  const foreignKeys = db.pragma('foreign_keys', { simple: true }) as number;
+  db.pragma('foreign_keys = OFF');
+  try {
+    db.exec(`
+      CREATE TABLE users_new (
+        id               INTEGER PRIMARY KEY AUTOINCREMENT,
+        condominium_id   INTEGER REFERENCES condominiums(id) ON DELETE SET NULL,
+        email            TEXT UNIQUE NOT NULL,
+        password_hash    TEXT NOT NULL,
+        first_name       TEXT NOT NULL,
+        last_name        TEXT NOT NULL,
+        role             TEXT NOT NULL CHECK(role IN ('resident','board_admin','concierge')),
+        unit_number      TEXT,
+        avatar_url       TEXT,
+        phone            TEXT,
+        whatsapp_opt_in  INTEGER NOT NULL DEFAULT 0,
+        created_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+
+      INSERT INTO users_new (
+        id, condominium_id, email, password_hash, first_name, last_name,
+        role, unit_number, avatar_url, phone, whatsapp_opt_in, created_at
+      )
+      SELECT
+        id, condominium_id, email, password_hash, first_name, last_name,
+        role, unit_number, avatar_url, phone, whatsapp_opt_in, created_at
+      FROM users;
+
+      DROP TABLE users;
+      ALTER TABLE users_new RENAME TO users;
+    `);
+    console.log('[migrate] widened users.role to include concierge');
+  } finally {
+    db.pragma(`foreign_keys = ${foreignKeys ? 'ON' : 'OFF'}`);
+  }
+}
+
 function migrateUsersCondoNullable() {
   const cols = db.prepare(`PRAGMA table_info(users)`).all() as Array<{ name: string; notnull: number }>;
   const condoCol = cols.find((c) => c.name === 'condominium_id');
@@ -187,6 +233,8 @@ export function initSchema() {
   db.exec(sql);
   migrateUsersCondoNullable();
   migrateProposalsInconclusiveStatus();
+  // Must run AFTER the additive column migrations below so phone +
+  // whatsapp_opt_in already exist in the source table.
 
   // Additive column migrations that SQLite can't express in schema.sql.
   addColumnIfMissing('condominiums', 'invite_code',        `TEXT`);
@@ -239,6 +287,9 @@ export function initSchema() {
   // WhatsApp notifications — phone + opt-in on users
   addColumnIfMissing('users',        'phone',              `TEXT`);
   addColumnIfMissing('users',        'whatsapp_opt_in',    `INTEGER NOT NULL DEFAULT 0`);
+  // Concierge role (#11) — widen the role CHECK constraint. Done AFTER
+  // the columns above so the rebuilt table preserves them.
+  migrateUsersRoleConcierge();
   // Party/event reservations: guest count + names list so the porteiro
   // can admit by name when 30 people show up for a Saturday party.
   addColumnIfMissing('amenity_reservations', 'expected_guests', `INTEGER NOT NULL DEFAULT 0`);

@@ -10,15 +10,31 @@ import OnboardingCreate from './pages/onboarding/Create';
 import OnboardingJoin from './pages/onboarding/Join';
 import ResidentApp from './pages/resident/ResidentApp';
 import BoardApp from './pages/board/BoardApp';
+import ConciergeApp from './pages/concierge/ConciergeApp';
 import { exposeInternalPages } from './lib/appConfig';
 
-function RequireAuth({ role, children }: { role?: 'resident' | 'board_admin'; children: React.ReactNode }) {
+type Role = 'resident' | 'board_admin' | 'concierge';
+
+// Staff users (board_admin, concierge) don't have user_unit rows, so the
+// hasActiveMembership check would always fail and bounce them to onboarding.
+// They get in based on having users.condominium_id set — which the backend
+// also treats as enough to access scoped routes.
+function isStaffRole(role: string | undefined): boolean {
+  return role === 'board_admin' || role === 'concierge';
+}
+function landingPath(role: string): string {
+  if (role === 'board_admin') return '/board';
+  if (role === 'concierge') return '/concierge';
+  return '/app';
+}
+
+function RequireAuth({ role, children }: { role?: Role; children: React.ReactNode }) {
   const { user, loading, hasActiveMembership } = useAuth();
-  if (loading || (user && hasActiveMembership === null)) return <div className="min-h-screen flex items-center justify-center text-dusk-300">Loading...</div>;
+  if (loading || (user && hasActiveMembership === null)) return <div className="min-h-screen flex items-center justify-center text-dusk-300">Carregando…</div>;
   if (!user) return <Navigate to="/login" replace />;
-  if (!hasActiveMembership) return <Navigate to="/onboarding" replace />;
+  if (!hasActiveMembership && !isStaffRole(user.role)) return <Navigate to="/onboarding" replace />;
   if (role && user.role !== role) {
-    return <Navigate to={user.role === 'board_admin' ? '/board' : '/app'} replace />;
+    return <Navigate to={landingPath(user.role)} replace />;
   }
   return <>{children}</>;
 }
@@ -34,8 +50,8 @@ function RootRoute() {
   const { user, loading, hasActiveMembership } = useAuth();
   if (loading || (user && hasActiveMembership === null)) return null;
   if (!user) return <LandingPage />;
-  if (!hasActiveMembership) return <Navigate to="/onboarding" replace />;
-  return <Navigate to={user.role === 'board_admin' ? '/board' : '/app'} replace />;
+  if (!hasActiveMembership && !isStaffRole(user.role)) return <Navigate to="/onboarding" replace />;
+  return <Navigate to={landingPath(user.role)} replace />;
 }
 
 export default function App() {
@@ -51,8 +67,9 @@ export default function App() {
         <Route path="/onboarding/create" element={<RequireSignedIn><OnboardingCreate /></RequireSignedIn>} />
         <Route path="/onboarding/join"   element={<RequireSignedIn><OnboardingJoin /></RequireSignedIn>} />
 
-        <Route path="/app/*" element={<RequireAuth><ResidentApp /></RequireAuth>} />
+        <Route path="/app/*" element={<RequireAuth role="resident"><ResidentApp /></RequireAuth>} />
         <Route path="/board/*" element={<RequireAuth role="board_admin"><BoardApp /></RequireAuth>} />
+        <Route path="/concierge/*" element={<RequireAuth role="concierge"><ConciergeApp /></RequireAuth>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AuthProvider>
