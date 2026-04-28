@@ -12,6 +12,11 @@ import { formatCurrency, formatDate } from '../../lib/i18n';
 
 const QUORUM_OPTIONS = [0, 25, 50, 67, 75];
 
+const PROPOSAL_STATUS_LABEL: Record<string, string> = {
+  discussion: 'em discussão', voting: 'em votação', approved: 'aprovada',
+  rejected: 'reprovada', completed: 'concluída', inconclusive: 'inconclusiva',
+};
+
 function toLocalInput(iso: string | null | undefined): string {
   if (!iso) return '';
   const d = new Date(iso);
@@ -56,10 +61,10 @@ export default function BoardProposalDetail() {
         voting_opens_at:   fromLocalInput(form.opens),
         voting_closes_at:  fromLocalInput(form.closes),
       });
-      toast.success('Voting rules updated');
+      toast.success('Regras de votação atualizadas');
       load();
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Update failed');
+      toast.error(err?.response?.data?.error || 'Falha ao atualizar');
     } finally { setBusy(false); }
   }
 
@@ -67,7 +72,7 @@ export default function BoardProposalDetail() {
     setBusy(true);
     try {
       await apiPost(`/proposals/${id}/status`, { status });
-      toast.success(`Status: ${status}`);
+      toast.success(`Status: ${PROPOSAL_STATUS_LABEL[status] || status}`);
       load();
     } finally { setBusy(false); }
   }
@@ -77,7 +82,7 @@ export default function BoardProposalDetail() {
     try {
       const data = await apiPost<any>(`/ai/proposals/${id}/summarize-thread`);
       setSummary(data);
-      toast.success('Thread summarized');
+      toast.success('Discussão resumida');
     } finally { setBusy(false); }
   }
 
@@ -86,7 +91,7 @@ export default function BoardProposalDetail() {
     try {
       const data = await apiPost<{ explainer: string }>(`/ai/proposals/${id}/explain`);
       setExplainer(data.explainer);
-      toast.success('Explanation generated');
+      toast.success('Explicação gerada');
     } finally { setBusy(false); }
   }
 
@@ -102,7 +107,7 @@ export default function BoardProposalDetail() {
         source: 'ai_decision',
         related_proposal_id: Number(id),
       });
-      toast.success('Decision summary + announcement published');
+      toast.success('Decisão e comunicado publicados');
       load();
     } finally { setBusy(false); }
   }
@@ -117,17 +122,17 @@ export default function BoardProposalDetail() {
         subtitle={`${p.author_first} ${p.author_last}${p.estimated_cost ? ` · ~${formatCurrency(p.estimated_cost)}` : ''}`}
         actions={
           <div className="flex gap-2 flex-wrap">
-            {p.status === 'discussion' && <Button variant="primary" onClick={() => setStatus('voting')} leftIcon={<Play className="w-4 h-4" />} loading={busy}>Open voting</Button>}
-            {p.status === 'voting'     && <Button variant="primary" onClick={closeDecision} leftIcon={<Check className="w-4 h-4" />} loading={busy}>Close & AI decision</Button>}
+            {p.status === 'discussion' && <Button variant="primary" onClick={() => setStatus('voting')} leftIcon={<Play className="w-4 h-4" />} loading={busy}>Abrir votação</Button>}
+            {p.status === 'voting'     && <Button variant="primary" onClick={closeDecision} leftIcon={<Check className="w-4 h-4" />} loading={busy}>Encerrar e gerar decisão</Button>}
             {p.status === 'voting' && (
               <Link
                 to={`/app/proposals/${id}`}
                 className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold bg-white/50 backdrop-blur-md border border-white/60 text-dusk-400 hover:bg-white/70 transition-all"
               >
-                <Vote className="w-4 h-4" /> Vote as owner
+                <Vote className="w-4 h-4" /> Votar como proprietário
               </Link>
             )}
-            {(['voting','discussion'].includes(p.status)) && <Button variant="ghost" onClick={() => setStatus('rejected')} leftIcon={<X className="w-4 h-4" />}>Reject</Button>}
+            {(['voting','discussion'].includes(p.status)) && <Button variant="ghost" onClick={() => setStatus('rejected')} leftIcon={<X className="w-4 h-4" />}>Reprovar</Button>}
           </div>
         }
       />
@@ -137,9 +142,9 @@ export default function BoardProposalDetail() {
         {p.ai_drafted === 1 && <Badge tone="sage">Redigido pela IA</Badge>}
         {p.category && <Badge tone="neutral">{p.category}</Badge>}
         <Badge tone={p.voter_eligibility === 'owners_only' ? 'peach' : 'neutral'}>
-          {p.voter_eligibility === 'owners_only' ? 'Owners only'
-           : p.voter_eligibility === 'primary_contact_only' ? 'Primary contact only'
-           : 'All residents vote'}
+          {p.voter_eligibility === 'owners_only' ? 'Só proprietários'
+           : p.voter_eligibility === 'primary_contact_only' ? 'Um voto por unidade'
+           : 'Todos os moradores votam'}
         </Badge>
       </div>
 
@@ -151,8 +156,8 @@ export default function BoardProposalDetail() {
         <GlassCard className="p-5 mb-6">
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div>
-              <div className="text-xs uppercase tracking-wider text-dusk-300 font-medium">Who votes on this?</div>
-              <div className="text-sm text-dusk-400 mt-1">Lock in before opening voting. Cannot change after.</div>
+              <div className="text-xs uppercase tracking-wider text-dusk-300 font-medium">Quem vota nesta proposta?</div>
+              <div className="text-sm text-dusk-400 mt-1">Defina antes de abrir a votação — não pode mudar depois.</div>
             </div>
             <select
               value={p.voter_eligibility || 'all'}
@@ -160,13 +165,13 @@ export default function BoardProposalDetail() {
                 try {
                   await apiPatch(`/proposals/${id}/eligibility`, { voter_eligibility: e.target.value });
                   load();
-                } catch (err: any) { toast.error(err?.response?.data?.error || 'Update failed'); }
+                } catch (err: any) { toast.error(err?.response?.data?.error || 'Falha ao atualizar'); }
               }}
               className="input max-w-xs"
             >
-              <option value="all">All residents (including tenants)</option>
-              <option value="owners_only">Owners only (capex / HOA spending)</option>
-              <option value="primary_contact_only">One per unit — primary contact</option>
+              <option value="all">Todos os moradores (incluindo inquilinos)</option>
+              <option value="owners_only">Só proprietários (capex / despesas do condomínio)</option>
+              <option value="primary_contact_only">Um voto por unidade — contato principal</option>
             </select>
           </div>
         </GlassCard>
@@ -175,24 +180,24 @@ export default function BoardProposalDetail() {
       {p.status === 'discussion' && (
         <GlassCard className="p-5 mb-6">
           <div className="mb-4">
-            <div className="text-xs uppercase tracking-wider text-dusk-300 font-medium">Voting compliance</div>
-            <div className="text-sm text-dusk-400 mt-1">Quorum + window enforced at vote-closing time. Missed quorum → inconclusive.</div>
+            <div className="text-xs uppercase tracking-wider text-dusk-300 font-medium">Quórum e janela</div>
+            <div className="text-sm text-dusk-400 mt-1">Quórum + janela aplicados no fechamento. Quórum não batido → inconclusiva.</div>
           </div>
           <div className="grid md:grid-cols-3 gap-4">
             <div>
-              <label className="text-xs text-dusk-300 uppercase tracking-wider">Quorum</label>
+              <label className="text-xs text-dusk-300 uppercase tracking-wider">Quórum</label>
               <select
                 value={form.quorum}
                 onChange={(e) => setForm({ ...form, quorum: Number(e.target.value) })}
                 className="input mt-1"
               >
                 {QUORUM_OPTIONS.map((q) => (
-                  <option key={q} value={q}>{q === 0 ? 'No quorum' : `${q}%`}</option>
+                  <option key={q} value={q}>{q === 0 ? 'Sem quórum' : `${q}%`}</option>
                 ))}
               </select>
             </div>
             <div>
-              <label className="text-xs text-dusk-300 uppercase tracking-wider">Voting opens</label>
+              <label className="text-xs text-dusk-300 uppercase tracking-wider">Abertura da votação</label>
               <input
                 type="datetime-local"
                 value={form.opens}
@@ -201,7 +206,7 @@ export default function BoardProposalDetail() {
               />
             </div>
             <div>
-              <label className="text-xs text-dusk-300 uppercase tracking-wider">Voting closes</label>
+              <label className="text-xs text-dusk-300 uppercase tracking-wider">Fechamento da votação</label>
               <input
                 type="datetime-local"
                 value={form.closes}
@@ -211,7 +216,7 @@ export default function BoardProposalDetail() {
             </div>
           </div>
           <div className="mt-4 flex justify-end">
-            <Button variant="primary" size="sm" onClick={saveCompliance} loading={busy}>Save voting rules</Button>
+            <Button variant="primary" size="sm" onClick={saveCompliance} loading={busy}>Salvar regras de votação</Button>
           </div>
         </GlassCard>
       )}
@@ -243,7 +248,7 @@ export default function BoardProposalDetail() {
               <span className="text-dusk-300"> · {p.quorum.votes_cast} de {p.quorum.eligible_voter_count} votaram</span>
             </div>
             <Badge tone={p.quorum.quorum_met ? 'sage' : 'peach'}>
-              {p.quorum.quorum_met ? 'Quorum met' : 'Quorum not yet met'}
+              {p.quorum.quorum_met ? 'Quórum atingido' : 'Quórum ainda não atingido'}
             </Badge>
           </div>
         </GlassCard>
@@ -251,21 +256,21 @@ export default function BoardProposalDetail() {
 
       {p.status === 'inconclusive' && (
         <GlassCard variant="clay-peach" className="p-5 mb-6">
-          <Badge tone="peach" className="mb-2">Inconclusive</Badge>
+          <Badge tone="peach" className="mb-2">Inconclusiva</Badge>
           <p className="text-dusk-500 text-sm">
-            Voting window closed without reaching the {p.quorum_percent}% quorum. No decision was recorded. You can re-open a new proposal with a wider window or lower quorum.
+            A janela de votação fechou sem atingir o quórum de {p.quorum_percent}%. Nenhuma decisão registrada. Você pode reabrir uma nova proposta com janela maior ou quórum mais baixo.
           </p>
         </GlassCard>
       )}
 
       {decision && (
         <GlassCard variant="clay-sage" className="p-7 mb-6">
-          <Badge tone="dark" className="mb-3"><Sparkles className="w-3 h-3" /> Board decision summary</Badge>
+          <Badge tone="dark" className="mb-3"><Sparkles className="w-3 h-3" /> Resumo da decisão</Badge>
           <h3 className="font-display text-2xl text-dusk-500">{decision.headline}</h3>
           <p className="text-dusk-400 mt-3 leading-relaxed">{decision.rationale}</p>
           {decision.next_steps?.length > 0 && (
             <div className="mt-4">
-              <div className="text-xs uppercase tracking-wider text-dusk-300 mb-1">Next steps</div>
+              <div className="text-xs uppercase tracking-wider text-dusk-300 mb-1">Próximos passos</div>
               <ul className="text-sm text-dusk-400 space-y-1">{decision.next_steps.map((s: string, i: number) => <li key={i}>• {s}</li>)}</ul>
             </div>
           )}
@@ -275,29 +280,29 @@ export default function BoardProposalDetail() {
       <div className="grid md:grid-cols-2 gap-4 mb-6">
         <GlassCard className="p-5">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-display text-lg text-dusk-500 flex items-center gap-2"><Sparkles className="w-4 h-4" /> Discussion summary</h3>
-            <Button size="sm" variant="ghost" onClick={summarize} loading={busy}>Summarize</Button>
+            <h3 className="font-display text-lg text-dusk-500 flex items-center gap-2"><Sparkles className="w-4 h-4" /> Resumo da discussão</h3>
+            <Button size="sm" variant="ghost" onClick={summarize} loading={busy}>Resumir</Button>
           </div>
           {summary ? (
             <div className="space-y-3 text-sm">
               <p className="text-dusk-400 leading-relaxed">{summary.summary}</p>
-              {summary.points_of_agreement?.length    > 0 && <Group label="Agreement"      items={summary.points_of_agreement}    tone="sage"    />}
-              {summary.points_of_disagreement?.length > 0 && <Group label="Disagreement"   items={summary.points_of_disagreement} tone="peach"   />}
-              {summary.open_questions?.length         > 0 && <Group label="Open questions" items={summary.open_questions}         tone="neutral" />}
+              {summary.points_of_agreement?.length    > 0 && <Group label="Concordância"  items={summary.points_of_agreement}    tone="sage"    />}
+              {summary.points_of_disagreement?.length > 0 && <Group label="Discordância"  items={summary.points_of_disagreement} tone="peach"   />}
+              {summary.open_questions?.length         > 0 && <Group label="Em aberto"     items={summary.open_questions}         tone="neutral" />}
             </div>
-          ) : <p className="text-sm text-dusk-300">Run a quick read of all {p.comments.length} comments.</p>}
+          ) : <p className="text-sm text-dusk-300">Faça uma leitura rápida dos {p.comments.length} comentários.</p>}
         </GlassCard>
 
         <GlassCard className="p-5">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-display text-lg text-dusk-500 flex items-center gap-2"><Sparkles className="w-4 h-4" /> Resident-friendly explainer</h3>
-            <Button size="sm" variant="ghost" onClick={explain} loading={busy}>Generate</Button>
+            <h3 className="font-display text-lg text-dusk-500 flex items-center gap-2"><Sparkles className="w-4 h-4" /> Versão para morador</h3>
+            <Button size="sm" variant="ghost" onClick={explain} loading={busy}>Gerar</Button>
           </div>
-          {explainer ? <p className="text-sm text-dusk-400 leading-relaxed whitespace-pre-line">{explainer}</p> : <p className="text-sm text-dusk-300">Get a plain-language version to post as an announcement.</p>}
+          {explainer ? <p className="text-sm text-dusk-400 leading-relaxed whitespace-pre-line">{explainer}</p> : <p className="text-sm text-dusk-300">Versão em linguagem simples para usar num comunicado.</p>}
         </GlassCard>
       </div>
 
-      <h3 className="font-display text-xl text-dusk-500 mb-4 flex items-center gap-2"><MessageCircle className="w-5 h-5" /> Discussion ({p.comments.length})</h3>
+      <h3 className="font-display text-xl text-dusk-500 mb-4 flex items-center gap-2"><MessageCircle className="w-5 h-5" /> Discussão ({p.comments.length})</h3>
       <div className="space-y-3">
         {p.comments.map((c: any) => (
           <GlassCard key={c.id} className="p-4 flex items-start gap-3">
@@ -305,7 +310,7 @@ export default function BoardProposalDetail() {
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 text-xs text-dusk-200">
                 <span className="font-medium text-dusk-400">{c.first_name} {c.last_name}</span>
-                <span>Unit {c.unit_number}</span>
+                <span>Unidade {c.unit_number}</span>
                 <span className="ml-auto">{formatDate(c.created_at)}</span>
               </div>
               <p className="text-sm text-dusk-400 mt-1">{c.body}</p>

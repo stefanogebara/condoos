@@ -74,11 +74,11 @@ export default function Overview() {
         <div className="grid md:grid-cols-2 gap-6 items-center">
           <div>
             <Badge tone="dark" className="mb-3">Pine Ridge Towers</Badge>
-            <h2 className="font-display text-3xl text-dusk-500 leading-tight">Your building, at a glance.</h2>
-            <p className="mt-3 text-dusk-300 max-w-md">One tap to request a package, approve a guest, book the pool, or weigh in on a proposal.</p>
+            <h2 className="font-display text-3xl text-dusk-500 leading-tight">Seu prédio, num panorama.</h2>
+            <p className="mt-3 text-dusk-300 max-w-md">Um toque para retirar uma encomenda, aprovar uma visita, reservar a piscina ou opinar numa proposta.</p>
             <div className="mt-5 flex flex-wrap gap-2">
-              <Link to="/app/suggest"><Button variant="primary" size="sm" leftIcon={<Sparkles className="w-4 h-4" />}>Suggest something</Button></Link>
-              <Link to="/app/amenities"><Button variant="ghost" size="sm">Book an amenity</Button></Link>
+              <Link to="/app/suggest"><Button variant="primary" size="sm" leftIcon={<Sparkles className="w-4 h-4" />}>Sugerir algo</Button></Link>
+              <Link to="/app/amenities"><Button variant="ghost" size="sm">Reservar área comum</Button></Link>
             </div>
           </div>
           <div className="flex justify-center">

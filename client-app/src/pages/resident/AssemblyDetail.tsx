@@ -160,7 +160,7 @@ export default function AssemblyDetail() {
             <div className="text-xs uppercase tracking-wider text-sage-700 font-medium">Sessão aberta</div>
             <div className="text-dusk-500 mt-1">Registre sua presença para votar.</div>
           </div>
-          <Button variant="primary" size="sm" onClick={checkIn} loading={busy} leftIcon={<UserCheck className="w-4 h-4" />}>Check in</Button>
+          <Button variant="primary" size="sm" onClick={checkIn} loading={busy} leftIcon={<UserCheck className="w-4 h-4" />}>Registrar presença</Button>
         </GlassCard>
       )}
 

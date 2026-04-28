@@ -47,7 +47,7 @@ export default function Suggestions() {
     setLoading(true);
     try {
       await apiPost('/ai/cluster-suggestions');
-      toast.success('Clustered with AI');
+      toast.success('Agrupadas pela IA');
       load();
     } finally { setLoading(false); }
   }
@@ -72,7 +72,7 @@ export default function Suggestions() {
         ai_drafted: true,
         source_suggestion_id: s.id,
       });
-      toast.success('Promoted to a proposal');
+      toast.success('Promovida a proposta');
       navigate(`/board/proposals/${proposal.id}`);
     } finally { setDrafting(null); }
   }
@@ -82,9 +82,9 @@ export default function Suggestions() {
   return (
     <>
       <PageHeader
-        title="Resident suggestions"
-        subtitle="Raw input from residents. Cluster related items, promote to proposals, or dismiss."
-        actions={<Button variant="primary" leftIcon={<Wand2 className="w-4 h-4" />} onClick={cluster} loading={loading}>Cluster with AI</Button>}
+        title="Sugestões dos moradores"
+        subtitle="O que os moradores estão pedindo. Agrupe semelhantes, promova a propostas ou descarte."
+        actions={<Button variant="primary" leftIcon={<Wand2 className="w-4 h-4" />} onClick={cluster} loading={loading}>Agrupar com IA</Button>}
       />
 
       {/* Clusters */}
@@ -94,7 +94,7 @@ export default function Suggestions() {
             <GlassCard key={c.id} variant="clay-sage" className="p-6">
               <div className="flex items-start justify-between gap-4 mb-3">
                 <div>
-                  <Badge tone="dark"><Sparkles className="w-3 h-3" /> Cluster</Badge>
+                  <Badge tone="dark"><Sparkles className="w-3 h-3" /> Agrupamento</Badge>
                   <h3 className="font-display text-2xl text-dusk-500 mt-2">{c.label}</h3>
                   <p className="text-sm text-dusk-300 mt-1">{c.summary}</p>
                 </div>
@@ -104,7 +104,7 @@ export default function Suggestions() {
                   loading={drafting === c.members[0]?.id}
                   rightIcon={<ArrowRight className="w-4 h-4" />}
                 >
-                  Draft proposal
+                  Redigir proposta
                 </Button>
               </div>
               <div className="grid md:grid-cols-2 gap-3 mt-4">
@@ -117,14 +117,14 @@ export default function Suggestions() {
 
       {unclustered.length > 0 && (
         <>
-          <h2 className="font-display text-xl text-dusk-500 mb-4">{clusters.length > 0 ? 'Unclustered' : 'Open suggestions'}</h2>
+          <h2 className="font-display text-xl text-dusk-500 mb-4">{clusters.length > 0 ? 'Sem agrupamento' : 'Sugestões abertas'}</h2>
           <div className="grid md:grid-cols-2 gap-4">
             {unclustered.map((s) => (
               <SuggestionCard key={s.id} s={s}
                 actions={
                   <div className="flex gap-2">
-                    <Button size="sm" variant="ghost" onClick={() => dismiss(s.id)} loading={busyId === s.id}>Dismiss</Button>
-                    <Button size="sm" variant="primary" onClick={() => promote(s)} loading={drafting === s.id}>Promote</Button>
+                    <Button size="sm" variant="ghost" onClick={() => dismiss(s.id)} loading={busyId === s.id}>Descartar</Button>
+                    <Button size="sm" variant="primary" onClick={() => promote(s)} loading={drafting === s.id}>Promover</Button>
                   </div>
                 }
               />
@@ -134,7 +134,7 @@ export default function Suggestions() {
       )}
 
       {rows.length > 0 && unclustered.length === 0 && clusters.length === 0 && (
-        <GlassCard className="p-6 text-sm text-dusk-300">All clear! Run the AI clusterer above when new suggestions come in.</GlassCard>
+        <GlassCard className="p-6 text-sm text-dusk-300">Tudo em dia! Use o agrupador da IA quando novas sugestões chegarem.</GlassCard>
       )}
     </>
   );
@@ -148,7 +148,7 @@ function SuggestionCard({ s, compact, actions }: { s: Suggestion; compact?: bool
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 text-xs text-dusk-200">
             <span className="font-medium text-dusk-400">{s.first_name} {s.last_name}</span>
-            <span>Unit {s.unit_number}</span>
+            <span>Unidade {s.unit_number}</span>
             {s.cluster_label && <Badge tone="sage">{s.cluster_label}</Badge>}
           </div>
           <p className="text-sm text-dusk-400 mt-1">{s.body}</p>

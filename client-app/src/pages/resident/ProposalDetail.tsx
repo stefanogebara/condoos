@@ -162,8 +162,8 @@ export default function ProposalDetail() {
         <Badge tone={p.status === 'voting' ? 'peach' : 'sage'}>{({ discussion: 'em discussão', voting: 'em votação', approved: 'aprovada', rejected: 'reprovada', completed: 'concluída', inconclusive: 'inconclusiva' } as Record<string,string>)[p.status] || p.status}</Badge>
         {p.ai_drafted === 1 && <Badge tone="sage">Redigido pela IA</Badge>}
         {p.category && <Badge tone="neutral">{p.category}</Badge>}
-        {p.voter_eligibility === 'owners_only' && <Badge tone="peach">Owners only</Badge>}
-        {p.voter_eligibility === 'primary_contact_only' && <Badge tone="peach">One vote per unit</Badge>}
+        {p.voter_eligibility === 'owners_only' && <Badge tone="peach">Só proprietários</Badge>}
+        {p.voter_eligibility === 'primary_contact_only' && <Badge tone="peach">Um voto por unidade</Badge>}
       </div>
 
       <GlassCard variant="clay" className="p-7 mb-6">
@@ -177,17 +177,17 @@ export default function ProposalDetail() {
         <GlassCard variant="clay-sage" className="p-7 mb-6">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h3 className="font-display text-xl text-dusk-500">Open for voting</h3>
+              <h3 className="font-display text-xl text-dusk-500">Aberta para votação</h3>
               <div className={`text-xs mt-1 font-medium ${win.tone === 'over' ? 'text-peach-500' : win.tone === 'pre' ? 'text-dusk-300' : 'text-sage-700'}`}>
                 {win.label}
               </div>
               {p.quorum && p.quorum.quorum_percent > 0 && (
                 <div className="mt-2 text-xs text-dusk-300">
-                  Quorum: <span className={`font-semibold ${p.quorum.quorum_met ? 'text-sage-700' : 'text-peach-500'}`}>
+                  Quórum: <span className={`font-semibold ${p.quorum.quorum_met ? 'text-sage-700' : 'text-peach-500'}`}>
                     {p.quorum.turnout_percent}%
                   </span>
-                  {' / '}{p.quorum.quorum_percent}% required
-                  <span className="text-dusk-200"> · {p.quorum.votes_cast} of {p.quorum.eligible_voter_count} voted</span>
+                  {' / '}{p.quorum.quorum_percent}% exigido
+                  <span className="text-dusk-200"> · {p.quorum.votes_cast} de {p.quorum.eligible_voter_count} votaram</span>
                 </div>
               )}
             </div>
@@ -199,25 +199,25 @@ export default function ProposalDetail() {
             <div className="h-full bg-dusk-200"  style={{ width: `${weightedTotal ? (p.votes.abstain_weight / weightedTotal) * 100 : 0}%` }} />
           </div>
           <div className="flex items-center justify-between text-sm">
-            <span className="text-sage-700 font-semibold">{p.votes.yes} yes ({pct}%)</span>
-            <span className="text-peach-500 font-semibold">{p.votes.no} no</span>
-            <span className="text-dusk-300">{p.votes.abstain} abstain</span>
+            <span className="text-sage-700 font-semibold">{p.votes.yes} sim ({pct}%)</span>
+            <span className="text-peach-500 font-semibold">{p.votes.no} não</span>
+            <span className="text-dusk-300">{p.votes.abstain} abstenção</span>
           </div>
           {usesWeightedTally && (
             <div className="mt-2 text-xs text-dusk-300">
-              Weighted tally: {p.votes.yes_weight} yes · {p.votes.no_weight} no · {p.votes.abstain_weight} abstain
+              Apuração com peso: {p.votes.yes_weight} sim · {p.votes.no_weight} não · {p.votes.abstain_weight} abstenção
             </div>
           )}
 
           {p.voter_rights?.can_vote === false ? (
             <div className="mt-5 p-4 rounded-2xl bg-white/60 border border-white/70 text-sm text-dusk-400">
-              <strong className="font-semibold">You're not eligible to vote on this proposal.</strong>
+              <strong className="font-semibold">Você não pode votar nesta proposta.</strong>
               <span className="ml-1">
                 {p.voter_eligibility === 'owners_only'
-                  ? 'Only unit owners can vote on HOA spending decisions.'
+                  ? 'Só proprietários votam em decisões de gastos do condomínio.'
                   : p.voter_eligibility === 'primary_contact_only'
-                  ? 'Only the primary contact of each unit votes here.'
-                  : 'Join a unit first to participate.'}
+                  ? 'Só o contato principal de cada unidade vota aqui.'
+                  : 'Vincule sua unidade primeiro para participar.'}
               </span>
             </div>
           ) : (
@@ -235,10 +235,10 @@ export default function ProposalDetail() {
       {/* Inconclusive / quorum-failure banner */}
       {p.status === 'inconclusive' && (
         <GlassCard variant="clay-peach" className="p-5 mb-6 text-sm text-dusk-500">
-          <span className="font-semibold">Vote closed inconclusive.</span>{' '}
+          <span className="font-semibold">Votação encerrada como inconclusiva.</span>{' '}
           {p.close_reason === 'quorum_not_met'
-            ? `Quorum of ${p.quorum_percent}% wasn't reached${p.quorum ? ` — only ${p.quorum.turnout_percent}% voted.` : '.'} The board can reopen voting at a later date.`
-            : 'Not enough votes either way. Decision deferred.'}
+            ? `O quórum de ${p.quorum_percent}% não foi atingido${p.quorum ? ` — só ${p.quorum.turnout_percent}% votaram.` : '.'} O síndico pode reabrir a votação depois.`
+            : 'Não houve votos suficientes para qualquer lado. Decisão adiada.'}
         </GlassCard>
       )}
 
@@ -246,32 +246,32 @@ export default function ProposalDetail() {
       <div className="grid md:grid-cols-2 gap-4 mb-6">
         <GlassCard className="p-5">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-display text-lg text-dusk-500 flex items-center gap-2"><Sparkles className="w-4 h-4" /> Discussion summary</h3>
-            <Button size="sm" variant="ghost" onClick={summarize} loading={busy && !summary}>Summarize thread</Button>
+            <h3 className="font-display text-lg text-dusk-500 flex items-center gap-2"><Sparkles className="w-4 h-4" /> Resumo da discussão</h3>
+            <Button size="sm" variant="ghost" onClick={summarize} loading={busy && !summary}>Resumir discussão</Button>
           </div>
           {summary ? (
             <div className="space-y-3 text-sm">
               <p className="text-dusk-400 leading-relaxed">{summary.summary}</p>
-              {summary.points_of_agreement?.length > 0 && <Group label="Agreement"    items={summary.points_of_agreement}    tone="sage" />}
-              {summary.points_of_disagreement?.length > 0 && <Group label="Disagreement" items={summary.points_of_disagreement} tone="peach" />}
-              {summary.open_questions?.length > 0 && <Group label="Open questions" items={summary.open_questions} tone="neutral" />}
+              {summary.points_of_agreement?.length > 0 && <Group label="Concordância"  items={summary.points_of_agreement}    tone="sage" />}
+              {summary.points_of_disagreement?.length > 0 && <Group label="Discordância" items={summary.points_of_disagreement} tone="peach" />}
+              {summary.open_questions?.length > 0 && <Group label="Em aberto" items={summary.open_questions} tone="neutral" />}
             </div>
-          ) : <p className="text-sm text-dusk-300">Ask AI to read the {p.comments.length} comments and summarize where residents agree and disagree.</p>}
+          ) : <p className="text-sm text-dusk-300">Peça pra IA ler os {p.comments.length} comentários e resumir onde os moradores concordam ou discordam.</p>}
         </GlassCard>
 
         <GlassCard className="p-5">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-display text-lg text-dusk-500 flex items-center gap-2"><Sparkles className="w-4 h-4" /> In plain language</h3>
-            <Button size="sm" variant="ghost" onClick={explain} loading={busy && !explainer}>Explain for me</Button>
+            <h3 className="font-display text-lg text-dusk-500 flex items-center gap-2"><Sparkles className="w-4 h-4" /> Em linguagem simples</h3>
+            <Button size="sm" variant="ghost" onClick={explain} loading={busy && !explainer}>Explicar pra mim</Button>
           </div>
           {explainer
             ? <p className="text-sm text-dusk-400 leading-relaxed whitespace-pre-line">{explainer}</p>
-            : <p className="text-sm text-dusk-300">Get a plain-language version — no jargon, no legalese.</p>}
+            : <p className="text-sm text-dusk-300">Versão sem juridiquês, sem termo técnico.</p>}
         </GlassCard>
       </div>
 
       {/* Comments */}
-      <h3 className="font-display text-xl text-dusk-500 mb-4 flex items-center gap-2"><MessageCircle className="w-5 h-5" /> Discussion ({p.comments.length})</h3>
+      <h3 className="font-display text-xl text-dusk-500 mb-4 flex items-center gap-2"><MessageCircle className="w-5 h-5" /> Discussão ({p.comments.length})</h3>
       <div className="space-y-3 mb-5">
         {p.comments.map((c) => (
           <GlassCard key={c.id} className="p-4 flex items-start gap-3">
@@ -279,7 +279,7 @@ export default function ProposalDetail() {
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
                 <span className="font-semibold text-dusk-500 text-sm">{c.first_name} {c.last_name}</span>
-                <span className="text-xs text-dusk-200">Unit {c.unit_number}</span>
+                <span className="text-xs text-dusk-200">Unidade {c.unit_number}</span>
                 <span className="text-xs text-dusk-200 ml-auto">{formatDate(c.created_at)}</span>
               </div>
               <p className="text-sm text-dusk-400 mt-1 whitespace-pre-line">{c.body}</p>
@@ -289,8 +289,8 @@ export default function ProposalDetail() {
       </div>
 
       <form onSubmit={addComment} className="flex gap-2">
-        <input className="input flex-1" placeholder="Share your view..." value={comment} onChange={(e) => setComment(e.target.value)} />
-        <Button type="submit" variant="primary" loading={busy}>Post</Button>
+        <input className="input flex-1" placeholder="Diga o que você acha..." value={comment} onChange={(e) => setComment(e.target.value)} />
+        <Button type="submit" variant="primary" loading={busy}>Comentar</Button>
       </form>
     </>
   );

@@ -49,11 +49,11 @@ export default function Meetings() {
 
                   {summary && (
                     <div className="mt-4 border-t border-white/60 pt-4">
-                      <Badge tone="sage" className="mb-2">AI recap</Badge>
+                      <Badge tone="sage" className="mb-2">Resumo da IA</Badge>
                       <p className="text-sm text-dusk-400 leading-relaxed">{summary.summary}</p>
                       {summary.decisions?.length > 0 && (
                         <div className="mt-3">
-                          <div className="text-xs uppercase tracking-wider text-dusk-200 mb-1">Decisions</div>
+                          <div className="text-xs uppercase tracking-wider text-dusk-200 mb-1">Decisões</div>
                           <ul className="text-sm text-dusk-400 space-y-1">{summary.decisions.map((d: string, i: number) => <li key={i}>• {d}</li>)}</ul>
                         </div>
                       )}
@@ -62,7 +62,7 @@ export default function Meetings() {
 
                   {m.action_items && m.action_items.length > 0 && (
                     <div className="mt-4 border-t border-white/60 pt-4">
-                      <div className="text-xs uppercase tracking-wider text-dusk-200 mb-2">Action items</div>
+                      <div className="text-xs uppercase tracking-wider text-dusk-200 mb-2">Tarefas</div>
                       <ul className="space-y-2">
                         {m.action_items.map((a) => (
                           <li key={a.id} className="flex items-start gap-2 text-sm">
@@ -70,7 +70,7 @@ export default function Meetings() {
                             <span className={a.status === 'done' ? 'line-through text-dusk-200' : 'text-dusk-400'}>
                               {a.description}
                               {a.owner_label && <span className="text-dusk-200"> · {a.owner_label}</span>}
-                              {a.due_date && <span className="text-dusk-200"> · due {formatDate(a.due_date)}</span>}
+                              {a.due_date && <span className="text-dusk-200"> · até {formatDate(a.due_date)}</span>}
                             </span>
                           </li>
                         ))}

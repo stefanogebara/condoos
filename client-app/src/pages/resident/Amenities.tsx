@@ -137,9 +137,9 @@ export default function Amenities() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-dusk-500">{r.amenity_name}</span>
-                    {mine && <Badge tone="sage">You</Badge>}
+                    {mine && <Badge tone="sage">Você</Badge>}
                   </div>
-                  <div className="text-xs text-dusk-200">{formatDateTime(r.starts_at)} · {r.first_name} {r.last_name} (Unit {r.unit_number})</div>
+                  <div className="text-xs text-dusk-200">{formatDateTime(r.starts_at)} · {r.first_name} {r.last_name} (Unidade {r.unit_number})</div>
                 </div>
               </GlassCard>
             );

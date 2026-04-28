@@ -34,7 +34,7 @@ export default function BoardMeetingDetail() {
     setSaving(true);
     try {
       await apiPatch(`/meetings/${id}/notes`, { raw_notes: notes });
-      toast.success('Notes saved');
+      toast.success('Anotações salvas');
       setSummary(null);
       load();
     } finally { setSaving(false); }
@@ -45,7 +45,7 @@ export default function BoardMeetingDetail() {
     try {
       const out = await apiPost<any>(`/ai/meetings/${id}/summarize`);
       setSummary(out);
-      toast.success('Meeting summarized');
+      toast.success('Reunião resumida');
       load();
     } finally { setSaving(false); }
   }
@@ -60,7 +60,7 @@ export default function BoardMeetingDetail() {
         pinned: 1,
         source: 'ai_meeting',
       });
-      toast.success('Published to residents');
+      toast.success('Comunicado publicado para os moradores');
     } finally { setSaving(false); }
   }
 
@@ -93,8 +93,8 @@ export default function BoardMeetingDetail() {
 
         <GlassCard variant={summary ? 'clay-sage' : 'clay'} className="p-6">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-display text-lg text-dusk-500 flex items-center gap-2"><Sparkles className="w-4 h-4" /> AI recap</h3>
-            {summary && <Badge tone="dark">Ready</Badge>}
+            <h3 className="font-display text-lg text-dusk-500 flex items-center gap-2"><Sparkles className="w-4 h-4" /> Resumo da IA</h3>
+            {summary && <Badge tone="dark">Pronto</Badge>}
           </div>
           {summary ? (
             <div className="space-y-4 text-sm">
@@ -102,7 +102,7 @@ export default function BoardMeetingDetail() {
 
               {summary.decisions?.length > 0 && (
                 <div>
-                  <div className="text-xs uppercase tracking-wider text-dusk-300 mb-1">Decisions</div>
+                  <div className="text-xs uppercase tracking-wider text-dusk-300 mb-1">Decisões</div>
                   <ul className="space-y-1">{summary.decisions.map((d: string, i: number) => <li key={i} className="text-dusk-400">• {d}</li>)}</ul>
                 </div>
               )}
@@ -110,8 +110,8 @@ export default function BoardMeetingDetail() {
               {summary.resident_announcement && (
                 <div className="border-t border-white/60 pt-4">
                   <div className="flex items-center justify-between mb-2">
-                    <div className="text-xs uppercase tracking-wider text-dusk-300">Resident announcement draft</div>
-                    <Button size="sm" variant="primary" onClick={publishAnnouncement} leftIcon={<Megaphone className="w-3.5 h-3.5" />}>Publish</Button>
+                    <div className="text-xs uppercase tracking-wider text-dusk-300">Rascunho do comunicado</div>
+                    <Button size="sm" variant="primary" onClick={publishAnnouncement} leftIcon={<Megaphone className="w-3.5 h-3.5" />}>Publicar</Button>
                   </div>
                   <div className="p-4 rounded-2xl bg-white/60 backdrop-blur-sm border border-white/70">
                     <div className="font-semibold text-dusk-500">{summary.resident_announcement.title}</div>
@@ -120,13 +120,13 @@ export default function BoardMeetingDetail() {
                 </div>
               )}
             </div>
-          ) : <p className="text-sm text-dusk-300">Save your notes, then hit Summarize. You'll get a clean recap, a list of decisions, action items, and a ready-to-publish announcement.</p>}
+          ) : <p className="text-sm text-dusk-300">Salve as anotações e clique em Resumir. Você recebe um resumo limpo, lista de decisões, tarefas, e um comunicado pronto para publicar.</p>}
         </GlassCard>
       </div>
 
       {m.action_items?.length > 0 && (
         <>
-          <h3 className="font-display text-xl text-dusk-500 mt-10 mb-4">Action items</h3>
+          <h3 className="font-display text-xl text-dusk-500 mt-10 mb-4">Tarefas</h3>
           <div className="space-y-2">
             {m.action_items.map((a) => (
               <GlassCard key={a.id} className="p-4 flex items-center gap-3">
@@ -139,7 +139,7 @@ export default function BoardMeetingDetail() {
                   </div>
                   <div className="text-xs text-dusk-200 mt-0.5">
                     {a.owner_label && <span>{a.owner_label}</span>}
-                    {a.due_date && <span> · due {formatDate(a.due_date)}</span>}
+                    {a.due_date && <span> · até {formatDate(a.due_date)}</span>}
                   </div>
                 </div>
               </GlassCard>

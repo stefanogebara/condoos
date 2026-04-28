@@ -31,12 +31,12 @@ interface Invite {
 function describeImportError(e: ImportError): string {
   const details = e.unit ? ` (${e.unit})` : e.email ? ` (${e.email})` : '';
   const labels: Record<string, string> = {
-    need_email_and_unit: 'Missing email or unit',
-    invalid_email: 'Invalid email',
-    unit_not_found: 'Unit not found',
-    already_invited: 'Already invited',
+    need_email_and_unit: 'Faltou email ou unidade',
+    invalid_email: 'Email inválido',
+    unit_not_found: 'Unidade não encontrada',
+    already_invited: 'Já convidado',
   };
-  return `Row ${e.row}: ${labels[e.error] || e.error}${details}`;
+  return `Linha ${e.row}: ${labels[e.error] || e.error}${details}`;
 }
 
 export default function Residents() {
@@ -76,21 +76,21 @@ export default function Residents() {
         '/memberships/import-csv',
         { csv, send_emails: sendEmails },
       );
-      if (res.imported_count > 0) toast.success(`${res.imported_count} invite${res.imported_count > 1 ? 's' : ''} created`);
+      if (res.imported_count > 0) toast.success(`${res.imported_count} convite${res.imported_count > 1 ? 's' : ''} criado${res.imported_count > 1 ? 's' : ''}`);
       if (sendEmails && res.email_delivery) {
         const sent = res.email_delivery.filter((d) => d.delivery.status === 'sent').length;
-        if (sent > 0) toast.success(`${sent} invite email${sent > 1 ? 's' : ''} sent`);
-        if (sent < res.email_delivery.length) toast.error('Some invite emails were not sent. Check email settings.');
+        if (sent > 0) toast.success(`${sent} email${sent > 1 ? 's' : ''} de convite enviado${sent > 1 ? 's' : ''}`);
+        if (sent < res.email_delivery.length) toast.error('Alguns emails não foram enviados. Verifique as configurações de email.');
       }
       if (res.error_count > 0) {
         setImportErrors(res.errors || []);
-        toast.error(`${res.error_count} row${res.error_count > 1 ? 's' : ''} skipped - details below`);
+        toast.error(`${res.error_count} linha${res.error_count > 1 ? 's' : ''} ignorada${res.error_count > 1 ? 's' : ''} — detalhes abaixo`);
       } else {
         setShowImport(false);
       }
       load();
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Import failed');
+      toast.error(err?.response?.data?.error || 'Falha na importação');
     } finally { setImporting(false); }
   }
 
@@ -98,7 +98,7 @@ export default function Residents() {
     if (!inviteCode) return;
     navigator.clipboard.writeText(inviteCode);
     setCopied(true);
-    toast.success('Invite code copied');
+    toast.success('Código de convite copiado');
     setTimeout(() => setCopied(false), 2000);
   }
 
@@ -106,11 +106,11 @@ export default function Residents() {
     setSendingInviteId(invite.id);
     try {
       await apiPost(`/memberships/invites/${invite.id}/send-email`);
-      toast.success(`Invite email sent to ${invite.email}`);
+      toast.success(`Email de convite enviado para ${invite.email}`);
       load();
     } catch (err: any) {
       const code = err?.response?.data?.error;
-      toast.error(code === 'email_not_configured' ? 'Email delivery is not configured' : code || 'Email send failed');
+      toast.error(code === 'email_not_configured' ? 'Envio de email não configurado' : code || 'Falha no envio do email');
     } finally {
       setSendingInviteId(null);
     }
@@ -134,16 +134,16 @@ export default function Residents() {
         <GlassCard variant="clay-sage" className="p-6 mb-6">
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div>
-              <Badge tone="dark" className="mb-2">Invite code</Badge>
+              <Badge tone="dark" className="mb-2">Código de convite</Badge>
               <div className="flex items-center gap-3">
                 <div className="font-mono text-2xl font-bold text-dusk-500 tracking-[0.24em]">{inviteCode}</div>
                 <button onClick={copy} className="text-sm text-dusk-400 hover:text-dusk-500 inline-flex items-center gap-1 underline decoration-dotted underline-offset-4">
-                  {copied ? <><Check className="w-4 h-4" /> Copied</> : <><Copy className="w-4 h-4" /> Copy</>}
+                  {copied ? <><Check className="w-4 h-4" /> Copiado</> : <><Copy className="w-4 h-4" /> Copiar</>}
                 </button>
               </div>
             </div>
             <div className="text-sm text-dusk-400 max-w-md">
-              Share this code with anyone who should join the building. They visit <span className="font-mono">/onboarding/join</span>, enter it, pick their unit.
+              Compartilhe este código com quem precisa entrar no prédio. Eles acessam <span className="font-mono">/onboarding/join</span>, digitam, e escolhem a unidade.
             </div>
           </div>
         </GlassCard>
@@ -151,10 +151,10 @@ export default function Residents() {
 
       {showImport && (
         <GlassCard className="p-6 mb-6 animate-fade-up">
-          <h3 className="font-display text-xl text-dusk-500 tracking-tight">Bulk import resident roster</h3>
+          <h3 className="font-display text-xl text-dusk-500 tracking-tight">Importar lista de moradores</h3>
           <p className="text-sm text-dusk-300 mt-1">
-            Paste a CSV below. Columns: <span className="font-mono">email,unit,relationship,primary_contact,voting_weight</span>.
-            When a resident signs in with that email, they're auto-linked to their unit — no admin approval needed.
+            Cole um CSV abaixo. Colunas: <span className="font-mono">email,unit,relationship,primary_contact,voting_weight</span>.
+            Quando o morador entrar com esse email, ele é vinculado automaticamente à unidade — sem aprovação manual.
           </p>
           <textarea
             className="input mt-4 min-h-[180px] font-mono text-[13px]"
@@ -170,13 +170,13 @@ export default function Residents() {
               className="mt-1"
             />
             <span>
-              Email each imported resident an invite link now.
-              <span className="block text-xs text-dusk-300 mt-0.5">Requires Resend env vars. Invites are still created if email is not configured.</span>
+              Enviar email de convite para cada morador agora.
+              <span className="block text-xs text-dusk-300 mt-0.5">Precisa das envs do Resend. Os convites são criados mesmo sem email configurado.</span>
             </span>
           </label>
           {importErrors.length > 0 && (
             <div role="alert" className="mt-4 rounded-2xl border border-peach-200 bg-peach-100/70 p-4 text-sm text-dusk-500">
-              <div className="font-semibold mb-2">Rows that need attention</div>
+              <div className="font-semibold mb-2">Linhas com problema</div>
               <ul className="space-y-1">
                 {importErrors.map((e, idx) => <li key={`${e.row}-${idx}`}>{describeImportError(e)}</li>)}
               </ul>
@@ -193,7 +193,7 @@ export default function Residents() {
 
       {pendingInvites.length > 0 && (
         <div className="mb-6">
-          <h3 className="font-display text-lg text-dusk-500 mb-3">Pending invites ({pendingInvites.length})</h3>
+          <h3 className="font-display text-lg text-dusk-500 mb-3">Convites pendentes ({pendingInvites.length})</h3>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
             {pendingInvites.map((i) => (
               <GlassCard key={i.id} className="p-4 flex items-center gap-3 bg-white/40">
@@ -203,13 +203,13 @@ export default function Residents() {
                 <div className="min-w-0 flex-1">
                   <div className="text-sm font-medium text-dusk-500 truncate">{i.email}</div>
                   <div className="text-xs text-dusk-300">
-                    Unit {i.unit_number} · {i.relationship}{i.primary_contact === 1 ? ' · primary' : ''} · weight {i.voting_weight}
+                    Unidade {i.unit_number} · {i.relationship}{i.primary_contact === 1 ? ' · principal' : ''} · peso {i.voting_weight}
                   </div>
                 </div>
-                <Badge tone="warning">pending</Badge>
+                <Badge tone="warning">pendente</Badge>
                 <div className="flex flex-col items-end gap-2">
-                  {i.email_status === 'sent' && <Badge tone="sage">emailed</Badge>}
-                  {i.email_status === 'failed' && <Badge tone="warning">email failed</Badge>}
+                  {i.email_status === 'sent' && <Badge tone="sage">enviado</Badge>}
+                  {i.email_status === 'failed' && <Badge tone="warning">falha no email</Badge>}
                   {i.email_status !== 'sent' && (
                     <Button
                       size="sm"
@@ -217,7 +217,7 @@ export default function Residents() {
                       onClick={() => sendInviteEmail(i)}
                       loading={sendingInviteId === i.id}
                     >
-                      Email
+                      Enviar
                     </Button>
                   )}
                 </div>
@@ -235,8 +235,8 @@ export default function Residents() {
               <div className="font-semibold text-dusk-500 truncate">{r.first_name} {r.last_name}</div>
               <div className="text-xs text-dusk-200 truncate">{r.email}</div>
               <div className="mt-2 flex items-center gap-2">
-                {r.unit_number && <Badge tone="neutral">Unit {r.unit_number}</Badge>}
-                {r.role === 'board_admin' && <Badge tone="sage">Board</Badge>}
+                {r.unit_number && <Badge tone="neutral">Unidade {r.unit_number}</Badge>}
+                {r.role === 'board_admin' && <Badge tone="sage">Síndico</Badge>}
               </div>
             </div>
           </GlassCard>

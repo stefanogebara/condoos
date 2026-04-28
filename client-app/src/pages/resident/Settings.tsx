@@ -52,10 +52,10 @@ export default function Settings() {
       <PageHeader title="Preferências" subtitle="Perfil e notificações" />
 
       <GlassCard variant="clay" className="p-6 mb-6">
-        <h3 className="font-display text-lg text-dusk-500 mb-3 flex items-center gap-2"><User className="w-5 h-5" /> Profile</h3>
+        <h3 className="font-display text-lg text-dusk-500 mb-3 flex items-center gap-2"><User className="w-5 h-5" /> Perfil</h3>
         <div className="grid md:grid-cols-2 gap-3 text-sm">
           <div>
-            <label className="text-xs text-dusk-300 uppercase tracking-wider">Name</label>
+            <label className="text-xs text-dusk-300 uppercase tracking-wider">Nome</label>
             <div className="text-dusk-500 mt-1">{me.first_name} {me.last_name}</div>
           </div>
           <div>
@@ -66,7 +66,7 @@ export default function Settings() {
       </GlassCard>
 
       <GlassCard className="p-6">
-        <h3 className="font-display text-lg text-dusk-500 mb-1 flex items-center gap-2"><MessageCircle className="w-5 h-5" /> WhatsApp notifications</h3>
+        <h3 className="font-display text-lg text-dusk-500 mb-1 flex items-center gap-2"><MessageCircle className="w-5 h-5" /> Notificações no WhatsApp</h3>
         <p className="text-sm text-dusk-400 mb-4">
           Receba avisos no WhatsApp: convocação de assembleia, abertura de votação, chegada de encomenda.
         </p>
@@ -100,7 +100,7 @@ export default function Settings() {
               : <Badge tone="neutral">Desativado</Badge>}
           </div>
           <Button variant="primary" size="sm" onClick={save} loading={saving} leftIcon={<Save className="w-4 h-4" />}>
-            Save
+            Salvar
           </Button>
         </div>
       </GlassCard>

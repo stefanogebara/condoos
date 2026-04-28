@@ -43,13 +43,13 @@ export default function BoardAnnouncements() {
         <GlassCard className="p-6 mb-6 animate-fade-up">
           <form onSubmit={post} className="space-y-3">
             <input className="input" placeholder="Título" required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
-            <textarea className="input min-h-[140px]" placeholder="Write your announcement..." required value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} />
+            <textarea className="input min-h-[140px]" placeholder="Escreva o comunicado..." required value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} />
             <label className="flex items-center gap-2 text-sm text-dusk-400">
               <input type="checkbox" checked={form.pinned} onChange={(e) => setForm({ ...form, pinned: e.target.checked })} />
-              Pin to top
+              Fixar no topo
             </label>
             <div className="flex justify-end">
-              <Button type="submit" variant="primary" loading={saving}>Publish</Button>
+              <Button type="submit" variant="primary" loading={saving}>Publicar</Button>
             </div>
           </form>
         </GlassCard>
@@ -64,7 +64,7 @@ export default function BoardAnnouncements() {
               </div>
               <div className="flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
-                  {a.pinned ? <Badge tone="peach"><Pin className="w-3 h-3" /> Pinned</Badge> : null}
+                  {a.pinned ? <Badge tone="peach"><Pin className="w-3 h-3" /> Fixado</Badge> : null}
                   {a.source !== 'manual' && <Badge tone="sage">Redigido pela IA</Badge>}
                   <span className="text-xs text-dusk-200 ml-auto">{formatDate(a.created_at)}</span>
                 </div>

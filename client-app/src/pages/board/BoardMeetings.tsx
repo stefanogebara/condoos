@@ -25,7 +25,7 @@ export default function BoardMeetings() {
     setSaving(true);
     try {
       await apiPost('/meetings', { ...form, scheduled_for: new Date(form.scheduled_for).toISOString() });
-      toast.success('Meeting scheduled');
+      toast.success('Reunião agendada');
       setForm({ title: '', scheduled_for: '', agenda: '' });
       setShowForm(false);
       load();
@@ -43,11 +43,11 @@ export default function BoardMeetings() {
       {showForm && (
         <GlassCard className="p-6 mb-6 animate-fade-up">
           <form onSubmit={create} className="grid md:grid-cols-2 gap-3">
-            <input className="input" placeholder="Title (e.g. Q3 Board Meeting)" required value={form.title}         onChange={(e) => setForm({ ...form, title: e.target.value })} />
+            <input className="input" placeholder="Título (ex: Reunião do síndico — 3º trimestre)" required value={form.title}         onChange={(e) => setForm({ ...form, title: e.target.value })} />
             <input className="input" type="datetime-local" required                  value={form.scheduled_for}  onChange={(e) => setForm({ ...form, scheduled_for: e.target.value })} />
-            <textarea className="input md:col-span-2 min-h-[90px]" placeholder="Agenda (optional)" value={form.agenda} onChange={(e) => setForm({ ...form, agenda: e.target.value })} />
+            <textarea className="input md:col-span-2 min-h-[90px]" placeholder="Pauta (opcional)" value={form.agenda} onChange={(e) => setForm({ ...form, agenda: e.target.value })} />
             <div className="md:col-span-2 flex justify-end">
-              <Button type="submit" variant="primary" loading={saving}>Schedule</Button>
+              <Button type="submit" variant="primary" loading={saving}>Agendar</Button>
             </div>
           </form>
         </GlassCard>
@@ -63,9 +63,9 @@ export default function BoardMeetings() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="font-display text-lg text-dusk-500">{m.title}</h3>
-                  <Badge tone={m.status === 'completed' ? 'sage' : 'peach'}>{m.status}</Badge>
-                  {m.ai_summary && <Badge tone="sage">AI recap</Badge>}
-                  {m.raw_notes && !m.ai_summary && <Badge tone="warning">notes pending</Badge>}
+                  <Badge tone={m.status === 'completed' ? 'sage' : 'peach'}>{m.status === 'completed' ? 'concluída' : m.status === 'scheduled' ? 'agendada' : m.status}</Badge>
+                  {m.ai_summary && <Badge tone="sage">resumo da IA</Badge>}
+                  {m.raw_notes && !m.ai_summary && <Badge tone="warning">notas pendentes</Badge>}
                 </div>
                 <div className="text-sm text-dusk-300 mt-1">{formatDateTime(m.scheduled_for)}</div>
               </div>

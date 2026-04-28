@@ -44,6 +44,10 @@ const MAJORITY_LABEL: Record<AgendaItem['required_majority'], string> = {
   simple: 'Maioria simples', two_thirds: '2/3 dos presentes', unanimous: 'Unanimidade',
 };
 
+const ASSEMBLY_STATUS_LABEL: Record<Assembly['status'], string> = {
+  draft: 'rascunho', convoked: 'convocada', in_session: 'em sessão', closed: 'encerrada',
+};
+
 export default function BoardAssemblyDetail() {
   const { id } = useParams();
   const [a, setA] = useState<Assembly | null>(null);
@@ -60,9 +64,9 @@ export default function BoardAssemblyDetail() {
       for (const item of out.items) {
         await apiPost(`/assemblies/${id}/agenda`, item);
       }
-      toast.success(`AI drafted ${out.items.length} agenda items`);
+      toast.success(`IA redigiu ${out.items.length} itens da pauta`);
       load();
-    } catch (err: any) { toast.error(err?.response?.data?.error || 'AI draft failed'); }
+    } catch (err: any) { toast.error(err?.response?.data?.error || 'Falha ao redigir com IA'); }
     finally { setBusy(false); }
   }
 
@@ -77,7 +81,7 @@ export default function BoardAssemblyDetail() {
   }
 
   async function removeItem(itemId: number) {
-    if (!confirm('Remove this agenda item?')) return;
+    if (!confirm('Remover este item da pauta?')) return;
     await apiDelete(`/assemblies/${id}/agenda/${itemId}`);
     load();
   }
@@ -86,9 +90,9 @@ export default function BoardAssemblyDetail() {
     setBusy(true);
     try {
       await apiPost(`/assemblies/${id}/convoke`);
-      toast.success('Convoked — residents can now RSVP and grant proxies');
+      toast.success('Convocada — moradores já podem confirmar presença e conceder procurações');
       load();
-    } catch (err: any) { toast.error(err?.response?.data?.error || 'Failed'); }
+    } catch (err: any) { toast.error(err?.response?.data?.error || 'Falha'); }
     finally { setBusy(false); }
   }
 
@@ -96,7 +100,7 @@ export default function BoardAssemblyDetail() {
     setBusy(true);
     try {
       await apiPost(`/assemblies/${id}/start`);
-      toast.success('Session open');
+      toast.success('Sessão aberta');
       load();
     } finally { setBusy(false); }
   }
@@ -108,16 +112,16 @@ export default function BoardAssemblyDetail() {
 
   async function closeItem(itemId: number) {
     const r = await apiPost<{ status: string }>(`/assemblies/${id}/agenda/${itemId}/close`);
-    toast.success(`Item ${r.status}`);
+    toast.success(`Item: ${statusLabel(r.status as AgendaItem['status'])}`);
     load();
   }
 
   async function closeAssembly() {
-    if (!confirm('Close the assembly? This will auto-close any open items as inconclusive and generate the ata.')) return;
+    if (!confirm('Encerrar a assembleia? Itens em votação serão fechados como inconclusivos e a ata vai ser gerada.')) return;
     setBusy(true);
     try {
       await apiPost(`/assemblies/${id}/close`);
-      toast.success('Assembly closed');
+      toast.success('Assembleia encerrada');
       load();
     } finally { setBusy(false); }
   }
@@ -126,9 +130,9 @@ export default function BoardAssemblyDetail() {
     setBusy(true);
     try {
       const r = await apiPost<{ ata_markdown: string }>(`/ai/assemblies/${id}/draft-ata`);
-      toast.success('Ata drafted');
+      toast.success('Ata gerada');
       setA((prev) => prev ? { ...prev, ata_markdown: r.ata_markdown } : prev);
-    } catch (err: any) { toast.error(err?.response?.data?.error || 'Failed'); }
+    } catch (err: any) { toast.error(err?.response?.data?.error || 'Falha'); }
     finally { setBusy(false); }
   }
 
@@ -137,26 +141,26 @@ export default function BoardAssemblyDetail() {
   return (
     <>
       <Link to="/board/assemblies" className="inline-flex items-center gap-1 text-sm text-dusk-300 hover:text-dusk-500 mb-4">
-        <ArrowLeft className="w-4 h-4" /> Back
+        <ArrowLeft className="w-4 h-4" /> Voltar
       </Link>
       <PageHeader
         title={a.title}
         subtitle={`${a.kind === 'ordinary' ? 'AGO' : 'AGE'} · ${formatDateTime(a.first_call_at)}`}
         actions={
           <div className="flex gap-2 flex-wrap">
-            {a.status === 'draft' && <Button variant="primary" onClick={convoke} loading={busy} leftIcon={<Gavel className="w-4 h-4" />}>Convoke</Button>}
-            {a.status === 'convoked' && <Button variant="primary" onClick={start} loading={busy} leftIcon={<Play className="w-4 h-4" />}>Start session</Button>}
-            {a.status === 'in_session' && <Button variant="primary" onClick={closeAssembly} loading={busy} leftIcon={<Check className="w-4 h-4" />}>Close assembly</Button>}
+            {a.status === 'draft' && <Button variant="primary" onClick={convoke} loading={busy} leftIcon={<Gavel className="w-4 h-4" />}>Convocar</Button>}
+            {a.status === 'convoked' && <Button variant="primary" onClick={start} loading={busy} leftIcon={<Play className="w-4 h-4" />}>Abrir sessão</Button>}
+            {a.status === 'in_session' && <Button variant="primary" onClick={closeAssembly} loading={busy} leftIcon={<Check className="w-4 h-4" />}>Encerrar assembleia</Button>}
           </div>
         }
       />
 
       <div className="flex items-center gap-2 mb-6 flex-wrap">
-        <Badge tone={a.status === 'in_session' ? 'sage' : a.status === 'closed' ? 'dark' : 'peach'}>{a.status.replace('_', ' ')}</Badge>
-        <Badge tone="neutral">{a.eligibility.eligible_owner_count} eligible owners</Badge>
+        <Badge tone={a.status === 'in_session' ? 'sage' : a.status === 'closed' ? 'dark' : 'peach'}>{ASSEMBLY_STATUS_LABEL[a.status]}</Badge>
+        <Badge tone="neutral">{a.eligibility.eligible_owner_count} proprietários elegíveis</Badge>
         {a.status === 'in_session' && (
           <Badge tone={a.eligibility.turnout_percent >= 50 ? 'sage' : 'peach'}>
-            Turnout: {a.eligibility.turnout_percent}%
+            Presença: {a.eligibility.turnout_percent}%
           </Badge>
         )}
       </div>
@@ -169,9 +173,9 @@ export default function BoardAssemblyDetail() {
       {a.status === 'draft' && a.agenda.length === 0 && (
         <GlassCard variant="clay-sage" className="p-5 mb-4 text-center">
           <Sparkles className="w-8 h-8 mx-auto text-sage-700 mb-2" />
-          <p className="text-dusk-400 text-sm mb-3">Let AI draft a standard AGO agenda from open proposals.</p>
+          <p className="text-dusk-400 text-sm mb-3">A IA monta uma pauta padrão de AGO a partir das propostas abertas.</p>
           <Button variant="primary" onClick={suggestAgenda} loading={busy} size="sm" leftIcon={<Sparkles className="w-4 h-4" />}>
-            Draft with AI
+            Redigir com IA
           </Button>
         </GlassCard>
       )}
@@ -199,15 +203,15 @@ export default function BoardAssemblyDetail() {
               </div>
               <div className="flex gap-2 flex-wrap">
                 {a.status === 'draft' && (
-                  <button onClick={() => removeItem(item.id)} className="text-dusk-300 hover:text-peach-600" title="Remove">
+                  <button onClick={() => removeItem(item.id)} className="text-dusk-300 hover:text-peach-600" title="Remover">
                     <Trash2 className="w-4 h-4" />
                   </button>
                 )}
                 {a.status === 'in_session' && item.status === 'pending' && (
-                  <Button size="sm" variant="primary" onClick={() => openItem(item.id)} leftIcon={<Play className="w-3 h-3" />}>Open vote</Button>
+                  <Button size="sm" variant="primary" onClick={() => openItem(item.id)} leftIcon={<Play className="w-3 h-3" />}>Abrir votação</Button>
                 )}
                 {a.status === 'in_session' && item.status === 'active' && (
-                  <Button size="sm" variant="primary" onClick={() => closeItem(item.id)} leftIcon={<Check className="w-3 h-3" />}>Close vote</Button>
+                  <Button size="sm" variant="primary" onClick={() => closeItem(item.id)} leftIcon={<Check className="w-3 h-3" />}>Fechar votação</Button>
                 )}
               </div>
             </div>
@@ -218,16 +222,16 @@ export default function BoardAssemblyDetail() {
       {a.status === 'draft' && (
         <GlassCard className="p-5 mb-6">
           <form onSubmit={addItem} className="grid md:grid-cols-2 gap-3">
-            <input className="input md:col-span-2" placeholder="Item title (e.g. Aprovar orçamento 2026)"
+            <input className="input md:col-span-2" placeholder="Título do item (ex: Aprovar orçamento 2026)"
                    required value={newItem.title} onChange={(e) => setNewItem({ ...newItem, title: e.target.value })} />
-            <textarea className="input md:col-span-2 min-h-[70px]" placeholder="Description (optional)"
+            <textarea className="input md:col-span-2 min-h-[70px]" placeholder="Descrição (opcional)"
                       value={newItem.description} onChange={(e) => setNewItem({ ...newItem, description: e.target.value })} />
             <select className="input" value={newItem.item_type} onChange={(e) => setNewItem({ ...newItem, item_type: e.target.value as AgendaItem['item_type'] })}>
               <option value="ordinary">Ordinária</option>
-              <option value="budget">Orçamento (budget)</option>
-              <option value="accounts">Contas (accounts)</option>
-              <option value="bylaw">Convenção (bylaw)</option>
-              <option value="election">Eleição (election)</option>
+              <option value="budget">Orçamento</option>
+              <option value="accounts">Contas</option>
+              <option value="bylaw">Convenção</option>
+              <option value="election">Eleição</option>
               <option value="other">Outros</option>
             </select>
             <select className="input" value={newItem.required_majority} onChange={(e) => setNewItem({ ...newItem, required_majority: e.target.value as AgendaItem['required_majority'] })}>
@@ -236,7 +240,7 @@ export default function BoardAssemblyDetail() {
               <option value="unanimous">Unanimidade</option>
             </select>
             <div className="md:col-span-2 flex justify-end">
-              <Button type="submit" variant="primary" size="sm" loading={busy} leftIcon={<Plus className="w-4 h-4" />}>Add item</Button>
+              <Button type="submit" variant="primary" size="sm" loading={busy} leftIcon={<Plus className="w-4 h-4" />}>Adicionar item</Button>
             </div>
           </form>
         </GlassCard>
@@ -281,10 +285,10 @@ export default function BoardAssemblyDetail() {
         <GlassCard variant="clay-sage" className="p-6 mb-6">
           <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
             <h3 className="font-display text-xl text-dusk-500 flex items-center gap-2"><FileText className="w-5 h-5" /> Ata</h3>
-            <Button size="sm" variant="ghost" onClick={draftAta} loading={busy} leftIcon={<Sparkles className="w-4 h-4" />}>Re-polish with AI</Button>
+            <Button size="sm" variant="ghost" onClick={draftAta} loading={busy} leftIcon={<Sparkles className="w-4 h-4" />}>Repolir com IA</Button>
           </div>
           <div className="prose prose-sm max-w-none text-dusk-400 whitespace-pre-line font-mono text-xs leading-relaxed">
-            {a.ata_markdown || '(ata will generate when you close the assembly)'}
+            {a.ata_markdown || '(a ata será gerada quando você encerrar a assembleia)'}
           </div>
         </GlassCard>
       )}
@@ -303,7 +307,7 @@ function statusTone(s: AgendaItem['status']): any {
 
 function statusLabel(s: AgendaItem['status']): string {
   return {
-    pending: 'pending', active: 'voting', approved: 'approved',
-    rejected: 'rejected', inconclusive: 'inconclusive', deferred: 'deferred',
+    pending: 'pendente', active: 'votando', approved: 'aprovado',
+    rejected: 'rejeitado', inconclusive: 'inconclusivo', deferred: 'adiado',
   }[s];
 }
