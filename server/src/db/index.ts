@@ -212,6 +212,30 @@ export function initSchema() {
   // risk_summary is plaintext too — AI-generated then admin-editable.
   addColumnIfMissing('proposals',    'cost_breakdown',     `TEXT`);
   addColumnIfMissing('proposals',    'risk_summary',       `TEXT`);
+
+  // Budget transparency (#12) — expenses table for outgoing spend. Sebastian's
+  // invoices table tracks dues collection (incoming); a separate table avoids
+  // mixing the two semantics. Residents read this view-only via /app/transparencia.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS expenses (
+      id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+      condominium_id      INTEGER NOT NULL REFERENCES condominiums(id) ON DELETE CASCADE,
+      amount_cents        INTEGER NOT NULL,
+      currency            TEXT NOT NULL DEFAULT 'BRL',
+      category            TEXT NOT NULL,
+      vendor              TEXT,
+      description         TEXT NOT NULL,
+      spent_at            TEXT NOT NULL,
+      receipt_url         TEXT,
+      related_proposal_id INTEGER REFERENCES proposals(id) ON DELETE SET NULL,
+      created_by_user_id  INTEGER REFERENCES users(id),
+      created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_expenses_condo_spent
+      ON expenses(condominium_id, spent_at);
+    CREATE INDEX IF NOT EXISTS idx_expenses_condo_category
+      ON expenses(condominium_id, category, spent_at);
+  `);
   // WhatsApp notifications — phone + opt-in on users
   addColumnIfMissing('users',        'phone',              `TEXT`);
   addColumnIfMissing('users',        'whatsapp_opt_in',    `INTEGER NOT NULL DEFAULT 0`);

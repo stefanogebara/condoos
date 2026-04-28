@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { Home, Inbox, Vote, Calendar, Megaphone, Users, UserCheck, Gavel, Building2 } from 'lucide-react';
+import { Home, Inbox, Vote, Calendar, Megaphone, Users, UserCheck, Gavel, Building2, Wallet } from 'lucide-react';
 import Sidebar, { NavItem } from '../../components/Sidebar';
 import BoardOverview from './BoardOverview';
 import Suggestions from './Suggestions';
@@ -14,6 +14,7 @@ import Pending from './Pending';
 import BoardAssemblies from './BoardAssemblies';
 import BoardAssemblyDetail from './BoardAssemblyDetail';
 import BoardEdificio from './BoardEdificio';
+import BoardFinancas from './BoardFinancas';
 import { apiGet } from '../../lib/api';
 
 export default function BoardApp() {
@@ -37,6 +38,7 @@ export default function BoardApp() {
     { to: '/board/announcements', label: 'Comunicados',   icon: Megaphone },
     { to: '/board/residents',     label: 'Moradores',     icon: Users },
     { to: '/board/edificio',      label: 'Edifício',      icon: Building2 },
+    { to: '/board/financas',      label: 'Finanças',      icon: Wallet },
   ];
 
   return (
@@ -56,6 +58,7 @@ export default function BoardApp() {
           <Route path="announcements"    element={<BoardAnnouncements />} />
           <Route path="residents"        element={<Residents />} />
           <Route path="edificio"         element={<BoardEdificio />} />
+          <Route path="financas"         element={<BoardFinancas />} />
           <Route path="*"                element={<Navigate to="/board" replace />} />
         </Routes>
       </main>

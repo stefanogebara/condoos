@@ -216,6 +216,36 @@ function run() {
     'scheduled'
   );
 
+  // Demo expenses for the Transparência view (#12). 12 months of realistic
+  // condo spend so a fresh demo doesn't show an empty page.
+  const insertExpense = db.prepare(
+    `INSERT INTO expenses (
+      condominium_id, amount_cents, currency, category, vendor,
+      description, spent_at, receipt_url, created_by_user_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  );
+  const expenses: Array<{ amount_cents: number; category: string; vendor: string | null; description: string; days_ago: number }> = [
+    { amount_cents: 4_700_000, category: 'maintenance',    vendor: 'Cool Breeze HVAC',   description: 'Substituição do ar-condicionado do saguão',           days_ago: 14 },
+    { amount_cents:   850_000, category: 'utilities',      vendor: 'Light',              description: 'Conta de luz das áreas comuns — abril',               days_ago: 22 },
+    { amount_cents:   620_000, category: 'utilities',      vendor: 'Sabesp',             description: 'Conta de água do prédio — abril',                     days_ago: 22 },
+    { amount_cents: 1_200_000, category: 'cleaning',       vendor: 'Lim+ Serviços',      description: 'Equipe de limpeza terceirizada — abril',              days_ago: 30 },
+    { amount_cents: 3_400_000, category: 'security',       vendor: 'GuardaSeg',          description: 'Portaria 24h — abril',                                days_ago: 30 },
+    { amount_cents:   480_000, category: 'admin',          vendor: null,                  description: 'Honorários do contador',                              days_ago: 30 },
+    { amount_cents: 1_350_000, category: 'staff',          vendor: null,                  description: 'Folha do zelador + encargos',                         days_ago: 30 },
+    { amount_cents:   180_000, category: 'maintenance',    vendor: 'Fitness Pro',        description: 'Manutenção da esteira #3 da academia',                days_ago: 45 },
+    { amount_cents:   320_000, category: 'amenity',        vendor: 'Pool Care',          description: 'Tratamento trimestral da piscina',                    days_ago: 70 },
+    { amount_cents: 2_100_000, category: 'insurance',      vendor: 'Porto Seguro',       description: 'Renovação anual do seguro do prédio',                 days_ago: 95 },
+    { amount_cents:   930_000, category: 'utilities',      vendor: 'Light',              description: 'Conta de luz das áreas comuns — março',               days_ago: 53 },
+    { amount_cents: 1_200_000, category: 'cleaning',       vendor: 'Lim+ Serviços',      description: 'Equipe de limpeza terceirizada — março',              days_ago: 60 },
+    { amount_cents:   720_000, category: 'reserve',        vendor: null,                  description: 'Aporte ao fundo de reserva — março',                  days_ago: 60 },
+  ];
+  for (const e of expenses) {
+    insertExpense.run(
+      condoId, e.amount_cents, 'BRL', e.category, e.vendor,
+      e.description, isoDaysAgo(e.days_ago), null, admin,
+    );
+  }
+
   console.log('Seed complete.');
   console.log('  admin@condoos.dev    / admin123    (board admin)');
   console.log('  resident@condoos.dev / resident123 (resident)');

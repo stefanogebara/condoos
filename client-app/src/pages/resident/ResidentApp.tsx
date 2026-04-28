@@ -1,6 +1,6 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { Home, Package, DoorOpen, Waves, Megaphone, Vote, Calendar, Sparkles, Gavel, SlidersHorizontal } from 'lucide-react';
+import { Home, Package, DoorOpen, Waves, Megaphone, Vote, Calendar, Sparkles, Gavel, SlidersHorizontal, Wallet } from 'lucide-react';
 import Sidebar, { NavItem } from '../../components/Sidebar';
 import Overview from './Overview';
 import Packages from './Packages';
@@ -14,6 +14,7 @@ import Suggest from './Suggest';
 import Assemblies from './Assemblies';
 import AssemblyDetail from './AssemblyDetail';
 import Settings from './Settings';
+import Transparencia from './Transparencia';
 
 const NAV: NavItem[] = [
   { to: '/app',               label: 'Início',        icon: Home },
@@ -24,6 +25,7 @@ const NAV: NavItem[] = [
   { to: '/app/proposals',     label: 'Propostas',     icon: Vote },
   { to: '/app/assemblies',    label: 'Assembleias',   icon: Gavel },
   { to: '/app/meetings',      label: 'Reuniões',      icon: Calendar },
+  { to: '/app/transparencia', label: 'Transparência', icon: Wallet },
   { to: '/app/suggest',       label: 'Sugerir',       icon: Sparkles },
   { to: '/app/settings',      label: 'Preferências',  icon: SlidersHorizontal },
 ];
@@ -44,6 +46,7 @@ export default function ResidentApp() {
           <Route path="assemblies"   element={<Assemblies />} />
           <Route path="assemblies/:id" element={<AssemblyDetail />} />
           <Route path="meetings"     element={<Meetings />} />
+          <Route path="transparencia" element={<Transparencia />} />
           <Route path="suggest"      element={<Suggest />} />
           <Route path="settings"     element={<Settings />} />
           <Route path="*"            element={<Navigate to="/app" replace />} />

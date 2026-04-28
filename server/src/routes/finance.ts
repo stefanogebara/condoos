@@ -34,6 +34,24 @@ const paymentSchema = z.object({
   reference: z.string().max(120).optional(),
 });
 
+// Expense categories — broad enough to bucket anything a Brazilian condo
+// actually spends on. Stored as the canonical English code; UI translates.
+const EXPENSE_CATEGORIES = [
+  'maintenance', 'utilities', 'cleaning', 'security', 'staff',
+  'admin', 'infrastructure', 'amenity', 'insurance', 'tax',
+  'reserve', 'other',
+] as const;
+const expenseSchema = z.object({
+  amount_cents: z.number().int().positive(),
+  currency: z.string().min(3).max(3).optional().default('BRL'),
+  category: z.enum(EXPENSE_CATEGORIES),
+  vendor: z.string().min(0).max(120).optional().nullable(),
+  description: z.string().min(1).max(500),
+  spent_at: z.string().datetime().or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)),
+  receipt_url: z.string().url().max(2048).optional().nullable(),
+  related_proposal_id: z.number().int().positive().optional().nullable(),
+});
+
 router.get('/schedules', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const rows = db.prepare(
@@ -139,6 +157,110 @@ router.post('/payments', requireAuth, requireRole('board_admin'), (req: AuthedRe
     duplicate: !!result.duplicate,
     remaining_cents: result.remaining_cents,
   }, result.duplicate ? 200 : 201);
+});
+
+// ---------------------------------------------------------------------------
+// Expenses (#12 — budget transparency).
+// GET is open to all members (residents see where the money goes).
+// POST/DELETE require board_admin.
+// ---------------------------------------------------------------------------
+router.get('/expenses', requireAuth, (req: AuthedRequest, res) => {
+  const condoId = getActiveCondoId(req);
+  // Optional filters: ?since=2026-01-01 (limits history, default = 12 months).
+  const sinceParam = String(req.query.since || '').trim();
+  const since = sinceParam || (() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() - 12);
+    return d.toISOString().slice(0, 10);
+  })();
+
+  const rows = db.prepare(
+    `SELECT e.*, p.title AS related_proposal_title
+     FROM expenses e
+     LEFT JOIN proposals p ON p.id = e.related_proposal_id
+     WHERE e.condominium_id = ?
+       AND e.spent_at >= ?
+     ORDER BY e.spent_at DESC, e.id DESC`
+  ).all(condoId, since) as any[];
+
+  // Aggregate totals so the resident view can render a category breakdown
+  // without re-summing on the client every render.
+  const totalsByCategory = db.prepare(
+    `SELECT category, SUM(amount_cents) AS total_cents, COUNT(*) AS count
+     FROM expenses
+     WHERE condominium_id = ? AND spent_at >= ?
+     GROUP BY category
+     ORDER BY total_cents DESC`
+  ).all(condoId, since);
+
+  const totalCents = (rows as Array<{ amount_cents: number }>)
+    .reduce((sum, r) => sum + (r.amount_cents || 0), 0);
+
+  return ok(res, {
+    since,
+    expenses: rows,
+    totals_by_category: totalsByCategory,
+    total_cents: totalCents,
+    currency: 'BRL',
+  });
+});
+
+router.post('/expenses', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+  const parsed = expenseSchema.safeParse(req.body);
+  if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
+  const condoId = getActiveCondoId(req);
+  const body = parsed.data;
+
+  // Normalize spent_at — accept both ISO datetime and YYYY-MM-DD.
+  const spentAt = /^\d{4}-\d{2}-\d{2}$/.test(body.spent_at)
+    ? `${body.spent_at}T00:00:00.000Z`
+    : new Date(body.spent_at).toISOString();
+
+  // If related_proposal_id is provided, check it belongs to the condo.
+  if (body.related_proposal_id) {
+    const ok = db.prepare(
+      `SELECT 1 FROM proposals WHERE id = ? AND condominium_id = ?`
+    ).get(body.related_proposal_id, condoId);
+    if (!ok) return fail(res, 'related_proposal_not_in_condo', 400);
+  }
+
+  const result = db.prepare(
+    `INSERT INTO expenses (
+      condominium_id, amount_cents, currency, category, vendor,
+      description, spent_at, receipt_url, related_proposal_id, created_by_user_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    condoId, body.amount_cents, body.currency, body.category, body.vendor || null,
+    body.description, spentAt, body.receipt_url || null, body.related_proposal_id || null,
+    req.user!.id,
+  );
+  const id = Number(result.lastInsertRowid);
+  audit(req, {
+    action: 'finance.expense_create',
+    target_type: 'expense',
+    target_id: id,
+    condominium_id: condoId,
+    metadata: { amount_cents: body.amount_cents, category: body.category, has_receipt: !!body.receipt_url },
+  });
+  return ok(res, { id, spent_at: spentAt }, 201);
+});
+
+router.delete('/expenses/:id', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+  const condoId = getActiveCondoId(req);
+  const id = Number(req.params.id);
+  const exists = db.prepare(
+    `SELECT id FROM expenses WHERE id = ? AND condominium_id = ?`
+  ).get(id, condoId);
+  if (!exists) return fail(res, 'not_found', 404);
+
+  db.prepare(`DELETE FROM expenses WHERE id = ?`).run(id);
+  audit(req, {
+    action: 'finance.expense_delete',
+    target_type: 'expense',
+    target_id: id,
+    condominium_id: condoId,
+  });
+  return ok(res, { id });
 });
 
 export default router;
