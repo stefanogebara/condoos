@@ -210,6 +210,11 @@ export function initSchema() {
   // WhatsApp notifications — phone + opt-in on users
   addColumnIfMissing('users',        'phone',              `TEXT`);
   addColumnIfMissing('users',        'whatsapp_opt_in',    `INTEGER NOT NULL DEFAULT 0`);
+  // Party/event reservations: guest count + names list so the porteiro
+  // can admit by name when 30 people show up for a Saturday party.
+  addColumnIfMissing('amenity_reservations', 'expected_guests', `INTEGER NOT NULL DEFAULT 0`);
+  addColumnIfMissing('amenity_reservations', 'guest_list',      `TEXT`);
+  addColumnIfMissing('amenity_reservations', 'notes',           `TEXT`);
 
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_audit_log_condo_created

@@ -29,7 +29,7 @@ router.get('/reservations', requireAuth, (req: AuthedRequest, res) => {
 
 router.post('/reservations', requireAuth, (req: AuthedRequest, res) => {
   const u = req.user!;
-  const { amenity_id, starts_at, ends_at } = req.body || {};
+  const { amenity_id, starts_at, ends_at, expected_guests, guest_list, notes } = req.body || {};
   if (!amenity_id || !starts_at || !ends_at) return fail(res, 'missing_fields');
   const starts = new Date(starts_at);
   const ends = new Date(ends_at);
@@ -63,18 +63,26 @@ router.post('/reservations', requireAuth, (req: AuthedRequest, res) => {
     return fail(res, 'amenity_conflict', 409);
   }
 
+  const guests = Math.max(0, Math.min(500, parseInt(expected_guests as any) || 0));
+  const guestListText = typeof guest_list === 'string' ? guest_list.slice(0, 4000) : null;
+  const notesText = typeof notes === 'string' ? notes.slice(0, 600) : null;
+
   const row = db.prepare(
-    `INSERT INTO amenity_reservations (amenity_id, user_id, starts_at, ends_at)
-     VALUES (?, ?, ?, ?)`
-  ).run(amenity.id, u.id, starts.toISOString(), ends.toISOString());
+    `INSERT INTO amenity_reservations (amenity_id, user_id, starts_at, ends_at, expected_guests, guest_list, notes)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    amenity.id, u.id,
+    starts.toISOString(), ends.toISOString(),
+    guests, guestListText, notesText,
+  );
   audit(req, {
     action: 'amenity.reservation_create',
     target_type: 'amenity_reservation',
     target_id: Number(row.lastInsertRowid),
     condominium_id: u.condominium_id,
-    metadata: { amenity_id: amenity.id, starts_at: starts.toISOString(), ends_at: ends.toISOString() },
+    metadata: { amenity_id: amenity.id, starts_at: starts.toISOString(), ends_at: ends.toISOString(), expected_guests: guests, has_guest_list: !!guestListText },
   });
-  return ok(res, { id: row.lastInsertRowid });
+  return ok(res, { id: row.lastInsertRowid, expected_guests: guests });
 });
 
 router.delete('/reservations/:id', requireAuth, (req: AuthedRequest, res) => {
