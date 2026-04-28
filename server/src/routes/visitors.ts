@@ -23,20 +23,33 @@ router.get('/', requireAuth, (req: AuthedRequest, res) => {
 
 router.post('/', requireAuth, (req: AuthedRequest, res) => {
   const u = req.user!;
-  const { visitor_name, visitor_type, expected_at, notes } = req.body || {};
+  const { visitor_name, visitor_type, expected_at, notes, pre_approve } = req.body || {};
   if (!visitor_name) return fail(res, 'missing_visitor_name');
+
+  // Pre-approval (#9 in the QA checklist): when the resident books a future
+  // visit, the host is the one approving — so we set status='approved'
+  // immediately and stamp decided_at. Porteiros / board admins still get the
+  // /:id/decide endpoint for ad-hoc walk-ups that arrive without warning.
+  const status = pre_approve === true ? 'approved' : 'pending';
+  const decidedAt = pre_approve === true ? new Date().toISOString() : null;
+
   const row = db.prepare(
-    `INSERT INTO visitors (condominium_id, host_id, visitor_name, visitor_type, expected_at, notes)
-     VALUES (?, ?, ?, ?, ?, ?)`
-  ).run(u.condominium_id, u.id, visitor_name, visitor_type || 'guest', expected_at || null, notes || null);
+    `INSERT INTO visitors (condominium_id, host_id, visitor_name, visitor_type, expected_at, notes, status, decided_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    u.condominium_id, u.id,
+    visitor_name, visitor_type || 'guest',
+    expected_at || null, notes || null,
+    status, decidedAt,
+  );
   audit(req, {
     action: 'visitor.create',
     target_type: 'visitor',
     target_id: Number(row.lastInsertRowid),
     condominium_id: u.condominium_id,
-    metadata: { visitor_type: visitor_type || 'guest' },
+    metadata: { visitor_type: visitor_type || 'guest', pre_approve: pre_approve === true },
   });
-  return ok(res, { id: row.lastInsertRowid });
+  return ok(res, { id: row.lastInsertRowid, status });
 });
 
 router.post('/:id/decide', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
