@@ -1,13 +1,19 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { ArrowLeft, ArrowRight, ArrowUp, Sparkles, Copy, Check } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ArrowUp, Sparkles, Copy, Check, Plus, Trash2 } from 'lucide-react';
 import Logo from '../../components/Logo';
 import GlassCard from '../../components/GlassCard';
 import Button from '../../components/Button';
 import Badge from '../../components/Badge';
 import { apiPost } from '../../lib/api';
 import { track } from '../../lib/analytics';
+
+interface BuildingBlock { name: string; floors: number; unitsPerFloor: number; }
+
+const MAX_BLOCKS = 12;     // matches backend createSchema.buildings.max(12)
+const MAX_FLOORS = 80;
+const MAX_UNITS_PER_FLOOR = 40;
 
 export default function Create() {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
@@ -18,9 +24,7 @@ export default function Create() {
   const [form, setForm] = useState({
     condoName: 'Vila Nova Residences',
     address: '200 Avenida Paulista, São Paulo SP',
-    buildingName: 'Main Tower',
-    floors: 8,
-    unitsPerFloor: 4,
+    blocks: [{ name: 'Torre Principal', floors: 8, unitsPerFloor: 4 }] as BuildingBlock[],
     ownerUnitNumber: '801',
     adminLivesInBuilding: true,   // unchecked = professional síndico (no unit)
     seedAmenities: true,
@@ -30,24 +34,58 @@ export default function Create() {
   const up = <K extends keyof typeof form>(key: K, val: typeof form[K]) =>
     setForm((f) => ({ ...f, [key]: val }));
 
-  const totalUnits = form.floors * form.unitsPerFloor;
+  function updateBlock(idx: number, patch: Partial<BuildingBlock>) {
+    setForm((f) => ({
+      ...f,
+      blocks: f.blocks.map((b, i) => (i === idx ? { ...b, ...patch } : b)),
+    }));
+  }
+  function addBlock() {
+    setForm((f) => {
+      if (f.blocks.length >= MAX_BLOCKS) return f;
+      const nextIdx = f.blocks.length + 1;
+      return {
+        ...f,
+        blocks: [...f.blocks, { name: `Bloco ${nextIdx}`, floors: 4, unitsPerFloor: 2 }],
+      };
+    });
+  }
+  function removeBlock(idx: number) {
+    setForm((f) => (f.blocks.length <= 1 ? f : { ...f, blocks: f.blocks.filter((_, i) => i !== idx) }));
+  }
+
+  const totalUnits = form.blocks.reduce((sum, b) => sum + b.floors * b.unitsPerFloor, 0);
+  const blocksValid = form.blocks.every(
+    (b) => b.name.trim().length > 0 && b.floors >= 1 && b.unitsPerFloor >= 1,
+  );
 
   async function submit() {
     setSaving(true);
     try {
-      // Strip ownerUnitNumber when the admin doesn't live in the building —
-      // backend treats it as a no-unit admin (no user_unit row, can't vote).
-      const payload = form.adminLivesInBuilding
-        ? form
-        : { ...form, ownerUnitNumber: '' };
+      // Backend createSchema requires buildingName/floors/unitsPerFloor. When
+      // multiple blocks are present we also send buildings[] which takes
+      // precedence; for a single block the legacy fields are enough.
+      const first = form.blocks[0];
+      const payload = {
+        condoName: form.condoName,
+        address: form.address,
+        buildingName: first.name,
+        floors: first.floors,
+        unitsPerFloor: first.unitsPerFloor,
+        buildings: form.blocks.length > 1 ? form.blocks : undefined,
+        ownerUnitNumber: form.adminLivesInBuilding ? form.ownerUnitNumber : '',
+        seedAmenities: form.seedAmenities,
+        requireApproval: form.requireApproval,
+        votingModel: form.votingModel,
+      };
       const res = await apiPost<{ condoId: number; buildingId: number; inviteCode: string }>(
         '/onboarding/create-building',
         payload,
       );
       track('onboarding_create_succeeded', {
         condo_id: res.condoId,
-        floors: form.floors,
-        units_per_floor: form.unitsPerFloor,
+        block_count: form.blocks.length,
+        total_units: totalUnits,
         voting_model: form.votingModel,
         admin_lives_in_building: form.adminLivesInBuilding,
       });
@@ -115,12 +153,8 @@ export default function Create() {
                     Endereço
                     <input className="input mt-1" value={form.address} onChange={(e) => up('address', e.target.value)} maxLength={240} />
                   </label>
-                  <label className="block text-xs text-dusk-300 font-medium">
-                    Nome do prédio / torre
-                    <input className="input mt-1" value={form.buildingName} onChange={(e) => up('buildingName', e.target.value)} maxLength={60} />
-                    <span className="text-[11px] text-dusk-200 mt-1 block">ex: "Torre Principal", "Bloco A" — você pode adicionar mais depois.</span>
-                  </label>
                 </div>
+                <p className="text-[11px] text-dusk-200 mt-3">Os blocos / torres você cadastra no próximo passo — pode ter mais de um.</p>
                 <div className="mt-8 flex justify-end">
                   <Button
                     variant="primary"
@@ -136,24 +170,78 @@ export default function Create() {
 
             {step === 2 && (
               <>
-                <h1 className="font-display text-3xl text-dusk-500 tracking-tight">Estrutura e sua unidade</h1>
+                <h1 className="font-display text-3xl text-dusk-500 tracking-tight">Blocos e sua unidade</h1>
                 <p className="text-dusk-300 mt-2 text-sm">
-                  Vamos gerar números de unidade tipo 101–{form.floors}{form.unitsPerFloor.toString().padStart(2, '0')}.
-                  Pode renomear cada uma depois.
+                  Cadastre cada torre ou bloco. Para um único prédio, deixe como está.
+                  Vamos gerar números tipo <span className="font-mono">101</span>, <span className="font-mono">102</span>… (renomeáveis depois).
                 </p>
-                <div className="mt-6 grid grid-cols-2 gap-3">
-                  <label className="block text-xs text-dusk-300 font-medium">
-                    Andares
-                    <input type="number" min={1} max={80} className="input mt-1" value={form.floors} onChange={(e) => up('floors', Math.max(1, Math.min(80, parseInt(e.target.value) || 1)))} />
-                  </label>
-                  <label className="block text-xs text-dusk-300 font-medium">
-                    Unidades por andar
-                    <input type="number" min={1} max={40} className="input mt-1" value={form.unitsPerFloor} onChange={(e) => up('unitsPerFloor', Math.max(1, Math.min(40, parseInt(e.target.value) || 1)))} />
-                  </label>
+
+                <div className="mt-6 space-y-3">
+                  {form.blocks.map((block, idx) => (
+                    <div key={idx} className="p-4 rounded-2xl bg-white/60 border border-white/70">
+                      <div className="flex items-start gap-2 mb-3">
+                        <label className="flex-1 block text-xs text-dusk-300 font-medium">
+                          Nome do bloco
+                          <input
+                            className="input mt-1"
+                            value={block.name}
+                            onChange={(e) => updateBlock(idx, { name: e.target.value })}
+                            maxLength={60}
+                            placeholder="ex: Torre A, Bloco 1, Cobertura"
+                          />
+                        </label>
+                        {form.blocks.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeBlock(idx)}
+                            className="mt-5 p-2 text-dusk-300 hover:text-peach-600 transition"
+                            title="Remover bloco"
+                            aria-label={`Remover bloco ${block.name}`}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <label className="block text-xs text-dusk-300 font-medium">
+                          Andares
+                          <input
+                            type="number" min={1} max={MAX_FLOORS}
+                            className="input mt-1"
+                            value={block.floors}
+                            onChange={(e) => updateBlock(idx, { floors: Math.max(1, Math.min(MAX_FLOORS, parseInt(e.target.value) || 1)) })}
+                          />
+                        </label>
+                        <label className="block text-xs text-dusk-300 font-medium">
+                          Unidades por andar
+                          <input
+                            type="number" min={1} max={MAX_UNITS_PER_FLOOR}
+                            className="input mt-1"
+                            value={block.unitsPerFloor}
+                            onChange={(e) => updateBlock(idx, { unitsPerFloor: Math.max(1, Math.min(MAX_UNITS_PER_FLOOR, parseInt(e.target.value) || 1)) })}
+                          />
+                        </label>
+                      </div>
+                      <div className="text-[11px] text-dusk-300 mt-2">
+                        {block.floors * block.unitsPerFloor} unidades neste bloco
+                      </div>
+                    </div>
+                  ))}
+
+                  {form.blocks.length < MAX_BLOCKS && (
+                    <button
+                      type="button"
+                      onClick={addBlock}
+                      className="w-full p-3 rounded-2xl border border-dashed border-dusk-200 text-sm text-dusk-400 hover:bg-white/40 hover:text-dusk-500 transition flex items-center justify-center gap-2"
+                    >
+                      <Plus className="w-4 h-4" /> Adicionar bloco
+                    </button>
+                  )}
                 </div>
+
                 <div className="mt-5 p-4 rounded-2xl bg-sage-100 border border-white/60 text-sm text-dusk-500">
-                  <strong className="font-display text-lg">{totalUnits}</strong> unidades vão ser criadas
-                  {form.floors > 1 && <> em <strong>{form.floors}</strong> andares</>}.
+                  <strong className="font-display text-lg">{totalUnits}</strong> unidades no total
+                  {form.blocks.length > 1 && <> em <strong>{form.blocks.length}</strong> blocos</>}.
                 </div>
 
                 <label className="mt-6 flex items-start gap-3 p-4 rounded-2xl bg-white/60 border border-white/70 cursor-pointer hover:bg-white/80">
@@ -184,7 +272,7 @@ export default function Create() {
                     variant="primary"
                     onClick={() => setStep(3)}
                     rightIcon={<ArrowRight className="w-4 h-4" />}
-                    disabled={form.adminLivesInBuilding && !form.ownerUnitNumber.trim()}
+                    disabled={!blocksValid || (form.adminLivesInBuilding && !form.ownerUnitNumber.trim())}
                   >
                     Continuar
                   </Button>

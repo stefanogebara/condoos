@@ -38,6 +38,43 @@ test.skip(!E2E_SECRET, 'E2E_REGISTER_SECRET not set — onboarding wizard tests 
 // 1b. Create-building API path for a no-unit admin (professional síndico)
 // ---------------------------------------------------------------------------
 
+test('Onboarding API: multi-block condo creates units across all towers', async ({ request }) => {
+  const r = await request.post(`${apiURL}/auth/dev-register`, {
+    headers: { 'x-e2e-secret': E2E_SECRET, 'Content-Type': 'application/json' },
+    data: { email: `e2e+multiblock-${Date.now()}@condoos.test`, password: 'e2etest123' },
+  });
+  expect(r.ok()).toBeTruthy();
+  const { token } = (await r.json()).data as { token: string };
+  const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+
+  const created = await request.post(`${apiURL}/onboarding/create-building`, {
+    headers,
+    data: {
+      condoName: `E2E MultiBlock ${Date.now()}`,
+      address: 'Rua das Torres 100',
+      // Legacy fields satisfy the schema; backend prefers buildings[] when present.
+      buildingName: 'Torre A',
+      floors: 8,
+      unitsPerFloor: 4,
+      buildings: [
+        { name: 'Torre A', floors: 8, unitsPerFloor: 4 },     // 32
+        { name: 'Torre B', floors: 5, unitsPerFloor: 6 },     // 30
+        { name: 'Cobertura', floors: 1, unitsPerFloor: 2 },    // 2
+      ],
+      ownerUnitNumber: '801',
+    },
+  });
+  expect(created.ok(), `create failed: ${created.status()} ${await created.text()}`).toBeTruthy();
+  const out = (await created.json()).data;
+  expect(out.buildingIds.length).toBe(3);
+  expect(out.inviteCode).toMatch(/^[A-Z2-9]{6}$/);
+
+  // Cross-check: lookup by invite code should expose all 64 units (32+30+2).
+  const lookup = await request.get(`${apiURL}/onboarding/by-code/${out.inviteCode}`);
+  const info = (await lookup.json()).data;
+  expect(info.units.length).toBe(64);
+});
+
 test('Onboarding API: no-unit admin can create a building and access scoped routes', async ({ request }) => {
   const r = await request.post(`${apiURL}/auth/dev-register`, {
     headers: { 'x-e2e-secret': E2E_SECRET, 'Content-Type': 'application/json' },
@@ -94,12 +131,12 @@ test('Onboarding: create-building wizard renders invite code and dashboard route
   await expect(page.getByRole('heading', { name: /Como o prédio se chama|What's your building called/i })).toBeVisible();
   await page.getByRole('button', { name: /^Continuar$|^Continue$/i }).click();
 
-  // Step 2 — Floors + units + owner unit
-  await expect(page.getByRole('heading', { name: /Estrutura e sua unidade|Structure & your unit/i })).toBeVisible();
+  // Step 2 — Floors + units per first block + owner unit
+  await expect(page.getByRole('heading', { name: /Blocos e sua unidade|Estrutura e sua unidade|Structure & your unit/i })).toBeVisible();
   await page.locator('input[type="number"]').nth(0).fill('5');
   await page.locator('input[type="number"]').nth(1).fill('3');
-  // Owner unit — text input with the example placeholder
-  const ownerInput = page.getByPlaceholder(/801|PH-1|Cobertura/);
+  // Owner unit — placeholder is "ex: 801 ou Cobertura-1", different from block name placeholder
+  const ownerInput = page.getByPlaceholder(/ex: 801|PH-1/);
   await ownerInput.fill('301');
   await page.getByRole('button', { name: /^Continuar$|^Continue$/i }).click();
 
