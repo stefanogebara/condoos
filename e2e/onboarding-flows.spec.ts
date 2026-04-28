@@ -144,9 +144,13 @@ test('Onboarding: create-building wizard renders invite code and dashboard route
   await expect(page.getByRole('heading', { name: /Preferências|Preferences/i })).toBeVisible();
   await page.getByRole('button', { name: /Criar prédio|Create building/i }).click();
 
-  // Step 4 — Success card with invite code
+  // Step 4 — Success card with invite code + share buttons
   await expect(page.getByRole('heading', { name: /Tudo pronto|You're in/i })).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText(/Código de convite|Invite code/i)).toBeVisible();
+  // Share buttons reuse the deep-link contract (?code=...) shipped earlier.
+  await expect(page.getByRole('button', { name: /Copiar link/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^WhatsApp$/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Email$/i })).toBeVisible();
   // Invite code is a 6-character A-Z2-9 string in a font-mono div
   const codeEl = page.locator('div.font-mono').filter({ hasText: /^[A-Z2-9]{6}$/ }).first();
   await expect(codeEl).toBeVisible();

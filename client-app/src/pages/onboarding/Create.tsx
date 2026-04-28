@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { ArrowLeft, ArrowRight, ArrowUp, Sparkles, Copy, Check, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ArrowUp, Sparkles, Copy, Check, Plus, Trash2, Link as LinkIcon, MessageCircle, Mail } from 'lucide-react';
 import Logo from '../../components/Logo';
 import GlassCard from '../../components/GlassCard';
 import Button from '../../components/Button';
@@ -20,6 +20,7 @@ export default function Create() {
   const [saving, setSaving] = useState(false);
   const [inviteCode, setInviteCode] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
 
   const [form, setForm] = useState({
     condoName: 'Vila Nova Residences',
@@ -105,6 +106,33 @@ export default function Create() {
     navigator.clipboard.writeText(inviteCode);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  }
+
+  // Deep-link contract: landing reads ?code= and forwards through the
+  // "Sou morador" CTA into /onboarding/join with the code pre-filled.
+  const inviteUrl = inviteCode
+    ? `${typeof window !== 'undefined' ? window.location.origin : 'https://condoos.one'}/?code=${encodeURIComponent(inviteCode)}`
+    : '';
+  const inviteMessage = inviteCode
+    ? `Você foi convidado(a) para ${form.condoName} no CondoOS. Entre por este link (o código já vem preenchido): ${inviteUrl}`
+    : '';
+  function copyInviteLink() {
+    if (!inviteUrl) return;
+    navigator.clipboard.writeText(inviteUrl);
+    setLinkCopied(true);
+    track('invite_link_copied', { method: 'copy' });
+    setTimeout(() => setLinkCopied(false), 2000);
+  }
+  function shareWhatsApp() {
+    if (!inviteMessage) return;
+    track('invite_link_copied', { method: 'whatsapp' });
+    window.open(`https://wa.me/?text=${encodeURIComponent(inviteMessage)}`, '_blank', 'noopener,noreferrer');
+  }
+  function shareEmail() {
+    if (!inviteMessage || !inviteCode) return;
+    track('invite_link_copied', { method: 'email' });
+    const subject = `Convite — ${form.condoName} no CondoOS`;
+    window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(inviteMessage)}`;
   }
 
   return (
@@ -357,8 +385,45 @@ export default function Create() {
                   </button>
                 </div>
 
-                <div className="mt-6 text-xs text-dusk-300 text-center">
-                  Moradores acessam este site, clicam em "Entrar num prédio" e digitam o código.
+                <div className="mt-6">
+                  <div className="text-xs uppercase tracking-[0.14em] text-dusk-300 font-medium text-center mb-3">
+                    Compartilhe direto com os moradores
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={copyInviteLink}
+                      className="flex flex-col items-center gap-1.5 p-3 rounded-2xl bg-white/60 border border-white/70 hover:bg-white/80 transition text-dusk-500"
+                    >
+                      {linkCopied
+                        ? <Check className="w-5 h-5 text-sage-700" />
+                        : <LinkIcon className="w-5 h-5" />}
+                      <span className="text-xs font-medium">{linkCopied ? 'Copiado!' : 'Copiar link'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={shareWhatsApp}
+                      className="flex flex-col items-center gap-1.5 p-3 rounded-2xl bg-white/60 border border-white/70 hover:bg-white/80 transition text-dusk-500"
+                    >
+                      <MessageCircle className="w-5 h-5 text-sage-700" />
+                      <span className="text-xs font-medium">WhatsApp</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={shareEmail}
+                      className="flex flex-col items-center gap-1.5 p-3 rounded-2xl bg-white/60 border border-white/70 hover:bg-white/80 transition text-dusk-500"
+                    >
+                      <Mail className="w-5 h-5 text-peach-500" />
+                      <span className="text-xs font-medium">Email</span>
+                    </button>
+                  </div>
+                  <div className="text-[11px] text-dusk-300 mt-3 text-center break-all font-mono">
+                    {inviteUrl}
+                  </div>
+                </div>
+
+                <div className="mt-5 text-xs text-dusk-300 text-center">
+                  Quem clicar no link cai direto no cadastro com o código já preenchido — não precisa digitar nada.
                 </div>
 
                 <div className="mt-8 flex justify-center">
