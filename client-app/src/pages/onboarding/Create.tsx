@@ -22,6 +22,7 @@ export default function Create() {
     floors: 8,
     unitsPerFloor: 4,
     ownerUnitNumber: '801',
+    adminLivesInBuilding: true,   // unchecked = professional síndico (no unit)
     seedAmenities: true,
     requireApproval: true,
     votingModel: 'one_per_unit' as 'one_per_unit' | 'weighted_by_sqft',
@@ -34,15 +35,21 @@ export default function Create() {
   async function submit() {
     setSaving(true);
     try {
+      // Strip ownerUnitNumber when the admin doesn't live in the building —
+      // backend treats it as a no-unit admin (no user_unit row, can't vote).
+      const payload = form.adminLivesInBuilding
+        ? form
+        : { ...form, ownerUnitNumber: '' };
       const res = await apiPost<{ condoId: number; buildingId: number; inviteCode: string }>(
         '/onboarding/create-building',
-        form,
+        payload,
       );
       track('onboarding_create_succeeded', {
         condo_id: res.condoId,
         floors: form.floors,
         units_per_floor: form.unitsPerFloor,
         voting_model: form.votingModel,
+        admin_lives_in_building: form.adminLivesInBuilding,
       });
       setInviteCode(res.inviteCode);
       setStep(4);
@@ -149,14 +156,38 @@ export default function Create() {
                   {form.floors > 1 && <> em <strong>{form.floors}</strong> andares</>}.
                 </div>
 
-                <label className="block text-xs text-dusk-300 font-medium mt-6">
-                  Sua unidade (você é o síndico, então essa é a sua)
-                  <input className="input mt-1" value={form.ownerUnitNumber} onChange={(e) => up('ownerUnitNumber', e.target.value.trim())} placeholder="ex: 801 ou Cobertura-1" />
+                <label className="mt-6 flex items-start gap-3 p-4 rounded-2xl bg-white/60 border border-white/70 cursor-pointer hover:bg-white/80">
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    checked={!form.adminLivesInBuilding}
+                    onChange={(e) => up('adminLivesInBuilding', !e.target.checked)}
+                  />
+                  <div>
+                    <div className="text-sm font-semibold text-dusk-500">Sou síndico mas não moro neste prédio</div>
+                    <div className="text-xs text-dusk-300 mt-0.5">
+                      Para administradoras / síndicos profissionais. Você gerencia o prédio mas não vai votar nas AGOs (só proprietários votam, conforme o Código Civil).
+                    </div>
+                  </div>
                 </label>
+
+                {form.adminLivesInBuilding && (
+                  <label className="block text-xs text-dusk-300 font-medium mt-4">
+                    Sua unidade (você é o síndico, então essa é a sua)
+                    <input className="input mt-1" value={form.ownerUnitNumber} onChange={(e) => up('ownerUnitNumber', e.target.value.trim())} placeholder="ex: 801 ou Cobertura-1" />
+                  </label>
+                )}
 
                 <div className="mt-8 flex justify-between">
                   <Button variant="ghost" onClick={() => setStep(1)} leftIcon={<ArrowLeft className="w-4 h-4" />}>Voltar</Button>
-                  <Button variant="primary" onClick={() => setStep(3)} rightIcon={<ArrowRight className="w-4 h-4" />} disabled={!form.ownerUnitNumber.trim()}>Continuar</Button>
+                  <Button
+                    variant="primary"
+                    onClick={() => setStep(3)}
+                    rightIcon={<ArrowRight className="w-4 h-4" />}
+                    disabled={form.adminLivesInBuilding && !form.ownerUnitNumber.trim()}
+                  >
+                    Continuar
+                  </Button>
                 </div>
               </>
             )}

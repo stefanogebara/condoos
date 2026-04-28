@@ -35,6 +35,46 @@ async function loadSession(page: Page, s: Session) {
 test.skip(!E2E_SECRET, 'E2E_REGISTER_SECRET not set — onboarding wizard tests need a fresh-user endpoint');
 
 // ---------------------------------------------------------------------------
+// 1b. Create-building API path for a no-unit admin (professional síndico)
+// ---------------------------------------------------------------------------
+
+test('Onboarding API: no-unit admin can create a building and access scoped routes', async ({ request }) => {
+  const r = await request.post(`${apiURL}/auth/dev-register`, {
+    headers: { 'x-e2e-secret': E2E_SECRET, 'Content-Type': 'application/json' },
+    data: { email: `e2e+nounit-${Date.now()}@condoos.test`, password: 'e2etest123' },
+  });
+  expect(r.ok()).toBeTruthy();
+  const { token } = (await r.json()).data as { token: string };
+  const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+
+  // Create a condo WITHOUT ownerUnitNumber — this is the professional-síndico path.
+  const created = await request.post(`${apiURL}/onboarding/create-building`, {
+    headers,
+    data: {
+      condoName: `E2E NoUnit ${Date.now()}`,
+      address: 'Rua Teste 100',
+      buildingName: 'Torre',
+      floors: 2,
+      unitsPerFloor: 2,
+      // ownerUnitNumber omitted → no user_unit row
+    },
+  });
+  expect(created.ok(), `create failed: ${created.status()} ${await created.text()}`).toBeTruthy();
+  const out = (await created.json()).data;
+  expect(out.condoId).toBeGreaterThan(0);
+  expect(out.inviteCode).toMatch(/^[A-Z2-9]{6}$/);
+
+  // The admin should have NO active membership (no user_unit row).
+  const me = await request.get(`${apiURL}/onboarding/me`, { headers });
+  expect(((await me.json()).data as any[]).length).toBe(0);
+
+  // …but they should still be able to hit a scoped route — requireActiveMembership
+  // has a special branch for board_admin with users.condominium_id set.
+  const proposals = await request.get(`${apiURL}/proposals`, { headers });
+  expect(proposals.ok(), `proposals 403'd a no-unit admin: ${proposals.status()}`).toBeTruthy();
+});
+
+// ---------------------------------------------------------------------------
 // 1. Create-building wizard — fresh user → 3 steps → invite code shown
 // ---------------------------------------------------------------------------
 

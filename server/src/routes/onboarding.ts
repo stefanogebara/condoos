@@ -43,7 +43,10 @@ const createSchema = z.object({
     floors: z.number().int().min(1).max(80),
     unitsPerFloor: z.number().int().min(1).max(40),
   })).max(12).optional(),
-  ownerUnitNumber: z.string().min(1).max(20),       // admin's own unit
+  // Optional: a professional síndico / administradora who manages the building
+  // without owning a unit can leave this empty. Treated as a "no-unit admin":
+  // role=board_admin, no user_unit row, cannot vote in AGOs.
+  ownerUnitNumber: z.string().max(20).optional(),
   seedAmenities: z.boolean().default(true),
   requireApproval: z.boolean().default(true),
   votingModel: z.enum(['one_per_unit', 'weighted_by_sqft']).default('one_per_unit'),
@@ -73,6 +76,7 @@ router.post('/create-building', onboardingWriteRateLimit, requireAuth, asyncHand
       ? body.buildings
       : [{ name: body.buildingName, floors: body.floors, unitsPerFloor: body.unitsPerFloor }];
     const buildingIds: number[] = [];
+    const ownerUnit = (body.ownerUnitNumber || '').trim();
     let ownerUnitId: number | null = null;
     for (const building of buildingInputs) {
       const buildingId = Number(
@@ -87,28 +91,36 @@ router.post('/create-building', onboardingWriteRateLimit, requireAuth, asyncHand
         for (let i = 1; i <= building.unitsPerFloor; i++) {
           const number = `${f}${i.toString().padStart(2, '0')}`;
           const unitId = Number(insertUnit.run(buildingId, f, number).lastInsertRowid);
-          if (number === body.ownerUnitNumber && !ownerUnitId) ownerUnitId = unitId;
+          if (ownerUnit && number === ownerUnit && !ownerUnitId) ownerUnitId = unitId;
         }
       }
     }
 
-    // If creator's unit wasn't inside the generated range, add it manually.
-    if (!ownerUnitId) {
+    // If the creator named a unit but it wasn't inside the generated range,
+    // add it manually. Skipped entirely when no ownerUnit was provided
+    // (no-unit admin path).
+    if (ownerUnit && !ownerUnitId) {
       ownerUnitId = Number(
-        insertUnit.run(buildingIds[0], null, body.ownerUnitNumber).lastInsertRowid
+        insertUnit.run(buildingIds[0], null, ownerUnit).lastInsertRowid
       );
     }
 
     // 4. Move the creating user into this new condo + promote to board_admin.
+    // unit_number stays NULL when the admin doesn't live in the building.
     db.prepare(
       `UPDATE users SET condominium_id = ?, role = 'board_admin', unit_number = ? WHERE id = ?`
-    ).run(condoId, body.ownerUnitNumber, u.id);
+    ).run(condoId, ownerUnit || null, u.id);
 
     // 5. Link them to their unit as active owner + primary contact.
-    db.prepare(
-      `INSERT INTO user_unit (user_id, unit_id, relationship, status, primary_contact, voting_weight, move_in_date)
-       VALUES (?, ?, 'owner', 'active', 1, 1.0, CURRENT_TIMESTAMP)`
-    ).run(u.id, ownerUnitId);
+    // Skipped for no-unit admins — they manage the building but don't own a
+    // unit, and therefore cannot vote in AGOs (already enforced downstream
+    // by canVoteInAssembly which requires user_unit.relationship='owner').
+    if (ownerUnitId) {
+      db.prepare(
+        `INSERT INTO user_unit (user_id, unit_id, relationship, status, primary_contact, voting_weight, move_in_date)
+         VALUES (?, ?, 'owner', 'active', 1, 1.0, CURRENT_TIMESTAMP)`
+      ).run(u.id, ownerUnitId);
+    }
 
     // 6. Seed amenities
     if (body.seedAmenities) {
