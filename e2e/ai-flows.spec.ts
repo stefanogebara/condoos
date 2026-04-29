@@ -84,10 +84,11 @@ test('AI: admin clusters open suggestions', async ({ page, request }) => {
   await expect(clusterBtn).toBeVisible({ timeout: 10_000 });
   await clusterBtn.click();
 
-  // The cluster card renders a "Cluster" badge for each AI-grouped bucket.
-  // Wait on the actual rendered badge instead of a fixed sleep, so a broken
-  // clustering pipeline fails the test instead of silently passing.
-  await expect(page.getByText('Cluster', { exact: true }).first()).toBeVisible({ timeout: 45_000 });
+  // The cluster card renders an "Agrupamento" badge for each AI-grouped
+  // bucket (or "Cluster" pre-PT-BR sweep). Wait on the actual rendered badge
+  // instead of a fixed sleep, so a broken clustering pipeline fails the test
+  // instead of silently passing.
+  await expect(page.getByText(/Agrupamento|Cluster/i).first()).toBeVisible({ timeout: 45_000 });
 
   // Cross-check via the API that clusters were persisted, not just rendered
   // from a transient response.
