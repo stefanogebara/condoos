@@ -11,7 +11,14 @@ import { createRateLimit } from '../lib/rate-limit';
 import { demoAuthEnabled, isBlockedDemoCredential } from '../lib/demo-auth';
 
 const router = Router();
-const authRateLimit = createRateLimit({ keyPrefix: 'auth', windowMs: 15 * 60_000, max: 5 });
+// Default 5/15min matches Sebastian's hardening. Override via AUTH_RATE_LIMIT_MAX
+// env var so E2E runs (which hit /auth/login many times across spec files) can
+// raise it temporarily without flipping the global RATE_LIMIT_DISABLED switch.
+const AUTH_RATE_LIMIT_MAX = (() => {
+  const raw = parseInt(process.env.AUTH_RATE_LIMIT_MAX || '', 10);
+  return Number.isFinite(raw) && raw > 0 ? raw : 5;
+})();
+const authRateLimit = createRateLimit({ keyPrefix: 'auth', windowMs: 15 * 60_000, max: AUTH_RATE_LIMIT_MAX });
 
 const loginSchema = z.object({
   email: z.string().email(),
