@@ -762,16 +762,16 @@ export function LanguageSwitcher() {
 
   return (
     <div
-      className="flex fixed bottom-4 left-1/2 z-[80] max-w-[calc(100vw-1.5rem)] -translate-x-1/2 flex-row flex-wrap items-center gap-2 rounded-3xl border border-white/60 bg-cream-50/85 p-2 text-xs font-semibold text-dusk-400 shadow-clay backdrop-blur-xl sm:left-auto sm:right-4 sm:translate-x-0"
+      className="fixed top-4 right-4 z-[80] flex flex-row items-center gap-1.5 rounded-3xl border border-white/60 bg-cream-50/85 p-1.5 text-xs font-semibold text-dusk-400 shadow-clay backdrop-blur-xl sm:bottom-4 sm:right-4 sm:top-auto sm:gap-2 sm:p-2"
       aria-label="Language controls"
     >
-      <label className="flex items-center gap-2 rounded-full bg-white/45 px-3 py-2">
+      <label className="flex items-center gap-1.5 rounded-full bg-white/45 px-2 py-1 sm:gap-2 sm:px-3 sm:py-2">
         <span className="hidden text-[11px] uppercase tracking-[0.14em] text-dusk-300 sm:inline">Language</span>
-        <span aria-hidden className="rounded-full bg-dusk-500 px-2 py-0.5 text-[11px] text-cream-50">
+        <span aria-hidden className="rounded-full bg-dusk-500 px-1.5 py-0.5 text-[10px] text-cream-50 sm:px-2 sm:text-[11px]">
           {active?.short}
         </span>
         <select
-          className="max-w-24 bg-transparent text-xs outline-none sm:max-w-none"
+          className="bg-transparent text-xs outline-none"
           value={locale}
           onChange={(e) => setLocale(e.target.value as AppLocale)}
           aria-label="Language"
@@ -783,15 +783,15 @@ export function LanguageSwitcher() {
       </label>
       <button
         type="button"
-        className="rounded-full border border-dusk-200/20 bg-sage-200/70 px-3 py-2 text-[11px] uppercase tracking-[0.12em] text-sage-900 transition hover:bg-sage-300 disabled:cursor-wait disabled:opacity-70"
+        className="rounded-full border border-dusk-200/20 bg-sage-200/70 px-2 py-1 text-[10px] uppercase tracking-[0.12em] text-sage-900 transition hover:bg-sage-300 disabled:cursor-wait disabled:opacity-70 sm:px-3 sm:py-2 sm:text-[11px]"
         onClick={handleLocation}
         disabled={detecting}
-        aria-label={source === 'manual' ? 'Use location' : 'Using location'}
+        aria-label={detecting ? 'Detecting location...' : source === 'manual' ? 'Use location' : 'Using location'}
       >
         <span className="hidden sm:inline">
           {detecting ? 'Detecting location...' : source === 'manual' ? 'Use location' : 'Using location'}
         </span>
-        <span className="sm:hidden">{detecting ? '...' : 'Auto'}</span>
+        <span className="sm:hidden">{detecting ? '…' : '⌖'}</span>
       </button>
     </div>
   );
