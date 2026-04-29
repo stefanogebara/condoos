@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { ArrowLeft, ArrowRight, ArrowUp, Sparkles, Copy, Check, Plus, Trash2, Link as LinkIcon, MessageCircle, Mail } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ArrowUp, Sparkles, Copy, Check, Plus, Trash2, Link as LinkIcon, MessageCircle, Mail, Dumbbell, Waves, Trophy, PartyPopper } from 'lucide-react';
 import Logo from '../../components/Logo';
 import GlassCard from '../../components/GlassCard';
 import Button from '../../components/Button';
@@ -10,10 +10,30 @@ import { apiPost } from '../../lib/api';
 import { track } from '../../lib/analytics';
 
 interface BuildingBlock { name: string; floors: number; unitsPerFloor: number; }
+interface AmenityDraft {
+  name: string;
+  description: string;
+  icon: string;
+  capacity: number;
+  open_hour: number;
+  close_hour: number;
+  slot_minutes: number;
+  booking_window_days: number;
+}
 
 const MAX_BLOCKS = 12;     // matches backend createSchema.buildings.max(12)
 const MAX_FLOORS = 80;
 const MAX_UNITS_PER_FLOOR = 40;
+const AMENITY_PRESETS: AmenityDraft[] = [
+  { name: 'Academia', description: 'Musculação, cardio e alongamento', icon: 'Dumbbell', capacity: 20, open_hour: 5, close_hour: 23, slot_minutes: 60, booking_window_days: 14 },
+  { name: 'Quadra de padel', description: 'Reserva por quadra, até quatro jogadores', icon: 'Trophy', capacity: 4, open_hour: 7, close_hour: 22, slot_minutes: 90, booking_window_days: 14 },
+  { name: 'Campo de futebol', description: 'Campo reservado para um grupo', icon: 'Trophy', capacity: 14, open_hour: 8, close_hour: 22, slot_minutes: 90, booking_window_days: 14 },
+  { name: 'Quadra de basquete', description: 'Meia quadra ou quadra inteira', icon: 'Trophy', capacity: 10, open_hour: 7, close_hour: 22, slot_minutes: 60, booking_window_days: 14 },
+  { name: 'Quadra de tênis', description: 'Simples ou duplas', icon: 'Trophy', capacity: 4, open_hour: 7, close_hour: 22, slot_minutes: 60, booking_window_days: 14 },
+  { name: 'Piscina', description: 'Piscina e deck', icon: 'Waves', capacity: 30, open_hour: 7, close_hour: 22, slot_minutes: 60, booking_window_days: 14 },
+  { name: 'Salão de festas', description: 'Eventos com cozinha e mesas', icon: 'PartyPopper', capacity: 40, open_hour: 9, close_hour: 23, slot_minutes: 180, booking_window_days: 60 },
+];
+const AMENITY_ICONS: Record<string, any> = { Dumbbell, Waves, Trophy, PartyPopper };
 
 export default function Create() {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
@@ -29,6 +49,7 @@ export default function Create() {
     ownerUnitNumber: '801',
     adminLivesInBuilding: true,   // unchecked = professional síndico (no unit)
     seedAmenities: true,
+    amenities: AMENITY_PRESETS.slice(0, 4) as AmenityDraft[],
     requireApproval: true,
     votingModel: 'one_per_unit' as 'one_per_unit' | 'weighted_by_sqft',
   });
@@ -54,10 +75,32 @@ export default function Create() {
   function removeBlock(idx: number) {
     setForm((f) => (f.blocks.length <= 1 ? f : { ...f, blocks: f.blocks.filter((_, i) => i !== idx) }));
   }
+  function addAmenity(preset: AmenityDraft = AMENITY_PRESETS[0]) {
+    setForm((f) => ({ ...f, seedAmenities: true, amenities: [...f.amenities, { ...preset }] }));
+  }
+  function updateAmenity(idx: number, patch: Partial<AmenityDraft>) {
+    setForm((f) => ({
+      ...f,
+      amenities: f.amenities.map((a, i) => (i === idx ? { ...a, ...patch } : a)),
+    }));
+  }
+  function removeAmenity(idx: number) {
+    setForm((f) => ({ ...f, amenities: f.amenities.filter((_, i) => i !== idx) }));
+  }
 
   const totalUnits = form.blocks.reduce((sum, b) => sum + b.floors * b.unitsPerFloor, 0);
   const blocksValid = form.blocks.every(
     (b) => b.name.trim().length > 0 && b.floors >= 1 && b.unitsPerFloor >= 1,
+  );
+  const amenitiesValid = !form.seedAmenities || (
+    form.amenities.length > 0
+    && form.amenities.every((a) => (
+      a.name.trim().length > 0
+      && a.capacity >= 1
+      && a.close_hour > a.open_hour
+      && a.slot_minutes >= 15
+      && a.slot_minutes <= (a.close_hour - a.open_hour) * 60
+    ))
   );
 
   async function submit() {
@@ -76,6 +119,16 @@ export default function Create() {
         buildings: form.blocks.length > 1 ? form.blocks : undefined,
         ownerUnitNumber: form.adminLivesInBuilding ? form.ownerUnitNumber : '',
         seedAmenities: form.seedAmenities,
+        amenities: form.seedAmenities ? form.amenities.map((a) => ({
+          ...a,
+          name: a.name.trim(),
+          description: a.description.trim(),
+          capacity: Math.max(1, Math.min(500, a.capacity || 1)),
+          open_hour: Math.max(0, Math.min(23, a.open_hour || 0)),
+          close_hour: Math.max(1, Math.min(24, a.close_hour || 1)),
+          slot_minutes: Math.max(15, Math.min(240, Math.round((a.slot_minutes || 60) / 15) * 15)),
+          booking_window_days: Math.max(1, Math.min(365, a.booking_window_days || 14)),
+        })) : undefined,
         requireApproval: form.requireApproval,
         votingModel: form.votingModel,
       };
@@ -87,6 +140,7 @@ export default function Create() {
         condo_id: res.condoId,
         block_count: form.blocks.length,
         total_units: totalUnits,
+        amenity_count: form.seedAmenities ? form.amenities.length : 0,
         voting_model: form.votingModel,
         admin_lives_in_building: form.adminLivesInBuilding,
       });
@@ -314,13 +368,109 @@ export default function Create() {
                 <p className="text-dusk-300 mt-2 text-sm">Padrões sensatos — pode mudar depois.</p>
 
                 <div className="mt-6 space-y-4">
-                  <label className="flex items-start gap-3 p-4 rounded-2xl bg-white/60 border border-white/70 cursor-pointer hover:bg-white/80">
-                    <input type="checkbox" className="mt-1" checked={form.seedAmenities} onChange={(e) => up('seedAmenities', e.target.checked)} />
-                    <div>
-                      <div className="text-sm font-semibold text-dusk-500">Pré-cadastrar áreas comuns</div>
-                      <div className="text-xs text-dusk-300 mt-0.5">Piscina, academia, churrasqueira, salão de festas. Edita quando quiser.</div>
-                    </div>
-                  </label>
+                  <div className="p-4 rounded-2xl bg-white/60 border border-white/70">
+                    <label className="flex items-start gap-3 cursor-pointer">
+                      <input type="checkbox" className="mt-1" checked={form.seedAmenities} onChange={(e) => up('seedAmenities', e.target.checked)} />
+                      <div>
+                        <div className="text-sm font-semibold text-dusk-500">Criar áreas comuns reserváveis agora</div>
+                        <div className="text-xs text-dusk-300 mt-0.5">
+                          Academia, piscina, quadras, campo, salão de festas — cada uma com capacidade e slots próprios.
+                        </div>
+                      </div>
+                    </label>
+
+                    {form.seedAmenities && (
+                      <div className="mt-4 space-y-3">
+                        <div className="grid sm:grid-cols-2 gap-2">
+                          {AMENITY_PRESETS.map((preset) => {
+                            const Icon = AMENITY_ICONS[preset.icon] || Trophy;
+                            return (
+                              <button
+                                key={preset.name}
+                                type="button"
+                                onClick={() => addAmenity(preset)}
+                                className="p-3 rounded-2xl bg-white/70 border border-white/80 text-left hover:bg-white transition"
+                              >
+                                <div className="flex items-center gap-2 text-sm font-semibold text-dusk-500">
+                                  <Icon className="w-4 h-4" /> {preset.name}
+                                </div>
+                                <div className="text-[11px] text-dusk-300 mt-1">{preset.capacity} pessoas · slots de {preset.slot_minutes} min</div>
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        <div className="space-y-2">
+                          {form.amenities.map((amenity, idx) => {
+                            const Icon = AMENITY_ICONS[amenity.icon] || Trophy;
+                            return (
+                              <div key={`${amenity.name}-${idx}`} className="p-3 rounded-2xl bg-cream-50/70 border border-white/80">
+                                <div className="flex items-start gap-2">
+                                  <div className="w-9 h-9 rounded-2xl bg-sage-200 text-sage-700 flex items-center justify-center shrink-0">
+                                    <Icon className="w-4 h-4" />
+                                  </div>
+                                  <div className="grid sm:grid-cols-2 gap-2 flex-1 min-w-0">
+                                    <label className="block text-[11px] text-dusk-300 font-medium">
+                                      Nome
+                                      <input className="input mt-1" value={amenity.name} onChange={(e) => updateAmenity(idx, { name: e.target.value })} maxLength={80} />
+                                    </label>
+                                    <label className="block text-[11px] text-dusk-300 font-medium">
+                                      Tipo
+                                      <select className="input mt-1" value={amenity.icon} onChange={(e) => updateAmenity(idx, { icon: e.target.value })}>
+                                        <option value="Dumbbell">Academia</option>
+                                        <option value="Waves">Piscina</option>
+                                        <option value="Trophy">Quadra / campo</option>
+                                        <option value="PartyPopper">Salão de festas</option>
+                                      </select>
+                                    </label>
+                                    <label className="block text-[11px] text-dusk-300 font-medium sm:col-span-2">
+                                      Descrição
+                                      <input className="input mt-1" value={amenity.description} onChange={(e) => updateAmenity(idx, { description: e.target.value })} maxLength={280} />
+                                    </label>
+                                    <label className="block text-[11px] text-dusk-300 font-medium">
+                                      Pessoas por slot
+                                      <input type="number" min={1} max={500} className="input mt-1" value={amenity.capacity} onChange={(e) => updateAmenity(idx, { capacity: parseInt(e.target.value) || 1 })} />
+                                    </label>
+                                    <label className="block text-[11px] text-dusk-300 font-medium">
+                                      Slot
+                                      <select className="input mt-1" value={amenity.slot_minutes} onChange={(e) => updateAmenity(idx, { slot_minutes: parseInt(e.target.value) })}>
+                                        {[30, 45, 60, 90, 120, 180, 240].map((m) => <option key={m} value={m}>{m} min</option>)}
+                                      </select>
+                                    </label>
+                                    <label className="block text-[11px] text-dusk-300 font-medium">
+                                      Abre
+                                      <input type="number" min={0} max={23} className="input mt-1" value={amenity.open_hour} onChange={(e) => updateAmenity(idx, { open_hour: parseInt(e.target.value) || 0 })} />
+                                    </label>
+                                    <label className="block text-[11px] text-dusk-300 font-medium">
+                                      Fecha
+                                      <input type="number" min={1} max={24} className="input mt-1" value={amenity.close_hour} onChange={(e) => updateAmenity(idx, { close_hour: parseInt(e.target.value) || 1 })} />
+                                    </label>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => removeAmenity(idx)}
+                                    className="p-2 text-dusk-300 hover:text-peach-600 transition"
+                                    aria-label={`Remover ${amenity.name}`}
+                                    title="Remover área"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => addAmenity({ name: 'Nova área', description: '', icon: 'Trophy', capacity: 4, open_hour: 8, close_hour: 22, slot_minutes: 60, booking_window_days: 14 })}
+                          className="w-full p-3 rounded-2xl border border-dashed border-dusk-200 text-sm text-dusk-400 hover:bg-white/40 hover:text-dusk-500 transition flex items-center justify-center gap-2"
+                        >
+                          <Plus className="w-4 h-4" /> Criar área personalizada
+                        </button>
+                      </div>
+                    )}
+                  </div>
 
                   <label className="flex items-start gap-3 p-4 rounded-2xl bg-white/60 border border-white/70 cursor-pointer hover:bg-white/80">
                     <input type="checkbox" className="mt-1" checked={form.requireApproval} onChange={(e) => up('requireApproval', e.target.checked)} />
@@ -357,7 +507,7 @@ export default function Create() {
 
                 <div className="mt-8 flex justify-between">
                   <Button variant="ghost" onClick={() => setStep(2)} leftIcon={<ArrowLeft className="w-4 h-4" />}>Voltar</Button>
-                  <Button variant="primary" onClick={submit} loading={saving} rightIcon={<Sparkles className="w-4 h-4" />}>Criar prédio</Button>
+                  <Button variant="primary" onClick={submit} loading={saving} disabled={!amenitiesValid} rightIcon={<Sparkles className="w-4 h-4" />}>Criar prédio</Button>
                 </div>
               </>
             )}

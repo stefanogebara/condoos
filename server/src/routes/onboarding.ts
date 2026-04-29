@@ -23,11 +23,28 @@ function randomCode(): string {
 }
 
 const defaultAmenities = [
-  { name: 'Rooftop Pool',   description: 'Heated, with sun deck',        icon: 'Waves',       capacity: 20, open_hour: 7,  close_hour: 22 },
-  { name: 'Fitness Center', description: 'Full cardio + weights',        icon: 'Dumbbell',    capacity: 15, open_hour: 5,  close_hour: 23 },
-  { name: 'BBQ Grill',      description: 'Rooftop grill station',        icon: 'Flame',       capacity: 8,  open_hour: 11, close_hour: 22 },
-  { name: 'Party Room',     description: 'Lounge, kitchen, seats 40',    icon: 'PartyPopper', capacity: 40, open_hour: 9,  close_hour: 23 },
+  { name: 'Rooftop Pool',   description: 'Heated, with sun deck',        icon: 'Waves',       capacity: 20, open_hour: 7,  close_hour: 22, slot_minutes: 60, booking_window_days: 14 },
+  { name: 'Fitness Center', description: 'Full cardio + weights',        icon: 'Dumbbell',    capacity: 15, open_hour: 5,  close_hour: 23, slot_minutes: 60, booking_window_days: 14 },
+  { name: 'BBQ Grill',      description: 'Rooftop grill station',        icon: 'Flame',       capacity: 8,  open_hour: 11, close_hour: 22, slot_minutes: 120, booking_window_days: 30 },
+  { name: 'Party Room',     description: 'Lounge, kitchen, seats 40',    icon: 'PartyPopper', capacity: 40, open_hour: 9,  close_hour: 23, slot_minutes: 180, booking_window_days: 60 },
 ];
+
+const amenitySchema = z.object({
+  name: z.string().min(1).max(80),
+  description: z.string().max(280).optional().default(''),
+  icon: z.string().min(1).max(40).optional().default('Waves'),
+  capacity: z.number().int().min(1).max(500),
+  open_hour: z.number().int().min(0).max(23),
+  close_hour: z.number().int().min(1).max(24),
+  slot_minutes: z.number().int().min(15).max(240).refine((n) => n % 15 === 0, 'must_be_15_min_increment'),
+  booking_window_days: z.number().int().min(1).max(365).default(14),
+}).refine((a) => a.close_hour > a.open_hour, {
+  message: 'close_hour_must_be_after_open_hour',
+  path: ['close_hour'],
+}).refine((a) => a.slot_minutes <= (a.close_hour - a.open_hour) * 60, {
+  message: 'slot_longer_than_open_hours',
+  path: ['slot_minutes'],
+});
 
 // ---------------------------------------------------------------------------
 // Create a new condo (first admin)
@@ -48,6 +65,7 @@ const createSchema = z.object({
   // role=board_admin, no user_unit row, cannot vote in AGOs.
   ownerUnitNumber: z.string().max(20).optional(),
   seedAmenities: z.boolean().default(true),
+  amenities: z.array(amenitySchema).max(30).optional(),
   requireApproval: z.boolean().default(true),
   votingModel: z.enum(['one_per_unit', 'weighted_by_sqft']).default('one_per_unit'),
 });
@@ -123,13 +141,22 @@ router.post('/create-building', onboardingWriteRateLimit, requireAuth, asyncHand
     }
 
     // 6. Seed amenities
-    if (body.seedAmenities) {
+    const amenitiesToCreate = body.amenities?.length
+      ? body.amenities
+      : body.seedAmenities ? defaultAmenities : [];
+    if (amenitiesToCreate.length) {
       const insertAmenity = db.prepare(
-        `INSERT INTO amenities (condominium_id, name, description, icon, capacity, open_hour, close_hour)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO amenities (
+           condominium_id, name, description, icon, capacity, open_hour, close_hour,
+           slot_minutes, booking_window_days
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
       );
-      for (const a of defaultAmenities) {
-        insertAmenity.run(condoId, a.name, a.description, a.icon, a.capacity, a.open_hour, a.close_hour);
+      for (const a of amenitiesToCreate) {
+        insertAmenity.run(
+          condoId,
+          a.name, a.description || '', a.icon || 'Waves', a.capacity, a.open_hour, a.close_hour,
+          a.slot_minutes, a.booking_window_days,
+        );
       }
     }
 
@@ -142,7 +169,7 @@ router.post('/create-building', onboardingWriteRateLimit, requireAuth, asyncHand
     target_type: 'condominium',
     target_id: out.condoId,
     condominium_id: out.condoId,
-    metadata: { building_id: out.buildingId, building_ids: out.buildingIds, invite_code: out.inviteCode },
+    metadata: { building_id: out.buildingId, building_ids: out.buildingIds, invite_code: out.inviteCode, amenities: body.amenities?.length || (body.seedAmenities ? defaultAmenities.length : 0) },
   });
   return ok(res, out);
 }));

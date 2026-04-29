@@ -295,6 +295,12 @@ export function initSchema() {
   addColumnIfMissing('amenity_reservations', 'expected_guests', `INTEGER NOT NULL DEFAULT 0`);
   addColumnIfMissing('amenity_reservations', 'guest_list',      `TEXT`);
   addColumnIfMissing('amenity_reservations', 'notes',           `TEXT`);
+  // Admin-configurable amenity reservation slots. Capacity is treated as the
+  // max number of people in a slot; legacy rows without guests count as 1.
+  addColumnIfMissing('amenities', 'slot_minutes',        `INTEGER NOT NULL DEFAULT 60`);
+  addColumnIfMissing('amenities', 'booking_window_days', `INTEGER NOT NULL DEFAULT 14`);
+  addColumnIfMissing('amenities', 'active',              `INTEGER NOT NULL DEFAULT 1`);
+  addColumnIfMissing('amenities', 'admin_notes',         `TEXT`);
 
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_audit_log_condo_created

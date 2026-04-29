@@ -58,7 +58,7 @@ export default function Sidebar({ items, title, subtitle }: Props) {
         <div className="mt-3 chip">{title}</div>
       </div>
 
-      <nav className="flex-1 space-y-1 overflow-y-auto">
+      <nav className="space-y-1 pr-1">
         {items.map((it) => (
           <NavLink
             key={it.to}
@@ -119,7 +119,7 @@ export default function Sidebar({ items, title, subtitle }: Props) {
       {/* Sidebar: sliding drawer on mobile, static on desktop */}
       <aside
         className={clsx(
-          'shrink-0 p-4 lg:p-6 flex flex-col gap-4 lg:gap-6',
+          'shrink-0 p-4 lg:p-6 flex flex-col gap-4 lg:gap-6 overflow-y-auto',
           // mobile: drawer
           'fixed lg:static inset-y-0 left-0 z-50 w-[86%] max-w-[340px] lg:w-72 lg:max-w-none',
           'bg-cream-50/95 lg:bg-transparent backdrop-blur-xl lg:backdrop-blur-0',

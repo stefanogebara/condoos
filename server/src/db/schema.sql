@@ -57,9 +57,13 @@ CREATE TABLE IF NOT EXISTS amenities (
   name             TEXT NOT NULL,
   description      TEXT,
   icon             TEXT,           -- lucide icon name
-  capacity         INTEGER NOT NULL DEFAULT 1,
+  capacity         INTEGER NOT NULL DEFAULT 1, -- max people per slot
   open_hour        INTEGER NOT NULL DEFAULT 8,
   close_hour       INTEGER NOT NULL DEFAULT 22,
+  slot_minutes     INTEGER NOT NULL DEFAULT 60,
+  booking_window_days INTEGER NOT NULL DEFAULT 14,
+  active           INTEGER NOT NULL DEFAULT 1,
+  admin_notes      TEXT,
   created_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 

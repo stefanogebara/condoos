@@ -34,6 +34,8 @@ function resetDb() {
     'dues_schedules',
     'notification_outbox',
     'audit_log',
+    'amenity_reservations',
+    'amenities',
     'assembly_votes',
     'assembly_proxies',
     'assembly_attendance',
@@ -760,6 +762,43 @@ test('AI classifier fallback: keyword heuristics map to correct categories', asy
   assert.equal(classify('welcome event for new residents'), 'community');
   // All valid categories in the enum
   for (const c of VALID) assert.ok(typeof c === 'string');
+});
+
+test('amenity slots track people capacity instead of reservation row count', () => {
+  resetDb();
+  const { condoId } = createCondoFixture();
+  const user1 = createUser('gym-a@example.com');
+  const user2 = createUser('gym-b@example.com');
+  const amenityId = Number(db.prepare(
+    `INSERT INTO amenities (
+       condominium_id, name, description, icon, capacity, open_hour, close_hour, slot_minutes, booking_window_days
+     ) VALUES (?, 'Gym', 'Weights', 'Dumbbell', 5, 6, 22, 60, 14)`
+  ).run(condoId).lastInsertRowid);
+  const starts = new Date('2026-05-01T18:00:00.000Z');
+  const ends = new Date('2026-05-01T19:00:00.000Z');
+  db.prepare(
+    `INSERT INTO amenity_reservations (amenity_id, user_id, starts_at, ends_at, expected_guests)
+     VALUES (?, ?, ?, ?, 2)`
+  ).run(amenityId, user1, starts.toISOString(), ends.toISOString());
+  db.prepare(
+    `INSERT INTO amenity_reservations (amenity_id, user_id, starts_at, ends_at, expected_guests)
+     VALUES (?, ?, ?, ?, 0)`
+  ).run(amenityId, user2, starts.toISOString(), ends.toISOString());
+
+  const overlapping = db.prepare(
+    `SELECT COALESCE(SUM(1 + COALESCE(expected_guests, 0)), 0) AS people
+     FROM amenity_reservations
+     WHERE amenity_id = ?
+       AND status = 'confirmed'
+       AND starts_at < ?
+       AND ends_at > ?`
+  ).get(amenityId, ends.toISOString(), starts.toISOString()) as { people: number };
+  assert.equal(overlapping.people, 4);
+
+  const amenity = db.prepare(
+    `SELECT capacity, slot_minutes, booking_window_days, active FROM amenities WHERE id = ?`
+  ).get(amenityId) as any;
+  assert.deepEqual(amenity, { capacity: 5, slot_minutes: 60, booking_window_days: 14, active: 1 });
 });
 
 test('WhatsApp: notifyCondoOwners selects only active owners in the condo', async () => {
