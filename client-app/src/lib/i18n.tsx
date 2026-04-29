@@ -746,7 +746,10 @@ export function LanguageSwitcher() {
   const location = useLocation();
   const [detecting, setDetecting] = useState(false);
   const active = LOCALE_OPTIONS.find((option) => option.locale === locale);
-  const appSurface = location.pathname.startsWith('/app') || location.pathname.startsWith('/board');
+  const appSurface = location.pathname.startsWith('/app') || location.pathname.startsWith('/board') || location.pathname.startsWith('/concierge');
+
+  // On app/board/concierge surfaces the sidebar owns the language switcher.
+  if (appSurface) return null;
 
   const handleLocation = async () => {
     setDetecting(true);
@@ -759,7 +762,7 @@ export function LanguageSwitcher() {
 
   return (
     <div
-      className={`${appSurface ? 'hidden sm:flex' : 'flex'} fixed left-1/2 top-16 z-[80] max-w-[calc(100vw-1.5rem)] -translate-x-1/2 flex-row flex-wrap items-center gap-2 rounded-3xl border border-white/60 bg-cream-50/85 p-2 text-xs font-semibold text-dusk-400 shadow-clay backdrop-blur-xl sm:bottom-4 sm:left-auto sm:right-4 sm:top-auto sm:translate-x-0`}
+      className="flex fixed bottom-4 left-1/2 z-[80] max-w-[calc(100vw-1.5rem)] -translate-x-1/2 flex-row flex-wrap items-center gap-2 rounded-3xl border border-white/60 bg-cream-50/85 p-2 text-xs font-semibold text-dusk-400 shadow-clay backdrop-blur-xl sm:left-auto sm:right-4 sm:translate-x-0"
       aria-label="Language controls"
     >
       <label className="flex items-center gap-2 rounded-full bg-white/45 px-3 py-2">
@@ -790,6 +793,56 @@ export function LanguageSwitcher() {
         </span>
         <span className="sm:hidden">{detecting ? '...' : 'Auto'}</span>
       </button>
+    </div>
+  );
+}
+
+export function SidebarLangSwitcher() {
+  const { locale, source, setLocale, useLocationLocale } = useLocale();
+  const [detecting, setDetecting] = useState(false);
+
+  const handleLocation = async () => {
+    setDetecting(true);
+    try {
+      await useLocationLocale();
+    } finally {
+      setDetecting(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-2 pt-1" data-i18n-skip>
+      <div className="flex gap-1.5 flex-wrap">
+        {LOCALE_OPTIONS.map((opt) => (
+          <button
+            key={opt.locale}
+            type="button"
+            onClick={() => locale !== opt.locale && setLocale(opt.locale)}
+            className={`px-2.5 py-1 rounded-xl text-[11px] font-semibold transition-all ${
+              locale === opt.locale
+                ? 'bg-white/70 text-dusk-500 shadow-clay-sm border border-white/80'
+                : 'text-dusk-300 hover:bg-white/40 hover:text-dusk-500'
+            }`}
+            aria-label={opt.label}
+            aria-pressed={locale === opt.locale}
+          >
+            {opt.short}
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={handleLocation}
+          disabled={detecting}
+          title={source === 'manual' ? 'Use location' : 'Using location'}
+          className={`px-2.5 py-1 rounded-xl text-[11px] font-semibold transition-all disabled:cursor-wait disabled:opacity-60 ${
+            source === 'location'
+              ? 'bg-sage-200/80 text-sage-900 border border-sage-300/40'
+              : 'text-dusk-300 hover:bg-white/40 hover:text-dusk-500'
+          }`}
+        >
+          {detecting ? '…' : '⌖'}
+        </button>
+      </div>
     </div>
   );
 }

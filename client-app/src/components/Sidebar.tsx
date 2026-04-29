@@ -5,6 +5,7 @@ import { LogOut, Menu, X } from 'lucide-react';
 import Logo from './Logo';
 import Avatar from './Avatar';
 import { useAuth } from '../lib/auth';
+import { SidebarLangSwitcher } from '../lib/i18n';
 
 export interface NavItem {
   to: string;
@@ -58,7 +59,7 @@ export default function Sidebar({ items, title, subtitle }: Props) {
         <div className="mt-3 chip">{title}</div>
       </div>
 
-      <nav className="space-y-1 pr-1">
+      <nav className="flex-1 overflow-y-auto space-y-1 pr-1">
         {items.map((it) => (
           <NavLink
             key={it.to}
@@ -80,13 +81,16 @@ export default function Sidebar({ items, title, subtitle }: Props) {
         ))}
       </nav>
 
-      <button
-        onClick={logout}
-        className="flex shrink-0 items-center gap-3 px-3.5 py-2.5 rounded-2xl text-sm font-medium text-dusk-300 hover:bg-white/40 hover:text-dusk-500 transition"
-      >
-        <LogOut className="w-[18px] h-[18px]" />
-        Sair
-      </button>
+      <div className="mt-auto pt-2 border-t border-white/30 space-y-2">
+        <SidebarLangSwitcher />
+        <button
+          onClick={logout}
+          className="flex w-full shrink-0 items-center gap-3 px-3.5 py-2.5 rounded-2xl text-sm font-medium text-dusk-300 hover:bg-white/40 hover:text-dusk-500 transition"
+        >
+          <LogOut className="w-[18px] h-[18px]" />
+          Sair
+        </button>
+      </div>
     </>
   );
 
