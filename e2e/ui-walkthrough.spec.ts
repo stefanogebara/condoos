@@ -18,6 +18,16 @@ const apiURL = process.env.E2E_API_URL
 type Session = { token: string; user: any };
 const sessionCache = new Map<string, Session>();
 
+async function openDrawerIfMobile(page: Page) {
+  const vp = page.viewportSize();
+  if (!vp || vp.width >= 1024) return;
+  const hamburger = page.getByRole('button', { name: /Abrir menu/i });
+  if (await hamburger.isVisible({ timeout: 1000 }).catch(() => false)) {
+    await hamburger.click();
+    await page.getByRole('navigation').waitFor({ state: 'visible', timeout: 5000 });
+  }
+}
+
 async function loginApi(request: APIRequestContext, email: string, password: string): Promise<Session> {
   const cached = sessionCache.get(email);
   if (cached) return cached;
@@ -55,6 +65,7 @@ test('Admin: sidebar links hit every new page (Edifício, Finanças)', async ({ 
   await expect(page.getByRole('heading', { name: /Visão geral|Bem-vindo/i }).first()).toBeVisible();
 
   // Edifício
+  await openDrawerIfMobile(page);
   await page.getByRole('link', { name: /^Edifício$/i }).click();
   await expect(page).toHaveURL(/\/board\/edificio/);
   await expect(page.getByRole('heading', { name: /^Edifício$/i }).first()).toBeVisible();
@@ -62,6 +73,7 @@ test('Admin: sidebar links hit every new page (Edifício, Finanças)', async ({ 
   await expect(page.getByRole('button', { name: /Novo bloco/i })).toBeVisible();
 
   // Finanças
+  await openDrawerIfMobile(page);
   await page.getByRole('link', { name: /^Finanças$/i }).click();
   await expect(page).toHaveURL(/\/board\/financas/);
   await expect(page.getByRole('heading', { name: /^Finanças$/i }).first()).toBeVisible();
