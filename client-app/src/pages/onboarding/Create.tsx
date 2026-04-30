@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { ArrowLeft, ArrowRight, ArrowUp, Sparkles, Copy, Check, Plus, Trash2, Link as LinkIcon, MessageCircle, Mail, Dumbbell, Waves, Trophy, PartyPopper } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ArrowUp, Sparkles, Copy, Check, Plus, Trash2, Link as LinkIcon, MessageCircle, Mail, Dumbbell, Waves, Trophy, PartyPopper, Wrench, Phone, ShieldCheck } from 'lucide-react';
 import Logo from '../../components/Logo';
 import GlassCard from '../../components/GlassCard';
 import Button from '../../components/Button';
@@ -25,6 +25,23 @@ interface AmenityDraft {
   slot_minutes: number;
   booking_window_days: number;
 }
+interface ServiceContactDraft {
+  category: string;
+  company_name: string;
+  contact_name: string;
+  phone: string;
+  whatsapp: string;
+  email: string;
+  website: string;
+  address: string;
+  service_scope: string;
+  notes: string;
+  contract_url: string;
+  emergency_available: boolean;
+  preferred: boolean;
+  active: boolean;
+  last_used_at: string;
+}
 
 const MAX_BLOCKS = 12;     // matches backend createSchema.buildings.max(12)
 const MAX_FLOORS = 80;
@@ -39,6 +56,31 @@ const AMENITY_PRESETS: AmenityDraft[] = [
   { name: 'Salão de festas', description: 'Eventos com cozinha e mesas', icon: 'PartyPopper', capacity: 40, open_hour: 9, close_hour: 23, slot_minutes: 180, booking_window_days: 60 },
 ];
 const AMENITY_ICONS: Record<string, any> = { Dumbbell, Waves, Trophy, PartyPopper };
+const SERVICE_CATEGORIES = [
+  { value: 'electrical', label: 'Elétrica' },
+  { value: 'plumbing', label: 'Hidráulica' },
+  { value: 'elevator', label: 'Elevadores' },
+  { value: 'gym_equipment', label: 'Academia / equipamentos' },
+  { value: 'pool', label: 'Piscina' },
+  { value: 'cleaning', label: 'Limpeza' },
+  { value: 'security', label: 'Segurança / portaria' },
+  { value: 'landscaping', label: 'Jardim' },
+  { value: 'internet_cctv', label: 'Internet / CFTV' },
+  { value: 'pest_control', label: 'Dedetização' },
+  { value: 'general_maintenance', label: 'Manutenção geral' },
+  { value: 'legal_admin', label: 'Jurídico / contábil' },
+  { value: 'other', label: 'Outro' },
+];
+const SERVICE_PRESETS: Array<Pick<ServiceContactDraft, 'category' | 'service_scope' | 'notes'>> = [
+  { category: 'electrical', service_scope: 'Quadros, disjuntores, iluminação, tomadas e emergências elétricas.', notes: '' },
+  { category: 'plumbing', service_scope: 'Vazamentos, bombas, caixa d’água, registros e manutenção hidráulica.', notes: '' },
+  { category: 'elevator', service_scope: 'Manutenção preventiva, chamados e emergência dos elevadores.', notes: '' },
+  { category: 'gym_equipment', service_scope: 'Instalação, manutenção e garantia de equipamentos da academia.', notes: 'Ex: fabricante das esteiras, instalador dos aparelhos, empresa de manutenção.' },
+  { category: 'pool', service_scope: 'Tratamento químico, bombas, aquecimento, limpeza e manutenção da piscina.', notes: '' },
+  { category: 'security', service_scope: 'Portaria, alarmes, câmeras, controle de acesso e ronda.', notes: '' },
+  { category: 'cleaning', service_scope: 'Equipe terceirizada, limpeza pesada, pós-obra e suprimentos.', notes: '' },
+  { category: 'general_maintenance', service_scope: 'Pequenos reparos, pintura, serralheria, marcenaria e apoio de obra.', notes: '' },
+];
 
 function clampInt(raw: number, min: number, max: number) {
   const next = Number.isFinite(raw) ? Math.trunc(raw) : min;
@@ -80,8 +122,59 @@ function normalizeBlock(block: BuildingBlock) {
   };
 }
 
+function blankServiceContact(preset?: Partial<ServiceContactDraft>): ServiceContactDraft {
+  return {
+    category: preset?.category || 'general_maintenance',
+    company_name: preset?.company_name || '',
+    contact_name: preset?.contact_name || '',
+    phone: preset?.phone || '',
+    whatsapp: preset?.whatsapp || '',
+    email: preset?.email || '',
+    website: preset?.website || '',
+    address: preset?.address || '',
+    service_scope: preset?.service_scope || '',
+    notes: preset?.notes || '',
+    contract_url: preset?.contract_url || '',
+    emergency_available: preset?.emergency_available || false,
+    preferred: preset?.preferred ?? true,
+    active: preset?.active ?? true,
+    last_used_at: preset?.last_used_at || '',
+  };
+}
+
+function serviceContactHasReachableDetail(contact: ServiceContactDraft) {
+  return [
+    contact.phone,
+    contact.whatsapp,
+    contact.email,
+    contact.website,
+    contact.address,
+    contact.notes,
+  ].some((value) => value.trim().length > 0);
+}
+
+function normalizeServiceContact(contact: ServiceContactDraft) {
+  return {
+    category: contact.category,
+    company_name: contact.company_name.trim(),
+    contact_name: contact.contact_name.trim() || null,
+    phone: contact.phone.trim() || null,
+    whatsapp: contact.whatsapp.trim() || null,
+    email: contact.email.trim() || null,
+    website: contact.website.trim() || null,
+    address: contact.address.trim() || null,
+    service_scope: contact.service_scope.trim() || null,
+    notes: contact.notes.trim() || null,
+    contract_url: contact.contract_url.trim() || null,
+    emergency_available: contact.emergency_available,
+    preferred: contact.preferred,
+    active: contact.active,
+    last_used_at: contact.last_used_at || null,
+  };
+}
+
 export default function Create() {
-  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(1);
   const [saving, setSaving] = useState(false);
   const [inviteCode, setInviteCode] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -95,6 +188,10 @@ export default function Create() {
     adminLivesInBuilding: true,   // unchecked = professional síndico (no unit)
     seedAmenities: true,
     amenities: AMENITY_PRESETS.slice(0, 4) as AmenityDraft[],
+    serviceContacts: [
+      blankServiceContact({ category: 'electrical', service_scope: 'Quadros, iluminação, tomadas e emergências elétricas.', emergency_available: true }),
+      blankServiceContact({ category: 'gym_equipment', service_scope: 'Fabricante, instalador ou manutenção dos equipamentos da academia.', notes: 'Preencha fabricante, instalador, garantia ou empresa que já conhece os aparelhos.' }),
+    ] as ServiceContactDraft[],
     requireApproval: true,
     votingModel: 'one_per_unit' as 'one_per_unit' | 'weighted_by_sqft',
   });
@@ -180,6 +277,18 @@ export default function Create() {
   function removeAmenity(idx: number) {
     setForm((f) => ({ ...f, amenities: f.amenities.filter((_, i) => i !== idx) }));
   }
+  function addServiceContact(preset?: Partial<ServiceContactDraft>) {
+    setForm((f) => ({ ...f, serviceContacts: [...f.serviceContacts, blankServiceContact(preset)] }));
+  }
+  function updateServiceContact(idx: number, patch: Partial<ServiceContactDraft>) {
+    setForm((f) => ({
+      ...f,
+      serviceContacts: f.serviceContacts.map((c, i) => (i === idx ? { ...c, ...patch } : c)),
+    }));
+  }
+  function removeServiceContact(idx: number) {
+    setForm((f) => ({ ...f, serviceContacts: f.serviceContacts.filter((_, i) => i !== idx) }));
+  }
 
   const totalUnits = form.blocks.reduce((sum, b) => sum + unitsInBlock(b), 0);
   const blocksValid = form.blocks.every(
@@ -202,6 +311,15 @@ export default function Create() {
       && a.slot_minutes <= (a.close_hour - a.open_hour) * 60
     ))
   );
+  const serviceContactsToSave = form.serviceContacts
+    .filter((c) => c.company_name.trim().length > 0);
+  const serviceContactsValid = serviceContactsToSave.every((c) => (
+    c.company_name.trim().length > 0
+    && serviceContactHasReachableDetail(c)
+    && (!c.email.trim() || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.email.trim()))
+    && (!c.website.trim() || /^https?:\/\//i.test(c.website.trim()))
+    && (!c.contract_url.trim() || /^https?:\/\//i.test(c.contract_url.trim()))
+  ));
 
   async function submit() {
     setSaving(true);
@@ -230,6 +348,7 @@ export default function Create() {
           slot_minutes: Math.max(15, Math.min(240, Math.round((a.slot_minutes || 60) / 15) * 15)),
           booking_window_days: Math.max(1, Math.min(365, a.booking_window_days || 14)),
         })) : undefined,
+        serviceContacts: serviceContactsToSave.map(normalizeServiceContact),
         requireApproval: form.requireApproval,
         votingModel: form.votingModel,
       };
@@ -242,11 +361,12 @@ export default function Create() {
         block_count: form.blocks.length,
         total_units: totalUnits,
         amenity_count: form.seedAmenities ? form.amenities.length : 0,
+        service_contact_count: serviceContactsToSave.length,
         voting_model: form.votingModel,
         admin_lives_in_building: form.adminLivesInBuilding,
       });
       setInviteCode(res.inviteCode);
-      setStep(4);
+      setStep(5);
       // Refresh our JWT-bound user (role is now board_admin).
       // Easiest path: force a full page reload on "Go to dashboard".
     } catch (err: any) {
@@ -300,29 +420,29 @@ export default function Create() {
       </nav>
 
       <main className="flex-1 flex items-center justify-center px-6 py-12">
-        <div className="w-full max-w-2xl animate-fade-up">
+        <div className="w-full max-w-3xl animate-fade-up">
           {/* Stepper */}
-          <div className="flex items-center gap-2 mb-8 text-xs">
-            {['Prédio', 'Estrutura', 'Preferências', 'Pronto'].map((label, i) => {
-              const n = (i + 1) as 1 | 2 | 3 | 4;
+          <div className="flex items-center gap-1 sm:gap-2 mb-8 text-xs min-w-0 overflow-hidden">
+            {['Prédio', 'Estrutura', 'Preferências', 'Operação', 'Pronto'].map((label, i) => {
+              const n = (i + 1) as 1 | 2 | 3 | 4 | 5;
               const active = step === n;
               const done = step > n;
               return (
-                <div key={label} className="flex items-center gap-2 flex-1">
+                <div key={label} className="flex items-center gap-1 sm:gap-2 flex-1 min-w-0">
                   <div
-                    className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-semibold
+                    className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-semibold shrink-0
                       ${done ? 'bg-sage-400 text-white' : active ? 'bg-dusk-400 text-cream-50' : 'bg-white/60 text-dusk-300 border border-white/60'}`}
                   >
                     {done ? '✓' : n}
                   </div>
-                  <div className={`text-xs font-medium ${active ? 'text-dusk-500' : 'text-dusk-300'}`}>{label}</div>
-                  {i < 3 && <div className={`flex-1 h-[1.5px] ${done ? 'bg-sage-400' : 'bg-white/70'}`} />}
+                  <div className={`hidden sm:block text-xs font-medium truncate ${active ? 'text-dusk-500' : 'text-dusk-300'}`}>{label}</div>
+                  {i < 4 && <div className={`flex-1 h-[1.5px] ${done ? 'bg-sage-400' : 'bg-white/70'}`} />}
                 </div>
               );
             })}
           </div>
 
-          <GlassCard variant="clay" className="p-8">
+          <GlassCard variant="clay" className="p-5 sm:p-8 overflow-hidden">
             {step === 1 && (
               <>
                 <h1 className="font-display text-3xl text-dusk-500 tracking-tight">Como o prédio se chama?</h1>
@@ -637,12 +757,157 @@ export default function Create() {
 
                 <div className="mt-8 flex justify-between">
                   <Button variant="ghost" onClick={() => setStep(2)} leftIcon={<ArrowLeft className="w-4 h-4" />}>Voltar</Button>
-                  <Button variant="primary" onClick={submit} loading={saving} disabled={!amenitiesValid} rightIcon={<Sparkles className="w-4 h-4" />}>Criar prédio</Button>
+                  <Button variant="primary" onClick={() => setStep(4)} disabled={!amenitiesValid} rightIcon={<ArrowRight className="w-4 h-4" />}>Continuar</Button>
                 </div>
               </>
             )}
 
-            {step === 4 && inviteCode && (
+            {step === 4 && (
+              <>
+                <h1 className="font-display text-3xl text-dusk-500 tracking-tight">Rede de operação</h1>
+                <p className="text-dusk-300 mt-2 text-sm">
+                  Registre os fornecedores que já conhecem o prédio: eletricista, hidráulica, elevador, academia, piscina, limpeza, segurança e outros contatos úteis.
+                </p>
+
+                <div className="mt-6 p-4 rounded-2xl bg-white/60 border border-white/70">
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <div>
+                      <div className="text-sm font-semibold text-dusk-500">Adicionar contato por tipo</div>
+                      <div className="text-xs text-dusk-300 mt-0.5">Use um modelo e preencha empresa, telefone, contrato e observações.</div>
+                    </div>
+                    <Badge tone="sage">{serviceContactsToSave.length} prontos para salvar</Badge>
+                  </div>
+                  <div className="mt-3 grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                    {SERVICE_PRESETS.map((preset) => (
+                      <button
+                        key={`${preset.category}-${preset.service_scope}`}
+                        type="button"
+                        onClick={() => addServiceContact(preset)}
+                        className="p-3 rounded-2xl bg-white/70 border border-white/80 text-left hover:bg-white transition"
+                      >
+                        <div className="flex items-center gap-2 text-sm font-semibold text-dusk-500">
+                          <Wrench className="w-4 h-4" /> {SERVICE_CATEGORIES.find((c) => c.value === preset.category)?.label}
+                        </div>
+                        <div className="text-[11px] text-dusk-300 mt-1 line-clamp-2">{preset.service_scope}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mt-4 space-y-3">
+                  {form.serviceContacts.map((contact, idx) => (
+                    <div key={idx} className="p-4 rounded-2xl bg-cream-50/70 border border-white/80">
+                      <div className="flex items-start gap-2">
+                        <div className="w-9 h-9 rounded-2xl bg-sage-200 text-sage-700 flex items-center justify-center shrink-0">
+                          <Phone className="w-4 h-4" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="grid md:grid-cols-2 gap-2">
+                            <label className="block text-[11px] text-dusk-300 font-medium">
+                              Tipo de serviço
+                              <select
+                                className="input mt-1"
+                                value={contact.category}
+                                onChange={(e) => updateServiceContact(idx, { category: e.target.value })}
+                              >
+                                {SERVICE_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                              </select>
+                            </label>
+                            <label className="block text-[11px] text-dusk-300 font-medium">
+                              Empresa / fornecedor
+                              <input
+                                className="input mt-1"
+                                value={contact.company_name}
+                                onChange={(e) => updateServiceContact(idx, { company_name: e.target.value })}
+                                maxLength={140}
+                                placeholder="ex: Fitness Pro, Elevadores Atlas"
+                              />
+                            </label>
+                            <label className="block text-[11px] text-dusk-300 font-medium">
+                              Pessoa de contato
+                              <input className="input mt-1" value={contact.contact_name} onChange={(e) => updateServiceContact(idx, { contact_name: e.target.value })} maxLength={120} />
+                            </label>
+                            <label className="block text-[11px] text-dusk-300 font-medium">
+                              Telefone
+                              <input className="input mt-1" value={contact.phone} onChange={(e) => updateServiceContact(idx, { phone: e.target.value })} maxLength={40} placeholder="+55 11 99999-0000" />
+                            </label>
+                            <label className="block text-[11px] text-dusk-300 font-medium">
+                              WhatsApp
+                              <input className="input mt-1" value={contact.whatsapp} onChange={(e) => updateServiceContact(idx, { whatsapp: e.target.value })} maxLength={40} placeholder="+55 11 99999-0000" />
+                            </label>
+                            <label className="block text-[11px] text-dusk-300 font-medium">
+                              Email
+                              <input className="input mt-1" type="email" value={contact.email} onChange={(e) => updateServiceContact(idx, { email: e.target.value })} maxLength={160} placeholder="contato@empresa.com" />
+                            </label>
+                            <label className="block text-[11px] text-dusk-300 font-medium">
+                              Site
+                              <input className="input mt-1" type="url" value={contact.website} onChange={(e) => updateServiceContact(idx, { website: e.target.value })} maxLength={2048} placeholder="https://..." />
+                            </label>
+                            <label className="block text-[11px] text-dusk-300 font-medium">
+                              Link do contrato / garantia
+                              <input className="input mt-1" type="url" value={contact.contract_url} onChange={(e) => updateServiceContact(idx, { contract_url: e.target.value })} maxLength={2048} placeholder="https://..." />
+                            </label>
+                            <label className="block text-[11px] text-dusk-300 font-medium md:col-span-2">
+                              Endereço
+                              <input className="input mt-1" value={contact.address} onChange={(e) => updateServiceContact(idx, { address: e.target.value })} maxLength={240} />
+                            </label>
+                            <label className="block text-[11px] text-dusk-300 font-medium md:col-span-2">
+                              O que essa empresa resolve
+                              <input className="input mt-1" value={contact.service_scope} onChange={(e) => updateServiceContact(idx, { service_scope: e.target.value })} maxLength={500} placeholder="ex: manutenção da esteira, instalação de aparelhos, emergência elétrica" />
+                            </label>
+                            <label className="block text-[11px] text-dusk-300 font-medium md:col-span-2">
+                              Observações importantes
+                              <textarea className="input mt-1 min-h-[72px]" value={contact.notes} onChange={(e) => updateServiceContact(idx, { notes: e.target.value })} maxLength={1200} placeholder="ex: horário de atendimento, SLA, quem chama, número do contrato, restrições de acesso" />
+                            </label>
+                          </div>
+                          <div className="mt-3 flex items-center gap-2 flex-wrap">
+                            <label className="inline-flex items-center gap-2 text-xs text-dusk-400 bg-white/60 border border-white/70 rounded-full px-3 py-1.5 cursor-pointer">
+                              <input type="checkbox" checked={contact.emergency_available} onChange={(e) => updateServiceContact(idx, { emergency_available: e.target.checked })} />
+                              Atende emergência
+                            </label>
+                            <label className="inline-flex items-center gap-2 text-xs text-dusk-400 bg-white/60 border border-white/70 rounded-full px-3 py-1.5 cursor-pointer">
+                              <input type="checkbox" checked={contact.preferred} onChange={(e) => updateServiceContact(idx, { preferred: e.target.checked })} />
+                              Fornecedor preferido
+                            </label>
+                            {contact.emergency_available && <Badge tone="warning"><ShieldCheck className="w-3 h-3" /> emergência</Badge>}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeServiceContact(idx)}
+                          className="p-2 text-dusk-300 hover:text-peach-600 transition"
+                          aria-label={`Remover contato ${idx + 1}`}
+                          title="Remover contato"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+
+                  <button
+                    type="button"
+                    onClick={() => addServiceContact()}
+                    className="w-full p-3 rounded-2xl border border-dashed border-dusk-200 text-sm text-dusk-400 hover:bg-white/40 hover:text-dusk-500 transition flex items-center justify-center gap-2"
+                  >
+                    <Plus className="w-4 h-4" /> Adicionar contato personalizado
+                  </button>
+                </div>
+
+                {!serviceContactsValid && (
+                  <div className="mt-4 p-3 rounded-2xl bg-peach-100/70 border border-peach-200 text-xs text-peach-700">
+                    Cada contato salvo precisa ter empresa e pelo menos uma forma de contato ou observação. Links devem começar com http:// ou https://.
+                  </div>
+                )}
+
+                <div className="mt-8 flex justify-between">
+                  <Button variant="ghost" onClick={() => setStep(3)} leftIcon={<ArrowLeft className="w-4 h-4" />}>Voltar</Button>
+                  <Button variant="primary" onClick={submit} loading={saving} disabled={!serviceContactsValid} rightIcon={<Sparkles className="w-4 h-4" />}>Criar prédio</Button>
+                </div>
+              </>
+            )}
+
+            {step === 5 && inviteCode && (
               <>
                 <div className="text-center">
                   <div className="w-14 h-14 rounded-2xl bg-sage-200 text-sage-700 flex items-center justify-center mx-auto">

@@ -30,6 +30,7 @@ import unitsRoutes from './routes/units';
 import conciergeRoutes from './routes/concierge';
 import financeRoutes from './routes/finance';
 import ticketsRoutes from './routes/tickets';
+import serviceContactsRoutes from './routes/service-contacts';
 import { processWhatsAppOutbox } from './lib/whatsapp';
 
 initSentry();
@@ -92,6 +93,7 @@ app.use('/api/units',         scoped, unitsRoutes);
 app.use('/api/concierge',     scoped, conciergeRoutes);
 app.use('/api/finance',       scoped, financeRoutes);
 app.use('/api/tickets',       scoped, ticketsRoutes);
+app.use('/api/service-contacts', scoped, serviceContactsRoutes);
 
 // 404
 app.use((req, res) => res.status(404).json({ success: false, error: 'not_found', path: req.path }));

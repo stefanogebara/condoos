@@ -62,6 +62,17 @@ test('Onboarding API: multi-block condo creates units across all towers', async 
         { name: 'Cobertura', floors: 1, unitsPerFloor: 2 },    // 2
       ],
       ownerUnitNumber: '801',
+      serviceContacts: [
+        {
+          category: 'gym_equipment',
+          company_name: 'E2E Fitness Install',
+          contact_name: 'Marina',
+          phone: '+55 11 90000-0001',
+          service_scope: 'Instalação e garantia dos equipamentos da academia',
+          notes: 'Chamar antes de trocar esteiras ou pesos',
+          preferred: true,
+        },
+      ],
     },
   });
   expect(created.ok(), `create failed: ${created.status()} ${await created.text()}`).toBeTruthy();
@@ -76,6 +87,11 @@ test('Onboarding API: multi-block condo creates units across all towers', async 
   const byNumber = new Set(info.units.map((u: any) => u.number));
   expect(byNumber.has('703')).toBeFalsy();
   expect(byNumber.has('801')).toBeTruthy();
+
+  const contacts = await request.get(`${apiURL}/service-contacts`, { headers });
+  expect(contacts.ok(), `service contacts failed: ${contacts.status()} ${await contacts.text()}`).toBeTruthy();
+  const serviceRows = (await contacts.json()).data as any[];
+  expect(serviceRows.some((c) => c.company_name === 'E2E Fitness Install' && c.category === 'gym_equipment')).toBeTruthy();
 });
 
 test('Onboarding API: no-unit admin can create a building and access scoped routes', async ({ request }) => {
@@ -144,8 +160,14 @@ test('Onboarding: create-building wizard renders invite code and dashboard route
   await ownerInput.fill('301');
   await page.getByRole('button', { name: /^Continuar$|^Continue$/i }).click();
 
-  // Step 3 — Preferences (defaults are fine) → submit
+  // Step 3 — Preferences (defaults are fine) → operation network
   await expect(page.getByRole('heading', { name: /Preferências|Preferences/i })).toBeVisible();
+  await page.getByRole('button', { name: /^Continuar$|^Continue$/i }).click();
+
+  // Step 4 — operational service network can be skipped or completed.
+  await expect(page.getByRole('heading', { name: /Rede de operação|Operations network/i })).toBeVisible();
+  await page.getByPlaceholder(/Fitness Pro|Elevadores Atlas/i).first().fill('E2E Gym Installer');
+  await page.getByPlaceholder(/\+55 11 99999-0000/i).first().fill('+55 11 90000-0002');
   await page.getByRole('button', { name: /Criar prédio|Create building/i }).click();
 
   // Step 4 — Success card with invite code + share buttons
