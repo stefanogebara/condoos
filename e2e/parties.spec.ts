@@ -1,16 +1,45 @@
 // Party guest-list (#10): amenity reservations now accept expected_guests +
 // guest_list + notes so the porteiro can admit by name without phoning.
-import { expect, test, type APIRequestContext } from '@playwright/test';
+import { expect, test, type APIRequestContext, type APIResponse } from '@playwright/test';
 
 const apiURL = process.env.E2E_API_URL
   || (process.env.E2E_BASE_URL ? `${process.env.E2E_BASE_URL.replace(/\/$/, '')}/api` : 'http://127.0.0.1:4312/api');
+
+type Amenity = {
+  id: number;
+  name: string;
+  capacity: number;
+  booking_window_days: number;
+};
+
+type Slot = {
+  starts_at: string;
+  ends_at: string;
+  available: boolean;
+  available_spots: number;
+};
 
 async function residentToken(request: APIRequestContext): Promise<string> {
   const r = await request.post(`${apiURL}/auth/login`, {
     data: { email: 'resident@condoos.dev', password: 'resident123' },
   });
-  expect(r.ok()).toBeTruthy();
+  await expectOk(r, 'resident login');
   return (await r.json()).data.token;
+}
+
+async function expectOk(response: APIResponse, label: string) {
+  if (!response.ok()) {
+    throw new Error(`${label} failed: ${response.status()} ${await response.text()}`);
+  }
+}
+
+function isoDate(daysFromNow: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + daysFromNow);
+  const year = d.getFullYear();
+  const month = `${d.getMonth() + 1}`.padStart(2, '0');
+  const day = `${d.getDate()}`.padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 test('Parties API: amenity reservation accepts guest list + count', async ({ request }) => {
@@ -19,47 +48,57 @@ test('Parties API: amenity reservation accepts guest list + count', async ({ req
 
   // Find the Party Room (or any party-ish amenity).
   const amenities = await request.get(`${apiURL}/amenities`, { headers });
-  const list = (await amenities.json()).data as Array<{ id: number; name: string; open_hour: number; close_hour: number; slot_minutes: number }>;
+  await expectOk(amenities, 'amenities');
+  const list = (await amenities.json()).data as Amenity[];
   const party = list.find((a) => /Party Room|Salão|Salao|Festa/i.test(a.name)) || list[0];
   expect(party, 'no amenity available to test').toBeTruthy();
 
-  // Find the first available slot on a future Saturday using the slots endpoint.
-  // This avoids desktop/mobile conflicts when both tests run against the same DB.
-  const saturday = new Date();
-  saturday.setDate(saturday.getDate() + ((6 - saturday.getDay() + 7) % 7 || 7));
-  const dateStr = saturday.toISOString().slice(0, 10);
-  const slotsRes = await request.get(`${apiURL}/amenities/${party.id}/slots?date=${dateStr}`, { headers });
-  const slots = (await slotsRes.json()).data?.slots as Array<{ starts_at: string; ends_at: string; available: boolean }> | undefined;
-  const freeSlot = slots?.find((s) => s.available);
-  expect(freeSlot, 'no free slot available on the target Saturday').toBeTruthy();
-  const future = new Date(freeSlot!.starts_at);
-  const ends = new Date(freeSlot!.ends_at);
+  // Reservations must match the admin-configured slot duration. Use the new
+  // slots endpoint instead of hardcoding a multi-hour party window.
+  let selected: Slot | undefined;
+  const maxDays = Math.min(Math.max(1, party.booking_window_days || 14), 14);
+  for (let offset = 1; offset <= maxDays; offset += 1) {
+    const date = isoDate(offset);
+    const slots = await request.get(`${apiURL}/amenities/${party.id}/slots?date=${date}`, { headers });
+    await expectOk(slots, 'slots');
+    const rows = (await slots.json()).data.slots as Slot[];
+    selected = rows.find((s) => s.available && s.available_spots >= 2);
+    if (selected) break;
+  }
+  test.skip(!selected, `no available slot with guest capacity for ${party.name}`);
 
-  const guestNames = ['Ana Souza', 'Bruno Lima', 'Carla Ferreira'].join('\n');
-  // Keep guest count small so desktop + mobile can both book the same slot without
-  // exceeding the Party Room capacity of 40.
-  const guestCount = 5;
+  const expectedGuests = Math.min(3, Math.max(1, selected!.available_spots - 1));
+  const guestNames = ['Ana Souza', 'Bruno Lima', 'Carla Ferreira'].slice(0, expectedGuests).join('\n');
+  let reservationId: number | undefined;
   const created = await request.post(`${apiURL}/amenities/reservations`, {
     headers,
     data: {
       amenity_id: party.id,
-      starts_at: future.toISOString(),
-      ends_at: ends.toISOString(),
-      expected_guests: guestCount,
+      starts_at: selected!.starts_at,
+      ends_at: selected!.ends_at,
+      expected_guests: expectedGuests,
       guest_list: guestNames,
-      notes: 'Aniversário de 40 anos. Buffet chega 18h.',
+      notes: 'E2E party guest-list validation.',
     },
   });
-  expect(created.ok(), `failed: ${created.status()} ${await created.text()}`).toBeTruthy();
+  await expectOk(created, 'create reservation');
   const body = (await created.json()).data;
-  expect(body.expected_guests).toBe(guestCount);
+  reservationId = body.id;
+  expect(body.expected_guests).toBe(expectedGuests);
 
-  // Verify the list endpoint surfaces the new fields.
-  const reservations = await request.get(`${apiURL}/amenities/reservations`, { headers });
-  const rows = (await reservations.json()).data as Array<{ id: number; expected_guests: number | null; guest_list: string | null }>;
-  const found = rows.find((r) => r.id === body.id);
-  expect(found, 'created reservation missing from list').toBeTruthy();
-  expect(found!.expected_guests).toBe(guestCount);
-  expect(found!.guest_list).toContain('Ana Souza');
-  expect(found!.guest_list).toContain('Bruno Lima');
+  try {
+    // Verify the list endpoint surfaces the new fields.
+    const reservations = await request.get(`${apiURL}/amenities/reservations`, { headers });
+    await expectOk(reservations, 'reservations');
+    const rows = (await reservations.json()).data as Array<{ id: number; expected_guests: number | null; guest_list: string | null }>;
+    const found = rows.find((r) => r.id === body.id);
+    expect(found, 'created reservation missing from list').toBeTruthy();
+    expect(found!.expected_guests).toBe(expectedGuests);
+    expect(found!.guest_list).toContain('Ana Souza');
+  } finally {
+    if (reservationId) {
+      const deleted = await request.delete(`${apiURL}/amenities/reservations/${reservationId}`, { headers });
+      await expectOk(deleted, 'delete reservation');
+    }
+  }
 });

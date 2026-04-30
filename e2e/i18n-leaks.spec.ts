@@ -189,6 +189,12 @@ const EN_ONLY_MARKERS: RegExp[] = [
   /\bAI decision\b/u,
 ];
 
+const GENERATED_CONTENT_EXCLUDES: RegExp[] = [
+  // The leak scanner verifies product UI chrome. Other E2E flows can leave
+  // user/generated announcements in English, which should not fail i18n chrome.
+  /\bE2E decision\b/i,
+];
+
 function findEnLeaks(text: string): Leak[] {
   const seen = new Set<string>();
   const out: Leak[] = [];
@@ -198,6 +204,7 @@ function findEnLeaks(text: string): Leak[] {
       const word = m[0];
       const idx = m.index ?? 0;
       const context = text.slice(Math.max(0, idx - 30), Math.min(text.length, idx + word.length + 30)).replace(/\s+/g, ' ').trim();
+      if (GENERATED_CONTENT_EXCLUDES.some((exclude) => exclude.test(context))) continue;
       const key = `${word}::${context}`;
       if (seen.has(key)) continue;
       seen.add(key);

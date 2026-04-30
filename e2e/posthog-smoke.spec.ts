@@ -3,6 +3,11 @@
 // and asserts our funnel events are in the captured payloads.
 import { expect, test } from '@playwright/test';
 
+test.skip(
+  process.env.E2E_POSTHOG_LIVE !== '1',
+  'Set E2E_POSTHOG_LIVE=1 to verify live PostHog ingestion against the deployed site.',
+);
+
 test('PostHog: landing_view fires from the live deploy', async ({ page }) => {
   test.setTimeout(60_000);
   const captures: Array<{ url: string; body: string }> = [];

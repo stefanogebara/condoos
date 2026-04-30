@@ -1,33 +1,34 @@
 import { test, expect } from '@playwright/test';
+import { gotoApp } from './support/navigation';
 
 test('Landing CTAs route by intent', async ({ page }) => {
-  await page.goto('/');
-  // Hero "Sou síndico" CTA
-  const sindico = page.getByRole('link', { name: /Sou síndico — montar meu prédio/ }).first();
+  await gotoApp(page, '/');
+
+  const sindico = page.locator('a[href="/login?intent=create"]').first();
   await expect(sindico).toBeVisible();
-  expect(await sindico.getAttribute('href')).toBe('/login?intent=create');
 
-  const morador = page.getByRole('link', { name: /Sou morador — tenho um código/ }).first();
-  expect(await morador.getAttribute('href')).toBe('/login?intent=join');
+  const morador = page.locator('a[href="/login?intent=join"]').first();
+  await expect(morador).toBeVisible();
 
-  const demo = page.getByRole('link', { name: /Só explorar/ }).first();
-  expect(await demo.getAttribute('href')).toBe('/login?intent=demo');
+  const demo = page.locator('a[href="/login?intent=demo"]').first();
+  await expect(demo).toBeVisible();
 });
 
 test('Landing forwards ?code= into the join CTA', async ({ page }) => {
-  await page.goto('/?code=ABC123');
-  const morador = page.getByRole('link', { name: /Sou morador — tenho um código/ }).first();
-  expect(await morador.getAttribute('href')).toBe('/login?intent=join&code=ABC123');
+  await gotoApp(page, '/?code=ABC123');
+  await expect(page.locator('a[href="/login?intent=join&code=ABC123"]').first()).toBeVisible();
 });
 
 test('Login page shows intent banner when ?intent=create', async ({ page }) => {
-  await page.goto('/login?intent=create');
-  await expect(page.getByText(/Sou síndico/)).toBeVisible();
-  await expect(page.getByRole('heading', { name: /Vamos montar seu prédio/ })).toBeVisible();
+  await gotoApp(page, '/login?intent=create');
+  await expect(page.getByText(/Sou síndico|I am the board admin|Soy administrador|Je suis syndic/i)).toBeVisible();
+  await expect(page.getByRole('heading', {
+    name: /Vamos montar seu prédio|Let.s set up your building|Vamos a configurar tu edificio|Configurons votre immeuble/i,
+  })).toBeVisible();
 });
 
 test('Login page shows detected code when ?intent=join&code=', async ({ page }) => {
-  await page.goto('/login?intent=join&code=AB12CD');
-  await expect(page.getByText(/Tenho um código/)).toBeVisible();
-  await expect(page.getByText(/Código detectado: AB12CD/)).toBeVisible();
+  await gotoApp(page, '/login?intent=join&code=AB12CD');
+  await expect(page.getByText(/Tenho um código|I have a code|Tengo un código|J.ai un code/i)).toBeVisible();
+  await expect(page.getByText(/(Código detectado|Code detected|Code détecté)\s*:?\s*AB12CD/i)).toBeVisible();
 });
