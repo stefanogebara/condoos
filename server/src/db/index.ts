@@ -284,6 +284,36 @@ export function initSchema() {
     CREATE INDEX IF NOT EXISTS idx_expenses_condo_category
       ON expenses(condominium_id, category, spent_at);
   `);
+  // Operational service network — admin-maintained directory of known vendors,
+  // installers, maintenance providers, emergency contacts, and contracts.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS service_contacts (
+      id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+      condominium_id      INTEGER NOT NULL REFERENCES condominiums(id) ON DELETE CASCADE,
+      category            TEXT NOT NULL,
+      company_name        TEXT NOT NULL,
+      contact_name        TEXT,
+      phone               TEXT,
+      whatsapp            TEXT,
+      email               TEXT,
+      website             TEXT,
+      address             TEXT,
+      service_scope       TEXT,
+      notes               TEXT,
+      contract_url        TEXT,
+      emergency_available INTEGER NOT NULL DEFAULT 0,
+      preferred           INTEGER NOT NULL DEFAULT 0,
+      active              INTEGER NOT NULL DEFAULT 1,
+      last_used_at        TEXT,
+      created_by_user_id  INTEGER REFERENCES users(id),
+      created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_service_contacts_condo_active_category
+      ON service_contacts(condominium_id, active, category, company_name);
+    CREATE INDEX IF NOT EXISTS idx_service_contacts_condo_company
+      ON service_contacts(condominium_id, company_name);
+  `);
   // WhatsApp notifications — phone + opt-in on users
   addColumnIfMissing('users',        'phone',              `TEXT`);
   addColumnIfMissing('users',        'whatsapp_opt_in',    `INTEGER NOT NULL DEFAULT 0`);

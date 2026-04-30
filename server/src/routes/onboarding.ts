@@ -10,6 +10,7 @@ import { requireAuth, requireActiveMembership, requireRole, getActiveCondoId, Au
 import { ok, fail, asyncHandler } from '../lib/respond';
 import { createRateLimit } from '../lib/rate-limit';
 import { audit } from '../lib/audit';
+import { normalizeServiceContact, serviceContactSchema } from '../lib/service-contacts';
 
 const router = Router();
 const lookupRateLimit = createRateLimit({ keyPrefix: 'onboarding_lookup', windowMs: 60_000, max: 60 });
@@ -92,6 +93,7 @@ const createSchema = z.object({
   ownerUnitNumber: z.string().max(20).optional(),
   seedAmenities: z.boolean().default(true),
   amenities: z.array(amenitySchema).max(30).optional(),
+  serviceContacts: z.array(serviceContactSchema).max(40).optional(),
   requireApproval: z.boolean().default(true),
   votingModel: z.enum(['one_per_unit', 'weighted_by_sqft']).default('one_per_unit'),
 }).superRefine((body, ctx) => {
@@ -197,6 +199,40 @@ router.post('/create-building', onboardingWriteRateLimit, requireAuth, asyncHand
       }
     }
 
+    // 7. Seed operational service network: electricians, installers,
+    // maintenance partners, cleaning/security providers, etc.
+    if (body.serviceContacts?.length) {
+      const insertServiceContact = db.prepare(
+        `INSERT INTO service_contacts (
+          condominium_id, category, company_name, contact_name, phone, whatsapp, email,
+          website, address, service_scope, notes, contract_url, emergency_available,
+          preferred, active, last_used_at, created_by_user_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      );
+      for (const raw of body.serviceContacts) {
+        const c = normalizeServiceContact(raw);
+        insertServiceContact.run(
+          condoId,
+          c.category,
+          c.company_name,
+          c.contact_name,
+          c.phone,
+          c.whatsapp,
+          c.email,
+          c.website,
+          c.address,
+          c.service_scope,
+          c.notes,
+          c.contract_url,
+          c.emergency_available ? 1 : 0,
+          c.preferred ? 1 : 0,
+          c.active ? 1 : 0,
+          c.last_used_at,
+          u.id,
+        );
+      }
+    }
+
     return { condoId, buildingId: buildingIds[0], buildingIds, inviteCode };
   });
 
@@ -206,7 +242,13 @@ router.post('/create-building', onboardingWriteRateLimit, requireAuth, asyncHand
     target_type: 'condominium',
     target_id: out.condoId,
     condominium_id: out.condoId,
-    metadata: { building_id: out.buildingId, building_ids: out.buildingIds, invite_code: out.inviteCode, amenities: body.amenities?.length || (body.seedAmenities ? defaultAmenities.length : 0) },
+    metadata: {
+      building_id: out.buildingId,
+      building_ids: out.buildingIds,
+      invite_code: out.inviteCode,
+      amenities: body.amenities?.length || (body.seedAmenities ? defaultAmenities.length : 0),
+      service_contacts: body.serviceContacts?.length || 0,
+    },
   });
   return ok(res, out);
 }));
