@@ -275,7 +275,7 @@ test('vote-closer: expired voting window transitions status within 80s', async (
   // Create a proposal to isolate the test.
   const createRes = await request.post(`${apiURL}/proposals`, {
     headers,
-    data: { title: `Vote-closer canary ${Date.now()}`, description: 'Canary for the auto-close poller.', category: 'maintenance' },
+    data: { title: `Vote-closer canary ${Date.now()}`, description: 'Canary for the auto-close poller.', category: 'maintenance', estimated_cost: 1000 },
   });
   expect(createRes.ok()).toBeTruthy();
   const proposalId = (await createRes.json()).data.id;

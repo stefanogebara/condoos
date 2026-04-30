@@ -1,6 +1,6 @@
 // Party guest-list (#10): amenity reservations now accept expected_guests +
 // guest_list + notes so the porteiro can admit by name without phoning.
-import { expect, test, type APIRequestContext } from '@playwright/test';
+import { expect, test, type APIRequestContext, type APIResponse } from '@playwright/test';
 
 const apiURL = process.env.E2E_API_URL
   || (process.env.E2E_BASE_URL ? `${process.env.E2E_BASE_URL.replace(/\/$/, '')}/api` : 'http://127.0.0.1:4312/api');
@@ -27,7 +27,7 @@ async function residentToken(request: APIRequestContext): Promise<string> {
   return (await r.json()).data.token;
 }
 
-async function expectOk(response: Awaited<ReturnType<APIRequestContext['get']>>, label: string) {
+async function expectOk(response: APIResponse, label: string) {
   if (!response.ok()) {
     throw new Error(`${label} failed: ${response.status()} ${await response.text()}`);
   }
@@ -36,7 +36,10 @@ async function expectOk(response: Awaited<ReturnType<APIRequestContext['get']>>,
 function isoDate(daysFromNow: number): string {
   const d = new Date();
   d.setDate(d.getDate() + daysFromNow);
-  return d.toISOString().slice(0, 10);
+  const year = d.getFullYear();
+  const month = `${d.getMonth() + 1}`.padStart(2, '0');
+  const day = `${d.getDate()}`.padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 test('Parties API: amenity reservation accepts guest list + count', async ({ request }) => {
@@ -94,7 +97,8 @@ test('Parties API: amenity reservation accepts guest list + count', async ({ req
     expect(found!.guest_list).toContain('Ana Souza');
   } finally {
     if (reservationId) {
-      await request.delete(`${apiURL}/amenities/reservations/${reservationId}`, { headers });
+      const deleted = await request.delete(`${apiURL}/amenities/reservations/${reservationId}`, { headers });
+      await expectOk(deleted, 'delete reservation');
     }
   }
 });

@@ -51,7 +51,7 @@ test('Proposals API: opening voting without estimated_cost is blocked with 409',
     headers,
     data: {
       title: `E2E cost-gate-ok ${Date.now()}`,
-      description: 'Proposta com custo definido — transição deve passar.',
+      description: 'Proposal with a fixed cost — voting transition expected.',
       category: 'maintenance',
       estimated_cost: 12000,
     },

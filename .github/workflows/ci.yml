@@ -23,3 +23,63 @@ jobs:
       - run: npm test
       - run: npx tsc --noEmit
       - run: npm run seed
+
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Matches what start:e2e bakes into the local server. The dev-register
+      # endpoint is gated by this; specs read it from process.env on both
+      # the server side (to enable the route) and the test side (to send the
+      # x-e2e-secret header).
+      E2E_REGISTER_SECRET: local-e2e-secret-32chars-min
+      # Playwright on Linux CI uses chromium; channel='chrome' would require
+      # a Google Chrome install. Force the bundled browser.
+      PLAYWRIGHT_CHANNEL: chromium
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            server/package-lock.json
+            client-app/package-lock.json
+
+      # Three-package monorepo — install each in parallel where possible.
+      - run: npm ci
+      - run: npm --prefix server ci
+      - run: npm --prefix client-app ci
+
+      # Cache the Playwright browser bundle so reruns don't re-download
+      # ~150 MB every push.
+      - uses: actions/cache@v4
+        id: pw-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: ms-playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+
+      # Smoke check that the toolchain compiles before paying the E2E cost.
+      - run: npm --prefix client-app run build
+        env:
+          # Skip CRA's eslint-on-build to keep the failure surface focused on
+          # type / runtime errors. ESLint runs on its own elsewhere.
+          DISABLE_ESLINT_PLUGIN: 'true'
+          CI: ''
+
+      # Playwright's webServer config auto-starts the api+web stack when
+      # E2E_BASE_URL is unset. Run the full suite. Cluster spec self-skips
+      # without E2E_HAS_LLM since CI doesn't ship an OpenRouter key.
+      - run: npx playwright test --project=desktop
+
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 7

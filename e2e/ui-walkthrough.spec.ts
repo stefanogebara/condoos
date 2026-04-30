@@ -19,6 +19,16 @@ const apiURL = process.env.E2E_API_URL
 type Session = { token: string; user: any };
 const sessionCache = new Map<string, Session>();
 
+async function openDrawerIfMobile(page: Page) {
+  const vp = page.viewportSize();
+  if (!vp || vp.width >= 1024) return;
+  const hamburger = page.getByRole('button', { name: /Abrir menu/i });
+  if (await hamburger.isVisible({ timeout: 1000 }).catch(() => false)) {
+    await hamburger.click();
+    await page.getByRole('navigation').waitFor({ state: 'visible', timeout: 5000 });
+  }
+}
+
 async function loginApi(request: APIRequestContext, email: string, password: string): Promise<Session> {
   const cached = sessionCache.get(email);
   if (cached) return cached;
@@ -49,7 +59,9 @@ async function seedSession(page: Page, request: APIRequestContext, kind: 'admin'
 async function clickShellLink(page: Page, href: string) {
   const link = page.locator(`a[href="${href}"]`).first();
   const isMobile = (page.viewportSize()?.width || 1280) < 1024;
-  if (isMobile || !(await link.isVisible().catch(() => false))) {
+  if (isMobile) {
+    await openDrawerIfMobile(page);
+  } else if (!(await link.isVisible().catch(() => false))) {
     await page.getByRole('button', { name: /Abrir menu|Open menu|Abrir menú|Ouvrir le menu/i }).click();
   }
   await expect(link).toBeVisible();

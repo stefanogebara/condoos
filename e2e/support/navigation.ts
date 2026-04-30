@@ -8,7 +8,7 @@ export async function assertNotVercelCheckpoint(page: Page) {
   if (VERCEL_CHECKPOINT.test(body)) {
     throw new Error(
       'Vercel Deployment Protection blocked this browser run. Set VERCEL_AUTOMATION_BYPASS_SECRET ' +
-      '(or VERCEL_PROTECTION_BYPASS) so Playwright sends x-vercel-protection-bypass.'
+      '(or VERCEL_PROTECTION_BYPASS / VERCEL_BYPASS_SECRET) so Playwright sends x-vercel-protection-bypass.'
     );
   }
 }

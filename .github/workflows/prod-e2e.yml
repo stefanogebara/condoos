@@ -34,6 +34,14 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chrome
 
+      - name: Check VERCEL_AUTOMATION_BYPASS_SECRET
+        if: ${{ inputs.suite != 'api' }}
+        run: |
+          if [ -z "$VERCEL_AUTOMATION_BYPASS_SECRET" ]; then
+            echo "VERCEL_AUTOMATION_BYPASS_SECRET is required for protected Vercel browser suites."
+            exit 1
+          fi
+
       - name: Run production API regression
         if: ${{ inputs.suite == 'api' }}
         run: npm run test:e2e:prod:api

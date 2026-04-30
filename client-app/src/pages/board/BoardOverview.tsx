@@ -35,7 +35,7 @@ export default function BoardOverview() {
     Promise.allSettled(loads).then((results) => {
       if (!alive) return;
       setLoadError(results.some((r) => r.status === 'rejected')
-        ? 'Não foi possível carregar parte dos dados. Atualize a página ou entre novamente.'
+        ? 'Alguns dados do painel não puderam ser carregados. Atualize ou entre novamente se persistir.'
         : null);
     });
     return () => { alive = false; };
@@ -53,8 +53,8 @@ export default function BoardOverview() {
   return (
     <>
       <PageHeader
-        title={`Bem-vindo de volta, ${user?.first_name}.`}
-        subtitle={condoName ? `Tudo que precisa da sua atenção no ${condoName}.` : 'Tudo que precisa da sua atenção.'}
+        title={<>Bem-vindo de volta, {user?.first_name}.</>}
+        subtitle={condoName ? <>Tudo que precisa da sua atenção no {condoName}.</> : 'Tudo que precisa da sua atenção.'}
       />
       {loadError && (
         <GlassCard variant="clay-peach" className="p-4 mb-6 text-sm text-dusk-500">
