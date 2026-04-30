@@ -36,7 +36,7 @@ export default function Overview() {
     Promise.allSettled(loads).then((results) => {
       if (!alive) return;
       setLoadError(results.some((r) => r.status === 'rejected')
-        ? 'Some dashboard data could not be loaded. Refresh or sign in again if it persists.'
+        ? 'Alguns dados do painel não puderam ser carregados. Atualize ou entre novamente se persistir.'
         : null);
     });
     return () => { alive = false; };
@@ -47,13 +47,13 @@ export default function Overview() {
   const openProposals = proposals.filter((p) => p.status === 'voting' || p.status === 'discussion');
 
   const hour = new Date().getHours();
-  const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+  const greeting = hour < 12 ? 'Bom dia' : hour < 18 ? 'Boa tarde' : 'Boa noite';
 
   return (
     <>
       <PageHeader
-        title={`${greeting}, ${user?.first_name}.`}
-        subtitle="Here's what's happening in your building today."
+        title={<>{greeting}, {user?.first_name}.</>}
+        subtitle="Aqui está o que está rolando no seu prédio hoje."
       />
       {loadError && (
         <GlassCard variant="clay-peach" className="p-4 mb-6 text-sm text-dusk-500">
@@ -63,10 +63,10 @@ export default function Overview() {
 
       {/* Top stats */}
       <div className="grid md:grid-cols-4 gap-4 mb-8">
-        <StatCard icon={Package}  color="sage"  label="Packages waiting"     value={waiting.length}          to="/app/packages" />
-        <StatCard icon={DoorOpen} color="peach" label="Upcoming visitors"    value={pendingVisitors.length}  to="/app/visitors" />
-        <StatCard icon={Waves}    color="sage"  label="Your reservations"    value={reservations.filter((r) => new Date(r.starts_at) > new Date()).length} to="/app/amenities" />
-        <StatCard icon={Vote}     color="peach" label="Open proposals"       value={openProposals.length}    to="/app/proposals" />
+        <StatCard icon={Package}  color="sage"  label="Encomendas aguardando" value={waiting.length}          to="/app/packages" />
+        <StatCard icon={DoorOpen} color="peach" label="Próximas visitas"      value={pendingVisitors.length}  to="/app/visitors" />
+        <StatCard icon={Waves}    color="sage"  label="Suas reservas"         value={reservations.filter((r) => new Date(r.starts_at) > new Date()).length} to="/app/amenities" />
+        <StatCard icon={Vote}     color="peach" label="Propostas abertas"     value={openProposals.length}    to="/app/proposals" />
       </div>
 
       {/* Hero clay building panel */}
@@ -90,7 +90,7 @@ export default function Overview() {
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Latest announcements */}
         <div className="lg:col-span-2 space-y-4">
-          <SectionHeader title="Latest announcements" link="/app/announcements" />
+          <SectionHeader title="Últimos comunicados" link="/app/announcements" />
           {anns.slice(0, 3).map((a) => (
             <GlassCard key={a.id} className="p-5">
               <div className="flex items-start gap-4">
@@ -112,7 +112,7 @@ export default function Overview() {
 
         {/* Hot proposals */}
         <div className="space-y-4">
-          <SectionHeader title="In the vote" link="/app/proposals" />
+          <SectionHeader title="Em votação" link="/app/proposals" />
           {openProposals.slice(0, 3).map((p) => (
             <Link key={p.id} to={`/app/proposals/${p.id}`}>
               <GlassCard variant="clay" hover className="p-5">
@@ -158,7 +158,7 @@ function SectionHeader({ title, link }: { title: string; link: string }) {
     <div className="flex items-center justify-between">
       <h2 className="font-display text-xl text-dusk-500">{title}</h2>
       <Link to={link} className="text-xs text-dusk-300 hover:text-dusk-500 inline-flex items-center gap-1">
-        View all <ArrowRight className="w-3 h-3" />
+        Ver tudo <ArrowRight className="w-3 h-3" />
       </Link>
     </div>
   );

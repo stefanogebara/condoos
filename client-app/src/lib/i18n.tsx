@@ -473,6 +473,110 @@ const phrases: Copy[] = [
   c('Desativado', 'Disabled', 'Desactivado', 'Désactivé'),
   c('Salvar preferências', 'Save preferences', 'Guardar preferencias', 'Enregistrer'),
 
+  // Navigation — new pages
+  c('Transparência', 'Transparency', 'Transparencia', 'Transparence'),
+  c('Edifício', 'Building', 'Edificio', 'Immeuble'),
+  c('Finanças', 'Finances', 'Finanzas', 'Finances'),
+  c('Porteiro', 'Concierge', 'Portero', 'Portier'),
+
+  // Resident overview promo card
+  c('Seu prédio, num panorama.', 'Your building, at a glance.', 'Tu edificio, de un vistazo.', 'Votre immeuble, en un coup d\'œil.'),
+  c('Um toque para retirar uma encomenda, aprovar uma visita, reservar a piscina ou opinar numa proposta.', 'One tap to pick up a package, approve a visitor, book the pool, or weigh in on a proposal.', 'Un toque para retirar un paquete, aprobar una visita, reservar la piscina u opinar en una propuesta.', 'Un toucher pour retirer un colis, approuver un visiteur, réserver la piscine ou voter sur une proposition.'),
+  c('Sugerir algo', 'Suggest something', 'Sugerir algo', 'Suggérer quelque chose'),
+  c('Reservar área comum', 'Book a common area', 'Reservar área común', 'Réserver un espace commun'),
+
+  // Visitors — new features (tabs, pre-approve, status badges)
+  c('Avise sobre visitas, entregas ou serviços. A portaria recebe na hora — e você pode pré-aprovar quem vem mais tarde.', 'Notify about visits, deliveries, or services. The front desk gets it immediately — and you can pre-approve future arrivals.', 'Avisa sobre visitas, entregas o servicios. Portería lo recibe al instante — y puedes preaprobar llegadas futuras.', 'Prévenez pour les visiteurs, livraisons ou services. La conciergerie le reçoit immédiatement — et vous pouvez pré-approuver les arrivées futures.'),
+  c('Próximas', 'Upcoming', 'Próximas', 'À venir'),
+  c('Histórico', 'History', 'Historial', 'Historique'),
+  c('Quando chega', 'When they arrive', 'Cuándo llega', 'Quand arrive-t-il'),
+  c('Pode marcar pra daqui a horas, dias ou semanas — a portaria fica avisada.', 'You can schedule hours, days, or weeks ahead — the front desk is notified.', 'Puedes marcarlo con horas, días o semanas de anticipación — portería queda avisada.', 'Vous pouvez planifier des heures, jours ou semaines à l\'avance — la conciergerie est notifiée.'),
+  c('Pré-aprovar a entrada', 'Pre-approve entry', 'Pre-autorizar entrada', 'Pré-approuver l\'entrée'),
+  c('Quando o visitante chegar, a portaria já tem liberação — sem precisar te ligar.', 'When the visitor arrives, the front desk already has clearance — no need to call.', 'Cuando llegue el visitante, portería ya tiene autorización — sin necesidad de llamar.', 'Quand le visiteur arrive, la conciergerie a déjà l\'autorisation — pas besoin d\'appeler.'),
+  c('Pré-aprovar visita', 'Pre-approve visit', 'Pre-autorizar visita', 'Pré-approuver la visite'),
+  c('pendente', 'pending', 'pendiente', 'en attente'),
+  c('aprovado', 'approved', 'aprobado', 'approuvé'),
+  c('negado', 'denied', 'rechazado', 'refusé'),
+  c('chegou', 'arrived', 'llegó', 'arrivé'),
+  c('concluído', 'completed', 'completado', 'terminé'),
+  c('Previsto para ', 'Scheduled for ', 'Previsto para ', 'Prévu pour '),
+  c('Esperado em ', 'Expected on ', 'Esperado el ', 'Prévu le '),
+
+  // Amenities — party room / guest list
+  c('Vai ter festa? Avise a portaria.', 'Having a party? Let the front desk know.', '¿Habrá fiesta? Avisa a portería.', 'Il y a une fête ? Prévenez la conciergerie.'),
+  c('Quantos convidados e quem são. O porteiro libera por nome — sem ligação na hora.', 'How many guests and who they are. The doorman clears by name — no call needed.', 'Cuántos invitados y quiénes son. Portería los autoriza por nombre — sin llamada.', 'Combien d\'invités et qui ils sont. La conciergerie autorise par nom — sans appel.'),
+  c('Quantos convidados (estimado)', 'How many guests (estimated)', 'Cantidad de invitados (estimado)', 'Nombre d\'invités (estimé)'),
+  c('Observações para a portaria (opcional)', 'Notes for the front desk (optional)', 'Notas para portería (opcional)', 'Notes pour la conciergerie (facultatif)'),
+  c('Lista de convidados (um nome por linha)', 'Guest list (one name per line)', 'Lista de invitados (un nombre por línea)', 'Liste d\'invités (un nom par ligne)'),
+  c('A portaria recebe a lista no dia. Pode editar até a hora da festa.', 'The front desk gets the list on the day. You can edit until party time.', 'Portería recibe la lista el día de la fiesta. Puedes editar hasta la hora.', 'La conciergerie reçoit la liste le jour même. Vous pouvez modifier jusqu\'à l\'heure.'),
+  c('Reservar:', 'Reserve:', 'Reservar:', 'Réserver :'),
+
+  // Transparência / Finanças — shared strings
+  c('Transparência', 'Transparency', 'Transparencia', 'Transparence'),
+  c('Tudo que o condomínio gastou nos últimos 12 meses. Cada lançamento traz fornecedor, valor e — quando disponível — o recibo.', 'Everything the condo has spent in the last 12 months. Each entry shows the vendor, amount, and — when available — the receipt.', 'Todo lo que el condominio ha gastado en los últimos 12 meses. Cada entrada muestra el proveedor, monto y — cuando esté disponible — el recibo.', 'Tout ce que la copropriété a dépensé ces 12 derniers mois. Chaque entrée indique le fournisseur, le montant et — si disponible — le reçu.'),
+  c('Para onde está indo o dinheiro', 'Where the money is going', 'A dónde va el dinero', 'Où va l\'argent'),
+  c('Sem despesas registradas ainda.', 'No expenses recorded yet.', 'Aún no hay gastos registrados.', 'Aucune dépense enregistrée.'),
+  c('Lançamentos', 'Expenses', 'Gastos', 'Dépenses'),
+  c('Resumo por categoria', 'Summary by category', 'Resumen por categoría', 'Résumé par catégorie'),
+  c('Nova despesa', 'New expense', 'Nuevo gasto', 'Nouvelle dépense'),
+  c('Manutenção', 'Maintenance', 'Mantenimiento', 'Maintenance'),
+  c('Segurança / portaria', 'Security / front desk', 'Seguridad / portería', 'Sécurité / conciergerie'),
+  c('Contas (luz, água, gás)', 'Utilities (electricity, water, gas)', 'Servicios (luz, agua, gas)', 'Charges (électricité, eau, gaz)'),
+  c('Limpeza', 'Cleaning', 'Limpieza', 'Nettoyage'),
+  c('Seguro', 'Insurance', 'Seguro', 'Assurance'),
+  c('Funcionários', 'Staff', 'Personal', 'Personnel'),
+  c('Fundo de reserva', 'Reserve fund', 'Fondo de reserva', 'Fonds de réserve'),
+  c('Onde o condomínio gasta. Cada lançamento aparece para os moradores no painel de transparência — coloque o link do recibo sempre que possível.', 'Where the condo spends. Every entry appears on the resident transparency dashboard — always attach the receipt link when possible.', 'Dónde gasta el condominio. Cada entrada aparece en el panel de transparencia de los residentes — adjunta siempre el enlace del recibo.', 'Où la copropriété dépense. Chaque entrée apparaît dans le tableau de transparence des résidents — joignez toujours le lien du reçu.'),
+
+  // Board overview — stat cards + promo banners
+  c('Sugestões novas', 'New suggestions', 'Sugerencias nuevas', 'Nouvelles suggestions'),
+  c('Propostas ativas', 'Active proposals', 'Propuestas activas', 'Propositions actives'),
+  c('Reuniões agendadas', 'Scheduled meetings', 'Reuniones programadas', 'Réunions planifiées'),
+  c('Caixa de IA', 'AI inbox', 'Bandeja de IA', 'Boîte IA'),
+  c('sugestões de moradores esperando', 'resident suggestions waiting', 'sugerencias de residentes esperando', 'suggestions de résidents en attente'),
+  c('Agrupe, transforme em proposta ou descarte. Um clique cada.', 'Cluster, promote to a proposal, or dismiss. One click each.', 'Agrupa, transforma en propuesta o descarta. Un clic cada una.', 'Regroupez, transformez en proposition ou ignorez. Un clic chacune.'),
+  c('Abrir caixa', 'Open inbox', 'Abrir bandeja', 'Ouvrir la boîte'),
+  c('Reunião pronta?', 'Meeting ready?', '¿Reunión lista?', 'Réunion prête ?'),
+  c('Cole as anotações. Receba o resumo, tarefas e o comunicado pros moradores.', 'Paste the notes. Get the summary, tasks, and resident announcement.', 'Pega las notas. Obtén el resumen, tareas y el comunicado para residentes.', 'Collez les notes. Obtenez le résumé, tâches et l\'annonce pour les résidents.'),
+  c('Ver reuniões', 'See meetings', 'Ver reuniones', 'Voir les réunions'),
+
+  // Board proposals — list + detail
+  c('Todas as decisões em andamento. Abrir votação, discutir, resumir, encerrar.', 'All active decisions. Open voting, discuss, summarize, close.', 'Todas las decisiones activas. Abrir votación, discutir, resumir, cerrar.', 'Toutes les décisions actives. Ouvrir un vote, discuter, résumer, clore.'),
+  c('Em votação', 'In voting', 'En votación', 'En vote'),
+  c('Em discussão', 'In discussion', 'En discusión', 'En discussion'),
+  c('Nova proposta', 'New proposal', 'Nueva propuesta', 'Nouvelle proposition'),
+  c('Análise pré-votação', 'Pre-vote analysis', 'Análisis previo a la votación', 'Analyse pré-vote'),
+  c('Custo não definido', 'Cost not defined', 'Costo no definido', 'Coût non défini'),
+  c('Analisar com IA', 'Analyze with AI', 'Analizar con IA', 'Analyser avec IA'),
+  c('Re-analisar com IA', 'Re-analyze with AI', 'Re-analizar con IA', 'Ré-analyser avec IA'),
+  c('Os moradores precisam de uma estimativa de custo + riscos antes de votar. A IA gera tudo a partir do título e descrição — só revisar.', 'Residents need a cost estimate + risks before voting. AI generates it all from the title and description — just review.', 'Los residentes necesitan una estimación de costo + riesgos antes de votar. La IA lo genera todo a partir del título y descripción — solo revisa.', 'Les résidents ont besoin d\'une estimation de coût + risques avant de voter. L\'IA génère tout à partir du titre et de la description — il suffit de relire.'),
+  c('Abrir votação', 'Open voting', 'Abrir votación', 'Ouvrir le vote'),
+  c('Reprovar', 'Reject', 'Reprobar', 'Rejeter'),
+  c('Salvar regras de votação', 'Save voting rules', 'Guardar reglas de votación', 'Enregistrer les règles de vote'),
+  c('Comparecimento:', 'Turnout:', 'Participación:', 'Participation :'),
+  c('Quórum atingido', 'Quorum reached', 'Quórum alcanzado', 'Quorum atteint'),
+  c('Quórum ainda não atingido', 'Quorum not yet reached', 'Quórum aún no alcanzado', 'Quorum pas encore atteint'),
+  c('Resumo da discussão', 'Discussion summary', 'Resumen de la discusión', 'Résumé de la discussion'),
+  c('Resumir', 'Summarize', 'Resumir', 'Résumer'),
+  c('Versão para morador', 'Resident version', 'Versión para residente', 'Version pour résident'),
+  c('Gerar', 'Generate', 'Generar', 'Générer'),
+  c('sim', 'yes', 'sí', 'oui'),
+  c('não', 'no', 'no', 'non'),
+  c('abst.', 'abst.', 'abst.', 'abst.'),
+
+  // Edifício — building management
+  c('1 bloco · 8 unidades', '1 block · 8 units', '1 bloque · 8 unidades', '1 bloc · 8 lots'),
+  c('Novo bloco', 'New block', 'Nuevo bloque', 'Nouveau bloc'),
+  c('Novo bloco', 'New block', 'Nuevo bloque', 'Nouveau bloc'),
+  c('Adicionar unidade', 'Add unit', 'Agregar unidad', 'Ajouter un lot'),
+  c('unidades', 'units', 'unidades', 'lots'),
+  c('unidade', 'unit', 'unidad', 'lot'),
+  c('andares', 'floors', 'pisos', 'étages'),
+  c('andar', 'floor', 'piso', 'étage'),
+  c('morador', 'resident', 'residente', 'résident'),
+  c('moradores', 'residents', 'residentes', 'résidents'),
+  c('Especial', 'Special', 'Especial', 'Spécial'),
+
   // Board app
   c('Tudo que precisa da sua atenção.', 'Everything that needs your attention.', 'Todo lo que necesita tu atención.', 'Tout ce qui demande votre attention.'),
   c('Não foi possível carregar parte dos dados. Atualize a página ou entre novamente.', 'Some data could not load. Refresh the page or sign in again.', 'No se pudo cargar parte de los datos. Actualiza o entra de nuevo.', 'Certaines données n’ont pas pu charger. Actualisez ou reconnectez-vous.'),
@@ -543,6 +647,457 @@ const phrases: Copy[] = [
   c('Request sent', 'Request sent', 'Solicitud enviada', 'Demande envoyée'),
   c('Request to join', 'Request to join', 'Solicitar ingreso', 'Demander à rejoindre'),
   c('Join now', 'Join now', 'Unirse ahora', 'Rejoindre maintenant'),
+
+  // Proposal detail — voter eligibility + quorum section
+  c('Voltar', 'Back', 'Volver', 'Retour'),
+  c('Encerrar e gerar decisão', 'Close and generate decision', 'Cerrar y generar decisión', 'Clore et générer la décision'),
+  c('Votar como proprietário', 'Vote as owner', 'Votar como propietario', 'Voter en tant que propriétaire'),
+  c('Redigido pela IA', 'AI-drafted', 'Redactado por IA', 'Rédigé par IA'),
+  c('Só proprietários', 'Owners only', 'Solo propietarios', 'Propriétaires uniquement'),
+  c('Um voto por unidade', 'One vote per unit', 'Un voto por unidad', 'Un vote par lot'),
+  c('Todos os moradores votam', 'All residents vote', 'Todos los residentes votan', 'Tous les résidents votent'),
+  c('Custos', 'Costs', 'Costos', 'Coûts'),
+  c('Riscos e considerações', 'Risks and considerations', 'Riesgos y consideraciones', 'Risques et considérations'),
+  c('Quem vota nesta proposta?', 'Who votes on this proposal?', '¿Quién vota en esta propuesta?', 'Qui vote sur cette proposition ?'),
+  c('Defina antes de abrir a votação — não pode mudar depois.', 'Define before opening voting — can\'t change after.', 'Defina antes de abrir la votación — no se puede cambiar después.', 'Définissez avant d\'ouvrir le vote — impossible de modifier ensuite.'),
+  c('Todos os moradores (incluindo inquilinos)', 'All residents (including tenants)', 'Todos los residentes (incluidos inquilinos)', 'Tous les résidents (locataires inclus)'),
+  c('Só proprietários (capex / despesas do condomínio)', 'Owners only (capex / condo expenses)', 'Solo propietarios (capex / gastos del condominio)', 'Propriétaires uniquement (capex / charges)'),
+  c('Um voto por unidade — contato principal', 'One vote per unit — primary contact', 'Un voto por unidad — contacto principal', 'Un vote par lot — contact principal'),
+  c('Quórum e janela', 'Quorum & window', 'Quórum y ventana', 'Quorum et fenêtre'),
+  c('Quórum + janela aplicados no fechamento. Quórum não batido → inconclusiva.', 'Quorum + window applied at close. Quorum not met → inconclusive.', 'Quórum + ventana aplicados al cierre. Quórum no alcanzado → inconclusiva.', 'Quorum + fenêtre appliqués à la clôture. Quorum non atteint → non concluant.'),
+  c('Quórum', 'Quorum', 'Quórum', 'Quorum'),
+  c('Abertura da votação', 'Voting opens', 'Apertura de la votación', 'Ouverture du vote'),
+  c('Fechamento da votação', 'Voting closes', 'Cierre de la votación', 'Clôture du vote'),
+  c('Sem quórum', 'No quorum', 'Sin quórum', 'Sans quorum'),
+  c('Sim', 'Yes', 'Sí', 'Oui'),
+  c('Não', 'No', 'No', 'Non'),
+  c('Abstenção', 'Abstention', 'Abstención', 'Abstention'),
+  c('peso', 'weight', 'peso', 'poids'),
+  c('Inconclusiva', 'Inconclusive', 'Inconclusiva', 'Non concluante'),
+  c('Próximos passos', 'Next steps', 'Próximos pasos', 'Prochaines étapes'),
+  c('Resumo da decisão', 'Decision summary', 'Resumen de la decisión', 'Résumé de la décision'),
+  c('Concordância', 'Agreement', 'Concordancia', 'Accord'),
+  c('Discordância', 'Disagreement', 'Discordancia', 'Désaccord'),
+  c('Em aberto', 'Open questions', 'Preguntas abiertas', 'Questions ouvertes'),
+  c('Versão em linguagem simples para usar num comunicado.', 'Plain-language version to use in an announcement.', 'Versión en lenguaje sencillo para usar en un comunicado.', 'Version en langage simple pour un communiqué.'),
+
+  // Proposal list form + categories
+  c('Cancelar', 'Cancel', 'Cancelar', 'Annuler'),
+  c('Encerradas', 'Closed', 'Cerradas', 'Clôturées'),
+  c('Cria a proposta direto em discussão. Você define quórum + janela e abre a votação quando quiser.', 'Creates the proposal in discussion. Set the quorum + window and open voting when ready.', 'Crea la propuesta en discusión. Define quórum + ventana y abre la votación cuando quieras.', 'Crée la proposition en discussion. Définissez le quorum + fenêtre et ouvrez le vote quand vous voulez.'),
+  c('Contexto, motivo, o que vai mudar. Quanto mais claro, mais fácil pros moradores votarem.', 'Context, reason, what will change. The clearer the easier for residents to vote.', 'Contexto, motivo, qué va a cambiar. Cuanto más claro, más fácil para los residentes votar.', 'Contexte, raison, ce qui va changer. Plus c\'est clair, plus c\'est facile pour les résidents de voter.'),
+  c('Categoria', 'Category', 'Categoría', 'Catégorie'),
+  c('Custo estimado (R$, opcional)', 'Estimated cost (optional)', 'Costo estimado (opcional)', 'Coût estimé (facultatif)'),
+  c('Infraestrutura', 'Infrastructure', 'Infraestructura', 'Infrastructure'),
+  c('Áreas comuns', 'Common areas', 'Áreas comunes', 'Parties communes'),
+  c('Convivência', 'Community', 'Convivencia', 'Vie commune'),
+  c('Convenção / regras', 'Convention / rules', 'Reglamento / normas', 'Règlement / règles'),
+  c('Financeiro', 'Financial', 'Financiero', 'Financier'),
+  c('Criar proposta', 'Create proposal', 'Crear propuesta', 'Créer une proposition'),
+  c('por', 'by', 'por', 'par'),
+
+  // Building (Edifício) admin
+  c('blocos', 'blocks', 'bloques', 'blocs'),
+  c('bloco', 'block', 'bloque', 'bloc'),
+  c('Nenhum bloco cadastrado ainda. Use "Novo bloco" para começar.', 'No blocks yet. Use "New block" to get started.', 'Sin bloques aún. Use "Nuevo bloque" para empezar.', 'Aucun bloc encore. Utilisez "Nouveau bloc" pour commencer.'),
+  c('Nome', 'Name', 'Nombre', 'Nom'),
+  c('Andares', 'Floors', 'Pisos', 'Étages'),
+  c('Unidades por andar (auto-gerar)', 'Units per floor (auto-generate)', 'Unidades por piso (auto-generar)', 'Lots par étage (auto-générer)'),
+  c('0 = começar vazio e adicionar manualmente.', '0 = start empty and add manually.', '0 = empezar vacío y agregar manualmente.', '0 = commencer vide et ajouter manuellement.'),
+  c('Criar bloco', 'Create block', 'Crear bloque', 'Créer un bloc'),
+  c('Renomear bloco', 'Rename block', 'Renombrar bloque', 'Renommer le bloc'),
+  c('Renomear', 'Rename', 'Renombrar', 'Renommer'),
+  c('Apagar bloco (só se não tiver unidades)', 'Delete block (only if no units)', 'Eliminar bloque (solo sin unidades)', 'Supprimer le bloc (uniquement sans lots)'),
+  c('Salvar', 'Save', 'Guardar', 'Enregistrer'),
+  c('Apagar', 'Delete', 'Eliminar', 'Supprimer'),
+  c('Tem morador vinculado', 'Has linked resident', 'Tiene residente vinculado', 'A un résident lié'),
+  c('Remova as unidades antes de apagar o bloco.', 'Remove units before deleting the block.', 'Elimine las unidades antes de borrar el bloque.', 'Retirez les lots avant de supprimer le bloc.'),
+  c('A unidade tem morador(es). Remova os vínculos antes de apagar.', 'Unit has resident(s). Remove links before deleting.', 'La unidad tiene residente(s). Elimine los vínculos antes de borrar.', 'Le lot a des résidents. Supprimez les liens avant de supprimer.'),
+
+  // Concierge (porteiro) view
+  c('Portaria', 'Front desk', 'Portería', 'Conciergerie'),
+  c('Atualizar', 'Refresh', 'Actualizar', 'Actualiser'),
+  c('Visitantes hoje', 'Today\'s visitors', 'Visitantes hoy', 'Visiteurs du jour'),
+  c('Nenhum visitante esperado hoje.', 'No visitors expected today.', 'Ningún visitante esperado hoy.', 'Aucun visiteur prévu aujourd\'hui.'),
+  c('liberado', 'cleared', 'autorizado', 'autorisé'),
+  c('aguardando', 'waiting', 'esperando', 'en attente'),
+  c('Visita', 'Visit', 'Visita', 'Visite'),
+  c('Entrega', 'Delivery', 'Entrega', 'Livraison'),
+  c('Serviço', 'Service', 'Servicio', 'Service'),
+  c('Liberar', 'Clear', 'Autorizar', 'Autoriser'),
+  c('Negar', 'Deny', 'Rechazar', 'Refuser'),
+  c('Marcar como chegou', 'Mark as arrived', 'Marcar como llegó', 'Marquer comme arrivé'),
+  c('Encomendas pendentes', 'Pending deliveries', 'Paquetes pendientes', 'Livraisons en attente'),
+  c('Nenhuma encomenda aguardando retirada.', 'No deliveries waiting for pickup.', 'Ningún paquete esperando retiro.', 'Aucune livraison en attente de récupération.'),
+  c('Retirar', 'Pick up', 'Retirar', 'Récupérer'),
+  c('Apto', 'Unit', 'Apto', 'Apt.'),
+  c('Eventos hoje', 'Today\'s events', 'Eventos de hoy', 'Événements du jour'),
+  c('convidados', 'guests', 'invitados', 'invités'),
+  c('Lista de convidados', 'Guest list', 'Lista de invitados', 'Liste d\'invités'),
+
+  // Visitors page (resident)
+  c('Visitantes', 'Visitors', 'Visitantes', 'Visiteurs'),
+  c('Novo visitante', 'New visitor', 'Nuevo visitante', 'Nouveau visiteur'),
+  c('Nome do visitante', 'Visitor name', 'Nombre del visitante', 'Nom du visiteur'),
+  c('Aplicativo', 'App', 'Aplicación', 'Application'),
+  c('Observações (opcional)', 'Notes (optional)', 'Notas (opcional)', 'Notes (facultatif)'),
+  c('Disponível só para visitas marcadas para o futuro.', 'Available only for future visits.', 'Disponible solo para visitas futuras.', 'Disponible uniquement pour les visites futures.'),
+  c('Enviar solicitação', 'Submit request', 'Enviar solicitud', 'Envoyer la demande'),
+  c('Nenhum visitante registrado', 'No visitors registered', 'Ningún visitante registrado', 'Aucun visiteur enregistré'),
+  c('Avise antes para a portaria estar preparada — você pode pré-aprovar para evitar ligação na hora.', 'Notify ahead so the front desk is ready — pre-approve to avoid a call at arrival.', 'Avisa antes para que portería esté preparada — puedes preautorizar para evitar una llamada.', 'Prévenez à l\'avance pour que la conciergerie soit prête — pré-approuvez pour éviter un appel.'),
+  c('Adicionar visitante', 'Add visitor', 'Agregar visitante', 'Ajouter un visiteur'),
+  c('Nada agendado por enquanto. Quando alguém estiver vindo, registre por aqui.', 'Nothing scheduled yet. When someone is coming, register them here.', 'Nada programado aún. Cuando venga alguien, regístralo aquí.', 'Rien de prévu pour l\'instant. Quand quelqu\'un vient, enregistrez-le ici.'),
+  c('Sem histórico nos últimos 90 dias.', 'No history in the last 90 days.', 'Sin historial en los últimos 90 días.', 'Aucun historique ces 90 derniers jours.'),
+
+  // Amenities page (resident)
+  c('Reserve a piscina, academia, churrasqueira ou salão de festas. Sem conflitos.', 'Book the pool, gym, BBQ grill, or party room. No conflicts.', 'Reserva la piscina, gimnasio, parrilla o salón de fiestas. Sin conflictos.', 'Réservez la piscine, la salle de sport, le barbecue ou la salle des fêtes. Sans conflits.'),
+  c('Início', 'Start', 'Inicio', 'Début'),
+  c('Fim', 'End', 'Fin', 'Fin'),
+  c('Escolha horários de início e fim válidos.', 'Choose valid start and end times.', 'Elige horarios de inicio y fin válidos.', 'Choisissez des horaires de début et de fin valides.'),
+  c('O horário final precisa ser depois do início.', 'End time must be after start time.', 'El horario de fin debe ser después del inicio.', 'L\'heure de fin doit être après l\'heure de début.'),
+  c('Reservar e avisar portaria', 'Book and notify front desk', 'Reservar y avisar a portería', 'Réserver et notifier la conciergerie'),
+  c('Confirmar reserva', 'Confirm booking', 'Confirmar reserva', 'Confirmer la réservation'),
+  c('Próximas reservas', 'Upcoming bookings', 'Próximas reservas', 'Réservations à venir'),
+  c('Nenhuma reserva futura no prédio.', 'No upcoming bookings in the building.', 'No hay reservas futuras en el edificio.', 'Aucune réservation à venir dans l\'immeuble.'),
+  c('Você', 'You', 'Tú', 'Vous'),
+
+  // Shared / common
+  c('Carregando…', 'Loading…', 'Cargando…', 'Chargement…'),
+  c('Ativar notificações', 'Enable notifications', 'Activar notificaciones', 'Activer les notifications'),
+  c('Sair', 'Sign out', 'Salir', 'Déconnexion'),
+  c('Unidade', 'Unit', 'Unidad', 'Lot'),
+  c('ver recibo', 'view receipt', 'ver recibo', 'voir le reçu'),
+  c('Descrição', 'Description', 'Descripción', 'Description'),
+  c('Valor (R$)', 'Amount (R$)', 'Valor (R$)', 'Montant (R$)'),
+  c('Fornecedor (opcional)', 'Vendor (optional)', 'Proveedor (opcional)', 'Fournisseur (facultatif)'),
+  c('Data', 'Date', 'Fecha', 'Date'),
+  c('Link do recibo (opcional)', 'Receipt link (optional)', 'Enlace al recibo (opcional)', 'Lien du reçu (facultatif)'),
+  c('Cole um link do Drive, Dropbox, ou foto hospedada. Os moradores podem clicar para conferir.', 'Paste a Drive, Dropbox, or hosted photo link. Residents can click to check.', 'Pega un enlace de Drive, Dropbox o foto hospedada. Los residentes pueden hacer clic para verificar.', 'Collez un lien Drive, Dropbox ou photo hébergée. Les résidents peuvent cliquer pour vérifier.'),
+  c('Registrar despesa', 'Log expense', 'Registrar gasto', 'Enregistrer la dépense'),
+  c('Sugestões dos moradores', 'Resident suggestions', 'Sugerencias de residentes', 'Suggestions des résidents'),
+  c('O que os moradores estão pedindo. Agrupe semelhantes, promova a propostas ou descarte.', 'What residents are requesting. Cluster similar ones, promote to proposals, or dismiss.', 'Lo que piden los residentes. Agrupa similares, promueve a propuestas o descarta.', 'Ce que demandent les résidents. Regroupez les similaires, promouvez en propositions ou ignorez.'),
+  c('Agrupar com IA', 'Cluster with AI', 'Agrupar con IA', 'Regrouper avec IA'),
+  c('Redigir proposta', 'Draft proposal', 'Redactar propuesta', 'Rédiger une proposition'),
+
+  // Board overview cards / labels
+  c('Sugestões novas', 'New suggestions', 'Sugerencias nuevas', 'Nouvelles suggestions'),
+  c('Propostas ativas', 'Active proposals', 'Propuestas activas', 'Propositions actives'),
+  c('Reuniões agendadas', 'Meetings scheduled', 'Reuniones agendadas', 'Réunions prévues'),
+  c('1 sugestão de morador esperando', '1 resident suggestion waiting', '1 sugerencia de residente esperando', '1 suggestion de résident en attente'),
+  c('Caixa de IA', 'AI inbox', 'Bandeja IA', 'Boîte IA'),
+  c('Reunião pronta?', 'Meeting ready?', '¿Reunión lista?', 'Réunion prête ?'),
+  c('Cole as anotações. Receba o resumo, tarefas e o comunicado pros moradores.', 'Paste your notes. Get the summary, tasks, and announcement for residents.', 'Pega las notas. Recibe el resumen, tareas y aviso para los residentes.', 'Collez vos notes. Recevez le résumé, les tâches et l’annonce pour les résidents.'),
+  c('Ver reuniões', 'See meetings', 'Ver reuniones', 'Voir les réunions'),
+  c('Abrir caixa', 'Open inbox', 'Abrir bandeja', 'Ouvrir la boîte'),
+  c('Agrupe, transforme em proposta ou descarte. Um clique cada.', 'Cluster, turn into a proposal, or dismiss. One click each.', 'Agrupa, conviértelas en propuesta o descarta. Un clic cada una.', 'Regroupez, transformez en proposition ou ignorez. Un clic chacun.'),
+
+  // Board edifício
+  c('Bloco criado', 'Block created', 'Bloque creado', 'Bloc créé'),
+  c('Bloco renomeado', 'Block renamed', 'Bloque renombrado', 'Bloc renommé'),
+  c('Bloco apagado', 'Block deleted', 'Bloque eliminado', 'Bloc supprimé'),
+  c('O bloco ainda tem unidades.', 'The block still has units.', 'El bloque todavía tiene unidades.', 'Le bloc contient encore des lots.'),
+  c('Falha ao criar bloco', 'Failed to create block', 'Error al crear bloque', 'Échec de la création du bloc'),
+  c('Falha ao renomear', 'Rename failed', 'Error al renombrar', 'Échec du renommage'),
+  c('Falha ao apagar', 'Delete failed', 'Error al eliminar', 'Échec de la suppression'),
+  c('Falha ao salvar', 'Save failed', 'Error al guardar', 'Échec de l’enregistrement'),
+  c('Falha ao adicionar', 'Add failed', 'Error al añadir', 'Échec de l’ajout'),
+  c('Já existe outra unidade com esse número neste bloco.', 'Another unit with this number already exists in this block.', 'Ya existe otra unidad con ese número en este bloque.', 'Un autre lot avec ce numéro existe déjà dans ce bloc.'),
+  c('Unidade apagada', 'Unit deleted', 'Unidad eliminada', 'Lot supprimé'),
+  c('ex: Torre B, Cobertura', 'e.g. Tower B, Penthouse', 'ej.: Torre B, Ático', 'ex. Tour B, Penthouse'),
+  c('Nº (ex: 1502)', 'No. (e.g. 1502)', 'Nº (ej.: 1502)', 'N° (ex. 1502)'),
+  c('Andar', 'Floor', 'Piso', 'Étage'),
+  c('Renomear', 'Rename', 'Renombrar', 'Renommer'),
+  c('Apagar', 'Delete', 'Eliminar', 'Supprimer'),
+  c('Apagar bloco', 'Delete block', 'Eliminar bloque', 'Supprimer le bloc'),
+  c('Adicionar unidade', 'Add unit', 'Añadir unidad', 'Ajouter un lot'),
+  c('Bloco', 'Block', 'Bloque', 'Bloc'),
+  c('Unidade', 'Unit', 'Unidad', 'Lot'),
+  c('unidades', 'units', 'unidades', 'lots'),
+  c('blocos', 'blocks', 'bloques', 'blocs'),
+  c('bloco', 'block', 'bloque', 'bloc'),
+
+  // Board finanças
+  c('Administração', 'Admin', 'Administración', 'Administration'),
+  c('Manutenção', 'Maintenance', 'Mantenimiento', 'Maintenance'),
+  c('Limpeza', 'Cleaning', 'Limpieza', 'Nettoyage'),
+  c('Segurança', 'Security', 'Seguridad', 'Sécurité'),
+  c('Equipe', 'Staff', 'Personal', 'Personnel'),
+  c('Obras / infraestrutura', 'Construction / infrastructure', 'Obras / infraestructura', 'Travaux / infrastructure'),
+  c('Áreas comuns / amenidades', 'Amenities', 'Áreas comunes / amenidades', 'Espaces communs / équipements'),
+  c('Seguros', 'Insurance', 'Seguros', 'Assurances'),
+  c('Impostos / taxas', 'Taxes / fees', 'Impuestos / tasas', 'Impôts / taxes'),
+  c('Reserva', 'Reserve', 'Reserva', 'Réserve'),
+  c('Outros', 'Other', 'Otros', 'Autres'),
+  c('Utilidades', 'Utilities', 'Servicios', 'Services'),
+  c('Despesa apagada', 'Expense deleted', 'Gasto eliminado', 'Dépense supprimée'),
+  c('Despesa registrada — visível para os moradores', 'Expense logged — visible to residents', 'Gasto registrado — visible para los residentes', 'Dépense enregistrée — visible pour les résidents'),
+  c('Falha ao registrar', 'Log failed', 'Error al registrar', 'Échec de l’enregistrement'),
+  c('Valor inválido — use números (ex: 1500 ou 1500,00)', 'Invalid amount — use numbers (e.g. 1500 or 1500.00)', 'Valor inválido — usa números (ej.: 1500 o 1500,00)', 'Montant invalide — utilisez des chiffres (ex. 1500 ou 1500,00)'),
+  c('Tudo que você lançar aqui aparece automaticamente na Transparência dos moradores.', 'Anything you log here shows up automatically in the residents\' Transparency view.', 'Todo lo que registres aquí aparece automáticamente en la Transparencia para residentes.', 'Tout ce que vous enregistrez ici apparaît automatiquement dans la Transparence des résidents.'),
+  c('ex: Substituição do ar do saguão', 'e.g. Lobby AC replacement', 'ej.: Reemplazo del aire del vestíbulo', 'ex. remplacement de la clim du hall'),
+  c('ex: 47000 ou 47000,00', 'e.g. 47000 or 47000.00', 'ej.: 47000 o 47000,00', 'ex. 47000 ou 47000,00'),
+  c('ex: Cool Breeze HVAC', 'e.g. Cool Breeze HVAC', 'ej.: Cool Breeze HVAC', 'ex. Cool Breeze HVAC'),
+  c('Apagar despesa', 'Delete expense', 'Eliminar gasto', 'Supprimer la dépense'),
+  c('Proposta:', 'Proposal:', 'Propuesta:', 'Proposition :'),
+  c('Nenhuma despesa registrada nos últimos 12 meses. Comece pelas contas fixas (luz, água, condomínio da empresa de portaria).', 'No expenses logged in the last 12 months. Start with the fixed bills (electricity, water, front-desk staffing).', 'Sin gastos registrados en los últimos 12 meses. Empieza por las cuentas fijas (luz, agua, portería).', 'Aucune dépense enregistrée sur les 12 derniers mois. Commencez par les factures fixes (électricité, eau, conciergerie).'),
+
+  // Board announcements
+  c('Tudo que você enviou aos moradores — incluindo os gerados pela IA após reuniões e decisões.', 'Everything you sent to residents — including AI-generated ones after meetings and decisions.', 'Todo lo que enviaste a los residentes — incluyendo los generados por IA tras reuniones y decisiones.', 'Tout ce que vous avez envoyé aux résidents — y compris ceux générés par l’IA après réunions et décisions.'),
+  c('Novo comunicado', 'New announcement', 'Nuevo aviso', 'Nouvelle annonce'),
+  c('Comunicado publicado', 'Announcement published', 'Aviso publicado', 'Annonce publiée'),
+  c('Título', 'Title', 'Título', 'Titre'),
+  c('Escreva o comunicado...', 'Write the announcement...', 'Escribe el aviso…', 'Rédigez l’annonce…'),
+  c('Fixar no topo', 'Pin to top', 'Fijar arriba', 'Épingler en haut'),
+  c('Publicar', 'Publish', 'Publicar', 'Publier'),
+  c('Fixado', 'Pinned', 'Fijado', 'Épinglé'),
+  c('Pinned', 'Pinned', 'Fijado', 'Épinglé'),
+  c('AI meeting recap', 'AI meeting recap', 'Resumen IA de reunión', 'Récap IA de réunion'),
+  c('AI decision', 'AI decision', 'Decisión IA', 'Décision IA'),
+  c('Avisos do síndico. Itens fixados ficam no topo.', 'Notices from the board. Pinned items stay on top.', 'Avisos del administrador. Los fijados quedan arriba.', 'Annonces du syndic. Les épinglés restent en haut.'),
+
+  // Board proposals & detail
+  c('Proposta criada — em discussão', 'Proposal created — in discussion', 'Propuesta creada — en discusión', 'Proposition créée — en discussion'),
+  c('Falha ao criar proposta', 'Failed to create proposal', 'Error al crear propuesta', 'Échec de la création de la proposition'),
+  c('Título (ex: Trocar o portão da garagem)', 'Title (e.g. Replace the garage gate)', 'Título (ej.: Cambiar el portón del garaje)', 'Titre (ex. remplacer le portail du garage)'),
+  c('ex: 47000', 'e.g. 47000', 'ej.: 47000', 'ex. 47000'),
+  c('Análise pré-votação', 'Pre-vote analysis', 'Análisis previo a la votación', 'Analyse avant vote'),
+  c('Análise gerada', 'Analysis generated', 'Análisis generado', 'Analyse générée'),
+  c('Análise técnica', 'Technical analysis', 'Análisis técnico', 'Analyse technique'),
+  c('Falha ao analisar com IA', 'AI analysis failed', 'Error al analizar con IA', 'Échec de l’analyse IA'),
+  c('Discussão resumida', 'Discussion summarized', 'Discusión resumida', 'Discussion résumée'),
+  c('Resumo gerado', 'Summary generated', 'Resumen generado', 'Résumé généré'),
+  c('Explicação gerada', 'Explanation generated', 'Explicación generada', 'Explication générée'),
+  c('Decisão e comunicado publicados', 'Decision and announcement published', 'Decisión y aviso publicados', 'Décision et annonce publiées'),
+  c('Encerrar e gerar decisão', 'Close and publish decision', 'Cerrar y generar decisión', 'Clore et publier la décision'),
+  c('Votar como proprietário', 'Vote as owner', 'Votar como propietario', 'Voter en tant que propriétaire'),
+  c('Resumir discussão', 'Summarize discussion', 'Resumir discusión', 'Résumer la discussion'),
+  c('Em linguagem simples', 'In plain language', 'En lenguaje simple', 'En langage clair'),
+  c('Explicar pra mim', 'Explain to me', 'Explícame', 'M’expliquer'),
+  c('Versão sem juridiquês, sem termo técnico.', 'A plain-language version — no legalese, no jargon.', 'Versión sin lenguaje legal, sin tecnicismos.', 'Version sans jargon juridique ni technique.'),
+  c('Comentar', 'Comment', 'Comentar', 'Commenter'),
+  c('Diga o que você acha...', 'Share your thoughts…', 'Comparte tu opinión…', 'Donnez votre avis…'),
+  c('Comentário publicado', 'Comment published', 'Comentario publicado', 'Commentaire publié'),
+  c('Voto registrado', 'Vote recorded', 'Voto registrado', 'Vote enregistré'),
+  c('Voto falhou', 'Vote failed', 'Voto fallido', 'Échec du vote'),
+  c('Aberta para votação', 'Open for voting', 'Abierta a votación', 'Ouverte au vote'),
+  c('Você não pode votar nesta proposta.', 'You cannot vote on this proposal.', 'No puedes votar esta propuesta.', 'Vous ne pouvez pas voter cette proposition.'),
+  c('Só proprietários votam em decisões de gastos do condomínio.', 'Only owners vote on condo spending decisions.', 'Solo los propietarios votan decisiones de gasto del condominio.', 'Seuls les propriétaires votent les décisions de dépense.'),
+  c('Só o contato principal de cada unidade vota aqui.', 'Only each unit\'s primary contact votes here.', 'Solo el contacto principal de cada unidad vota aquí.', 'Seul le contact principal de chaque lot vote ici.'),
+  c('Vincule sua unidade primeiro para participar.', 'Link your unit first to take part.', 'Vincula tu unidad primero para participar.', 'Reliez d’abord votre lot pour participer.'),
+  c('Seu voto:', 'Your vote:', 'Tu voto:', 'Votre vote :'),
+  c('Votação encerrada como inconclusiva.', 'Voting closed as inconclusive.', 'Votación cerrada como no concluyente.', 'Vote clos comme non concluant.'),
+  c('Não houve votos suficientes para qualquer lado. Decisão adiada.', 'Not enough votes either way. Decision postponed.', 'No hubo votos suficientes para ningún lado. Decisión aplazada.', 'Pas assez de votes d’un côté ou de l’autre. Décision reportée.'),
+  c('Adicione um custo estimado antes de abrir a votação. Use "Analisar com IA" se preferir.', 'Add an estimated cost before opening voting. Use "Analyze with AI" if you prefer.', 'Agrega un costo estimado antes de abrir la votación. Usa "Analizar con IA" si prefieres.', 'Ajoutez un coût estimé avant d’ouvrir le vote. Utilisez « Analyser avec IA » si vous préférez.'),
+  c('Reprovar', 'Reject', 'Rechazar', 'Rejeter'),
+  c('Aprovar', 'Approve', 'Aprobar', 'Approuver'),
+  c('exigido', 'required', 'requerido', 'requis'),
+  c('sim', 'yes', 'sí', 'oui'),
+  c('não', 'no', 'no', 'non'),
+  c('abstenção', 'abstention', 'abstención', 'abstention'),
+  c('Manutenção', 'Maintenance', 'Mantenimiento', 'Maintenance'),
+
+  // Board meetings
+  c('Agende as reuniões. Cole as anotações depois — a IA gera o resumo e a lista de tarefas.', 'Schedule meetings. Paste notes afterwards — AI generates the summary and task list.', 'Agenda las reuniones. Pega las notas después — la IA genera el resumen y las tareas.', 'Planifiez les réunions. Collez les notes ensuite — l’IA génère le résumé et la liste des tâches.'),
+  c('Nova reunião', 'New meeting', 'Nueva reunión', 'Nouvelle réunion'),
+  c('Reunião agendada', 'Meeting scheduled', 'Reunión agendada', 'Réunion planifiée'),
+  c('Pauta (opcional)', 'Agenda (optional)', 'Agenda (opcional)', 'Ordre du jour (facultatif)'),
+  c('Agendar', 'Schedule', 'Agendar', 'Planifier'),
+  c('agendada', 'scheduled', 'agendada', 'planifiée'),
+  c('resumo da IA', 'AI summary', 'resumen IA', 'résumé IA'),
+  c('notas pendentes', 'notes pending', 'notas pendientes', 'notes en attente'),
+  c('Anotações', 'Notes', 'Notas', 'Notes'),
+  c('Anotações salvas', 'Notes saved', 'Notas guardadas', 'Notes enregistrées'),
+  c('Cole as anotações da reunião aqui. Tópicos, abreviações, do jeito que veio — a IA arruma.', 'Paste the meeting notes here. Bullets, abbreviations — AI cleans it up.', 'Pega aquí las notas de la reunión. Listas, abreviaciones, como vinieron — la IA las arregla.', 'Collez ici les notes de réunion. Puces, abréviations — l’IA met en forme.'),
+  c('Resumir com IA', 'Summarize with AI', 'Resumir con IA', 'Résumer avec IA'),
+  c('Reunião resumida', 'Meeting summarized', 'Reunión resumida', 'Réunion résumée'),
+  c('Resumo da IA', 'AI summary', 'Resumen de la IA', 'Résumé de l’IA'),
+  c('Pronto', 'Ready', 'Listo', 'Prêt'),
+  c('Decisões', 'Decisions', 'Decisiones', 'Décisions'),
+  c('Rascunho do comunicado', 'Announcement draft', 'Borrador del aviso', 'Brouillon de l’annonce'),
+  c('Comunicado publicado para os moradores', 'Announcement published to residents', 'Aviso publicado a los residentes', 'Annonce publiée aux résidents'),
+  c('Salve as anotações e clique em Resumir. Você recebe um resumo limpo, lista de decisões, tarefas, e um comunicado pronto para publicar.', 'Save the notes and click Summarize. You\'ll get a clean summary, decisions, tasks, and an announcement ready to publish.', 'Guarda las notas y haz clic en Resumir. Recibirás un resumen claro, decisiones, tareas y un aviso listo para publicar.', 'Enregistrez les notes et cliquez sur Résumer. Vous obtiendrez un résumé clair, des décisions, des tâches et une annonce prête à publier.'),
+  c('Tarefas', 'Tasks', 'Tareas', 'Tâches'),
+  c('Reuniões do síndico, pautas e resumos gerados pela IA.', 'Board meetings, agendas, and AI-generated recaps.', 'Reuniones del administrador, agendas y resúmenes generados por IA.', 'Réunions du syndic, ordres du jour et résumés générés par IA.'),
+
+  // Resident overview
+  c('Bom dia', 'Good morning', 'Buenos días', 'Bonjour'),
+  c('Boa tarde', 'Good afternoon', 'Buenas tardes', 'Bon après-midi'),
+  c('Boa noite', 'Good evening', 'Buenas noches', 'Bonsoir'),
+  c('Aqui está o que está rolando no seu prédio hoje.', 'Here\'s what\'s happening in your building today.', 'Esto es lo que está pasando hoy en tu edificio.', 'Voici ce qui se passe dans votre immeuble aujourd’hui.'),
+  c("Here's what's happening in your building today.", "Here's what's happening in your building today.", 'Esto es lo que está pasando hoy en tu edificio.', 'Voici ce qui se passe dans votre immeuble aujourd’hui.'),
+  c('Encomendas aguardando', 'Packages waiting', 'Paquetes esperando', 'Colis en attente'),
+  c('Próximas visitas', 'Upcoming visitors', 'Próximas visitas', 'Visites à venir'),
+  c('Suas reservas', 'Your reservations', 'Tus reservas', 'Vos réservations'),
+  c('Propostas abertas', 'Open proposals', 'Propuestas abiertas', 'Propositions ouvertes'),
+  c('Últimos comunicados', 'Latest announcements', 'Últimos avisos', 'Dernières annonces'),
+  c('Em votação', 'In the vote', 'En votación', 'En vote'),
+  c('Ver tudo', 'View all', 'Ver todo', 'Voir tout'),
+  c('Alguns dados do painel não puderam ser carregados. Atualize ou entre novamente se persistir.', 'Some dashboard data could not be loaded. Refresh or sign in again if it persists.', 'Algunos datos del panel no pudieron cargarse. Actualiza o vuelve a entrar si persiste.', 'Certaines données n’ont pas pu être chargées. Rafraîchissez ou reconnectez-vous si cela persiste.'),
+
+  // Resident amenities
+  c('Reserva confirmada', 'Reservation confirmed', 'Reserva confirmada', 'Réservation confirmée'),
+  c('Aberto', 'Open', 'Abierto', 'Ouvert'),
+  c('convidados', 'guests', 'invitados', 'invités'),
+
+  // Resident visitors
+  c('Visita pré-aprovada — a portaria já tem a liberação', 'Visitor pre-approved — the front desk has the green light', 'Visita pre-aprobada — la portería ya tiene la autorización', 'Visiteur pré-approuvé — la conciergerie a l’autorisation'),
+  c('Solicitação enviada à portaria', 'Request sent to the front desk', 'Solicitud enviada a la portería', 'Demande envoyée à la conciergerie'),
+  c('Próximas', 'Upcoming', 'Próximas', 'À venir'),
+  c('Histórico', 'History', 'Historial', 'Historique'),
+  c('Pré-aprovar', 'Pre-approve', 'Pre-aprobar', 'Pré-approuver'),
+
+  // Resident proposals overview
+  c('Todas as decisões do seu prédio — passadas, atuais e em andamento.', 'Every decision in your building — past, present, and ongoing.', 'Todas las decisiones de tu edificio — pasadas, actuales y en curso.', 'Toutes les décisions de votre immeuble — passées, actuelles et en cours.'),
+
+  // Resident transparência
+  c('Quando o síndico começar a lançar as despesas do prédio, elas aparecem aqui automaticamente — com valor, fornecedor e link do recibo.', 'When the board starts logging building expenses, they\'ll show up here automatically — with amount, vendor, and receipt link.', 'Cuando el administrador empiece a registrar los gastos del edificio, aparecerán aquí automáticamente — con valor, proveedor y enlace al recibo.', 'Quand le syndic commencera à enregistrer les dépenses, elles apparaîtront ici automatiquement — avec montant, fournisseur et lien du reçu.'),
+  c('Período: últimos 12 meses. Lançado pelo síndico — clique em cada item para ver o recibo, quando disponível.', 'Period: last 12 months. Logged by the board — click any item for the receipt when available.', 'Período: últimos 12 meses. Registrado por el administrador — haz clic en cada ítem para ver el recibo si está disponible.', 'Période : 12 derniers mois. Enregistré par le syndic — cliquez sur chaque ligne pour le reçu si disponible.'),
+
+  // Resident suggest
+  c('Conta o que tá pegando. A IA transforma sua ideia numa proposta pronta pro síndico.', 'Tell us what\'s up. AI turns your idea into a proposal ready for the board.', 'Cuéntanos qué pasa. La IA convierte tu idea en una propuesta lista para el administrador.', 'Dites-nous ce qui ne va pas. L’IA transforme votre idée en proposition prête pour le syndic.'),
+  c('O ar do saguão mal está funcionando. Ontem marcou 30°C aqui dentro.', 'The lobby AC barely works. It hit 30°C in here yesterday.', 'El aire del vestíbulo casi no funciona. Ayer marcó 30°C aquí dentro.', 'La clim du hall fonctionne à peine. Il faisait 30°C ici hier.'),
+  c('Podemos colocar carregadores de carro elétrico na garagem?', 'Can we install EV chargers in the garage?', '¿Podemos poner cargadores para autos eléctricos en el garaje?', 'Peut-on installer des bornes de recharge dans le garage ?'),
+  c('A esteira #3 da academia faz um barulho alto quando alguém usa.', 'Treadmill #3 in the gym is making a loud noise when used.', 'La cinta #3 del gimnasio hace mucho ruido cuando alguien la usa.', 'Le tapis #3 de la salle de sport fait beaucoup de bruit quand on l’utilise.'),
+  c('Enviado ao síndico', 'Sent to the board', 'Enviado al administrador', 'Envoyé au syndic'),
+  c('ex: O ar do saguão tá quebrado, marca 30°C aqui dentro...', 'e.g. The lobby AC is broken, it hits 30°C in here...', 'ej.: El aire del vestíbulo está roto, marca 30°C aquí dentro…', 'ex. la clim du hall est cassée, il fait 30°C ici…'),
+  c('Recomeçar', 'Start over', 'Empezar de nuevo', 'Recommencer'),
+
+  // Resident packages
+  c('Encomenda retirada', 'Package picked up', 'Paquete retirado', 'Colis récupéré'),
+  c('Retirei', 'Picked up', 'Retiré', 'Récupéré'),
+
+  // Resident announcements
+  c('Avisos do síndico', 'Notices from the board', 'Avisos del administrador', 'Annonces du syndic'),
+  c('Itens fixados ficam no topo.', 'Pinned items stay on top.', 'Los fijados quedan arriba.', 'Les épinglés restent en haut.'),
+
+  // Concierge
+  c('Portaria', 'Front desk', 'Portería', 'Conciergerie'),
+  c('Atualizar', 'Refresh', 'Actualizar', 'Actualiser'),
+  c('Ativar notificações', 'Enable notifications', 'Activar notificaciones', 'Activer les notifications'),
+  c('Notificações ativadas', 'Notifications enabled', 'Notificaciones activadas', 'Notifications activées'),
+  c('Notificações bloqueadas', 'Notifications blocked', 'Notificaciones bloqueadas', 'Notifications bloquées'),
+  c('Notificações bloqueadas — habilite nas configurações do navegador', 'Notifications blocked — enable them in your browser settings', 'Notificaciones bloqueadas — actívalas en la configuración del navegador', 'Notifications bloquées — activez-les dans les paramètres du navigateur'),
+  c('Lista de convidados', 'Guest list', 'Lista de invitados', 'Liste d’invités'),
+  c('Atualiza automaticamente', 'Auto-refresh', 'Actualiza automáticamente', 'Actualisation automatique'),
+  c('Liberar', 'Let in', 'Dejar entrar', 'Laisser entrer'),
+  c('Negar', 'Deny', 'Denegar', 'Refuser'),
+  c('s/n', 'n/a', 's/n', 's/n'),
+
+  // Sidebar / layouts
+  c('Visão geral', 'Overview', 'Resumen', 'Vue d’ensemble'),
+  c('Edifício', 'Building', 'Edificio', 'Immeuble'),
+  c('Finanças', 'Finance', 'Finanzas', 'Finances'),
+  c('Transparência', 'Transparency', 'Transparencia', 'Transparence'),
+  c('Despesas', 'Expenses', 'Gastos', 'Dépenses'),
+  c('Sugerir', 'Suggest', 'Sugerir', 'Suggérer'),
+
+  // Seed/demo content — translate so the demo looks consistent across locales.
+  // Announcements
+  c('Piscina reabre na sexta', 'Pool reopens Friday', 'La piscina reabre el viernes', 'La piscine rouvre vendredi'),
+  c('A piscina volta a funcionar nesta sexta após a manutenção trimestral. Obrigado pela paciência.', 'The pool reopens this Friday after quarterly maintenance. Thanks for your patience.', 'La piscina vuelve a funcionar este viernes tras el mantenimiento trimestral. Gracias por la paciencia.', 'La piscine rouvre ce vendredi après la maintenance trimestrielle. Merci de votre patience.'),
+  c('Simulado de incêndio quinta 10h', 'Fire drill Thursday 10 a.m.', 'Simulacro de incendio jueves 10 h', 'Exercice incendie jeudi 10 h'),
+  c('Simulado de incêndio em todo o prédio nesta quinta às 10h. Alarmes vão tocar por uns 10 minutos.', 'Building-wide fire drill this Thursday at 10 a.m. Alarms will sound for about 10 minutes.', 'Simulacro de incendio en todo el edificio este jueves a las 10 h. Las alarmas sonarán unos 10 minutos.', 'Exercice incendie dans tout l’immeuble jeudi à 10 h. Les alarmes sonneront environ 10 minutes.'),
+  c('Nova orientação de reciclagem', 'New recycling guidance', 'Nueva orientación de reciclaje', 'Nouvelle consigne de recyclage'),
+  c('Desmonte as caixas de papelão antes de colocar no contêiner. Coleta segundas e quintas.', 'Break down cardboard boxes before placing them in the bin. Collection on Mondays and Thursdays.', 'Desmonta las cajas de cartón antes de ponerlas en el contenedor. Recogida lunes y jueves.', 'Démontez les cartons avant de les déposer dans le conteneur. Collecte les lundis et jeudis.'),
+  c('Redigido pela IA', 'AI-drafted', 'Redactado por IA', 'Rédigé par IA'),
+
+  // Suggestions
+  c('O ar do saguão mal está funcionando. Ontem à tarde marcou 30°C aqui dentro.', 'The lobby AC barely works. Yesterday afternoon it hit 30°C in here.', 'El aire del vestíbulo casi no funciona. Ayer por la tarde llegó a 30°C aquí dentro.', 'La clim du hall fonctionne à peine. Hier après-midi il faisait 30°C ici.'),
+  c('O saguão está muito quente ultimamente. O ar quebrou?', 'The lobby is very hot lately. Did the AC break?', 'El vestíbulo está muy caliente últimamente. ¿Se rompió el aire?', 'Le hall est très chaud ces derniers temps. La clim est en panne ?'),
+
+  // Proposals
+  c('Trocar o ar-condicionado do saguão', 'Replace the lobby air conditioner', 'Cambiar el aire acondicionado del vestíbulo', 'Remplacer la climatisation du hall'),
+  c('O ar do saguão falhou duas vezes neste verão. Orçamento da Cool Breeze HVAC para um novo equipamento de 5 TR: R$ 47.000 incluindo instalação e 5 anos de garantia.', 'The lobby AC failed twice this summer. Cool Breeze HVAC quote for new 5-ton equipment: R$ 47,000 including installation and 5-year warranty.', 'El aire del vestíbulo falló dos veces este verano. Presupuesto de Cool Breeze HVAC para un nuevo equipo de 5 TR: R$ 47.000 incluyendo instalación y 5 años de garantía.', 'La clim du hall est tombée en panne deux fois cet été. Devis Cool Breeze HVAC pour nouvel équipement 5 TR : 47 000 R$ incluant installation et garantie 5 ans.'),
+  c('Carregadores de carro elétrico nas vagas de visitante', 'EV chargers in visitor spots', 'Cargadores eléctricos en plazas de visita', 'Bornes de recharge sur les places visiteurs'),
+  c('Carregadores nível 2 nas 4 vagas de visitante perto do elevador. Estimativa de instalação + equipamento R$ 90.000. Energia consumida cobrada por usuário via cartão RFID.', 'Level 2 chargers in the 4 visitor spots near the elevator. Installation + equipment estimate: R$ 90,000. Power consumed billed per user via RFID card.', 'Cargadores nivel 2 en las 4 plazas de visita cerca del ascensor. Estimación instalación + equipo R$ 90.000. Energía consumida cobrada por usuario vía tarjeta RFID.', 'Bornes niveau 2 sur les 4 places visiteurs près de l’ascenseur. Estimation installation + équipement 90 000 R$. Énergie consommée facturée par utilisateur via carte RFID.'),
+  c('Quem paga a eletricidade? Não quero ver minha taxa subsidiando o combustível de outros moradores.', 'Who pays the electricity? I don\'t want my fee subsidizing other residents\' fuel.', '¿Quién paga la electricidad? No quiero que mi cuota subsidie el combustible de otros residentes.', 'Qui paie l’électricité ? Je ne veux pas que ma charge subventionne le carburant des autres résidents.'),
+  c('A medição por usuário resolve. Pede a planilha de consumo da empresa que vai instalar.', 'Per-user metering solves it. Ask the installer for the consumption sheet.', 'La medición por usuario lo resuelve. Pide a la empresa instaladora la hoja de consumo.', 'Le comptage par utilisateur règle ça. Demandez à l’installateur la fiche de consommation.'),
+
+  // Meetings
+  c('Reunião do síndico — 2º trimestre', 'Board meeting — Q2', 'Reunión del administrador — 2º trimestre', 'Réunion du syndic — T2'),
+  c('Revisar propostas em pauta (carregadores EV, ar do saguão), orçamento trimestral, reclamações recentes.', 'Review proposals on the agenda (EV chargers, lobby AC), quarterly budget, recent complaints.', 'Revisar propuestas en agenda (cargadores EV, aire del vestíbulo), presupuesto trimestral, quejas recientes.', 'Examiner les propositions à l’ordre du jour (bornes EV, clim du hall), budget trimestriel, plaintes récentes.'),
+
+  // Expenses
+  c('Substituição do ar-condicionado do saguão', 'Lobby AC replacement', 'Reemplazo del aire del vestíbulo', 'Remplacement de la clim du hall'),
+  c('Manutenção da esteira #3 da academia', 'Treadmill #3 maintenance (gym)', 'Mantenimiento cinta #3 (gimnasio)', 'Maintenance tapis #3 (salle de sport)'),
+  c('Renovação anual do seguro do prédio', 'Annual building insurance renewal', 'Renovación anual del seguro del edificio', 'Renouvellement annuel de l’assurance immeuble'),
+  c('Manutenção da piscina (junho)', 'Pool maintenance (June)', 'Mantenimiento de la piscina (junio)', 'Entretien de la piscine (juin)'),
+  c('Limpeza profunda do saguão', 'Deep clean of the lobby', 'Limpieza profunda del vestíbulo', 'Nettoyage approfondi du hall'),
+  c('Conserto da bomba de água', 'Water pump repair', 'Reparación de la bomba de agua', 'Réparation de la pompe à eau'),
+  c('Materiais de limpeza (trimestre)', 'Cleaning supplies (quarter)', 'Productos de limpieza (trimestre)', 'Produits d’entretien (trimestre)'),
+  c('Conta de luz das áreas comuns', 'Common-area electricity bill', 'Factura de luz de áreas comunes', 'Facture d’électricité parties communes'),
+  c('Conta de água do prédio', 'Building water bill', 'Factura de agua del edificio', 'Facture d’eau de l’immeuble'),
+  c('Internet do saguão', 'Lobby internet', 'Internet del vestíbulo', 'Internet du hall'),
+
+  // Resident-page hero copy
+  c('Seu prédio, num panorama.', 'Your building at a glance.', 'Tu edificio de un vistazo.', 'Votre immeuble en un coup d’œil.'),
+  c('Um toque para retirar uma encomenda, aprovar uma visita, reservar a piscina ou opinar numa proposta.', 'One tap to pick up a package, approve a visit, book the pool, or weigh in on a proposal.', 'Un toque para retirar un paquete, aprobar una visita, reservar la piscina u opinar en una propuesta.', 'Un tap pour récupérer un colis, approuver une visite, réserver la piscine ou donner votre avis.'),
+  c('Sugerir algo', 'Suggest something', 'Sugerir algo', 'Suggérer quelque chose'),
+  c('Reservar área comum', 'Book amenity', 'Reservar área común', 'Réserver un espace commun'),
+
+  // Common visitor types & misc
+  c('Visita', 'Visit', 'Visita', 'Visite'),
+  c('Entrega', 'Delivery', 'Entrega', 'Livraison'),
+  c('Serviço', 'Service', 'Servicio', 'Service'),
+  c('Aplicativo', 'App', 'Aplicación', 'App'),
+
+  // Status / state words
+  c('aprovada', 'approved', 'aprobada', 'approuvée'),
+  c('aprovado', 'approved', 'aprobado', 'approuvé'),
+  c('reprovada', 'rejected', 'rechazada', 'rejetée'),
+  c('rejeitada', 'rejected', 'rechazada', 'rejetée'),
+  c('inconclusiva', 'inconclusive', 'no concluyente', 'non concluante'),
+  c('em discussão', 'in discussion', 'en discusión', 'en discussion'),
+  c('em votação', 'voting open', 'en votación', 'en vote'),
+  c('discussion', 'discussion', 'discusión', 'discussion'),
+  c('voting', 'voting', 'votación', 'vote'),
+  c('approved', 'approved', 'aprobada', 'approuvée'),
+  c('rejected', 'rejected', 'rechazada', 'rejetée'),
+  c('Aprovada', 'Approved', 'Aprobada', 'Approuvée'),
+  c('Rejeitada', 'Rejected', 'Rechazada', 'Rejetée'),
+  c('Em discussão', 'In discussion', 'En discusión', 'En discussion'),
+
+  // Board amenities (added in upstream commit)
+  c('Áreas comuns', 'Amenities', 'Áreas comunes', 'Espaces communs'),
+  c('Carregando…', 'Loading…', 'Cargando…', 'Chargement…'),
+  c('Adicionar por modelo', 'Add from a template', 'Añadir desde plantilla', 'Ajouter depuis un modèle'),
+  c('Comece com um padrão e ajuste capacidade, horários e duração dos slots.', 'Start from a preset and tweak capacity, hours, and slot length.', 'Empieza desde una plantilla y ajusta capacidad, horarios y duración de los slots.', 'Partez d’un modèle puis ajustez capacité, horaires et durée des créneaux.'),
+  c('capacidade = pessoas por slot', 'capacity = people per slot', 'capacidad = personas por slot', 'capacité = personnes par créneau'),
+  c('Nova área', 'New amenity', 'Nueva área', 'Nouvel espace'),
+  c('Nova área comum', 'New amenity', 'Nueva área común', 'Nouvel espace commun'),
+  c('Editar área comum', 'Edit amenity', 'Editar área común', 'Modifier l’espace commun'),
+  c('Cancelar', 'Cancel', 'Cancelar', 'Annuler'),
+  c('Salvar', 'Save', 'Guardar', 'Enregistrer'),
+  c('Sem descrição.', 'No description.', 'Sin descripción.', 'Aucune description.'),
+  c('ativa', 'active', 'activa', 'active'),
+  c('inativa', 'inactive', 'inactiva', 'inactive'),
+  c('pessoas', 'people', 'personas', 'personnes'),
+  c('dias de antecedência', 'days in advance', 'días de antelación', 'jours à l’avance'),
+  c('Editar área', 'Edit amenity', 'Editar área', 'Modifier l’espace'),
+  c('Desativar área', 'Deactivate amenity', 'Desactivar área', 'Désactiver l’espace'),
+  c('Área desativada', 'Amenity deactivated', 'Área desactivada', 'Espace désactivé'),
+  c('Área criada', 'Amenity created', 'Área creada', 'Espace créé'),
+  c('Área atualizada', 'Amenity updated', 'Área actualizada', 'Espace mis à jour'),
+  c('Falha ao desativar', 'Deactivate failed', 'Error al desactivar', 'Échec de la désactivation'),
+  c('Falha ao salvar área', 'Failed to save amenity', 'Error al guardar el área', 'Échec de l’enregistrement'),
+  c('Dê um nome para a área.', 'Give the amenity a name.', 'Dale un nombre al área.', 'Donnez un nom à l’espace.'),
+  c('O horário final precisa ser depois da abertura.', 'Closing time must be after opening time.', 'La hora de cierre debe ser posterior a la apertura.', 'L’heure de fermeture doit être après l’ouverture.'),
+  c('O slot precisa caber no horário de funcionamento.', 'The slot length must fit inside the open hours.', 'La duración del slot debe caber en el horario.', 'La durée du créneau doit tenir dans les horaires d’ouverture.'),
+  c('Nome', 'Name', 'Nombre', 'Nom'),
+  c('Tipo visual', 'Visual type', 'Tipo visual', 'Type visuel'),
+  c('Descrição', 'Description', 'Descripción', 'Description'),
+  c('Pessoas por slot', 'People per slot', 'Personas por slot', 'Personnes par créneau'),
+  c('Duração do slot', 'Slot length', 'Duración del slot', 'Durée du créneau'),
+  c('minutos', 'minutes', 'minutos', 'minutes'),
+  c('Abre às', 'Opens at', 'Abre a las', 'Ouvre à'),
+  c('Fecha às', 'Closes at', 'Cierra a las', 'Ferme à'),
+  c('Reservar com antecedência', 'Booking lead time', 'Reservar con antelación', 'Réservation à l’avance'),
+  c('Número de dias que aparecem para os moradores.', 'Number of days residents see in the booking calendar.', 'Días que ven los residentes en el calendario.', 'Nombre de jours visibles par les résidents.'),
+  c('Status', 'Status', 'Estado', 'Statut'),
+  c('Ativa para reservas', 'Active for bookings', 'Activa para reservas', 'Active pour les réservations'),
+  c('Inativa', 'Inactive', 'Inactiva', 'Inactive'),
+  c('Observações internas', 'Internal notes', 'Notas internas', 'Notes internes'),
+  c('Nenhuma área comum cadastrada ainda. Crie a primeira para liberar reservas aos moradores.', 'No amenities set up yet. Create the first one to enable bookings.', 'Aún no hay áreas comunes. Crea la primera para habilitar reservas.', 'Aucun espace commun configuré. Créez le premier pour activer les réservations.'),
 ];
 
 function c(pt: string, en: string, es: string, fr: string): Copy {
@@ -572,21 +1127,172 @@ function translateText(value: string, locale: AppLocale): string {
   const body = normalize(value);
   const exact = indexes[locale].get(body);
   if (exact) return `${leading}${exact}${trailing}`;
+  // Try comma/punctuation-stripped match, e.g. "Bem-vindo de volta," → key "Bem-vindo de volta"
+  const stripped = body.replace(/[\s,.;:!?]+$/, '').trim();
+  if (stripped !== body) {
+    const exact2 = indexes[locale].get(stripped);
+    if (exact2) {
+      const tail = body.slice(stripped.length);
+      return `${leading}${exact2}${tail}${trailing}`;
+    }
+  }
   return translatePatterns(value, locale);
+}
+
+// Pattern-based replacements for dynamic strings (template literals).
+// Each pattern matches a PT prefix/suffix and rewrites it in the target locale.
+// `replace` receives the full match as the first arg and capture groups (1-indexed) afterward.
+type Pattern = { match: RegExp; replace: (locale: AppLocale, match: string, ...groups: string[]) => string };
+const dynamicPatterns: Pattern[] = [
+  // "Bem-vindo de volta, X." → "Welcome back, X."
+  {
+    match: /^Bem-vindo de volta,\s*/u,
+    replace: (locale) => `${pickWord(locale, ['Bem-vindo de volta', 'Welcome back', 'Bienvenido de vuelta', 'Bon retour'])}, `,
+  },
+  // "Bem-vinda de volta, X."
+  {
+    match: /^Bem-vinda de volta,\s*/u,
+    replace: (locale) => `${pickWord(locale, ['Bem-vinda de volta', 'Welcome back', 'Bienvenida de vuelta', 'Bon retour'])}, `,
+  },
+  // "Tudo que precisa da sua atenção no X."
+  {
+    match: /^Tudo que precisa da sua atenção no\s+/u,
+    replace: (locale) => `${pickWord(locale, [
+      'Tudo que precisa da sua atenção no',
+      'Everything that needs your attention at',
+      'Todo lo que necesita tu atención en',
+      'Tout ce qui demande votre attention à',
+    ])} `,
+  },
+  // "Tudo que precisa da sua atenção." (standalone)
+  {
+    match: /^Tudo que precisa da sua atenção\.?$/u,
+    replace: (locale) => pickWord(locale, [
+      'Tudo que precisa da sua atenção.',
+      'Everything that needs your attention.',
+      'Todo lo que necesita tu atención.',
+      'Tout ce qui demande votre attention.',
+    ]),
+  },
+  // "X · Portaria" → "X · Front desk"
+  {
+    match: /\s·\s*Portaria$/u,
+    replace: (locale) => ` · ${pickWord(locale, ['Portaria', 'Front desk', 'Portería', 'Conciergerie'])}`,
+  },
+  // Unit/floor labels with a trailing number when present in the same text node.
+  // Also covers JSX-split cases where "(Unidade " is a separate text node from {var}.
+  {
+    match: /\bUnidade\b/gu,
+    replace: (locale) => pickWord(locale, ['Unidade', 'Unit', 'Unidad', 'Lot']),
+  },
+  {
+    match: /\bApto\b/gu,
+    replace: (locale) => pickWord(locale, ['Apto', 'Unit', 'Unidad', 'Lot']),
+  },
+  {
+    match: /\bAndar\b/gu,
+    replace: (locale) => pickWord(locale, ['Andar', 'Floor', 'Piso', 'Étage']),
+  },
+  // "Reunião X" e.g. "Reunião do síndico"
+  {
+    match: /\bReunião\b/gu,
+    replace: (locale) => pickWord(locale, ['Reunião', 'Meeting', 'Reunión', 'Réunion']),
+  },
+  {
+    match: /\breunião\b/gu,
+    replace: (locale) => pickWord(locale, ['reunião', 'meeting', 'reunión', 'réunion']),
+  },
+  // "Síndico" / "síndico"
+  {
+    match: /\bSíndico\b/gu,
+    replace: (locale) => pickWord(locale, ['Síndico', 'Board admin', 'Administrador', 'Syndic']),
+  },
+  {
+    match: /\bsíndico\b/gu,
+    replace: (locale) => pickWord(locale, ['síndico', 'board admin', 'administrador', 'syndic']),
+  },
+  // "Moradores" / "moradores"
+  {
+    match: /\bMoradores\b/gu,
+    replace: (locale) => pickWord(locale, ['Moradores', 'Residents', 'Residentes', 'Résidents']),
+  },
+  {
+    match: /\bmoradores\b/gu,
+    replace: (locale) => pickWord(locale, ['moradores', 'residents', 'residentes', 'résidents']),
+  },
+  // "Visitante" / "visitante"
+  {
+    match: /\bVisitante\b/gu,
+    replace: (locale) => pickWord(locale, ['Visitante', 'Visitor', 'Visitante', 'Visiteur']),
+  },
+  // "Orçamento"
+  {
+    match: /\bOrçamento\b/gu,
+    replace: (locale) => pickWord(locale, ['Orçamento', 'Budget', 'Presupuesto', 'Budget']),
+  },
+  // "Votação" / "votação"
+  {
+    match: /\bVotação\b/gu,
+    replace: (locale) => pickWord(locale, ['Votação', 'Voting', 'Votación', 'Vote']),
+  },
+  {
+    match: /\bvotação\b/gu,
+    replace: (locale) => pickWord(locale, ['votação', 'voting', 'votación', 'vote']),
+  },
+  // "Próximas" / "Próximos"
+  {
+    match: /\bPróximas\b/gu,
+    replace: (locale) => pickWord(locale, ['Próximas', 'Upcoming', 'Próximas', 'À venir']),
+  },
+  {
+    match: /\bPróximos\b/gu,
+    replace: (locale) => pickWord(locale, ['Próximos', 'Upcoming', 'Próximos', 'À venir']),
+  },
+  // "Histórico"
+  {
+    match: /\bHistórico\b/gu,
+    replace: (locale) => pickWord(locale, ['Histórico', 'History', 'Historial', 'Historique']),
+  },
+  // "Edifício"
+  {
+    match: /\bEdifício\b/gu,
+    replace: (locale) => pickWord(locale, ['Edifício', 'Building', 'Edificio', 'Immeuble']),
+  },
+];
+
+function pickWord(locale: AppLocale, [pt, en, es, fr]: [string, string, string, string]) {
+  return ({ 'pt-BR': pt, 'en-US': en, 'es-ES': es, 'fr-FR': fr } as const)[locale];
 }
 
 function translatePatterns(value: string, locale: AppLocale): string {
   const unit = unitLabel(locale);
   const floor = word(locale, 'Floor');
   const due = word(locale, 'due');
-  return value
+  let result = value
     .replace(/\bUnit ([A-Za-z0-9-]+)/g, `${unit} $1`)
-    .replace(/\bApto ([A-Za-z0-9-]+)/g, `${unit} $1`)
     .replace(/\bFloor ([0-9]+)/g, `${floor} $1`)
     .replace(/\bdue /gi, `${due} `)
     .replace(/\bYes\b/g, word(locale, 'Yes'))
-    .replace(/\bNo\b/g, word(locale, 'No'))
     .replace(/\bAbstain\b/g, word(locale, 'Abstain'));
+
+  for (const p of dynamicPatterns) {
+    result = result.replace(p.match, (...args: unknown[]) => {
+      // String.replace passes: (match, p1, p2, ..., offset, string [, groups]).
+      // We want match + capture groups only.
+      const stringArgs = args.filter((a) => typeof a === 'string') as string[];
+      // Last string arg is the full input; drop it.
+      const captures = stringArgs.slice(0, -1);
+      const [match, ...groups] = captures;
+      return p.replace(locale, match, ...groups);
+    });
+  }
+  return result;
+}
+
+// Synchronous translate helper — usable from toasts, alerts, and template literals.
+export function t(key: string, locale?: AppLocale): string {
+  const target = locale || detectLocale();
+  return translateText(key, target);
 }
 
 function word(locale: AppLocale, key: string) {
