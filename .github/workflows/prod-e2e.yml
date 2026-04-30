@@ -1,0 +1,47 @@
+name: Production E2E
+
+on:
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: Production suite to run
+        required: true
+        default: ui
+        type: choice
+        options:
+          - api
+          - ui
+          - smoke
+
+concurrency:
+  group: production-e2e
+  cancel-in-progress: false
+
+jobs:
+  production-e2e:
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - run: npm ci
+      - run: npx playwright install --with-deps chrome
+
+      - name: Run production API regression
+        if: ${{ inputs.suite == 'api' }}
+        run: npm run test:e2e:prod:api
+
+      - name: Run production UI walkthrough
+        if: ${{ inputs.suite == 'ui' }}
+        run: npm run test:e2e:prod:ui
+
+      - name: Run production smoke suite
+        if: ${{ inputs.suite == 'smoke' }}
+        run: npm run test:e2e:prod:smoke

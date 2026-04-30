@@ -2,6 +2,10 @@ import { defineConfig, devices } from '@playwright/test';
 
 const baseURL = process.env.E2E_BASE_URL || 'http://127.0.0.1:5175';
 const stackCommand = 'npm run e2e:seed && npm run e2e:stack';
+const vercelBypassSecret =
+  process.env.VERCEL_AUTOMATION_BYPASS_SECRET ||
+  process.env.VERCEL_PROTECTION_BYPASS ||
+  process.env.VERCEL_BYPASS_SECRET;
 
 export default defineConfig({
   testDir: './e2e',
@@ -13,6 +17,12 @@ export default defineConfig({
   reporter: [['list']],
   use: {
     baseURL,
+    extraHTTPHeaders: vercelBypassSecret
+      ? {
+          'x-vercel-protection-bypass': vercelBypassSecret,
+          'x-vercel-set-bypass-cookie': 'true',
+        }
+      : undefined,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',

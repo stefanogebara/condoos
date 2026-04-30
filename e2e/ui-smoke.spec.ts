@@ -1,6 +1,7 @@
 // Full UI smoke — click through every board + resident page and verify each
 // renders its main heading and role-appropriate navigation.
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
+import { gotoApp } from './support/navigation';
 
 const apiURL = process.env.E2E_API_URL
   || (process.env.E2E_BASE_URL ? `${process.env.E2E_BASE_URL.replace(/\/$/, '')}/api` : 'http://127.0.0.1:4312/api');
@@ -23,7 +24,7 @@ async function browserLogin(page: Page, request: APIRequestContext, kind: 'admin
     ? ['admin@condoos.dev', 'admin123']
     : ['resident@condoos.dev', 'resident123'];
   const s = await loginApi(request, creds[0], creds[1]);
-  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await gotoApp(page, '/');
   await page.evaluate(({ token, user }) => {
     localStorage.setItem('condoos_token', token);
     localStorage.setItem('condoos_user', JSON.stringify(user));
@@ -41,7 +42,7 @@ async function expectShellRole(page: Page, label: RegExp) {
 // ---------------------------------------------------------------------------
 
 test('landing is fully PT-BR, no English leaking', async ({ page }, testInfo) => {
-  await page.goto('/');
+  await gotoApp(page, '/');
   const isMobile = testInfo.project.name === 'mobile';
 
   // Positive assertions — Portuguese content we expect
@@ -83,10 +84,10 @@ test('landing is fully PT-BR, no English leaking', async ({ page }, testInfo) =>
 });
 
 test('landing: nav anchors scroll to the right sections', async ({ page }, testInfo) => {
-  await page.goto('/');
+  await gotoApp(page, '/');
   if (testInfo.project.name === 'mobile') {
     for (const hash of ['ago', 'loop', 'faq']) {
-      await page.goto(`/#${hash}`);
+      await gotoApp(page, `/#${hash}`);
       await expect(page).toHaveURL(new RegExp(`#${hash}$`));
       await expect(page.locator(`#${hash}`)).toBeVisible();
     }
@@ -102,7 +103,7 @@ test('landing: nav anchors scroll to the right sections', async ({ page }, testI
 });
 
 test('landing: FAQ details expand on click', async ({ page }) => {
-  await page.goto('/#faq');
+  await gotoApp(page, '/#faq');
   const summary = page.getByText('Quanto custa?', { exact: true });
   await expect(summary).toBeVisible();
   await summary.click();
@@ -133,7 +134,7 @@ test.describe('resident UI pages render', () => {
 
     for (const p of pages) {
       await test.step(p.path, async () => {
-        await page.goto(p.path);
+        await gotoApp(page, p.path);
         await expect(page.getByRole('heading', { name: p.heading }).first()).toBeVisible();
         await expectShellRole(page, /Resident|Morador/i);
       });
@@ -162,7 +163,7 @@ test.describe('board UI pages render', () => {
 
     for (const p of pages) {
       await test.step(p.path, async () => {
-        await page.goto(p.path);
+        await gotoApp(page, p.path);
         await expect(page.getByRole('heading', { name: p.heading }).first()).toBeVisible();
         await expectShellRole(page, /Board admin|Síndico/i);
       });
@@ -176,7 +177,7 @@ test.describe('board UI pages render', () => {
 
 test('resident: click on first existing proposal shows detail', async ({ page, request }) => {
   await browserLogin(page, request, 'resident');
-  await page.goto('/app/proposals');
+  await gotoApp(page, '/app/proposals');
   const firstCard = page.locator('a[href*="/app/proposals/"]').first();
   await expect(firstCard).toBeVisible();
   await firstCard.click();
@@ -186,7 +187,7 @@ test('resident: click on first existing proposal shows detail', async ({ page, r
 
 test('resident: settings page has phone input + opt-in checkbox + save', async ({ page, request }) => {
   await browserLogin(page, request, 'resident');
-  await page.goto('/app/settings');
+  await gotoApp(page, '/app/settings');
   await expect(page.getByRole('heading', { name: /Settings|Preferênc/i })).toBeVisible();
   await expect(page.locator('input[type="tel"]')).toBeVisible();
   await expect(page.locator('input[type="checkbox"]')).toBeVisible();
@@ -199,7 +200,7 @@ test('resident: settings page has phone input + opt-in checkbox + save', async (
 
 test('board overview: stat cards render', async ({ page, request }) => {
   await browserLogin(page, request, 'admin');
-  await page.goto('/board');
+  await gotoApp(page, '/board');
   // The overview surfaces several numeric stats — just verify the page doesn't
   // crash and shows the sidebar + a heading.
   await expectShellRole(page, /Board admin|Síndico/i);
@@ -208,7 +209,7 @@ test('board overview: stat cards render', async ({ page, request }) => {
 
 test('board assemblies: "New assembly" button opens the form', async ({ page, request }) => {
   await browserLogin(page, request, 'admin');
-  await page.goto('/board/assemblies');
+  await gotoApp(page, '/board/assemblies');
   const btn = page.getByRole('button', { name: /New assembly|Nova assembleia/i });
   await expect(btn).toBeVisible();
   await btn.click();
@@ -218,7 +219,7 @@ test('board assemblies: "New assembly" button opens the form', async ({ page, re
 
 test('board residents: table renders + import roster button visible', async ({ page, request }) => {
   await browserLogin(page, request, 'admin');
-  await page.goto('/board/residents');
+  await gotoApp(page, '/board/residents');
   await expect(page.getByRole('heading', { name: /Residents|Moradores/i })).toBeVisible();
   await expect(page.getByRole('button', { name: /Import roster|Importar/i }).first()).toBeVisible();
 });
@@ -229,7 +230,7 @@ test('board residents: table renders + import roster button visible', async ({ p
 
 test('logout: Sign out button clears session and redirects', async ({ page, request, isMobile }) => {
   await browserLogin(page, request, 'resident');
-  await page.goto('/app');
+  await gotoApp(page, '/app');
 
   if (isMobile) {
     const openMenu = page.getByRole('button', { name: /Open menu|Abrir menu/i });

@@ -11,6 +11,7 @@
 // /auth/login. seedSession() does an API login once per role and pre-loads
 // the JWT into localStorage so each test skips the login form entirely.
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
+import { gotoApp } from './support/navigation';
 
 const apiURL = process.env.E2E_API_URL
   || (process.env.E2E_BASE_URL ? `${process.env.E2E_BASE_URL.replace(/\/$/, '')}/api` : 'http://127.0.0.1:4312/api');
@@ -29,6 +30,9 @@ async function loginApi(request: APIRequestContext, email: string, password: str
 }
 
 async function seedSession(page: Page, request: APIRequestContext, kind: 'admin' | 'resident' | 'concierge') {
+  // Check the web edge before consuming one of production's scarce auth attempts.
+  await gotoApp(page, '/');
+
   const creds: Record<typeof kind, [string, string]> = {
     admin:     ['admin@condoos.dev',    'admin123'],
     resident:  ['resident@condoos.dev', 'resident123'],
@@ -36,11 +40,20 @@ async function seedSession(page: Page, request: APIRequestContext, kind: 'admin'
   };
   const [email, password] = creds[kind];
   const s = await loginApi(request, email, password);
-  await page.goto('/', { waitUntil: 'domcontentloaded' });
   await page.evaluate(({ token, user }) => {
     localStorage.setItem('condoos_token', token);
     localStorage.setItem('condoos_user', JSON.stringify(user));
   }, s);
+}
+
+async function clickShellLink(page: Page, href: string) {
+  const link = page.locator(`a[href="${href}"]`).first();
+  const isMobile = (page.viewportSize()?.width || 1280) < 1024;
+  if (isMobile || !(await link.isVisible().catch(() => false))) {
+    await page.getByRole('button', { name: /Abrir menu|Open menu|Abrir menú|Ouvrir le menu/i }).click();
+  }
+  await expect(link).toBeVisible();
+  await link.click();
 }
 
 // ---------------------------------------------------------------------------
@@ -51,18 +64,18 @@ test('Admin: sidebar links hit every new page (Edifício, Finanças)', async ({ 
   test.setTimeout(60_000);
   await seedSession(page, request, 'admin');
 
-  await page.goto('/board');
+  await gotoApp(page, '/board');
   await expect(page.getByRole('heading', { name: /Visão geral|Bem-vindo/i }).first()).toBeVisible();
 
   // Edifício
-  await page.getByRole('link', { name: /^Edifício$/i }).click();
+  await clickShellLink(page, '/board/edificio');
   await expect(page).toHaveURL(/\/board\/edificio/);
   await expect(page.getByRole('heading', { name: /^Edifício$/i }).first()).toBeVisible();
   // Building cards or a "Novo bloco" button
   await expect(page.getByRole('button', { name: /Novo bloco/i })).toBeVisible();
 
   // Finanças
-  await page.getByRole('link', { name: /^Finanças$/i }).click();
+  await clickShellLink(page, '/board/financas');
   await expect(page).toHaveURL(/\/board\/financas/);
   await expect(page.getByRole('heading', { name: /^Finanças$/i }).first()).toBeVisible();
   await expect(page.getByRole('button', { name: /Nova despesa/i })).toBeVisible();
@@ -75,7 +88,7 @@ test('Admin: sidebar links hit every new page (Edifício, Finanças)', async ({ 
 test('Edifício: existing buildings render with unit counts', async ({ page, request }) => {
   test.setTimeout(45_000);
   await seedSession(page, request, 'admin');
-  await page.goto('/board/edificio');
+  await gotoApp(page, '/board/edificio');
 
   // The seeded condo has at least one building. Look for the "unidades" badge.
   await expect(page.getByText(/\d+ unidades?/i).first()).toBeVisible({ timeout: 15_000 });
@@ -93,7 +106,7 @@ test('Edifício: existing buildings render with unit counts', async ({ page, req
 test('Finanças: shows resumo por categoria + at least one expense row', async ({ page, request }) => {
   test.setTimeout(45_000);
   await seedSession(page, request, 'admin');
-  await page.goto('/board/financas');
+  await gotoApp(page, '/board/financas');
 
   // Either the seeded demo has expenses (Pine Ridge Towers, R$ 180.500) and
   // the resumo renders, or there's the empty-state message. Accept either —
@@ -115,7 +128,7 @@ test('Proposals: Nova proposta CTA + Análise pré-votação card on discussion 
   await seedSession(page, request, 'admin');
 
   // List page
-  await page.goto('/board/proposals');
+  await gotoApp(page, '/board/proposals');
   await expect(page.getByRole('heading', { name: /^Propostas$/i }).first()).toBeVisible();
   await expect(page.getByRole('button', { name: /Nova proposta/i })).toBeVisible();
 
@@ -126,7 +139,7 @@ test('Proposals: Nova proposta CTA + Análise pré-votação card on discussion 
   const discussionId = rows.find((r) => r.status === 'discussion')?.id;
   test.skip(!discussionId, 'no proposal in discussion to assert the cost card');
 
-  await page.goto(`/board/proposals/${discussionId}`);
+  await gotoApp(page, `/board/proposals/${discussionId}`);
   // The cost-analysis card surfaces in two states: with breakdown ("Análise
   // pré-votação" + a breakdown), or empty ("Custo não definido" warning).
   // Either way the heading is there.
@@ -142,7 +155,7 @@ test('Resident: Transparência renders the spend dashboard', async ({ page, requ
   test.setTimeout(45_000);
   await seedSession(page, request, 'resident');
 
-  await page.goto('/app/transparencia');
+  await gotoApp(page, '/app/transparencia');
   await expect(page.getByRole('heading', { name: /^Transparência$/i }).first()).toBeVisible();
 
   // Demo data has 13 expenses — should see the breakdown chart heading.
@@ -160,7 +173,7 @@ test('Resident: Visitantes shows Próximas/Histórico tabs and pré-aprovar in f
   test.setTimeout(45_000);
   await seedSession(page, request, 'resident');
 
-  await page.goto('/app/visitors');
+  await gotoApp(page, '/app/visitors');
   await expect(page.getByRole('heading', { name: /^Visitantes$/i }).first()).toBeVisible();
 
   // Open the form
@@ -177,7 +190,7 @@ test('Amenities: selecting Salão de Festas exposes the guest-list textarea', as
   test.setTimeout(45_000);
   await seedSession(page, request, 'resident');
 
-  await page.goto('/app/amenities');
+  await gotoApp(page, '/app/amenities');
   // Click a party-ish amenity card. Demo seeds "Party Room"; matcher also
   // accepts PT-BR variants in case the seed gets translated.
   const partyCard = page.getByRole('heading', { name: /Party Room|Salão de Festas|Salão|Festas/i }).first();
@@ -197,7 +210,7 @@ test('Concierge: porteiro lands on /concierge with the today-view', async ({ pag
   test.setTimeout(45_000);
   await seedSession(page, request, 'concierge');
 
-  await page.goto('/concierge');
+  await gotoApp(page, '/concierge');
   // Mobile-first header has the user name + day
   await expect(page.getByText(/Portaria/i).first()).toBeVisible({ timeout: 15_000 });
 

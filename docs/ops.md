@@ -70,3 +70,45 @@ flyctl secrets set -a condoos-api DEMO_AUTH_ENABLED=1
 When `NODE_ENV=production` and `DEMO_AUTH_ENABLED` is not set, known seeded demo
 credentials such as `admin@condoos.dev / admin123` are rejected and the login
 page hides one-click demo buttons.
+
+## Production E2E Against Vercel
+
+Vercel Deployment Protection can show the Security Checkpoint to automated
+browsers. Playwright must send Vercel's automation bypass secret before loading
+protected pages, otherwise UI tests fail at the edge and can waste production
+login attempts.
+
+Configure a project bypass secret in Vercel's "Protection Bypass for Automation"
+settings or API, then expose it only through your local shell or CI secrets:
+
+```powershell
+$env:VERCEL_AUTOMATION_BYPASS_SECRET='<secret-from-vercel>'
+npm run test:e2e:prod:ui
+npm run test:e2e:prod:smoke
+```
+
+The Playwright config reads `VERCEL_AUTOMATION_BYPASS_SECRET` and also accepts
+the legacy aliases `VERCEL_PROTECTION_BYPASS` and `VERCEL_BYPASS_SECRET`. When a
+value is present it sends both `x-vercel-protection-bypass` and
+`x-vercel-set-bypass-cookie: true`, matching Vercel's documented Playwright
+setup:
+
+https://vercel.com/docs/deployment-protection/methods-to-bypass-deployment-protection/protection-bypass-automation
+
+Keep `VERCEL_AUTOMATION_BYPASS_SECRET` as a GitHub Actions/Vercel secret. Do not
+commit it to `.env`, `.env.local`, screenshots, Playwright reports, or issue
+comments.
+
+Useful production test targets:
+
+```bash
+npm run test:e2e:prod:api     # API-backed reservation regression, no browser checkpoint
+npm run test:e2e:prod:smoke   # Landing/i18n/intent smoke coverage
+npm run test:e2e:prod:ui      # Authenticated browser walkthroughs
+```
+
+Production scripts intentionally run the `desktop` Playwright project only. The
+Fly API login endpoint is production-rate-limited, and running the same
+authenticated suite across desktop plus mobile can exhaust the limit before the
+second project starts. Use the full local `npm run test:e2e` matrix for
+cross-device coverage.
