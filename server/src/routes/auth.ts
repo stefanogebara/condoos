@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type Request } from 'express';
 import { timingSafeEqual } from 'crypto';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
@@ -11,21 +11,46 @@ import { createRateLimit } from '../lib/rate-limit';
 import { demoAuthEnabled, isBlockedDemoCredential } from '../lib/demo-auth';
 
 const router = Router();
-// Default 5/15min matches Sebastian's hardening. Override via AUTH_RATE_LIMIT_MAX
-// env var so E2E runs (which hit /auth/login many times across spec files) can
-// raise it temporarily without flipping the global RATE_LIMIT_DISABLED switch.
-const AUTH_RATE_LIMIT_MAX = (() => {
-  const raw = parseInt(process.env.AUTH_RATE_LIMIT_MAX || '', 10);
-  return Number.isFinite(raw) && raw > 0 ? raw : 5;
-})();
-const authRateLimit = createRateLimit({ keyPrefix: 'auth', windowMs: 15 * 60_000, max: AUTH_RATE_LIMIT_MAX });
+const AUTH_RATE_LIMIT_WINDOW_MS = 15 * 60_000;
+
+function positiveIntEnv(name: string, fallback: number): number {
+  const raw = parseInt(process.env[name] || '', 10);
+  return Number.isFinite(raw) && raw > 0 ? raw : fallback;
+}
+
+// Keep brute-force protection per credential while avoiding collateral lockouts
+// for shared NATs such as GitHub Actions runners or condo building networks.
+const AUTH_RATE_LIMIT_MAX = positiveIntEnv('AUTH_RATE_LIMIT_MAX', 5);
+const AUTH_IP_RATE_LIMIT_MAX = positiveIntEnv('AUTH_IP_RATE_LIMIT_MAX', 60);
+
+function clientIp(req: Request): string {
+  return req.ip || req.socket.remoteAddress || 'unknown';
+}
+
+export function authRateLimitKey(req: Request): string {
+  const rawEmail = typeof req.body?.email === 'string' ? req.body.email : 'unknown';
+  const email = rawEmail.trim().toLowerCase() || 'unknown';
+  return `${clientIp(req)}:${email}`;
+}
+
+const authIpRateLimit = createRateLimit({
+  keyPrefix: 'auth_ip',
+  windowMs: AUTH_RATE_LIMIT_WINDOW_MS,
+  max: AUTH_IP_RATE_LIMIT_MAX,
+});
+const authCredentialRateLimit = createRateLimit({
+  keyPrefix: 'auth_credential',
+  windowMs: AUTH_RATE_LIMIT_WINDOW_MS,
+  max: AUTH_RATE_LIMIT_MAX,
+  key: authRateLimitKey,
+});
 
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
 });
 
-router.post('/login', authRateLimit, (req, res) => {
+router.post('/login', authIpRateLimit, authCredentialRateLimit, (req, res) => {
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
   if (isBlockedDemoCredential(parsed.data.email, parsed.data.password)) {
@@ -74,7 +99,7 @@ router.get('/config', (_req, res) => {
 // Body: { credential: string } — the ID token returned by @react-oauth/google.
 const googleSchema = z.object({ credential: z.string().min(10) });
 
-router.post('/google', authRateLimit, asyncHandler(async (req, res) => {
+router.post('/google', authIpRateLimit, authCredentialRateLimit, asyncHandler(async (req, res) => {
   const parsed = googleSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
 
@@ -153,7 +178,7 @@ function constantTimeMatch(provided: string, expected: string): boolean {
   return timingSafeEqual(a, b);
 }
 
-router.post('/dev-register', authRateLimit, asyncHandler(async (req, res) => {
+router.post('/dev-register', authIpRateLimit, authCredentialRateLimit, asyncHandler(async (req, res) => {
   const expected = devRegisterSecretIsConfigured();
   // Same 404 in both "disabled" and "wrong secret" cases — never confirm to
   // unauthenticated callers that the endpoint is live.

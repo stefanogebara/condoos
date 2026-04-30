@@ -4,6 +4,7 @@ import { GoogleAuthError, verifyGoogleCredential } from '../src/lib/google-auth'
 import { buildInviteEmail, sendInviteEmail } from '../src/lib/email';
 import { createRateLimit, resetRateLimits } from '../src/lib/rate-limit';
 import { demoAuthEnabled, isBlockedDemoCredential } from '../src/lib/demo-auth';
+import { authRateLimitKey } from '../src/routes/auth';
 
 const futureExp = Math.floor(Date.now() / 1000) + 3600;
 
@@ -147,6 +148,47 @@ test('createRateLimit returns 429 after the configured allowance', () => {
   assert.equal(nextCalls, 1);
   assert.deepEqual(responses.find((r) => r.status), { status: 429 });
   assert.equal((responses.find((r) => r.body) as any).body.error, 'rate_limited');
+  resetRateLimits();
+});
+
+test('auth rate-limit key scopes shared IPs by normalized email', () => {
+  const req = {
+    ip: '203.0.113.10',
+    socket: {},
+    body: { email: ' Resident@CondoOS.Dev ' },
+  } as any;
+
+  assert.equal(authRateLimitKey(req), '203.0.113.10:resident@condoos.dev');
+});
+
+test('createRateLimit custom key allows different users behind one shared IP', () => {
+  resetRateLimits();
+  const limiter = createRateLimit({
+    keyPrefix: 'auth-test',
+    windowMs: 60_000,
+    max: 1,
+    key: (req) => authRateLimitKey(req),
+  });
+  const responses: any[] = [];
+  const res = {
+    setHeader: (name: string, value: string) => responses.push({ header: [name, value] }),
+    status(code: number) {
+      responses.push({ status: code });
+      return this;
+    },
+    json(body: unknown) {
+      responses.push({ body });
+      return this;
+    },
+  } as any;
+
+  let nextCalls = 0;
+  limiter({ ip: '203.0.113.10', socket: {}, body: { email: 'a@example.com' } } as any, res, () => { nextCalls += 1; });
+  limiter({ ip: '203.0.113.10', socket: {}, body: { email: 'b@example.com' } } as any, res, () => { nextCalls += 1; });
+  limiter({ ip: '203.0.113.10', socket: {}, body: { email: 'a@example.com' } } as any, res, () => { nextCalls += 1; });
+
+  assert.equal(nextCalls, 2);
+  assert.deepEqual(responses.find((r) => r.status), { status: 429 });
   resetRateLimits();
 });
 

@@ -71,6 +71,18 @@ When `NODE_ENV=production` and `DEMO_AUTH_ENABLED` is not set, known seeded demo
 credentials such as `admin@condoos.dev / admin123` are rejected and the login
 page hides one-click demo buttons.
 
+Production auth rate limits:
+
+```bash
+flyctl secrets set -a condoos-api AUTH_RATE_LIMIT_MAX=5
+flyctl secrets set -a condoos-api AUTH_IP_RATE_LIMIT_MAX=60
+```
+
+`AUTH_RATE_LIMIT_MAX` applies per normalized email plus client IP. The broader
+`AUTH_IP_RATE_LIMIT_MAX` applies per client IP. This prevents a shared network
+or CI runner from locking out every user after a few legitimate logins while
+still limiting credential attacks against each account.
+
 ## Production E2E Against Vercel
 
 Vercel Deployment Protection can show the Security Checkpoint to automated
