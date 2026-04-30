@@ -75,7 +75,7 @@ export default function BoardOverview() {
           <h2 className="font-display text-2xl text-dusk-500 leading-tight">
             {openSuggestions.length === 1
               ? '1 sugestão de morador esperando'
-              : `${openSuggestions.length} sugestões de moradores esperando`}
+              : <>{openSuggestions.length} sugestões de moradores esperando</>}
           </h2>
           <p className="text-sm text-dusk-300 mt-2">Agrupe, transforme em proposta ou descarte. Um clique cada.</p>
           <Link to="/board/suggestions" className="mt-5 inline-flex items-center gap-1 font-semibold text-dusk-500">
