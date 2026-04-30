@@ -17,6 +17,11 @@ concurrency:
   group: production-e2e
   cancel-in-progress: false
 
+env:
+  # Opt into GitHub's upcoming Actions Node 24 runtime before it becomes the
+  # hosted-runner default, so production checks catch compatibility issues now.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
 jobs:
   production-e2e:
     runs-on: ubuntu-latest
@@ -27,7 +32,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
           cache-dependency-path: package-lock.json
 
