@@ -46,6 +46,35 @@ const amenitySchema = z.object({
   path: ['slot_minutes'],
 });
 
+const floorUnitCountsSchema = z.array(
+  z.number().int().min(0).max(40)
+).min(1).max(80).refine((counts) => counts.some((count) => count > 0), {
+  message: 'building_must_have_at_least_one_unit',
+});
+
+const buildingInputSchema = z.object({
+  name: z.string().min(1).max(60),
+  floors: z.number().int().min(1).max(80),
+  unitsPerFloor: z.number().int().min(1).max(40),
+  floorUnitCounts: floorUnitCountsSchema.optional(),
+}).superRefine((building, ctx) => {
+  if (!building.floorUnitCounts) return;
+  if (building.floorUnitCounts.length !== building.floors) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'floor_unit_counts_must_match_floors',
+      path: ['floorUnitCounts'],
+    });
+  }
+});
+
+type BuildingInput = z.infer<typeof buildingInputSchema>;
+
+function floorCountsFor(building: BuildingInput): number[] {
+  if (building.floorUnitCounts?.length) return building.floorUnitCounts;
+  return Array.from({ length: building.floors }, () => building.unitsPerFloor);
+}
+
 // ---------------------------------------------------------------------------
 // Create a new condo (first admin)
 // ---------------------------------------------------------------------------
@@ -55,11 +84,8 @@ const createSchema = z.object({
   buildingName: z.string().min(1).max(60).default('Main Building'),
   floors: z.number().int().min(1).max(80),
   unitsPerFloor: z.number().int().min(1).max(40),
-  buildings: z.array(z.object({
-    name: z.string().min(1).max(60),
-    floors: z.number().int().min(1).max(80),
-    unitsPerFloor: z.number().int().min(1).max(40),
-  })).max(12).optional(),
+  floorUnitCounts: floorUnitCountsSchema.optional(),
+  buildings: z.array(buildingInputSchema).max(12).optional(),
   // Optional: a professional síndico / administradora who manages the building
   // without owning a unit can leave this empty. Treated as a "no-unit admin":
   // role=board_admin, no user_unit row, cannot vote in AGOs.
@@ -68,6 +94,15 @@ const createSchema = z.object({
   amenities: z.array(amenitySchema).max(30).optional(),
   requireApproval: z.boolean().default(true),
   votingModel: z.enum(['one_per_unit', 'weighted_by_sqft']).default('one_per_unit'),
+}).superRefine((body, ctx) => {
+  if (!body.floorUnitCounts) return;
+  if (body.floorUnitCounts.length !== body.floors) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'floor_unit_counts_must_match_floors',
+      path: ['floorUnitCounts'],
+    });
+  }
 });
 
 router.post('/create-building', onboardingWriteRateLimit, requireAuth, asyncHandler(async (req: AuthedRequest, res) => {
@@ -92,7 +127,7 @@ router.post('/create-building', onboardingWriteRateLimit, requireAuth, asyncHand
     );
     const buildingInputs = body.buildings?.length
       ? body.buildings
-      : [{ name: body.buildingName, floors: body.floors, unitsPerFloor: body.unitsPerFloor }];
+      : [{ name: body.buildingName, floors: body.floors, unitsPerFloor: body.unitsPerFloor, floorUnitCounts: body.floorUnitCounts }];
     const buildingIds: number[] = [];
     const ownerUnit = (body.ownerUnitNumber || '').trim();
     let ownerUnitId: number | null = null;
@@ -104,9 +139,11 @@ router.post('/create-building', onboardingWriteRateLimit, requireAuth, asyncHand
       );
       buildingIds.push(buildingId);
 
-      // 3. Generate units — floor N, units N01..N{unitsPerFloor}
+      // 3. Generate units — floor N, units N01..N{count for that floor}
+      const floorUnitCounts = floorCountsFor(building);
       for (let f = 1; f <= building.floors; f++) {
-        for (let i = 1; i <= building.unitsPerFloor; i++) {
+        const unitsOnFloor = floorUnitCounts[f - 1] ?? building.unitsPerFloor;
+        for (let i = 1; i <= unitsOnFloor; i++) {
           const number = `${f}${i.toString().padStart(2, '0')}`;
           const unitId = Number(insertUnit.run(buildingId, f, number).lastInsertRowid);
           if (ownerUnit && number === ownerUnit && !ownerUnitId) ownerUnitId = unitId;

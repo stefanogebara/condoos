@@ -9,7 +9,12 @@ import Badge from '../../components/Badge';
 import { apiPost } from '../../lib/api';
 import { track } from '../../lib/analytics';
 
-interface BuildingBlock { name: string; floors: number; unitsPerFloor: number; }
+interface BuildingBlock {
+  name: string;
+  floors: number;
+  unitsPerFloor: number;
+  floorUnitCounts: number[];
+}
 interface AmenityDraft {
   name: string;
   description: string;
@@ -35,6 +40,46 @@ const AMENITY_PRESETS: AmenityDraft[] = [
 ];
 const AMENITY_ICONS: Record<string, any> = { Dumbbell, Waves, Trophy, PartyPopper };
 
+function clampInt(raw: number, min: number, max: number) {
+  const next = Number.isFinite(raw) ? Math.trunc(raw) : min;
+  return Math.max(min, Math.min(max, next));
+}
+
+function makeFloorUnitCounts(floors: number, fallbackUnits: number, existing: number[] = []) {
+  const safeFloors = clampInt(floors, 1, MAX_FLOORS);
+  const safeFallback = clampInt(fallbackUnits, 0, MAX_UNITS_PER_FLOOR);
+  return Array.from({ length: safeFloors }, (_, idx) => (
+    existing[idx] === undefined
+      ? safeFallback
+      : clampInt(existing[idx], 0, MAX_UNITS_PER_FLOOR)
+  ));
+}
+
+function createBlock(name: string, floors: number, unitsPerFloor: number): BuildingBlock {
+  return {
+    name,
+    floors,
+    unitsPerFloor,
+    floorUnitCounts: makeFloorUnitCounts(floors, unitsPerFloor),
+  };
+}
+
+function unitsInBlock(block: BuildingBlock) {
+  return makeFloorUnitCounts(block.floors, block.unitsPerFloor, block.floorUnitCounts)
+    .reduce((sum, count) => sum + count, 0);
+}
+
+function normalizeBlock(block: BuildingBlock) {
+  const floorUnitCounts = makeFloorUnitCounts(block.floors, block.unitsPerFloor, block.floorUnitCounts);
+  const fallbackUnits = floorUnitCounts.find((count) => count > 0) || 1;
+  return {
+    name: block.name.trim(),
+    floors: floorUnitCounts.length,
+    unitsPerFloor: clampInt(block.unitsPerFloor || fallbackUnits, 1, MAX_UNITS_PER_FLOOR),
+    floorUnitCounts,
+  };
+}
+
 export default function Create() {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [saving, setSaving] = useState(false);
@@ -45,7 +90,7 @@ export default function Create() {
   const [form, setForm] = useState({
     condoName: 'Vila Nova Residences',
     address: '200 Avenida Paulista, São Paulo SP',
-    blocks: [{ name: 'Torre Principal', floors: 8, unitsPerFloor: 4 }] as BuildingBlock[],
+    blocks: [createBlock('Torre Principal', 8, 4)] as BuildingBlock[],
     ownerUnitNumber: '801',
     adminLivesInBuilding: true,   // unchecked = professional síndico (no unit)
     seedAmenities: true,
@@ -59,7 +104,55 @@ export default function Create() {
   function updateBlock(idx: number, patch: Partial<BuildingBlock>) {
     setForm((f) => ({
       ...f,
-      blocks: f.blocks.map((b, i) => (i === idx ? { ...b, ...patch } : b)),
+      blocks: f.blocks.map((b, i) => {
+        if (i !== idx) return b;
+        const next = { ...b, ...patch };
+        return {
+          ...next,
+          floors: clampInt(next.floors, 1, MAX_FLOORS),
+          unitsPerFloor: clampInt(next.unitsPerFloor, 1, MAX_UNITS_PER_FLOOR),
+          floorUnitCounts: makeFloorUnitCounts(next.floors, next.unitsPerFloor, next.floorUnitCounts),
+        };
+      }),
+    }));
+  }
+  function updateBlockFloors(idx: number, floors: number) {
+    setForm((f) => ({
+      ...f,
+      blocks: f.blocks.map((b, i) => (
+        i === idx
+          ? {
+              ...b,
+              floors: clampInt(floors, 1, MAX_FLOORS),
+              floorUnitCounts: makeFloorUnitCounts(floors, b.unitsPerFloor, b.floorUnitCounts),
+            }
+          : b
+      )),
+    }));
+  }
+  function applyUnitsToAllFloors(idx: number, unitsPerFloor: number) {
+    setForm((f) => ({
+      ...f,
+      blocks: f.blocks.map((b, i) => {
+        if (i !== idx) return b;
+        const safeUnits = clampInt(unitsPerFloor, 1, MAX_UNITS_PER_FLOOR);
+        return {
+          ...b,
+          unitsPerFloor: safeUnits,
+          floorUnitCounts: makeFloorUnitCounts(b.floors, safeUnits),
+        };
+      }),
+    }));
+  }
+  function updateFloorUnits(blockIdx: number, floorIdx: number, units: number) {
+    setForm((f) => ({
+      ...f,
+      blocks: f.blocks.map((b, i) => {
+        if (i !== blockIdx) return b;
+        const floorUnitCounts = makeFloorUnitCounts(b.floors, b.unitsPerFloor, b.floorUnitCounts);
+        floorUnitCounts[floorIdx] = clampInt(units, 0, MAX_UNITS_PER_FLOOR);
+        return { ...b, floorUnitCounts };
+      }),
     }));
   }
   function addBlock() {
@@ -68,7 +161,7 @@ export default function Create() {
       const nextIdx = f.blocks.length + 1;
       return {
         ...f,
-        blocks: [...f.blocks, { name: `Bloco ${nextIdx}`, floors: 4, unitsPerFloor: 2 }],
+        blocks: [...f.blocks, createBlock(`Bloco ${nextIdx}`, 4, 2)],
       };
     });
   }
@@ -88,9 +181,16 @@ export default function Create() {
     setForm((f) => ({ ...f, amenities: f.amenities.filter((_, i) => i !== idx) }));
   }
 
-  const totalUnits = form.blocks.reduce((sum, b) => sum + b.floors * b.unitsPerFloor, 0);
+  const totalUnits = form.blocks.reduce((sum, b) => sum + unitsInBlock(b), 0);
   const blocksValid = form.blocks.every(
-    (b) => b.name.trim().length > 0 && b.floors >= 1 && b.unitsPerFloor >= 1,
+    (b) => (
+      b.name.trim().length > 0
+      && b.floors >= 1
+      && b.unitsPerFloor >= 1
+      && b.floorUnitCounts.length === b.floors
+      && b.floorUnitCounts.every((count) => count >= 0 && count <= MAX_UNITS_PER_FLOOR)
+      && unitsInBlock(b) > 0
+    ),
   );
   const amenitiesValid = !form.seedAmenities || (
     form.amenities.length > 0
@@ -106,17 +206,18 @@ export default function Create() {
   async function submit() {
     setSaving(true);
     try {
-      // Backend createSchema requires buildingName/floors/unitsPerFloor. When
-      // multiple blocks are present we also send buildings[] which takes
-      // precedence; for a single block the legacy fields are enough.
-      const first = form.blocks[0];
+      // Legacy fields remain in the payload, but buildings[].floorUnitCounts
+      // carries the real per-floor layout for new onboarding.
+      const buildings = form.blocks.map(normalizeBlock);
+      const first = buildings[0];
       const payload = {
         condoName: form.condoName,
         address: form.address,
         buildingName: first.name,
         floors: first.floors,
         unitsPerFloor: first.unitsPerFloor,
-        buildings: form.blocks.length > 1 ? form.blocks : undefined,
+        floorUnitCounts: first.floorUnitCounts,
+        buildings,
         ownerUnitNumber: form.adminLivesInBuilding ? form.ownerUnitNumber : '',
         seedAmenities: form.seedAmenities,
         amenities: form.seedAmenities ? form.amenities.map((a) => ({
@@ -291,21 +392,50 @@ export default function Create() {
                             type="number" min={1} max={MAX_FLOORS}
                             className="input mt-1"
                             value={block.floors}
-                            onChange={(e) => updateBlock(idx, { floors: Math.max(1, Math.min(MAX_FLOORS, parseInt(e.target.value) || 1)) })}
+                            onChange={(e) => updateBlockFloors(idx, parseInt(e.target.value) || 1)}
                           />
                         </label>
                         <label className="block text-xs text-dusk-300 font-medium">
-                          Unidades por andar
+                          Unidades padrão
                           <input
                             type="number" min={1} max={MAX_UNITS_PER_FLOOR}
                             className="input mt-1"
                             value={block.unitsPerFloor}
-                            onChange={(e) => updateBlock(idx, { unitsPerFloor: Math.max(1, Math.min(MAX_UNITS_PER_FLOOR, parseInt(e.target.value) || 1)) })}
+                            onChange={(e) => applyUnitsToAllFloors(idx, parseInt(e.target.value) || 1)}
                           />
                         </label>
                       </div>
+                      <div className="mt-4 rounded-2xl bg-cream-50/70 border border-white/80 p-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <div className="text-xs font-semibold text-dusk-500">Unidades por andar</div>
+                            <div className="text-[11px] text-dusk-300">
+                              Edite os andares que fogem do padrão. Use 0 para andares sem apartamentos.
+                            </div>
+                          </div>
+                          <Badge tone={new Set(block.floorUnitCounts).size > 1 ? 'sage' : 'neutral'}>
+                            {new Set(block.floorUnitCounts).size > 1 ? 'Layout personalizado' : 'Mesmo padrão'}
+                          </Badge>
+                        </div>
+                        <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2 max-h-56 overflow-y-auto pr-1">
+                          {makeFloorUnitCounts(block.floors, block.unitsPerFloor, block.floorUnitCounts).map((units, floorIdx) => (
+                            <label key={floorIdx} className="block text-[11px] text-dusk-300 font-medium">
+                              Andar {floorIdx + 1}
+                              <input
+                                type="number"
+                                min={0}
+                                max={MAX_UNITS_PER_FLOOR}
+                                className="input mt-1"
+                                value={units}
+                                aria-label={`Unidades no andar ${floorIdx + 1} de ${block.name}`}
+                                onChange={(e) => updateFloorUnits(idx, floorIdx, parseInt(e.target.value) || 0)}
+                              />
+                            </label>
+                          ))}
+                        </div>
+                      </div>
                       <div className="text-[11px] text-dusk-300 mt-2">
-                        {block.floors * block.unitsPerFloor} unidades neste bloco
+                        {unitsInBlock(block)} unidades neste bloco
                       </div>
                     </div>
                   ))}

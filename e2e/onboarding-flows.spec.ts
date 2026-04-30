@@ -57,8 +57,8 @@ test('Onboarding API: multi-block condo creates units across all towers', async 
       floors: 8,
       unitsPerFloor: 4,
       buildings: [
-        { name: 'Torre A', floors: 8, unitsPerFloor: 4 },     // 32
-        { name: 'Torre B', floors: 5, unitsPerFloor: 6 },     // 30
+        { name: 'Torre A', floors: 8, unitsPerFloor: 4, floorUnitCounts: [4, 4, 4, 4, 4, 4, 2, 1] }, // 27
+        { name: 'Torre B', floors: 5, unitsPerFloor: 6, floorUnitCounts: [2, 6, 6, 3, 1] },           // 18
         { name: 'Cobertura', floors: 1, unitsPerFloor: 2 },    // 2
       ],
       ownerUnitNumber: '801',
@@ -69,10 +69,13 @@ test('Onboarding API: multi-block condo creates units across all towers', async 
   expect(out.buildingIds.length).toBe(3);
   expect(out.inviteCode).toMatch(/^[A-Z2-9]{6}$/);
 
-  // Cross-check: lookup by invite code should expose all 64 units (32+30+2).
+  // Cross-check: lookup by invite code should expose the uneven per-floor layout.
   const lookup = await request.get(`${apiURL}/onboarding/by-code/${out.inviteCode}`);
   const info = (await lookup.json()).data;
-  expect(info.units.length).toBe(64);
+  expect(info.units.length).toBe(47);
+  const byNumber = new Set(info.units.map((u: any) => u.number));
+  expect(byNumber.has('703')).toBeFalsy();
+  expect(byNumber.has('801')).toBeTruthy();
 });
 
 test('Onboarding API: no-unit admin can create a building and access scoped routes', async ({ request }) => {
@@ -135,6 +138,7 @@ test('Onboarding: create-building wizard renders invite code and dashboard route
   await expect(page.getByRole('heading', { name: /Blocos e sua unidade|Estrutura e sua unidade|Structure & your unit/i })).toBeVisible();
   await page.locator('input[type="number"]').nth(0).fill('5');
   await page.locator('input[type="number"]').nth(1).fill('3');
+  await page.getByLabel(/Unidades no andar 5/i).fill('1');
   // Owner unit — placeholder is "ex: 801 ou Cobertura-1", different from block name placeholder
   const ownerInput = page.getByPlaceholder(/ex: 801|PH-1/);
   await ownerInput.fill('301');

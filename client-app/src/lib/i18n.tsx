@@ -636,6 +636,13 @@ const phrases: Copy[] = [
   c('Building / tower name', 'Building / tower name', 'Nombre del edificio / torre', 'Nom de l’immeuble / tour'),
   c('Structure & your unit', 'Structure & your unit', 'Estructura y tu unidad', 'Structure et votre lot'),
   c('You can rename individual units later.', 'You can rename individual units later.', 'Puedes renombrar unidades después.', 'Vous pourrez renommer les lots plus tard.'),
+  c('Unidades padrão', 'Default units', 'Unidades predeterminadas', 'Lots par défaut'),
+  c('Unidades por andar', 'Units by floor', 'Unidades por piso', 'Lots par étage'),
+  c('Edite os andares que fogem do padrão. Use 0 para andares sem apartamentos.', 'Edit the floors that differ from the default. Use 0 for floors without apartments.', 'Edita los pisos que se salen del patrón. Usa 0 para pisos sin apartamentos.', 'Modifiez les étages qui diffèrent du défaut. Utilisez 0 pour les étages sans appartements.'),
+  c('Layout personalizado', 'Custom layout', 'Distribución personalizada', 'Plan personnalisé'),
+  c('Mesmo padrão', 'Same pattern', 'Mismo patrón', 'Même modèle'),
+  c('unidades neste bloco', 'units in this block', 'unidades en este bloque', 'lots dans ce bloc'),
+  c('unidades no total', 'units total', 'unidades en total', 'lots au total'),
   c('Continue', 'Continue', 'Continuar', 'Continuer'),
   c('Back', 'Back', 'Volver', 'Retour'),
   c('Create building', 'Create building', 'Crear edificio', 'Créer l’immeuble'),
@@ -1184,6 +1191,14 @@ const dynamicPatterns: Pattern[] = [
   {
     match: /\bUnidade\b/gu,
     replace: (locale) => pickWord(locale, ['Unidade', 'Unit', 'Unidad', 'Lot']),
+  },
+  {
+    match: /\bUnidades\b/gu,
+    replace: (locale) => pickWord(locale, ['Unidades', 'Units', 'Unidades', 'Lots']),
+  },
+  {
+    match: /\bunidades\b/gu,
+    replace: (locale) => pickWord(locale, ['unidades', 'units', 'unidades', 'lots']),
   },
   {
     match: /\bApto\b/gu,
