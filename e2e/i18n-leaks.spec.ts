@@ -117,7 +117,14 @@ async function loginAs(page: Page, role: 'admin' | 'resident' | 'porteiro') {
     porteiro: { email: 'porteiro@condoos.dev', password: 'porteiro123' },
   }[role];
 
-  const res = await page.request.post(`${apiURL}/auth/login`, { data: creds });
+  // Surface a clear message if the API is down. Avoids 14 specs failing
+  // with cryptic `apiRequestContext.post: ECONNREFUSED 127.0.0.1:4312`.
+  let res;
+  try {
+    res = await page.request.post(`${apiURL}/auth/login`, { data: creds });
+  } catch (err) {
+    throw new Error(`API unreachable at ${apiURL} — is the e2e backend running? (${(err as Error).message})`);
+  }
   expect(res.ok(), `${role} login should succeed`).toBeTruthy();
   const body = await res.json();
   const token = body?.data?.token || body?.token;

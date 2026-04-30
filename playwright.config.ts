@@ -1,11 +1,20 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const baseURL = process.env.E2E_BASE_URL || 'http://127.0.0.1:5175';
-const stackCommand = 'npm run e2e:seed && npm run e2e:stack';
+const apiURL = process.env.E2E_API_URL || 'http://127.0.0.1:4312/api';
 const vercelBypassSecret =
   process.env.VERCEL_AUTOMATION_BYPASS_SECRET ||
   process.env.VERCEL_PROTECTION_BYPASS ||
   process.env.VERCEL_BYPASS_SECRET;
+
+// Only delegate server management when the user is testing against a
+// local URL. For remote (vercel/fly.io) we never spawn anything.
+// `reuseExistingServer` is enabled when the caller has set E2E_BASE_URL
+// pointing at localhost — that lets `npm run dev:e2e` keep a long-lived
+// stack while iterating, but Playwright still owns the lifecycle when
+// no servers are up yet (heals after a crash or shell taking them down).
+const isLocalBase = /^https?:\/\/(127\.0\.0\.1|localhost|0\.0\.0\.0)/.test(baseURL);
+const reuseExisting = isLocalBase && !!process.env.E2E_BASE_URL;
 
 export default defineConfig({
   testDir: './e2e',
@@ -32,12 +41,27 @@ export default defineConfig({
     { name: 'desktop', use: { ...devices['Desktop Chrome'], locale: 'pt-BR', timezoneId: 'America/Sao_Paulo' } },
     { name: 'mobile', use: { ...devices['Pixel 7'], locale: 'pt-BR', timezoneId: 'America/Sao_Paulo' } },
   ],
-  webServer: process.env.E2E_BASE_URL
-    ? undefined
-    : {
-        command: stackCommand,
-        url: baseURL,
-        reuseExistingServer: false,
-        timeout: 120_000,
-      },
+  // Two webServers so Playwright health-checks each one independently.
+  // If the API dies mid-suite Playwright will surface it immediately
+  // instead of every spec failing with ECONNREFUSED.
+  webServer: isLocalBase
+    ? [
+        {
+          command: 'npm run e2e:seed && npm run e2e:server',
+          url: `${apiURL.replace(/\/api\/?$/, '')}/api/health`,
+          reuseExistingServer: reuseExisting,
+          timeout: 120_000,
+          stdout: 'pipe',
+          stderr: 'pipe',
+        },
+        {
+          command: 'npm run e2e:client',
+          url: baseURL,
+          reuseExistingServer: reuseExisting,
+          timeout: 60_000,
+          stdout: 'pipe',
+          stderr: 'pipe',
+        },
+      ]
+    : undefined,
 });
