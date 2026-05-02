@@ -18,7 +18,12 @@ const reuseExisting = isLocalBase && !!process.env.E2E_BASE_URL;
 
 export default defineConfig({
   testDir: './e2e',
-  timeout: 45_000,
+  // The leak/visual specs walk many routes per test (10+ pages with a
+  // login, a goto, a 800 ms render wait and a screenshot) and were
+  // hitting the previous 45 s ceiling under combined-suite load on
+  // real Chrome. Bump per-test budget so legitimate work finishes;
+  // genuine bugs still surface via the inner `expect.toEqual` checks.
+  timeout: 90_000,
   expect: { timeout: 10_000 },
   fullyParallel: false,
   workers: process.env.E2E_WORKERS ? Number(process.env.E2E_WORKERS) : 1,
