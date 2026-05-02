@@ -12,6 +12,10 @@ on:
           - api
           - ui
           - smoke
+          - safe-desktop
+          - safe-mobile
+          - safe-full
+          - integrations
 
 concurrency:
   group: production-e2e
@@ -58,3 +62,25 @@ jobs:
       - name: Run production smoke suite
         if: ${{ inputs.suite == 'smoke' }}
         run: npm run test:e2e:prod:smoke
+
+      - name: Run production-safe desktop suite
+        if: ${{ inputs.suite == 'safe-desktop' }}
+        run: npm run test:e2e:prod:safe:desktop
+
+      - name: Run production-safe mobile suite
+        if: ${{ inputs.suite == 'safe-mobile' }}
+        run: npm run test:e2e:prod:safe:mobile
+
+      - name: Run production-safe full suite
+        if: ${{ inputs.suite == 'safe-full' }}
+        run: npm run test:e2e:prod:safe
+
+      - name: Run live integration suite
+        if: ${{ inputs.suite == 'integrations' }}
+        env:
+          E2E_EXPECT_GOOGLE: ${{ vars.E2E_EXPECT_GOOGLE }}
+          E2E_EXPECT_WHATSAPP: ${{ vars.E2E_EXPECT_WHATSAPP }}
+          E2E_ALLOW_PROD_WRITES: ${{ secrets.E2E_ALLOW_PROD_WRITES }}
+          E2E_LIVE_EMAIL_TO: ${{ secrets.E2E_LIVE_EMAIL_TO }}
+          E2E_LIVE_WHATSAPP_TO: ${{ secrets.E2E_LIVE_WHATSAPP_TO }}
+        run: npm run test:e2e:prod:integrations

@@ -137,7 +137,7 @@ export default function DesignSystem() {
           </div>
 
           <div className="relative mt-6 rounded-[32px] overflow-hidden">
-            <img src="/images/bg-dusk.jpg" alt="" className="absolute inset-0 w-full h-full object-cover" />
+            <img src="/images/bg-dusk.webp" alt="" className="absolute inset-0 w-full h-full object-cover" />
             <div className="relative p-8 grid md:grid-cols-2 gap-5">
               <GlassCard variant="glass-dark" className="p-5">
                 <Label className="opacity-70 text-cream-50">glass-dark</Label>

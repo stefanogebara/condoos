@@ -1,7 +1,13 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const baseURL = process.env.E2E_BASE_URL || 'http://127.0.0.1:5175';
-const apiURL = process.env.E2E_API_URL || 'http://127.0.0.1:4312/api';
+const localBaseURL = 'http://127.0.0.1:6175';
+const localApiURL = 'http://127.0.0.1:6312/api';
+const baseURL = process.env.E2E_BASE_URL || localBaseURL;
+const apiURL = process.env.E2E_API_URL || localApiURL;
+
+if (!process.env.E2E_BASE_URL && !process.env.E2E_API_URL) {
+  process.env.E2E_API_URL = localApiURL;
+}
 const vercelBypassSecret =
   process.env.VERCEL_AUTOMATION_BYPASS_SECRET ||
   process.env.VERCEL_PROTECTION_BYPASS ||
@@ -55,7 +61,7 @@ export default defineConfig({
           command: 'npm run e2e:seed && npm run e2e:server',
           url: `${apiURL.replace(/\/api\/?$/, '')}/api/health`,
           reuseExistingServer: reuseExisting,
-          timeout: 240_000,
+          timeout: 300_000,
           stdout: 'pipe',
           stderr: 'pipe',
         },
@@ -63,7 +69,7 @@ export default defineConfig({
           command: 'npm run e2e:client',
           url: baseURL,
           reuseExistingServer: reuseExisting,
-          timeout: 120_000,
+          timeout: 180_000,
           stdout: 'pipe',
           stderr: 'pipe',
         },

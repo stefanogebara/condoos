@@ -23,6 +23,9 @@ interface Props {
 export default function Sidebar({ items, title, subtitle }: Props) {
   const { user, logout } = useAuth();
   const [open, setOpen] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia('(min-width: 1024px)').matches : true,
+  );
   const location = useLocation();
 
   // Close drawer on route change
@@ -34,6 +37,14 @@ export default function Sidebar({ items, title, subtitle }: Props) {
     document.body.style.overflow = open ? 'hidden' : prev;
     return () => { document.body.style.overflow = prev; };
   }, [open]);
+
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1024px)');
+    const sync = () => setIsDesktop(mq.matches);
+    sync();
+    mq.addEventListener('change', sync);
+    return () => mq.removeEventListener('change', sync);
+  }, []);
 
   const body = (
     <>
@@ -94,6 +105,8 @@ export default function Sidebar({ items, title, subtitle }: Props) {
     </>
   );
 
+  const drawerHidden = !open && !isDesktop;
+
   return (
     <>
       {/* Mobile top bar — only visible below lg */}
@@ -132,9 +145,9 @@ export default function Sidebar({ items, title, subtitle }: Props) {
           'transition-transform duration-300 ease-out',
           open ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
         )}
-        aria-hidden={!open && typeof window !== 'undefined' && window.innerWidth < 1024}
+        aria-hidden={drawerHidden ? true : undefined}
       >
-        {body}
+        {drawerHidden ? null : body}
       </aside>
     </>
   );

@@ -147,7 +147,7 @@ export default function Login() {
     <div className="relative min-h-screen grid lg:grid-cols-2">
       {/* Left: dusk landscape with quote */}
       <div className="relative hidden lg:flex items-end overflow-hidden">
-        <img src="/images/bg-dusk.jpg" alt="" className="absolute inset-0 w-full h-full object-cover" />
+        <img src="/images/bg-dusk.webp" alt="" className="absolute inset-0 w-full h-full object-cover" />
         <div className="absolute inset-0 bg-gradient-to-t from-dusk-500/60 via-dusk-400/10 to-transparent" />
         <div className="relative p-12 text-cream-50 max-w-lg">
           <Link to="/"><Logo size={32} /></Link>

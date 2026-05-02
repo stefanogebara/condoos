@@ -1,0 +1,150 @@
+name: Full Audit
+
+on:
+  schedule:
+    - cron: '23 7 * * *'
+  workflow_dispatch:
+    inputs:
+      production:
+        description: Run production-safe Vercel/Fly audits
+        required: true
+        default: true
+        type: boolean
+      live_integrations:
+        description: Run live provider checks that are gated by secrets
+        required: true
+        default: false
+        type: boolean
+
+concurrency:
+  group: full-audit-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+jobs:
+  local-full:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      E2E_REGISTER_SECRET: local-e2e-secret-32chars-min
+      PLAYWRIGHT_CHANNEL: chromium
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            server/package-lock.json
+            client-app/package-lock.json
+
+      - run: npm ci
+      - run: npm --prefix server ci
+      - run: npm --prefix client-app ci
+
+      - run: npm test
+      - run: npm run build
+      - run: npm run audit:ops:backup-restore
+
+      - uses: actions/cache@v5
+        id: pw-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: ms-playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: Desktop E2E
+        run: npm run test:e2e:desktop
+
+      - name: Mobile E2E
+        run: npm run test:e2e:mobile
+
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: full-audit-local-artifacts
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 14
+
+  production-safe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    if: ${{ github.event_name == 'schedule' || github.event.inputs.production == 'true' }}
+    env:
+      VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - run: npm ci
+      - run: npx playwright install --with-deps chrome
+
+      - name: Check VERCEL_AUTOMATION_BYPASS_SECRET
+        run: |
+          if [ -z "$VERCEL_AUTOMATION_BYPASS_SECRET" ]; then
+            echo "VERCEL_AUTOMATION_BYPASS_SECRET is required for protected Vercel browser suites."
+            exit 1
+          fi
+
+      - name: Lighthouse production budgets
+        run: npm run audit:perf:prod
+
+      - name: Production-safe desktop E2E
+        run: npm run test:e2e:prod:safe:desktop
+
+      - name: Production-safe mobile E2E
+        run: npm run test:e2e:prod:safe:mobile
+
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: full-audit-production-artifacts
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 14
+
+  live-integrations:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.live_integrations == 'true' }}
+    env:
+      VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+      E2E_EXPECT_GOOGLE: ${{ vars.E2E_EXPECT_GOOGLE }}
+      E2E_EXPECT_WHATSAPP: ${{ vars.E2E_EXPECT_WHATSAPP }}
+      E2E_ALLOW_PROD_WRITES: ${{ secrets.E2E_ALLOW_PROD_WRITES }}
+      E2E_LIVE_EMAIL_TO: ${{ secrets.E2E_LIVE_EMAIL_TO }}
+      E2E_LIVE_WHATSAPP_TO: ${{ secrets.E2E_LIVE_WHATSAPP_TO }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - run: npm ci
+      - run: npx playwright install --with-deps chrome
+      - run: npm run test:e2e:prod:integrations
+
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: full-audit-live-integration-artifacts
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 14

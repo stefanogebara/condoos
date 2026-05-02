@@ -177,7 +177,7 @@ export default function Landing() {
       {/* AI callout — dusk landscape with glass cards */}
       <section id="ai" className="relative px-6 lg:px-12 pb-28 scroll-mt-20">
         <div className="max-w-7xl mx-auto relative overflow-hidden rounded-[40px] shadow-clay-lg">
-          <img src="/images/bg-dusk.jpg" alt="" aria-hidden loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover" />
+          <img src="/images/bg-dusk.webp" alt="" aria-hidden loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover" />
           <div className="absolute inset-0 bg-gradient-to-b from-dusk-500/10 via-transparent to-dusk-500/30" />
           <div className="relative p-10 md:p-16 text-cream-50">
             <span className="chip bg-white/20 border-white/30 text-cream-50"><Sparkles className="w-3.5 h-3.5" /> Copiloto IA</span>

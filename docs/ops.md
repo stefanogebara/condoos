@@ -117,10 +117,47 @@ Useful production test targets:
 npm run test:e2e:prod:api     # API-backed reservation regression, no browser checkpoint
 npm run test:e2e:prod:smoke   # Landing/i18n/intent smoke coverage
 npm run test:e2e:prod:ui      # Authenticated browser walkthroughs
+npm run test:e2e:prod:safe    # Desktop + mobile production-safe UI/i18n/a11y sweep
+npm run audit:perf:prod       # Lighthouse budgets for public production pages
 ```
 
-Production scripts intentionally run the `desktop` Playwright project only. The
-Fly API login endpoint is production-rate-limited, and running the same
-authenticated suite across desktop plus mobile can exhaust the limit before the
-second project starts. Use the full local `npm run test:e2e` matrix for
-cross-device coverage.
+`test:e2e:prod:safe` is deliberately limited to read-only or form-open browser
+flows. Do not point the full mutating local E2E suite at production unless the
+database is disposable or a cleanup plan is in place.
+
+## Full Audit Workflow
+
+GitHub Actions has a scheduled `Full Audit` workflow plus manual dispatch. It
+does the expensive checks that should not block every push:
+
+- local seeded backend tests, build, and backup/restore dry run
+- full local Playwright desktop and mobile matrix
+- production-safe desktop and mobile Playwright sweeps against Vercel/Fly
+- axe accessibility checks for public, resident, board, and concierge pages
+- Lighthouse budgets for `/`, `/login`, and `/onboarding`
+- optional live provider checks for PostHog, Google config, Resend, and WhatsApp
+
+Required GitHub secret for production browser checks:
+
+```text
+VERCEL_AUTOMATION_BYPASS_SECRET
+```
+
+Optional GitHub variables:
+
+```text
+E2E_EXPECT_GOOGLE=1
+E2E_EXPECT_WHATSAPP=1
+```
+
+Optional write-enabled live-provider secrets:
+
+```text
+E2E_ALLOW_PROD_WRITES=1
+E2E_LIVE_EMAIL_TO=stefanogebara@gmail.com
+E2E_LIVE_WHATSAPP_TO=+5511999002121
+```
+
+Only set `E2E_ALLOW_PROD_WRITES=1` for a manual run when you actually want the
+workflow to create a production invite email and a production package
+notification. The default scheduled workflow avoids those writes.
