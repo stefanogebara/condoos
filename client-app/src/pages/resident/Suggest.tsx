@@ -100,9 +100,10 @@ export default function Suggest() {
                     key={ex}
                     type="button"
                     onClick={() => setText(ex)}
-                    className="chip hover:bg-white/70 transition"
+                    className="chip hover:bg-white/70 transition max-w-[18rem] truncate"
+                    title={ex}
                   >
-                    {ex.length > 44 ? ex.slice(0, 44) + '...' : ex}
+                    {ex}
                   </button>
                 ))}
               </div>

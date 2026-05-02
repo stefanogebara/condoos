@@ -1084,6 +1084,67 @@ const phrases: Copy[] = [
   c('Rejeitada', 'Rejected', 'Rechazada', 'Rejetée'),
   c('Em discussão', 'In discussion', 'En discusión', 'En discussion'),
 
+  // Resident Settings (/app/settings)
+  c('Preferências', 'Preferences', 'Preferencias', 'Préférences'),
+  c('Perfil e notificações', 'Profile & notifications', 'Perfil y notificaciones', 'Profil et notifications'),
+  c('Perfil', 'Profile', 'Perfil', 'Profil'),
+  c('Notificações no WhatsApp', 'WhatsApp notifications', 'Notificaciones por WhatsApp', 'Notifications WhatsApp'),
+  c('Receba avisos no WhatsApp: convocação de assembleia, abertura de votação, chegada de encomenda.', 'Get WhatsApp notices: assembly call, voting open, package arrival.', 'Recibe avisos por WhatsApp: convocatoria de asamblea, apertura de votación, llegada de paquete.', 'Recevez sur WhatsApp : convocation d’assemblée, ouverture du vote, arrivée de colis.'),
+  c('Número com DDD (ex: +55 11 99999-0000)', 'Phone with country code (e.g. +55 11 99999-0000)', 'Teléfono con código (ej.: +55 11 99999-0000)', 'Téléphone avec indicatif (ex. +55 11 99999-0000)'),
+  c('Autorizar notificações pelo WhatsApp', 'Authorize WhatsApp notifications', 'Autorizar notificaciones por WhatsApp', 'Autoriser les notifications WhatsApp'),
+  c('Ativo', 'Active', 'Activo', 'Actif'),
+  c('Desativado', 'Disabled', 'Desactivado', 'Désactivé'),
+  c('Preferências salvas', 'Preferences saved', 'Preferencias guardadas', 'Préférences enregistrées'),
+  c('Não foi possível salvar', 'Could not save', 'No se pudo guardar', 'Impossible d’enregistrer'),
+
+  // Resident Packages (/app/packages)
+  c('Tudo aguardando você na portaria.', 'Everything waiting for you at the front desk.', 'Todo esperando por ti en la portería.', 'Tout ce qui vous attend à la conciergerie.'),
+  c('Nenhuma encomenda ainda', 'No packages yet', 'Sin paquetes todavía', 'Aucun colis pour l’instant'),
+  c('As entregas aparecem aqui no momento que chegam.', 'Deliveries show up here the moment they arrive.', 'Las entregas aparecen aquí en cuanto llegan.', 'Les livraisons apparaissent ici dès leur arrivée.'),
+  c('Aguardando retirada', 'Waiting for pickup', 'Esperando retiro', 'En attente de retrait'),
+  c('aguardando', 'waiting', 'esperando', 'en attente'),
+  c('Chegou em', 'Arrived on', 'Llegó el', 'Arrivé le'),
+  c('Retiradas recentes', 'Recently picked up', 'Retiros recientes', 'Récemment récupérés'),
+
+  // Resident Assemblies (/app/assemblies)
+  c('AGO / AGE — conceda procuração se não puder comparecer, ou vote ao vivo.', 'AGM / EGM — grant a proxy if you cannot attend, or vote live.', 'AGO / AGE — concede un poder si no puedes asistir, o vota en vivo.', 'AGO / AGE — donnez procuration si vous ne pouvez pas venir, ou votez en direct.'),
+
+  // Resident AssemblyDetail
+  c('Conceda uma procuração a outro morador para votar em seu nome.', 'Grant a proxy to another resident to vote in your name.', 'Concede un poder a otro residente para que vote en tu nombre.', 'Donnez procuration à un autre résident pour voter en votre nom.'),
+  c('Não poderá comparecer?', 'Cannot attend?', '¿No puedes asistir?', 'Vous ne pouvez pas venir ?'),
+  c('Conceder procuração', 'Grant proxy', 'Conceder poder', 'Donner procuration'),
+  c('Procuração ativa', 'Active proxy', 'Poder activo', 'Procuration active'),
+  c('Procuração concedida', 'Proxy granted', 'Poder concedido', 'Procuration accordée'),
+  c('Procuração revogada', 'Proxy revoked', 'Poder revocado', 'Procuration révoquée'),
+  c('Revogar', 'Revoke', 'Revocar', 'Révoquer'),
+  c('Sessão aberta', 'Session open', 'Sesión abierta', 'Session ouverte'),
+  c('Registrar presença', 'Register attendance', 'Registrar asistencia', 'Enregistrer la présence'),
+  c('Registre sua presença para votar.', 'Register your attendance to vote.', 'Registra tu asistencia para votar.', 'Enregistrez votre présence pour voter.'),
+  c('Presença registrada', 'Attendance registered', 'Asistencia registrada', 'Présence enregistrée'),
+  c('Você pode votar', 'You can vote', 'Puedes votar', 'Vous pouvez voter'),
+  c('Apenas proprietários votam', 'Only owners can vote', 'Solo los propietarios votan', 'Seuls les propriétaires votent'),
+  c('Inadimplente — voto bloqueado', 'In arrears — vote blocked', 'En mora — voto bloqueado', 'En arriérés — vote bloqué'),
+  c('Pauta', 'Agenda', 'Agenda', 'Ordre du jour'),
+  c('Ata', 'Minutes', 'Acta', 'Procès-verbal'),
+  c('A lista nominal de presença e procurações fica visível apenas para o conselho.', 'The full attendance and proxy list is visible only to the board.', 'La lista nominal de asistencia y poderes solo es visible para el consejo.', 'La liste nominative de présence et procurations n’est visible que pour le conseil.'),
+  c('Escolher morador…', 'Choose a resident…', 'Elegir residente…', 'Choisir un résident…'),
+
+  // Resident Meetings (/app/meetings)
+  c('Reuniões do síndico, pautas e resumos gerados pela IA.', 'Board meetings, agendas, and AI-generated recaps.', 'Reuniones del administrador, agendas y resúmenes generados por IA.', 'Réunions du syndic, ordres du jour et résumés générés par IA.'),
+
+  // Concierge texts
+  c('Eventos hoje', 'Today\'s events', 'Eventos de hoy', 'Événements du jour'),
+  c('Encomendas pendentes', 'Pending packages', 'Paquetes pendientes', 'Colis en attente'),
+  c('Retirar', 'Pick up', 'Retirar', 'Récupérer'),
+  c('Marcar como chegou', 'Mark as arrived', 'Marcar como llegó', 'Marquer comme arrivé'),
+  c('Ninguém aguardando agora', 'No one waiting right now', 'Nadie esperando ahora', 'Personne n’attend pour le moment'),
+  c('Hoje não há reservas', 'No reservations today', 'Hoy no hay reservas', 'Aucune réservation aujourd’hui'),
+  c('Visitantes do dia', 'Today\'s visitors', 'Visitantes del día', 'Visiteurs du jour'),
+  c('Entregas em espera', 'Pending deliveries', 'Entregas en espera', 'Livraisons en attente'),
+
+  // Marketing/board copy
+  c('AGO / AGE. Proprietários votam. Procurações e quórum aplicados. A IA redige a ata.', 'AGM / EGM. Owners vote. Proxies and quorum applied. AI drafts the minutes.', 'AGO / AGE. Los propietarios votan. Poderes y quórum aplicados. La IA redacta el acta.', 'AGO / AGE. Les propriétaires votent. Procurations et quorum appliqués. L’IA rédige le procès-verbal.'),
+
   // Board amenities (added in upstream commit)
   c('Áreas comuns', 'Amenities', 'Áreas comunes', 'Espaces communs'),
   c('Carregando…', 'Loading…', 'Cargando…', 'Chargement…'),
@@ -1292,6 +1353,54 @@ const dynamicPatterns: Pattern[] = [
   {
     match: /\bEdifício\b/gu,
     replace: (locale) => pickWord(locale, ['Edifício', 'Building', 'Edificio', 'Immeuble']),
+  },
+  // "Chegou em " — prefix before a formatted date (template literal split)
+  {
+    match: /\bChegou em\s/gu,
+    replace: (locale) => `${pickWord(locale, ['Chegou em', 'Arrived on', 'Llegó el', 'Arrivé le'])} `,
+  },
+  // " · chegou " — lowercase variant from concierge package list (template split)
+  {
+    match: /\bchegou\b/gu,
+    replace: (locale) => pickWord(locale, ['chegou', 'arrived', 'llegó', 'arrivé']),
+  },
+  // Lowercase "quórum" in marketing/landing copy
+  {
+    match: /\bquórum\b/gu,
+    replace: (locale) => pickWord(locale, ['quórum', 'quorum', 'quórum', 'quorum']),
+  },
+  // "Proposto por" — prefix before a name
+  {
+    match: /\bProposto por\s/gu,
+    replace: (locale) => `${pickWord(locale, ['Proposto por', 'Proposed by', 'Propuesto por', 'Proposé par'])} `,
+  },
+  // "Quórum" / "Quorum"
+  {
+    match: /\bQuórum\b/gu,
+    replace: (locale) => pickWord(locale, ['Quórum', 'Quorum', 'Quórum', 'Quorum']),
+  },
+  // "Procuração" / "Procurações"
+  {
+    match: /\bProcurações\b/gu,
+    replace: (locale) => pickWord(locale, ['Procurações', 'Proxies', 'Poderes', 'Procurations']),
+  },
+  {
+    match: /\bProcuração\b/gu,
+    replace: (locale) => pickWord(locale, ['Procuração', 'Proxy', 'Poder', 'Procuration']),
+  },
+  // "Proprietários" / "Proprietária"
+  {
+    match: /\bProprietários\b/gu,
+    replace: (locale) => pickWord(locale, ['Proprietários', 'Owners', 'Propietarios', 'Propriétaires']),
+  },
+  {
+    match: /\bproprietários\b/gu,
+    replace: (locale) => pickWord(locale, ['proprietários', 'owners', 'propietarios', 'propriétaires']),
+  },
+  // "Inadimplente"
+  {
+    match: /\bInadimplente\b/gu,
+    replace: (locale) => pickWord(locale, ['Inadimplente', 'In arrears', 'En mora', 'En arriérés']),
   },
 ];
 

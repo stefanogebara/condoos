@@ -56,6 +56,45 @@ const PT_MARKERS: RegExp[] = [
   /\bunidades\b/iu,
   /\bhoje\b/iu,
   /\bdesc(rever|rição|reva)\b/iu,
+  // Multi-word PT phrases — none of these are valid in EN/ES/FR.
+  /Aqui está/iu,
+  /Você (?:pode|tem|recebe|autorizou)/iu,
+  /Seu (?:prédio|voto|condomínio|nome)/iu,
+  /Sua (?:unidade|reserva|presença)/iu,
+  /Seus (?:dados|pedidos)/iu,
+  /Suas (?:reservas|preferências)/iu,
+  /Não foi possível/iu,
+  /\bredigido pela ia\b/iu,
+  /\bgerado pela ia\b/iu,
+  /Receba (?:avisos|o resumo)/iu,
+  /\bnotificações\b/iu,    // ES is notificaciones — PT only
+  /\bautorizar\b/iu,        // also ES — relax in ES walk
+  /\bnenhum[ao]?\b/iu,      // ES is ninguno — exclude from ES
+  /\bcom IA\b/iu,           // "com IA" PT — relax in ES walk
+  /\bjuridiquês\b/iu,
+  /\bConvocação\b/iu,
+  /\bConceda\b/iu,
+  /\bRegistre\b/iu,
+  /\bConvocar\b/iu,
+  /\bConvocada\b/iu,
+  /\bencerrada\b/iu,
+  /\brascunho\b/iu,
+  /\bDescrição\b/iu,
+  /\bDecisões\b/iu,
+  /\bComentário\b/iu,
+  /\bComentários\b/iu,
+  /\bEnviado\b/iu,
+  /\bAtivo\b/iu,
+  /\bproprietários?\b/iu,
+  /\bproprietária\b/iu,
+  /\bprocuração\b/iu,
+  /\bprocurações\b/iu,
+  /\bquórum\b/iu,
+  /\binadimplente\b/iu,
+  /\bRetirei\b/iu,
+  /\bRetirar\b/iu,
+  /\bChegou em\b/iu,
+  /\bChegou (?:hoje|agora|no)\b/iu,
 ];
 
 // Per-locale exclusion: many words overlap with Spanish (visitantes, moradores, salvar, etc.)
@@ -75,6 +114,14 @@ const ES_EXCLUDES = new Set([
   'proximas', 'próximas', 'proximos', 'próximos',
   'aprovacion', 'aprovación',
   'discusion', 'discussão',
+  'autorizar', 'rascunho', 'descripción', 'descrição',
+  'comentarios', 'comentários', 'comentario', 'comentário',
+  'enviado', 'activo', 'ativo',
+  'propietarios', 'proprietários', 'propietaria', 'proprietária',
+  'quorum', 'quórum',
+  'retirar',
+  'eventos hoy', 'eventos hoje', // Spanish + Portuguese form of same phrase
+  'inadimplente', // not a Spanish word but same as PT
 ]);
 
 type Leak = { word: string; context: string };
@@ -166,6 +213,10 @@ const RESIDENT_ROUTES = [
   '/app/announcements',
   '/app/transparencia',
   '/app/suggest',
+  '/app/settings',
+  '/app/assemblies',
+  '/app/meetings',
+  '/app/packages',
 ];
 const PORTEIRO_ROUTES = [
   '/concierge',
