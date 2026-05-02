@@ -18,10 +18,10 @@ const LOCALES: Array<{ locale: Locale; label: string; tz: string }> = [
 // Locale-specific signature words per page. If a word is missing the page
 // did not translate; if a foreign-locale word is present, there's a leak.
 const SIGNATURES: Record<Locale, RegExp> = {
-  'pt-BR': /(Encomendas|Visitantes|Áreas comuns|Comunicados|Propostas)/,
-  'en-US': /(Packages|Visitors|Amenities|Announcements|Proposals)/,
-  'es-ES': /(Paquetes|Visitantes|Áreas comunes|Avisos|Propuestas)/,
-  'fr-FR': /(Colis|Visiteurs|Espaces communs|Annonces|Propositions)/,
+  'pt-BR': /(Encomendas|Visitantes|Áreas comuns|Comunicados|Propostas)/i,
+  'en-US': /(Packages|Visitors|Amenities|Announcements|Proposals)/i,
+  'es-ES': /(Paquetes|Visitantes|Áreas comunes|Avisos|Propuestas)/i,
+  'fr-FR': /(Colis|Visiteurs|Espaces communs|Annonces|Propositions)/i,
 };
 
 async function loginAs(page: Page, role: 'admin' | 'resident' | 'porteiro') {

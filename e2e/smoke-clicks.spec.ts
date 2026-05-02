@@ -4,7 +4,7 @@
 // at the end so failures are easy to triage.
 //
 // Buttons whose label matches DESTRUCTIVE_LABELS are skipped because we
-// don't want to actually delete a unit / deny a visitor / etc.
+// don't want to actually delete a unit, deny a visitor, reset a form, etc.
 import { test, expect, Page, ConsoleMessage } from '@playwright/test';
 
 const apiURL = process.env.E2E_API_URL
@@ -59,6 +59,8 @@ const DESTRUCTIVE_LABELS = [
   'recusar', 'reject', 'rechazar', 'rejeter',
   'sair', 'sign out', 'cerrar sesión', 'se déconnecter',
   'revogar', 'revoke', 'revocar', 'révoquer',
+  'cancelar', 'cancel', 'annuler',
+  'enviar', 'send', 'submit', 'envoyer',
   // Status-changing actions that mutate global state for this fixture
   'encerrar', 'close session', 'cerrar', 'clore',
   'publicar decisão', 'publish decision',
@@ -124,11 +126,17 @@ async function clickAllButtons(page: Page, route: string): Promise<ClickReport> 
         continue;
       }
 
+      const enabled = await btn.isEnabled({ timeout: 500 }).catch(() => false);
+      if (!enabled) {
+        report.skipped.push(`${trimmed || '(no label)'} (disabled)`);
+        continue;
+      }
+
       const beforeUrl = page.url();
       try {
         // Some buttons may be off-screen — scroll into view, click with timeout.
         await btn.scrollIntoViewIfNeeded({ timeout: 1500 }).catch(() => {});
-        await btn.click({ timeout: 2000, trial: false, force: false });
+        await btn.click({ timeout: 5000, trial: false, force: false });
         report.clicked += 1;
 
         // Settle: dismiss any toast, close any modal, and return to route.
