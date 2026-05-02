@@ -1145,6 +1145,25 @@ const phrases: Copy[] = [
   // Marketing/board copy
   c('AGO / AGE. Proprietários votam. Procurações e quórum aplicados. A IA redige a ata.', 'AGM / EGM. Owners vote. Proxies and quorum applied. AI drafts the minutes.', 'AGO / AGE. Los propietarios votan. Poderes y quórum aplicados. La IA redacta el acta.', 'AGO / AGE. Les propriétaires votent. Procurations et quorum appliqués. L’IA rédige le procès-verbal.'),
 
+  // AI-drafted proposal copy that exists in production demo data. Adding
+  // these here so the existing demo proposals translate; new proposals get
+  // drafted in the user's locale via the locale param on /ai/proposal-draft.
+  c('Reparar ou substituir esteira #3 com ruído excessivo', 'Repair or replace treadmill #3 with excessive noise', 'Reparar o sustituir cinta #3 con ruido excesivo', 'Réparer ou remplacer le tapis #3 trop bruyant'),
+  c('A esteira #3 na academia está produzindo ruído anormal durante o uso, potencialmente indicando desgaste mecânico.', 'Treadmill #3 in the gym is producing abnormal noise during use, potentially indicating mechanical wear.', 'La cinta #3 del gimnasio produce un ruido anormal durante el uso, lo que indica posible desgaste mecánico.', 'Le tapis #3 de la salle de sport produit un bruit anormal pendant l’utilisation, indiquant probablement une usure mécanique.'),
+  c('Trocar ou consertar o portão da garagem', 'Replace or repair the garage gate', 'Cambiar o reparar el portón del garaje', 'Remplacer ou réparer le portail du garage'),
+  c('O portão da garagem está apresentando falhas mecânicas frequentes, causando transtorno aos moradores. Avaliar reparo vs substituição com 3 orçamentos.', 'The garage gate has frequent mechanical failures, causing inconvenience for residents. Evaluate repair vs replacement with three bids.', 'El portón del garaje presenta fallas mecánicas frecuentes, causando molestias a los residentes. Evaluar reparación vs reemplazo con 3 presupuestos.', 'Le portail du garage tombe régulièrement en panne, gênant les résidents. Comparer réparation et remplacement avec trois devis.'),
+
+  // AI/manual badges still leaking on cards
+  c('AI-drafted', 'AI-drafted', 'redactado por IA', 'rédigé par IA'),
+  c('discussion', 'discussion', 'en discusión', 'en discussion'),
+  c('maintenance', 'maintenance', 'mantenimiento', 'maintenance'),
+  c('infrastructure', 'infrastructure', 'infraestructura', 'infrastructure'),
+  c('safety', 'safety', 'seguridad', 'sécurité'),
+  c('amenity', 'amenity', 'área común', 'espace commun'),
+  c('community', 'community', 'comunidad', 'communauté'),
+  c('policy', 'policy', 'política', 'politique'),
+  c('financial', 'financial', 'financiero', 'financier'),
+
   // Board amenities (added in upstream commit)
   c('Áreas comuns', 'Amenities', 'Áreas comunes', 'Espaces communs'),
   c('Carregando…', 'Loading…', 'Cargando…', 'Chargement…'),

@@ -75,14 +75,28 @@ async function tryAI<T>(
   }
 }
 
-// 1. Draft a proposal from free-text resident suggestion
+// 1. Draft a proposal from free-text resident suggestion.
+// `locale` (optional) forces the model to respond in that language regardless
+// of what the resident wrote — e.g. an English-locale user typing PT still
+// gets an English proposal back, so the demo stays single-language.
+const LOCALE_NAMES: Record<string, string> = {
+  'pt-BR': 'Brazilian Portuguese',
+  'en-US': 'English',
+  'es-ES': 'Spanish',
+  'fr-FR': 'French',
+};
 router.post('/proposal-draft', requireAuth, aiRateLimit, asyncHandler(async (req: AuthedRequest, res) => {
   const input = boundedText(req.body?.text, 4_000);
   if (!input.ok) return fail(res, input.error, input.error === 'text_too_long' ? 413 : 400);
   const text = input.text;
+  const localeRaw = typeof req.body?.locale === 'string' ? req.body.locale : '';
+  const localeName = LOCALE_NAMES[localeRaw] || '';
+  const localeOverride = localeName
+    ? `\n\n## Output language\nRespond ONLY in ${localeName}. If the resident wrote in another language, translate as you draft. Do not echo the input language.`
+    : '';
   const out = await tryAI(
     [
-      { role: 'system', content: PROPOSAL_DRAFT_SYS },
+      { role: 'system', content: PROPOSAL_DRAFT_SYS + localeOverride },
       { role: 'user', content: text },
     ],
     () => fallbackProposalDraft(text),

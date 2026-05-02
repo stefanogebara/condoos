@@ -8,7 +8,7 @@ import Button from '../../components/Button';
 import Badge from '../../components/Badge';
 import { apiPost } from '../../lib/api';
 import { track } from '../../lib/analytics';
-import { formatCurrency } from '../../lib/i18n';
+import { formatCurrency, useLocale } from '../../lib/i18n';
 
 interface Draft {
   title: string;
@@ -21,6 +21,7 @@ interface Draft {
 
 export default function Suggest() {
   const navigate = useNavigate();
+  const { locale } = useLocale();
   const [text, setText] = useState('');
   const [saving, setSaving] = useState(false);
   const [drafting, setDrafting] = useState(false);
@@ -36,7 +37,11 @@ export default function Suggest() {
       toast.success('Enviado ao síndico');
       setDrafting(true);
       try {
-        const d = await apiPost<Draft>('/ai/proposal-draft', { text });
+        // Pass the user's UI locale so the AI drafts in their language even
+        // when the input is Portuguese (or vice-versa). Without this, a French
+        // user clicking a Portuguese example chip would get a Portuguese
+        // proposal stuck in their condo.
+        const d = await apiPost<Draft>('/ai/proposal-draft', { text, locale });
         track('proposal_drafted', { category: d.category, has_estimate: d.estimated_cost != null, fallback: !!d._fallback });
         setDraft(d);
       } finally { setDrafting(false); }
