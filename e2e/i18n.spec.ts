@@ -5,7 +5,7 @@ test.describe('locale auto-detection', () => {
   test.use({ locale: 'en-US', timezoneId: 'America/New_York' });
 
   test('renders public and login copy in English for US location', async ({ page }) => {
-    await gotoApp(page, '/');
+    await page.goto('/');
     await expect(page.getByRole('heading', { name: /Your condo,/i })).toBeVisible();
     await expect(page.getByText(/at peace\./i)).toBeVisible();
     await expect(page.getByRole('link', { name: /^Sign in$/i }).first()).toBeVisible();
@@ -27,7 +27,7 @@ test.describe('Spanish locale', () => {
   test.use({ locale: 'es-ES', timezoneId: 'Europe/Madrid' });
 
   test('renders key public copy in Spanish for Spain location', async ({ page }) => {
-    await gotoApp(page, '/');
+    await page.goto('/');
     await expect(page.getByRole('heading', { name: /Tu condominio,/i })).toBeVisible();
     await expect(page.getByText(/en paz\./i)).toBeVisible();
     await expect(page.getByRole('link', { name: /^Entrar$/i }).first()).toBeVisible();
@@ -39,7 +39,7 @@ test.describe('French locale', () => {
   test.use({ locale: 'fr-FR', timezoneId: 'Europe/Paris' });
 
   test('renders key public copy in French for France location', async ({ page }) => {
-    await gotoApp(page, '/');
+    await page.goto('/');
     await expect(page.getByRole('heading', { name: /Votre copropriété,/i })).toBeVisible();
     await expect(page.getByText(/en paix\./i)).toBeVisible();
     await expect(page.getByRole('link', { name: /^Connexion$/i }).first()).toBeVisible();
@@ -47,13 +47,28 @@ test.describe('French locale', () => {
   });
 });
 
-test.describe('location priority', () => {
-  test.use({ locale: 'pt-BR', timezoneId: 'Europe/Paris' });
+test.describe('browser-language priority over timezone', () => {
+  // Real-world bug: a user physically in Spain (`es-ES` browser) was
+  // sometimes pulled into French because their device timezone said
+  // `Europe/Paris`. Browser language must win — it's an explicit user
+  // preference; timezone is a heuristic.
+  test.use({ locale: 'es-ES', timezoneId: 'Europe/Paris' });
 
-  test('prefers location over browser language before manual override', async ({ page }) => {
-    await gotoApp(page, '/');
-    await expect(page.getByRole('heading', { name: /Votre copropriété,/i })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Localisation utilisée/i })).toBeVisible();
+  test('Spanish browser pinned to Paris timezone still renders Spanish', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByRole('heading', { name: /Tu condominio,/i })).toBeVisible();
+  });
+});
+
+test.describe('timezone fallback when browser is generic English', () => {
+  // When the browser default is plain English we still want to pick up
+  // location-as-a-hint via the timezone — a US-locale browser visiting
+  // from a Spanish IP/timezone should land in Spanish.
+  test.use({ locale: 'en-US', timezoneId: 'Europe/Madrid' });
+
+  test('English browser + Madrid timezone falls through to Spanish', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByRole('heading', { name: /Tu condominio,/i })).toBeVisible();
   });
 });
 
@@ -61,7 +76,7 @@ test.describe('manual language switcher', () => {
   test.use({ locale: 'pt-BR', timezoneId: 'America/Sao_Paulo' });
 
   test('lets users override the detected language', async ({ page }) => {
-    await gotoApp(page, '/');
+    await page.goto('/');
     await expect(page.getByRole('heading', { name: /Seu condomínio,/i })).toBeVisible();
 
     await page.locator('select[aria-label]').selectOption('en-US');
@@ -106,7 +121,7 @@ test.describe('precise location reset', () => {
       });
     });
 
-    await gotoApp(page, '/');
+    await page.goto('/');
     await page.locator('select[aria-label]').selectOption('fr-FR');
     await expect(page.getByRole('heading', { name: /Votre copropriété,/i })).toBeVisible();
 

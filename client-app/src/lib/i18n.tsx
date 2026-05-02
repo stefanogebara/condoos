@@ -179,7 +179,19 @@ function locationLocale(): AppLocale | null {
 }
 
 function detectAutoLocale(): AppLocale {
-  return locationLocale() || browserLocale();
+  // Browser language is a stronger signal of the user's preferred locale
+  // than timezone. Bug we hit: a user physically in Spain (with a
+  // ne-Madrid timezone but `Europe/Paris` reported by their device) was
+  // getting French. By trusting `navigator.languages` first we honour
+  // their explicit preference; we still fall back to timezone for users
+  // whose browser default doesn't match any of our four locales.
+  const browser = browserLocale();
+  if (browser !== 'en-US') return browser; // explicit non-English preference wins
+  // navigator.languages defaulted to en-US (no PT/ES/FR signal). Use
+  // timezone if it points us to one of the supported regions; otherwise
+  // keep the en-US fallback.
+  const fromZone = locationLocale();
+  return fromZone || browser;
 }
 
 function detectLocale(): AppLocale {
@@ -1144,6 +1156,72 @@ const phrases: Copy[] = [
 
   // Marketing/board copy
   c('AGO / AGE. Proprietários votam. Procurações e quórum aplicados. A IA redige a ata.', 'AGM / EGM. Owners vote. Proxies and quorum applied. AI drafts the minutes.', 'AGO / AGE. Los propietarios votan. Poderes y quórum aplicados. La IA redacta el acta.', 'AGO / AGE. Les propriétaires votent. Procurations et quorum appliqués. L’IA rédige le procès-verbal.'),
+
+  // Onboarding — landing /onboarding
+  c('Olá', 'Hi', 'Hola', 'Salut'),
+  c('Sair', 'Sign out', 'Cerrar sesión', 'Se déconnecter'),
+  c('Carregando…', 'Loading…', 'Cargando…', 'Chargement…'),
+  c('Passo 1 de 2', 'Step 1 of 2', 'Paso 1 de 2', 'Étape 1 sur 2'),
+  c('Vamos encontrar seu prédio.', 'Let’s find your building.', 'Vamos a encontrar tu edificio.', 'Trouvons votre immeuble.'),
+  c('Se seu prédio já está no CondoOS, entre com o código que o síndico mandou. Se não, monte um novo — você é o primeiro síndico.', 'If your building is already on CondoOS, sign in with the invite code your board admin shared. If not, set up a new one — you are the first board admin.', 'Si tu edificio ya está en CondoOS, entra con el código que te dio el administrador. Si no, crea uno nuevo — tú serás el primer administrador.', 'Si votre immeuble est déjà sur CondoOS, connectez-vous avec le code envoyé par le syndic. Sinon, créez-en un nouveau — vous serez le premier syndic.'),
+  c('Aguardando aprovação', 'Waiting for approval', 'Esperando aprobación', 'En attente d’approbation'),
+  c('Você reivindicou', 'You claimed', 'Reclamaste', 'Vous avez revendiqué'),
+  c('como', 'as', 'como', 'en tant que'),
+  c('O síndico vai analisar em breve.', 'The board admin will review shortly.', 'El administrador lo revisará pronto.', 'Le syndic va vérifier sous peu.'),
+  c('Entrar num prédio', 'Join a building', 'Unirse a un edificio', 'Rejoindre un immeuble'),
+  c('Tenho um código de convite de 6 caracteres do meu síndico. Vou inserir, escolher minha unidade e ocupar meu lugar.', 'I have a 6-character invite code from my board admin. I’ll enter it, pick my unit, and take my seat.', 'Tengo un código de invitación de 6 caracteres del administrador. Lo ingreso, elijo mi unidad y ocupo mi lugar.', 'J’ai un code d’invitation à 6 caractères du syndic. Je l’entre, choisis mon lot, et prends ma place.'),
+  c('Inserir código', 'Enter code', 'Ingresar código', 'Saisir le code'),
+  c('Montar um novo prédio', 'Set up a new building', 'Crear un nuevo edificio', 'Configurer un nouvel immeuble'),
+  c('Meu condomínio ainda não está no sistema. Me guie pelo cadastro: nome, unidades e código de convite.', 'My condominium isn’t in the system yet. Guide me through setup: name, units, and invite code.', 'Mi condominio todavía no está en el sistema. Guíame en la configuración: nombre, unidades y código de invitación.', 'Ma copropriété n’est pas encore dans le système. Guidez-moi : nom, lots, et code d’invitation.'),
+  c('Começar o cadastro', 'Start setup', 'Empezar configuración', 'Commencer la configuration'),
+  c('Só explorando?', 'Just exploring?', '¿Solo explorando?', 'Vous explorez ?'),
+  c('Entre como demo (síndico ou morador)', 'Sign in as demo (board admin or resident)', 'Entrar como demo (administrador o residente)', 'Connectez-vous en démo (syndic ou résident)'),
+
+  // Onboarding — Join
+  c('Insira o código de convite', 'Enter the invite code', 'Ingresa el código de invitación', 'Saisissez le code d’invitation'),
+  c('Um código de 6 caracteres que o síndico te mandou.', 'A 6-character code sent to you by your board admin.', 'Un código de 6 caracteres que te envió el administrador.', 'Un code à 6 caractères envoyé par le syndic.'),
+  c('Continuar', 'Continue', 'Continuar', 'Continuer'),
+  c('Não tem código?', 'No code?', '¿Sin código?', 'Pas de code ?'),
+  c('Crie seu próprio prédio', 'Create your own building', 'Crea tu propio edificio', 'Créez votre propre immeuble'),
+  c('Esse código não corresponde a nenhum prédio', 'That code doesn’t match any building', 'Ese código no corresponde a ningún edificio', 'Ce code ne correspond à aucun immeuble'),
+  c('Falha na busca', 'Lookup failed', 'Error en la búsqueda', 'Échec de la recherche'),
+  c('Falha ao entrar', 'Sign-in failed', 'Error al entrar', 'Échec de la connexion'),
+  c('Você entrou!', 'You’re in!', '¡Entraste!', 'Vous êtes entré !'),
+  c('Prédio encontrado', 'Building found', 'Edificio encontrado', 'Immeuble trouvé'),
+  c('Escolha sua unidade', 'Choose your unit', 'Elige tu unidad', 'Choisissez votre lot'),
+  c('Unidades já reivindicadas estão marcadas — você ainda pode escolhê-las se está se mudando ou dividindo.', 'Already-claimed units are marked — you can still pick one if you’re moving in or sharing.', 'Las unidades ya reclamadas están marcadas — puedes elegirlas si te mudas o las compartes.', 'Les lots déjà revendiqués sont marqués — vous pouvez en choisir un si vous emménagez ou partagez.'),
+  c('Especial', 'Special', 'Especial', 'Spécial'),
+  c('aqui', 'here', 'aquí', 'ici'),
+  c('Qual seu vínculo?', 'What’s your role?', '¿Cuál es tu vínculo?', 'Quel est votre rôle ?'),
+  c('Proprietário', 'Owner', 'Propietario', 'Propriétaire'),
+  c('Inquilino', 'Tenant', 'Inquilino', 'Locataire'),
+  c('Ocupante', 'Occupant', 'Ocupante', 'Occupant'),
+  c('Sou dono da unidade', 'I own the unit', 'Soy dueño de la unidad', 'Je suis propriétaire du lot'),
+  c('Alugo a unidade', 'I rent the unit', 'Alquilo la unidad', 'Je loue le lot'),
+  c('Família / outro', 'Family / other', 'Familia / otro', 'Famille / autre'),
+  c('Voltar', 'Back', 'Volver', 'Retour'),
+  c('Pedir entrada', 'Request access', 'Solicitar entrada', 'Demander l’accès'),
+  c('Entrar agora', 'Join now', 'Entrar ahora', 'Rejoindre maintenant'),
+  c('Pedido enviado', 'Request sent', 'Solicitud enviada', 'Demande envoyée'),
+  c('O síndico vai analisar. Você terá acesso assim que ele aprovar.', 'The board admin will review. You’ll get access as soon as it’s approved.', 'El administrador lo revisará. Tendrás acceso en cuanto lo apruebe.', 'Le syndic va examiner. Vous aurez accès dès l’approbation.'),
+  c('proprietário', 'owner', 'propietario', 'propriétaire'),
+  c('inquilino', 'tenant', 'inquilino', 'locataire'),
+  c('ocupante', 'occupant', 'ocupante', 'occupant'),
+
+  // Onboarding — Create (board-admin set-up)
+  c('Montar um prédio', 'Set up a building', 'Crear un edificio', 'Configurer un immeuble'),
+  c('Como o prédio se chama?', 'What is your building called?', '¿Cómo se llama el edificio?', 'Comment s’appelle votre immeuble ?'),
+  c('Os moradores vão ver esse nome ao entrar.', 'Residents will see this name when they sign in.', 'Los residentes verán este nombre al entrar.', 'Les résidents verront ce nom à la connexion.'),
+  c('Modelo de votação', 'Voting model', 'Modelo de votación', 'Modèle de vote'),
+  c('Padrões sensatos — pode mudar depois.', 'Sensible defaults — you can change them later.', 'Valores predeterminados sensatos — puedes cambiarlos después.', 'Réglages par défaut — vous pourrez changer plus tard.'),
+  c('Comum em condomínios brasileiros.', 'Common in Brazilian condominiums.', 'Común en condominios brasileños.', 'Courant dans les copropriétés brésiliennes.'),
+  c('Exigir aprovação do síndico para novos moradores', 'Require board-admin approval for new residents', 'Requerir aprobación del administrador para nuevos residentes', 'Exiger l’approbation du syndic pour les nouveaux résidents'),
+  c('Recomendado. Novos moradores ficam em fila até o síndico aprovar.', 'Recommended. New residents wait in a queue until the board admin approves.', 'Recomendado. Los nuevos residentes esperan en cola hasta que el administrador apruebe.', 'Recommandé. Les nouveaux résidents attendent dans une file jusqu’à approbation du syndic.'),
+  c('Sou síndico mas não moro neste prédio', 'I’m the board admin but I don’t live in this building', 'Soy el administrador pero no vivo en este edificio', 'Je suis syndic mais je n’habite pas dans cet immeuble'),
+  c('Criar prédio', 'Create building', 'Crear edificio', 'Créer l’immeuble'),
+  c('Use um modelo e preencha empresa, telefone, contrato e observações.', 'Use a template and fill in company, phone, contract, and notes.', 'Usa una plantilla y completa empresa, teléfono, contrato y notas.', 'Utilisez un modèle et remplissez entreprise, téléphone, contrat, notes.'),
+  c('Salão de festas', 'Party room', 'Salón de fiestas', 'Salle des fêtes'),
+  c('Rede de operação', 'Operating network', 'Red operativa', 'Réseau d’exploitation'),
 
   // AI-drafted proposal copy that exists in production demo data. Adding
   // these here so the existing demo proposals translate; new proposals get

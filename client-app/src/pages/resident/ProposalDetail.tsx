@@ -280,11 +280,11 @@ export default function ProposalDetail() {
           {summary ? (
             <div className="space-y-3 text-sm">
               <p className="text-dusk-400 leading-relaxed">{summary.summary}</p>
-              {summary.points_of_agreement?.length > 0 && <Group label="Concordância"  items={summary.points_of_agreement}    tone="sage" />}
-              {summary.points_of_disagreement?.length > 0 && <Group label="Discordância" items={summary.points_of_disagreement} tone="peach" />}
-              {summary.open_questions?.length > 0 && <Group label="Em aberto" items={summary.open_questions} tone="neutral" />}
+              {summary.points_of_agreement?.length > 0 && <Group label="Pontos de acordo"  items={summary.points_of_agreement}    tone="sage" />}
+              {summary.points_of_disagreement?.length > 0 && <Group label="Pontos de desacordo" items={summary.points_of_disagreement} tone="peach" />}
+              {summary.open_questions?.length > 0 && <Group label="Perguntas em aberto" items={summary.open_questions} tone="neutral" />}
             </div>
-          ) : <p className="text-sm text-dusk-300">Peça pra IA ler os {p.comments.length} comentários e resumir onde os moradores concordam ou discordam.</p>}
+          ) : <p className="text-sm text-dusk-300">Peça pra IA ler os {p.comments.length} <>comentários e resumir onde os moradores concordam ou discordam.</></p>}
         </GlassCard>
 
         <GlassCard className="p-5">
@@ -299,7 +299,7 @@ export default function ProposalDetail() {
       </div>
 
       {/* Comments */}
-      <h3 className="font-display text-xl text-dusk-500 mb-4 flex items-center gap-2"><MessageCircle className="w-5 h-5" /> Discussão ({p.comments.length})</h3>
+      <h3 className="font-display text-xl text-dusk-500 mb-4 flex items-center gap-2"><MessageCircle className="w-5 h-5" /> <>Discussão</> ({p.comments.length})</h3>
       <div className="space-y-3 mb-5">
         {p.comments.map((c) => (
           <GlassCard key={c.id} className="p-4 flex items-start gap-3">
