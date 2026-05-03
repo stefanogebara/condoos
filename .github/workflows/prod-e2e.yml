@@ -31,6 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+      E2E_RATE_LIMIT_BYPASS_SECRET: ${{ secrets.E2E_RATE_LIMIT_BYPASS_SECRET }}
     steps:
       - uses: actions/checkout@v6
 
@@ -48,6 +49,13 @@ jobs:
         run: |
           if [ -z "$VERCEL_AUTOMATION_BYPASS_SECRET" ]; then
             echo "VERCEL_AUTOMATION_BYPASS_SECRET is required for protected Vercel browser suites."
+            exit 1
+          fi
+
+      - name: Check E2E_RATE_LIMIT_BYPASS_SECRET
+        run: |
+          if [ -z "$E2E_RATE_LIMIT_BYPASS_SECRET" ]; then
+            echo "E2E_RATE_LIMIT_BYPASS_SECRET is required so production E2E does not trip live auth rate limits."
             exit 1
           fi
 

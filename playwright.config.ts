@@ -12,6 +12,18 @@ const vercelBypassSecret =
   process.env.VERCEL_AUTOMATION_BYPASS_SECRET ||
   process.env.VERCEL_PROTECTION_BYPASS ||
   process.env.VERCEL_BYPASS_SECRET;
+const rateLimitBypassSecret =
+  process.env.E2E_RATE_LIMIT_BYPASS_SECRET ||
+  process.env.CONDOOS_RATE_LIMIT_BYPASS_SECRET ||
+  process.env.RATE_LIMIT_BYPASS_SECRET;
+const extraHTTPHeaders: Record<string, string> = {};
+if (vercelBypassSecret) {
+  extraHTTPHeaders['x-vercel-protection-bypass'] = vercelBypassSecret;
+  extraHTTPHeaders['x-vercel-set-bypass-cookie'] = 'true';
+}
+if (rateLimitBypassSecret) {
+  extraHTTPHeaders['x-condoos-rate-limit-bypass'] = rateLimitBypassSecret;
+}
 
 // Only delegate server management when the user is testing against a
 // local URL. For remote (vercel/fly.io) we never spawn anything.
@@ -37,12 +49,7 @@ export default defineConfig({
   reporter: [['list']],
   use: {
     baseURL,
-    extraHTTPHeaders: vercelBypassSecret
-      ? {
-          'x-vercel-protection-bypass': vercelBypassSecret,
-          'x-vercel-set-bypass-cookie': 'true',
-        }
-      : undefined,
+    extraHTTPHeaders: Object.keys(extraHTTPHeaders).length ? extraHTTPHeaders : undefined,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',

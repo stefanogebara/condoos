@@ -79,6 +79,7 @@ jobs:
     if: ${{ github.event_name == 'schedule' || github.event.inputs.production == 'true' }}
     env:
       VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+      E2E_RATE_LIMIT_BYPASS_SECRET: ${{ secrets.E2E_RATE_LIMIT_BYPASS_SECRET }}
     steps:
       - uses: actions/checkout@v6
 
@@ -95,6 +96,13 @@ jobs:
         run: |
           if [ -z "$VERCEL_AUTOMATION_BYPASS_SECRET" ]; then
             echo "VERCEL_AUTOMATION_BYPASS_SECRET is required for protected Vercel browser suites."
+            exit 1
+          fi
+
+      - name: Check E2E_RATE_LIMIT_BYPASS_SECRET
+        run: |
+          if [ -z "$E2E_RATE_LIMIT_BYPASS_SECRET" ]; then
+            echo "E2E_RATE_LIMIT_BYPASS_SECRET is required so production-safe E2E does not trip live auth rate limits."
             exit 1
           fi
 
@@ -122,6 +130,7 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.live_integrations == 'true' }}
     env:
       VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+      E2E_RATE_LIMIT_BYPASS_SECRET: ${{ secrets.E2E_RATE_LIMIT_BYPASS_SECRET }}
       E2E_EXPECT_GOOGLE: ${{ vars.E2E_EXPECT_GOOGLE }}
       E2E_EXPECT_WHATSAPP: ${{ vars.E2E_EXPECT_WHATSAPP }}
       E2E_ALLOW_PROD_WRITES: ${{ secrets.E2E_ALLOW_PROD_WRITES }}

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { GoogleAuthError, verifyGoogleCredential } from '../src/lib/google-auth';
 import { buildInviteEmail, sendInviteEmail } from '../src/lib/email';
-import { createRateLimit, resetRateLimits } from '../src/lib/rate-limit';
+import { RATE_LIMIT_BYPASS_HEADER, createRateLimit, resetRateLimits } from '../src/lib/rate-limit';
 import { demoAuthEnabled, isBlockedDemoCredential } from '../src/lib/demo-auth';
 import { authRateLimitKey } from '../src/routes/auth';
 
@@ -190,6 +190,50 @@ test('createRateLimit custom key allows different users behind one shared IP', (
   assert.equal(nextCalls, 2);
   assert.deepEqual(responses.find((r) => r.status), { status: 429 });
   resetRateLimits();
+});
+
+test('createRateLimit allows secret-gated automation bypass', () => {
+  const previous = process.env.RATE_LIMIT_BYPASS_SECRET;
+  process.env.RATE_LIMIT_BYPASS_SECRET = '0123456789abcdef0123456789abcdef';
+  resetRateLimits();
+
+  try {
+    const limiter = createRateLimit({
+      keyPrefix: 'auth-test-bypass',
+      windowMs: 60_000,
+      max: 1,
+    });
+    const responses: any[] = [];
+    const res = {
+      setHeader: (name: string, value: string) => responses.push({ header: [name, value] }),
+      status(code: number) {
+        responses.push({ status: code });
+        return this;
+      },
+      json(body: unknown) {
+        responses.push({ body });
+        return this;
+      },
+    } as any;
+    const req = {
+      ip: '203.0.113.10',
+      socket: {},
+      get: (name: string) => name.toLowerCase() === RATE_LIMIT_BYPASS_HEADER
+        ? process.env.RATE_LIMIT_BYPASS_SECRET
+        : undefined,
+    } as any;
+
+    let nextCalls = 0;
+    limiter(req, res, () => { nextCalls += 1; });
+    limiter(req, res, () => { nextCalls += 1; });
+
+    assert.equal(nextCalls, 2);
+    assert.deepEqual(responses, []);
+  } finally {
+    if (previous === undefined) delete process.env.RATE_LIMIT_BYPASS_SECRET;
+    else process.env.RATE_LIMIT_BYPASS_SECRET = previous;
+    resetRateLimits();
+  }
 });
 
 test('demo auth blocks every seeded demo credential in production unless explicitly enabled', () => {

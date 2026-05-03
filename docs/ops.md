@@ -83,6 +83,18 @@ flyctl secrets set -a condoos-api AUTH_IP_RATE_LIMIT_MAX=60
 or CI runner from locking out every user after a few legitimate logins while
 still limiting credential attacks against each account.
 
+Production E2E runs make many legitimate demo logins in a short window. Do not
+raise or disable public limits for that. Instead configure a long random
+`RATE_LIMIT_BYPASS_SECRET` on the Fly API and expose the same value to Playwright
+as `E2E_RATE_LIMIT_BYPASS_SECRET`. When present, Playwright sends
+`x-condoos-rate-limit-bypass`; the API ignores it unless the server-side secret
+matches.
+
+```bash
+flyctl secrets set -a condoos-api RATE_LIMIT_BYPASS_SECRET='<long-random-secret>'
+gh secret set E2E_RATE_LIMIT_BYPASS_SECRET --repo stefanogebara/condoos
+```
+
 ## Production E2E Against Vercel
 
 Vercel Deployment Protection can show the Security Checkpoint to automated
@@ -95,6 +107,7 @@ settings or API, then expose it only through your local shell or CI secrets:
 
 ```powershell
 $env:VERCEL_AUTOMATION_BYPASS_SECRET='<secret-from-vercel>'
+$env:E2E_RATE_LIMIT_BYPASS_SECRET='<same-secret-configured-on-fly>'
 npm run test:e2e:prod:ui
 npm run test:e2e:prod:smoke
 ```
@@ -109,7 +122,7 @@ https://vercel.com/docs/deployment-protection/methods-to-bypass-deployment-prote
 
 Keep `VERCEL_AUTOMATION_BYPASS_SECRET` as a GitHub Actions/Vercel secret. Do not
 commit it to `.env`, `.env.local`, screenshots, Playwright reports, or issue
-comments.
+comments. Treat `E2E_RATE_LIMIT_BYPASS_SECRET` the same way.
 
 Useful production test targets:
 
@@ -137,10 +150,11 @@ does the expensive checks that should not block every push:
 - Lighthouse budgets for `/`, `/login`, and `/onboarding`
 - optional live provider checks for PostHog, Google config, Resend, and WhatsApp
 
-Required GitHub secret for production browser checks:
+Required GitHub secrets for production browser checks:
 
 ```text
 VERCEL_AUTOMATION_BYPASS_SECRET
+E2E_RATE_LIMIT_BYPASS_SECRET
 ```
 
 Optional GitHub variables:
