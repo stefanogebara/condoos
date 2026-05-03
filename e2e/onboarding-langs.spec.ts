@@ -109,5 +109,48 @@ for (const locale of ['pt-BR', 'en-US', 'es-ES', 'fr-FR'] as Locale[]) {
         }
       });
     }
+
+    // /onboarding/create is a 5-step wizard — step 1 is what the lone
+    // page-load test above sees. Walk through every step by filling
+    // out the form so we catch leaks on the inner steps the user
+    // actually screenshotted.
+    test(`/onboarding/create wizard steps 1-3 in ${locale}`, async ({ page }) => {
+      test.setTimeout(60_000);
+      await setLocale(page, locale);
+      await loginAs(page, 'admin');
+      await page.goto('/onboarding/create', { waitUntil: 'domcontentloaded' });
+      await page.waitForTimeout(1500);
+
+      const sig = SIGNATURES[locale];
+      const initialText = await page.locator('body').innerText();
+      test.skip(!sig.test(initialText), '/onboarding/create did not show wizard (admin already onboarded)');
+
+      // Step 1: enter condo name + address, then Continue.
+      const inputs = page.locator('input.input');
+      await inputs.nth(0).fill('Visual QA Tower');
+      await inputs.nth(1).fill('1 Test Street');
+      await page.getByRole('button').filter({ hasText: /Continuar|Continue|Continuer/ }).first().click();
+      await page.waitForTimeout(900);
+      await page.screenshot({ path: `test-results/onboarding-langs/${locale}-create-step2.png`, fullPage: true });
+
+      const step2Text = await page.locator('body').innerText();
+      if (locale !== 'pt-BR') {
+        const leaks2 = PT_LEAKS.flatMap((re) => step2Text.match(re)?.[0] ? [step2Text.match(re)![0]] : []);
+        // Also catch the long step-2 hint paragraph that previously broke.
+        if (/Cadastre cada torre ou bloco/.test(step2Text)) leaks2.push('Cadastre cada torre ou bloco…');
+        expect(leaks2, `PT leak on /onboarding/create step 2 in ${locale}: ${leaks2.join(', ')}`).toEqual([]);
+      }
+
+      // Step 2 → step 3: just click Continue (defaults are valid).
+      await page.getByRole('button').filter({ hasText: /Continuar|Continue|Continuer/ }).first().click();
+      await page.waitForTimeout(900);
+      await page.screenshot({ path: `test-results/onboarding-langs/${locale}-create-step3.png`, fullPage: true });
+
+      const step3Text = await page.locator('body').innerText();
+      if (locale !== 'pt-BR') {
+        const leaks3 = PT_LEAKS.flatMap((re) => step3Text.match(re)?.[0] ? [step3Text.match(re)![0]] : []);
+        expect(leaks3, `PT leak on /onboarding/create step 3 in ${locale}: ${leaks3.join(', ')}`).toEqual([]);
+      }
+    });
   });
 }

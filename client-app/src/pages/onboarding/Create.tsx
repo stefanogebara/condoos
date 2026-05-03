@@ -475,8 +475,7 @@ export default function Create() {
               <>
                 <h1 className="font-display text-3xl text-dusk-500 tracking-tight">Blocos e sua unidade</h1>
                 <p className="text-dusk-300 mt-2 text-sm">
-                  Cadastre cada torre ou bloco. Para um único prédio, deixe como está.
-                  Vamos gerar números tipo <span className="font-mono">101</span>, <span className="font-mono">102</span>… (renomeáveis depois).
+                  Cadastre cada torre ou bloco. Para um único prédio, deixe como está. Vamos gerar números tipo 101, 102… (renomeáveis depois).
                 </p>
 
                 <div className="mt-6 space-y-3">
