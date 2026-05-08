@@ -7,17 +7,26 @@ const Database = require('better-sqlite3');
 const DB_PATH = process.env.DB_PATH || '/data/condoos.sqlite';
 const db = new Database(DB_PATH);
 
-const propWhere = "(title LIKE 'Isolation probe%' OR title LIKE 'E2E %' OR title LIKE 'walkthrough %' OR title LIKE 'UI compliance%' OR title LIKE 'Vote-closer%')";
+// 2026-05 audit: extended to cover the patterns visible in production:
+// PROD_E2E_GATE_TEST / Cost gate test / Prod maintenance test / 'desc' on
+// proposals; E2E Pending <epoch> on visitors. Patterns chosen so a real
+// resident-authored row can never match (no real condo would title a
+// proposal exactly 'desc' or start a visitor name with 'E2E ').
+const propWhere = "(title LIKE 'Isolation probe%' OR title LIKE 'E2E %' OR title LIKE 'walkthrough %' OR title LIKE 'UI compliance%' OR title LIKE 'Vote-closer%' OR title LIKE 'PROD_E2E%' OR title LIKE '%Cost gate test%' OR title LIKE '%Prod maintenance%' OR title = 'desc')";
 const asmWhere  = "(title LIKE 'Canary AGO%' OR title LIKE 'walkthrough %' OR title LIKE 'E2E %')";
 const meetingWhere = "(title LIKE 'E2E %' OR title LIKE 'walkthrough %')";
 const inviteWhere = "(email LIKE 'e2e-%@example.com' OR email LIKE 'e2e+%@condoos.test')";
 const suggestionWhere = "(body LIKE 'E2E %' OR body LIKE 'A iluminação do hall do 3º andar fica piscando%')";
+const visitorWhere = "(visitor_name LIKE 'E2E %' OR visitor_name LIKE 'PROD_E2E%' OR visitor_name LIKE 'walkthrough %')";
+const announcementWhere = "(title LIKE 'E2E %' OR title LIKE 'PROD_E2E%' OR title LIKE 'walkthrough %')";
 
 const propBefore = db.prepare('SELECT COUNT(*) AS c FROM proposals').get().c;
 const asmBefore  = db.prepare('SELECT COUNT(*) AS c FROM assemblies').get().c;
 const meetingBefore = db.prepare('SELECT COUNT(*) AS c FROM meetings').get().c;
 const inviteBefore = db.prepare('SELECT COUNT(*) AS c FROM invites').get().c;
 const suggestionBefore = db.prepare('SELECT COUNT(*) AS c FROM suggestions').get().c;
+const visitorBefore = db.prepare('SELECT COUNT(*) AS c FROM visitors').get().c;
+const announcementBefore = db.prepare('SELECT COUNT(*) AS c FROM announcements').get().c;
 
 db.prepare('DELETE FROM proposal_votes    WHERE proposal_id IN (SELECT id FROM proposals WHERE ' + propWhere + ')').run();
 db.prepare('DELETE FROM proposal_comments WHERE proposal_id IN (SELECT id FROM proposals WHERE ' + propWhere + ')').run();
@@ -42,17 +51,24 @@ const inviteRes = db.prepare('DELETE FROM invites WHERE ' + inviteWhere).run();
 db.prepare('UPDATE proposals SET source_suggestion_id = NULL WHERE source_suggestion_id IN (SELECT id FROM suggestions WHERE ' + suggestionWhere + ')').run();
 const suggestionRes = db.prepare('DELETE FROM suggestions WHERE ' + suggestionWhere).run();
 
+const visitorRes = db.prepare('DELETE FROM visitors WHERE ' + visitorWhere).run();
+const announcementRes = db.prepare('DELETE FROM announcements WHERE ' + announcementWhere).run();
+
 const propAfter = db.prepare('SELECT COUNT(*) AS c FROM proposals').get().c;
 const asmAfter  = db.prepare('SELECT COUNT(*) AS c FROM assemblies').get().c;
 const meetingAfter = db.prepare('SELECT COUNT(*) AS c FROM meetings').get().c;
 const inviteAfter = db.prepare('SELECT COUNT(*) AS c FROM invites').get().c;
 const suggestionAfter = db.prepare('SELECT COUNT(*) AS c FROM suggestions').get().c;
+const visitorAfter = db.prepare('SELECT COUNT(*) AS c FROM visitors').get().c;
+const announcementAfter = db.prepare('SELECT COUNT(*) AS c FROM announcements').get().c;
 
 console.log('[cleanup] proposals: ' + propBefore + ' → ' + propAfter + ' (deleted ' + propRes.changes + ')');
 console.log('[cleanup] assemblies: ' + asmBefore + ' → ' + asmAfter + ' (deleted ' + asmRes.changes + ')');
 console.log('[cleanup] meetings: ' + meetingBefore + ' → ' + meetingAfter + ' (deleted ' + meetingRes.changes + ')');
 console.log('[cleanup] invites: ' + inviteBefore + ' → ' + inviteAfter + ' (deleted ' + inviteRes.changes + ')');
 console.log('[cleanup] suggestions: ' + suggestionBefore + ' → ' + suggestionAfter + ' (deleted ' + suggestionRes.changes + ')');
+console.log('[cleanup] visitors: ' + visitorBefore + ' → ' + visitorAfter + ' (deleted ' + visitorRes.changes + ')');
+console.log('[cleanup] announcements: ' + announcementBefore + ' → ' + announcementAfter + ' (deleted ' + announcementRes.changes + ')');
 
 // E2E onboarding artifacts — condos created by the create-building wizard test
 // and users created by /auth/dev-register. Safe to delete: real users never
