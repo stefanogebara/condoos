@@ -2,6 +2,34 @@ import React, { createContext, useContext, useEffect, useState, ReactNode } from
 import { apiPost, apiGet } from './api';
 import { identify, reset, track } from './analytics';
 
+// Read a JSON-encoded value from localStorage. If the key holds the literal
+// string "undefined" or any non-JSON garbage, wipe it and return null instead
+// of throwing — a stale "undefined" payload used to crash the entire app on
+// reload (SyntaxError: "undefined" is not valid JSON).
+function safeReadJson<T>(key: string): T | null {
+  const raw = localStorage.getItem(key);
+  if (!raw || raw === 'undefined' || raw === 'null') {
+    if (raw) localStorage.removeItem(key);
+    return null;
+  }
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    localStorage.removeItem(key);
+    return null;
+  }
+}
+
+// Persist a value as JSON, but never write a literal "undefined" / "null"
+// string — drop the key instead, so the next read short-circuits cleanly.
+function safeWriteJson(key: string, value: unknown): void {
+  if (value == null) {
+    localStorage.removeItem(key);
+    return;
+  }
+  localStorage.setItem(key, JSON.stringify(value));
+}
+
 export interface User {
   id: number;
   email: string;
@@ -49,14 +77,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
-    const raw = localStorage.getItem('condoos_user');
+    const cached = safeReadJson<User>('condoos_user');
     const token = localStorage.getItem('condoos_token');
-    if (raw && token) {
-      setUser(JSON.parse(raw));
+    if (cached && token) {
+      setUser(cached);
       apiGet<{ user: User }>('/auth/me')
         .then(async (d) => {
           setUser(d.user);
-          localStorage.setItem('condoos_user', JSON.stringify(d.user));
+          safeWriteJson('condoos_user', d.user);
           await refreshMembershipStatus();
         })
         .catch(() => {
@@ -70,9 +98,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // The api interceptor dispatches this event when an auth endpoint (/auth/me,
+  // /auth/refresh) returns 401. Clear React state so route guards in App.tsx
+  // redirect to /login on the next render — replaces the previous full-page
+  // window.location.href = '/login' which interrupted unrelated UI work.
+  useEffect(() => {
+    function onInvalidated() {
+      setUser(null);
+      setMembershipStatus('unknown');
+    }
+    window.addEventListener('condoos:auth-invalidated', onInvalidated);
+    return () => window.removeEventListener('condoos:auth-invalidated', onInvalidated);
+  }, []);
+
   const completeLogin = async (data: { token: string; user: User }, source: 'password' | 'google'): Promise<User> => {
     localStorage.setItem('condoos_token', data.token);
-    localStorage.setItem('condoos_user', JSON.stringify(data.user));
+    safeWriteJson('condoos_user', data.user);
     setUser(data.user);
     const hasActiveMembership = await refreshMembershipStatus();
     identify({ id: data.user.id, role: data.user.role, has_condo: hasActiveMembership });

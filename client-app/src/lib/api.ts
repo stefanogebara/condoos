@@ -13,14 +13,25 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// Endpoints whose 401 should be treated as "session is invalid"; for any other
+// endpoint a 401 is surfaced to the caller without forcing a logout. This
+// prevents a single transient 401 (e.g. from an unrelated detail-page fetch)
+// from kicking the user back to /login mid-flow — the previous behaviour was
+// "open a bad detail-route id → logged out".
+const AUTH_INVALIDATING_PATHS = ['/auth/me', '/auth/refresh'];
+
 api.interceptors.response.use(
   (r) => r,
   (err) => {
     if (err?.response?.status === 401) {
-      localStorage.removeItem('condoos_token');
-      localStorage.removeItem('condoos_user');
-      if (!window.location.pathname.startsWith('/login')) {
-        window.location.href = '/login';
+      const url: string = err?.config?.url || '';
+      const invalidates = AUTH_INVALIDATING_PATHS.some((p) => url.includes(p));
+      if (invalidates) {
+        localStorage.removeItem('condoos_token');
+        localStorage.removeItem('condoos_user');
+        // Notify the auth context so React state clears and route guards
+        // navigate via React Router (no full page reload).
+        window.dispatchEvent(new Event('condoos:auth-invalidated'));
       }
     }
     return Promise.reject(err);
