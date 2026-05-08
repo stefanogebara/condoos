@@ -14,7 +14,7 @@ import { expect, test, type APIRequestContext, type Page } from '@playwright/tes
 import { gotoApp } from './support/navigation';
 
 const apiURL = process.env.E2E_API_URL
-  || (process.env.E2E_BASE_URL ? `${process.env.E2E_BASE_URL.replace(/\/$/, '')}/api` : 'http://127.0.0.1:4312/api');
+  || (process.env.E2E_BASE_URL ? `${process.env.E2E_BASE_URL.replace(/\/$/, '')}/api` : 'http://127.0.0.1:4316/api');
 
 type Session = { token: string; user: any };
 const sessionCache = new Map<string, Session>();
@@ -74,6 +74,10 @@ async function clickShellLink(page: Page, href: string) {
 
 test('Admin: sidebar links hit every new page (Edifício, Finanças)', async ({ page, request }) => {
   test.setTimeout(60_000);
+  // Block external font requests so there are no in-flight CDN downloads when
+  // this page closes — otherwise Chrome can crash during fixture teardown and
+  // corrupt the next test's browser context.
+  await page.route(/fonts\.(googleapis|gstatic)\.com/, (route) => route.abort());
   await seedSession(page, request, 'admin');
 
   await gotoApp(page, '/board');
@@ -91,6 +95,7 @@ test('Admin: sidebar links hit every new page (Edifício, Finanças)', async ({ 
   await expect(page).toHaveURL(/\/board\/financas/);
   await expect(page.getByRole('heading', { name: /^Finanças$/i }).first()).toBeVisible();
   await expect(page.getByRole('button', { name: /Nova despesa/i })).toBeVisible();
+  await page.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => {});
 });
 
 // ---------------------------------------------------------------------------

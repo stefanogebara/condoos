@@ -2,7 +2,7 @@
 import { expect, test, type APIRequestContext } from '@playwright/test';
 
 const apiURL = process.env.E2E_API_URL
-  || (process.env.E2E_BASE_URL ? `${process.env.E2E_BASE_URL.replace(/\/$/, '')}/api` : 'http://127.0.0.1:4312/api');
+  || (process.env.E2E_BASE_URL ? `${process.env.E2E_BASE_URL.replace(/\/$/, '')}/api` : 'http://127.0.0.1:4316/api');
 
 async function adminToken(request: APIRequestContext): Promise<string> {
   const r = await request.post(`${apiURL}/auth/login`, {
