@@ -48,7 +48,10 @@ app.use(cors({
     if (!origin) return cb(null, true);
     if (allowedOrigins.length === 0 && process.env.NODE_ENV !== 'production') return cb(null, true);
     if (allowedOrigins.includes(origin)) return cb(null, true);
-    return cb(new Error('cors_origin_not_allowed'));
+    // Disallowed origin: tell cors to omit ACAO headers (browser blocks the
+    // response) instead of throwing into the error handler, which produced 500s
+    // on every preflight from an unlisted Origin.
+    return cb(null, false);
   },
 }));
 app.use((_req, res, next) => {
