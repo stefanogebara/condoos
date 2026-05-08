@@ -1423,6 +1423,8 @@ const phrases: Copy[] = [
   c('Valor inválido — use números (ex: 1500 ou 1500,00)', 'Invalid amount — use numbers (e.g. 1500 or 1500.00)', 'Importe inválido — usa números (ej. 1500 o 1500,00)', 'Montant invalide — utilisez des chiffres (ex. 1500 ou 1500,00)'),
   c('Despesa registrada — visível para os moradores', 'Expense logged — visible to residents', 'Gasto registrado — visible para residentes', 'Dépense enregistrée — visible pour les résidents'),
   c('Falha ao registrar', 'Failed to log', 'Error al registrar', "Échec de l'enregistrement"),
+  // H3 — confirmation prompt before location detection overrides a manual choice
+  c('Substituir sua escolha manual pela detecção de localização?', 'Replace your manual choice with location detection?', '¿Reemplazar tu elección manual por la detección de ubicación?', 'Remplacer votre choix manuel par la détection de la localisation ?'),
 ];
 
 function c(pt: string, en: string, es: string, fr: string): Copy {
@@ -1853,6 +1855,14 @@ export function LanguageSwitcher() {
   if (appSurface) return null;
 
   const handleLocation = async () => {
+    // Audit H3 — silently overriding a manual choice was the actual cause of
+    // "locale flips between routes" (the ⌖ button sits next to the FR pill
+    // and is easy to mis-click). Require explicit confirmation when the user
+    // already chose a language so accidental clicks no longer flip it.
+    if (source === 'manual' && typeof window !== 'undefined') {
+      const ok = window.confirm(t('Substituir sua escolha manual pela detecção de localização?'));
+      if (!ok) return;
+    }
     setDetecting(true);
     try {
       await useLocationLocale();
@@ -1903,6 +1913,14 @@ export function SidebarLangSwitcher() {
   const [detecting, setDetecting] = useState(false);
 
   const handleLocation = async () => {
+    // Audit H3 — same fix as LanguageSwitcher: confirm before overriding a
+    // manual choice. The ⌖ button sits adjacent to the FR pill in this
+    // compact row and was easy to mis-click, silently flipping the user's
+    // saved language to whatever browser+timezone resolved to.
+    if (source === 'manual' && typeof window !== 'undefined') {
+      const ok = window.confirm(t('Substituir sua escolha manual pela detecção de localização?'));
+      if (!ok) return;
+    }
     setDetecting(true);
     try {
       await useLocationLocale();
@@ -1913,7 +1931,7 @@ export function SidebarLangSwitcher() {
 
   return (
     <div className="flex flex-col gap-2 pt-1" data-i18n-skip>
-      <div className="flex gap-1.5 flex-wrap">
+      <div className="flex gap-1.5 flex-wrap items-center">
         {LOCALE_OPTIONS.map((opt) => (
           <button
             key={opt.locale}
@@ -1930,11 +1948,15 @@ export function SidebarLangSwitcher() {
             {opt.short}
           </button>
         ))}
+        {/* Visual separator: the ⌖ button is a different action (location-
+            based detection) and shouldn't read as a 5th language pill. */}
+        <span aria-hidden className="mx-0.5 h-4 w-px bg-dusk-200/40" />
         <button
           type="button"
           onClick={handleLocation}
           disabled={detecting}
-          title={source === 'manual' ? 'Use location' : 'Using location'}
+          title={source === 'manual' ? 'Detect language from location' : 'Using location-detected language'}
+          aria-label={source === 'manual' ? 'Detect language from location' : 'Using location-detected language'}
           className={`px-2.5 py-1 rounded-xl text-[11px] font-semibold transition-all disabled:cursor-wait disabled:opacity-60 ${
             source === 'location'
               ? 'bg-sage-200/80 text-sage-900 border border-sage-300/40'
