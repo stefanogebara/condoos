@@ -5,7 +5,7 @@ import PageHeader from '../../components/PageHeader';
 import GlassCard from '../../components/GlassCard';
 import Badge from '../../components/Badge';
 import { apiGet } from '../../lib/api';
-import { formatCurrency } from '../../lib/i18n';
+import { formatCurrency, t } from '../../lib/i18n';
 
 interface Proposal {
   id: number;
@@ -57,7 +57,7 @@ export default function Proposals() {
               <p className="text-sm text-dusk-300 mt-2 line-clamp-2">{p.description}</p>
               <div className="flex items-center justify-between mt-4 pt-4 border-t border-white/50">
                 <div className="text-xs text-dusk-200">
-                  {p.estimated_cost ? `~${formatCurrency(p.estimated_cost)}` : '—'}
+                  {p.estimated_cost ? `${t('Estimativa')}: ${formatCurrency(Math.abs(p.estimated_cost))}` : '—'}
                 </div>
                 {p.status === 'voting' ? (
                   <div className="flex items-center gap-2 text-xs">
@@ -67,7 +67,7 @@ export default function Proposals() {
                   </div>
                 ) : (
                   <div className="flex items-center gap-1 text-xs text-dusk-200">
-                    <MessageCircle className="w-3 h-3" /> discussion
+                    <MessageCircle className="w-3 h-3" /> {t('discussão')}
                   </div>
                 )}
               </div>

@@ -6,6 +6,24 @@ import { Building2, ArrowRight, Shield, User, Plus, LogIn, Sparkles } from 'luci
 import { useAuth } from '../lib/auth';
 import { apiGet } from '../lib/api';
 import { track } from '../lib/analytics';
+import { t } from '../lib/i18n';
+
+// Translate auth errors to a user-facing toast string. The runtime translates
+// DOM nodes only — react-hot-toast renders into a portal that the
+// MutationObserver does not scan, so we must resolve the locale here.
+function authErrorMessage(err: any): string {
+  const status = err?.response?.status;
+  if (status === 429) {
+    const retry = Number(err?.response?.data?.retry_after_seconds);
+    if (Number.isFinite(retry) && retry > 0) {
+      const minutes = Math.max(1, Math.ceil(retry / 60));
+      return t('Muitas tentativas. Tente novamente em {n} min.').replace('{n}', String(minutes));
+    }
+    return t('Muitas tentativas. Aguarde um momento.');
+  }
+  if (err?.response?.data?.error === 'invalid_credentials') return t('Email ou senha incorretos');
+  return t('Falha ao entrar');
+}
 import Logo from '../components/Logo';
 import Button from '../components/Button';
 import GlassCard from '../components/GlassCard';
@@ -106,10 +124,10 @@ export default function Login() {
     setLoading(true);
     try {
       const u = await login(email, password);
-      toast.success(`Bem-vindo de volta, ${u.first_name}`);
+      toast.success(`${t('Bem-vindo de volta')}, ${u.first_name}`);
       await routeAfterLogin(u);
     } catch (err: any) {
-      toast.error(err?.response?.data?.error === 'invalid_credentials' ? 'Email ou senha incorretos' : 'Falha ao entrar');
+      toast.error(authErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -122,20 +140,20 @@ export default function Login() {
     setEmail(creds.e); setPassword(creds.p);
     setLoading(true);
     login(creds.e, creds.p)
-      .then(async (u) => { toast.success(`Olá, ${u.first_name}`); await routeAfterLogin(u); })
-      .catch(() => toast.error('Falha ao entrar'))
+      .then(async (u) => { toast.success(`${t('Olá')}, ${u.first_name}`); await routeAfterLogin(u); })
+      .catch((err) => toast.error(authErrorMessage(err)))
       .finally(() => setLoading(false));
   }
 
   async function handleGoogleSuccess(credential: string | undefined) {
-    if (!credential) return toast.error('Nenhuma credencial do Google recebida');
+    if (!credential) return toast.error(t('Nenhuma credencial do Google recebida'));
     setLoading(true);
     try {
       const u = await loginWithGoogle(credential);
-      toast.success(`Olá, ${u.first_name}`);
+      toast.success(`${t('Olá')}, ${u.first_name}`);
       await routeAfterLogin(u);
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Falha ao entrar com Google');
+      toast.error(authErrorMessage(err));
     } finally {
       setLoading(false);
     }
