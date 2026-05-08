@@ -7,7 +7,7 @@ import GlassCard from '../../components/GlassCard';
 import Button from '../../components/Button';
 import Badge from '../../components/Badge';
 import { apiDelete, apiGet, apiPost } from '../../lib/api';
-import { formatDateTime } from '../../lib/i18n';
+import { formatDateTime, pluralize } from '../../lib/i18n';
 
 interface AgendaItem {
   id: number;
@@ -201,7 +201,7 @@ export default function AssemblyDetail() {
         <p className="text-sm text-dusk-400">
           {a.attendance_count === 0
             ? 'Ninguém se registrou ainda.'
-            : `${a.attendance_count} participante${a.attendance_count === 1 ? '' : 's'} registrado${a.attendance_count === 1 ? '' : 's'}.`}
+            : `${pluralize(a.attendance_count, 'participante registrado', 'participantes registrados')}.`}
         </p>
         <p className="text-xs text-dusk-300 mt-2">
           A lista nominal de presença e procurações fica visível apenas para o conselho.

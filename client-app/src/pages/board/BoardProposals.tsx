@@ -140,7 +140,7 @@ function NewProposalForm({ onCreated }: { onCreated: () => void }) {
             </select>
           </label>
           <label className="block text-xs text-dusk-300 font-medium">
-            Custo estimado (R$, opcional)
+            Custo estimado (opcional)
             <input
               className="input mt-1"
               type="text"

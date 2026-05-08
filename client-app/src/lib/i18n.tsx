@@ -643,8 +643,9 @@ const phrases: Copy[] = [
   c('emailed', 'emailed', 'enviado por email', 'envoyé par e-mail'),
   c('email failed', 'email failed', 'falló el email', 'échec e-mail'),
   c('Board', 'Board', 'Consejo', 'Conseil'),
-  c('Resident approved', 'Resident approved', 'Residente aprobado', 'Résident approuvé'),
-  c('Request denied', 'Request denied', 'Solicitud rechazada', 'Demande refusée'),
+  // PT slot was previously English ("Resident approved") so a PT user saw English; fixed in 2026-05 audit.
+  c('Morador aprovado', 'Resident approved', 'Residente aprobado', 'Résident approuvé'),
+  c('Pedido recusado', 'Request denied', 'Solicitud rechazada', 'Demande refusée'),
   c('Approve', 'Approve', 'Aprobar', 'Approuver'),
   c('Deny', 'Deny', 'Rechazar', 'Refuser'),
 
@@ -1372,6 +1373,44 @@ const phrases: Copy[] = [
   c('Inativa', 'Inactive', 'Inactiva', 'Inactive'),
   c('Observações internas', 'Internal notes', 'Notas internas', 'Notes internes'),
   c('Nenhuma área comum cadastrada ainda. Crie a primeira para liberar reservas aos moradores.', 'No amenities set up yet. Create the first one to enable bookings.', 'Aún no hay áreas comunes. Crea la primera para habilitar reservas.', 'Aucun espace commun configuré. Créez le premier pour activer les réservations.'),
+  // Audit 2026-05 — H5 /board/pending was rendered entirely in English.
+  c('Aprovações pendentes', 'Pending approvals', 'Aprobaciones pendientes', 'Approbations en attente'),
+  c('Pessoas que pediram para entrar no seu prédio. Aprove para conceder acesso; recuse para rejeitar.', 'People who requested to join your building. Approve to grant them access; deny to reject.', 'Personas que pidieron unirse a tu edificio. Aprueba para concederles acceso; rechaza para denegar.', "Personnes qui ont demandé à rejoindre votre immeuble. Approuvez pour leur accorder l'accès ; refusez pour les rejeter."),
+  c('Nada pendente', 'Nothing pending', 'Nada pendiente', 'Rien en attente'),
+  c('Você verá novos moradores aqui quando entrarem com seu código de convite. Compartilhe o código na página de Moradores.', "You'll see new residents here when they join with your invite code. Share the code in the Residents page.", 'Verás nuevos residentes aquí cuando se unan con tu código de invitación. Comparte el código en la página de Residentes.', "Vous verrez les nouveaux résidents ici lorsqu'ils rejoignent avec votre code d'invitation. Partagez le code sur la page Résidents."),
+  c('contato principal', 'primary contact', 'contacto principal', 'contact principal'),
+  c('Reivindicando', 'Claiming', 'Reclamando', 'Réclamant'),
+  c('solicitado', 'requested', 'solicitado', 'demandé'),
+  c('Recusar', 'Deny', 'Rechazar', 'Refuser'),
+  c('Aprovar', 'Approve', 'Aprobar', 'Approuver'),
+  c('Morador aprovado', 'Resident approved', 'Residente aprobado', 'Résident approuvé'),
+  c('Pedido recusado', 'Request denied', 'Solicitud rechazada', 'Demande refusée'),
+  c('proprietário', 'owner', 'propietario', 'propriétaire'),
+  c('inquilino', 'tenant', 'inquilino', 'locataire'),
+  c('ocupante', 'occupant', 'ocupante', 'occupant'),
+  // H6 — plural forms used by pluralize() helper, locale-aware singular/plural.
+  c('item', 'item', 'ítem', 'élément'),
+  c('itens', 'items', 'ítems', 'éléments'),
+  c('na agenda', 'on agenda', 'en la agenda', "à l'ordre du jour"),
+  c('bloco', 'building', 'bloque', 'bâtiment'),
+  c('blocos', 'buildings', 'bloques', 'bâtiments'),
+  c('unidade', 'unit', 'unidad', 'lot'),
+  c('unidades', 'units', 'unidades', 'lots'),
+  c('andar', 'floor', 'piso', 'étage'),
+  c('andares', 'floors', 'pisos', 'étages'),
+  c('participante registrado', 'attendee registered', 'participante registrado', 'participant inscrit'),
+  c('participantes registrados', 'attendees registered', 'participantes registrados', 'participants inscrits'),
+  // H9 — proposal card cost label
+  c('Estimativa', 'Estimate', 'Estimación', 'Estimation'),
+  c('discussão', 'discussion', 'discusión', 'discussion'),
+  // H2 — login error toasts (rendered in react-hot-toast portal, must resolve via t())
+  c('Bem-vindo de volta', 'Welcome back', 'Bienvenido de vuelta', 'Bon retour'),
+  c('Olá', 'Hello', 'Hola', 'Bonjour'),
+  c('Falha ao entrar', 'Sign-in failed', 'Error al iniciar sesión', 'Échec de connexion'),
+  c('Email ou senha incorretos', 'Wrong email or password', 'Correo o contraseña incorrectos', 'Email ou mot de passe incorrects'),
+  c('Muitas tentativas. Tente novamente em {n} min.', 'Too many attempts. Try again in {n} min.', 'Demasiados intentos. Inténtalo de nuevo en {n} min.', "Trop d'essais. Réessayez dans {n} min."),
+  c('Muitas tentativas. Aguarde um momento.', 'Too many attempts. Please wait a moment.', 'Demasiados intentos. Espera un momento.', "Trop d'essais. Veuillez patienter."),
+  c('Nenhuma credencial do Google recebida', 'No Google credential received', 'No se recibió credencial de Google', "Aucune information d'identification Google reçue"),
 ];
 
 function c(pt: string, en: string, es: string, fr: string): Copy {
@@ -1638,6 +1677,20 @@ function word(locale: AppLocale, key: string) {
 
 function unitLabel(locale: AppLocale) {
   return ({ 'pt-BR': 'Apto', 'en-US': 'Unit', 'es-ES': 'Unidad', 'fr-FR': 'Lot' } as const)[locale];
+}
+
+// Locale-aware "{count} <noun>" formatting. The runtime cannot fix
+// English-only `${n===1?'':'s'}` patterns sprinkled across components, so
+// callsites must pick singular vs plural explicitly. Each form is then
+// translated through the phrase index. Use as:
+//   pluralize(count, 'unidade', 'unidades')  →  "1 unit" / "5 units"
+export function pluralize(count: number, ptSingular: string, ptPlural: string): string {
+  const locale = detectLocale();
+  const rule = new Intl.PluralRules(locale).select(count);
+  const key = rule === 'one' ? ptSingular : ptPlural;
+  // Note: translateText is module-scoped below; call site is fine because the
+  // function is hoisted.
+  return `${count} ${translateText(key, locale)}`;
 }
 
 function shouldSkip(node: Node) {

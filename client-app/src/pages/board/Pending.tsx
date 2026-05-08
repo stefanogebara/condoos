@@ -8,7 +8,7 @@ import Avatar from '../../components/Avatar';
 import Button from '../../components/Button';
 import EmptyState from '../../components/EmptyState';
 import { apiGet, apiPost } from '../../lib/api';
-import { formatDate } from '../../lib/i18n';
+import { formatDate, t } from '../../lib/i18n';
 
 interface PendingRequest {
   id: number;
@@ -37,10 +37,12 @@ export default function Pending() {
     setBusyId(id);
     try {
       await apiPost(`/memberships/${id}/${action}`);
-      toast.success(action === 'approve' ? 'Resident approved' : 'Request denied');
+      // Resolve via t() because react-hot-toast renders into a portal that
+      // the i18n MutationObserver does not scan (audit H11).
+      toast.success(t(action === 'approve' ? 'Morador aprovado' : 'Pedido recusado'));
       load();
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || `${action} failed`);
+      toast.error(err?.response?.data?.error || t('Falha ao entrar'));
     } finally { setBusyId(null); }
   }
 

@@ -19,7 +19,7 @@ import Badge from '../../components/Badge';
 import Button from '../../components/Button';
 import { apiGet, apiPost } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
-import { formatDateTime } from '../../lib/i18n';
+import { formatDateTime, currentIntlLocale } from '../../lib/i18n';
 
 interface VisitorRow {
   id: number;
@@ -69,7 +69,7 @@ const POLL_MS = 20_000;
 function timeOnly(iso: string | null): string {
   if (!iso) return '';
   const d = new Date(iso);
-  return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleTimeString(currentIntlLocale(), { hour: '2-digit', minute: '2-digit' });
 }
 
 function VISITOR_TYPE_LABEL(t: string): string {
@@ -188,7 +188,7 @@ export default function ConciergeApp() {
         <Logo size={22} />
         <div className="flex-1 min-w-0">
           <div className="text-sm font-semibold text-dusk-500 truncate">{user?.first_name} · Portaria</div>
-          <div className="text-[11px] text-dusk-300">{new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
+          <div className="text-[11px] text-dusk-300">{new Date().toLocaleDateString(currentIntlLocale(), { weekday: 'long', day: 'numeric', month: 'long' })}</div>
         </div>
         <button onClick={() => load()} title="Atualizar" aria-label="Atualizar" className="p-2 rounded-full hover:bg-white/60 text-dusk-400">
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />

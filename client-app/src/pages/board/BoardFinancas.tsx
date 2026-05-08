@@ -238,7 +238,7 @@ function NewExpenseForm({ onCreated }: { onCreated: () => void }) {
           />
         </label>
         <label className="block text-xs text-dusk-300 font-medium">
-          Valor (R$)
+          Valor
           <input
             className="input mt-1"
             type="text"

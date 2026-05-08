@@ -13,6 +13,7 @@
 import React, { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { Building2, Plus, Trash2, Pencil, Check, X, AlertTriangle } from 'lucide-react';
+import { pluralize } from '../../lib/i18n';
 import PageHeader from '../../components/PageHeader';
 import GlassCard from '../../components/GlassCard';
 import Badge from '../../components/Badge';
@@ -61,7 +62,7 @@ export default function BoardEdificio() {
     <>
       <PageHeader
         title="Edifício"
-        subtitle={loading ? 'Carregando…' : `${buildings.length} ${buildings.length === 1 ? 'bloco' : 'blocos'} · ${totalUnits} ${totalUnits === 1 ? 'unidade' : 'unidades'}`}
+        subtitle={loading ? 'Carregando…' : `${pluralize(buildings.length, 'bloco', 'blocos')} · ${pluralize(totalUnits, 'unidade', 'unidades')}`}
         actions={
           <Button
             onClick={() => setShowNewBlock((x) => !x)}
@@ -225,8 +226,8 @@ function BlockCard({
             </>
           )}
         </div>
-        <Badge tone="neutral">{building.unit_count} {building.unit_count === 1 ? 'unidade' : 'unidades'}</Badge>
-        <Badge tone="neutral">{building.floors} {building.floors === 1 ? 'andar' : 'andares'}</Badge>
+        <Badge tone="neutral">{pluralize(building.unit_count, 'unidade', 'unidades')}</Badge>
+        <Badge tone="neutral">{pluralize(building.floors, 'andar', 'andares')}</Badge>
         <button
           onClick={deleteBlock}
           className="text-dusk-300 hover:text-peach-600 transition"
