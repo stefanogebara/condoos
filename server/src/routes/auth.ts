@@ -1,4 +1,4 @@
-import { Router, type Request } from 'express';
+import { Router, type Request, type Response, type NextFunction } from 'express';
 import { timingSafeEqual } from 'crypto';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
@@ -23,6 +23,15 @@ function positiveIntEnv(name: string, fallback: number): number {
 const AUTH_RATE_LIMIT_MAX = positiveIntEnv('AUTH_RATE_LIMIT_MAX', 5);
 const AUTH_IP_RATE_LIMIT_MAX = positiveIntEnv('AUTH_IP_RATE_LIMIT_MAX', 60);
 
+// Demo accounts are public credentials embedded in the README. Without an
+// allowlist a single visitor hammering the "Síndico"/"Morador" demo buttons
+// will trip the per-credential limit (max=5/15min) and lock the demo for the
+// next visitor. The per-IP limit still throttles abuse from a single attacker.
+const DEMO_LOGIN_ALLOWLIST = new Set([
+  'admin@condoos.dev',
+  'resident@condoos.dev',
+]);
+
 function clientIp(req: Request): string {
   return req.ip || req.socket.remoteAddress || 'unknown';
 }
@@ -45,12 +54,18 @@ const authCredentialRateLimit = createRateLimit({
   key: authRateLimitKey,
 });
 
+function skipDemoCredentialLimit(req: Request, _res: Response, next: NextFunction) {
+  const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+  if (DEMO_LOGIN_ALLOWLIST.has(email)) return next();
+  return authCredentialRateLimit(req, _res, next);
+}
+
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
 });
 
-router.post('/login', authIpRateLimit, authCredentialRateLimit, (req, res) => {
+router.post('/login', authIpRateLimit, skipDemoCredentialLimit, (req, res) => {
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
   if (isBlockedDemoCredential(parsed.data.email, parsed.data.password)) {

@@ -154,51 +154,67 @@ router.post('/proposal-classify', requireAuth, aiRateLimit, asyncHandler(async (
 // 2. Cluster all open suggestions for the condo
 router.post('/cluster-suggestions', requireAuth, aiRateLimit, requireRole('board_admin'), asyncHandler(async (req: AuthedRequest, res) => {
   const u = req.user!;
-  const rows = db.prepare(
-    `SELECT id, body FROM suggestions
-     WHERE condominium_id=? AND status='open'
-     ORDER BY created_at DESC LIMIT 50`
-  ).all(u.condominium_id) as { id: number; body: string }[];
+  // Per the README contract every /api/ai/* endpoint must degrade to a
+  // _fallback: true response on any failure (DB, model, malformed JSON)
+  // rather than 500. Wrap the whole handler body so a missed nullable or
+  // a model hiccup doesn't kick the admin back to an error toast.
+  try {
+    const rows = db.prepare(
+      `SELECT id, body FROM suggestions
+       WHERE condominium_id=? AND status='open'
+       ORDER BY created_at DESC LIMIT 50`
+    ).all(u.condominium_id) as { id: number; body: string }[];
 
-  if (rows.length === 0) return ok(res, { clusters: [], unclustered_ids: [] });
+    if (rows.length === 0) return ok(res, { clusters: [], unclustered_ids: [], _fallback: false });
 
-  const payload = rows.map((r) => `#${r.id}: ${clip(r.body, 1_000)}`).join('\n');
-  const out = await tryAI<any>(
-    [
-      { role: 'system', content: CLUSTER_SYS },
-      { role: 'user', content: `Here are the open suggestions:\n\n${payload}` },
-    ],
-    () => fallbackCluster(rows),
-    { jsonMode: true, maxTokens: 1200, tier: 'cheap', label: 'cluster-suggestions' }
-  );
+    const payload = rows.map((r) => `#${r.id}: ${clip(r.body, 1_000)}`).join('\n');
+    const out = await tryAI<any>(
+      [
+        { role: 'system', content: CLUSTER_SYS },
+        { role: 'user', content: `Here are the open suggestions:\n\n${payload}` },
+      ],
+      () => fallbackCluster(rows),
+      { jsonMode: true, maxTokens: 1200, tier: 'cheap', label: 'cluster-suggestions' }
+    );
 
-  // Persist clusters
-  db.prepare(
-    `DELETE FROM suggestion_clusters WHERE condominium_id=?`
-  ).run(u.condominium_id);
-  db.prepare(
-    `UPDATE suggestions SET cluster_id=NULL WHERE condominium_id=?`
-  ).run(u.condominium_id);
+    // Persist clusters
+    db.prepare(
+      `DELETE FROM suggestion_clusters WHERE condominium_id=?`
+    ).run(u.condominium_id);
+    db.prepare(
+      `UPDATE suggestions SET cluster_id=NULL WHERE condominium_id=?`
+    ).run(u.condominium_id);
 
-  const insertCluster = db.prepare(
-    `INSERT INTO suggestion_clusters (condominium_id, label, summary) VALUES (?, ?, ?)`
-  );
-  const assign = db.prepare(`UPDATE suggestions SET cluster_id=?, category=? WHERE id=?`);
+    const insertCluster = db.prepare(
+      `INSERT INTO suggestion_clusters (condominium_id, label, summary) VALUES (?, ?, ?)`
+    );
+    const assign = db.prepare(`UPDATE suggestions SET cluster_id=?, category=? WHERE id=?`);
 
-  const persisted: any[] = [];
-  for (const c of out.clusters || []) {
-    const result = insertCluster.run(u.condominium_id, c.label || 'Untitled', c.summary || null);
-    const cid = Number(result.lastInsertRowid);
-    for (const sid of c.suggestion_ids || []) assign.run(cid, c.label || null, sid);
-    persisted.push({ id: cid, label: c.label, summary: c.summary, suggestion_ids: c.suggestion_ids });
+    const persisted: any[] = [];
+    const clusters = Array.isArray(out?.clusters) ? out.clusters : [];
+    for (const c of clusters) {
+      const result = insertCluster.run(u.condominium_id, c.label || 'Untitled', c.summary || null);
+      const cid = Number(result.lastInsertRowid);
+      const suggestionIds = Array.isArray(c.suggestion_ids) ? c.suggestion_ids : [];
+      for (const sid of suggestionIds) assign.run(cid, c.label || null, sid);
+      persisted.push({ id: cid, label: c.label, summary: c.summary, suggestion_ids: suggestionIds });
+    }
+    audit(req, {
+      action: 'suggestion.cluster',
+      target_type: 'suggestion_cluster',
+      condominium_id: u.condominium_id,
+      metadata: { cluster_count: persisted.length, unclustered_count: (out?.unclustered_ids || []).length },
+    });
+    return ok(res, {
+      clusters: persisted,
+      unclustered_ids: Array.isArray(out?.unclustered_ids) ? out.unclustered_ids : [],
+      _fallback: out?._fallback === true,
+    });
+  } catch (err) {
+    // Logged, but never bubbled — degraded experience > broken endpoint.
+    console.warn('[ai/cluster-suggestions] fallback after error:', (err as Error)?.message || err);
+    return ok(res, { clusters: [], unclustered_ids: [], _fallback: true });
   }
-  audit(req, {
-    action: 'suggestion.cluster',
-    target_type: 'suggestion_cluster',
-    condominium_id: u.condominium_id,
-    metadata: { cluster_count: persisted.length, unclustered_count: (out.unclustered_ids || []).length },
-  });
-  return ok(res, { clusters: persisted, unclustered_ids: out.unclustered_ids || [], fallback: out._fallback === true });
 }));
 
 // 3. Summarize a proposal's discussion thread

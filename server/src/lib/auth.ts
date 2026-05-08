@@ -1,13 +1,24 @@
 import jwt from 'jsonwebtoken';
+import { randomBytes } from 'crypto';
 import { Request, Response, NextFunction } from 'express';
 import db from '../db';
 
 function getJwtSecret(): string {
   const secret = process.env.JWT_SECRET;
-  if (!secret && process.env.NODE_ENV === 'production') {
-    throw new Error('JWT_SECRET is required in production');
+  if (!secret) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('JWT_SECRET is required in production');
+    }
+    // Generate a per-process random secret for dev/test instead of using a
+    // known shared fallback. Tokens issued by one dev process won't validate
+    // in another, which is acceptable — and there is no shipped secret to
+    // forge with if the .env is misconfigured.
+    return randomBytes(32).toString('hex');
   }
-  return secret || 'condoos-dev-secret';
+  if (secret.length < 32) {
+    throw new Error('JWT_SECRET must be at least 32 characters');
+  }
+  return secret;
 }
 
 const JWT_SECRET = getJwtSecret();
@@ -43,7 +54,9 @@ export function signToken(userId: number): string {
 
 export function verifyToken(token: string): { uid: number } | null {
   try {
-    return jwt.verify(token, JWT_SECRET) as { uid: number };
+    // Pin algorithm to HS256 — defense-in-depth against future jsonwebtoken
+    // changes that might re-allow algorithm confusion via a forged header.
+    return jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] }) as { uid: number };
   } catch {
     return null;
   }
