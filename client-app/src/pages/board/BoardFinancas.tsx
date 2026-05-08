@@ -9,7 +9,7 @@ import GlassCard from '../../components/GlassCard';
 import Badge from '../../components/Badge';
 import Button from '../../components/Button';
 import { apiGet, apiPost, apiDelete } from '../../lib/api';
-import { formatCurrency, formatDate } from '../../lib/i18n';
+import { formatCurrency, formatDate, t } from '../../lib/i18n';
 
 interface Expense {
   id: number;
@@ -198,7 +198,7 @@ function NewExpenseForm({ onCreated }: { onCreated: () => void }) {
     if (!form.description.trim()) return;
     const cents = Math.round(parseFloat(form.amount.replace(',', '.')) * 100);
     if (!Number.isInteger(cents) || cents <= 0) {
-      toast.error('Valor inválido — use números (ex: 1500 ou 1500,00)');
+      toast.error(t('Valor inválido — use números (ex: 1500 ou 1500,00)'));
       return;
     }
     setSaving(true);
@@ -211,10 +211,10 @@ function NewExpenseForm({ onCreated }: { onCreated: () => void }) {
         spent_at: form.spent_at,
         receipt_url: form.receipt_url.trim() || null,
       });
-      toast.success('Despesa registrada — visível para os moradores');
+      toast.success(t('Despesa registrada — visível para os moradores'));
       onCreated();
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Falha ao registrar');
+      toast.error(err?.response?.data?.error || t('Falha ao registrar'));
     } finally { setSaving(false); }
   }
 

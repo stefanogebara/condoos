@@ -1411,6 +1411,18 @@ const phrases: Copy[] = [
   c('Muitas tentativas. Tente novamente em {n} min.', 'Too many attempts. Try again in {n} min.', 'Demasiados intentos. Inténtalo de nuevo en {n} min.', "Trop d'essais. Réessayez dans {n} min."),
   c('Muitas tentativas. Aguarde um momento.', 'Too many attempts. Please wait a moment.', 'Demasiados intentos. Espera un momento.', "Trop d'essais. Veuillez patienter."),
   c('Nenhuma credencial do Google recebida', 'No Google credential received', 'No se recibió credencial de Google', "Aucune information d'identification Google reçue"),
+  // Audit round 2 — H10 form label leaks. Disclaimer is split around a <strong>
+  // Transparência</strong> tag, so the runtime walks each text-node fragment
+  // independently and the full sentence never matches as one chunk. Provide
+  // tuples for the two surrounding fragments — the middle word is already
+  // covered by the existing 'Transparência' phrase.
+  c('Valor', 'Amount', 'Importe', 'Montant'),
+  c('Custo estimado (opcional)', 'Estimated cost (optional)', 'Costo estimado (opcional)', 'Coût estimé (facultatif)'),
+  c('Tudo que você lançar aqui aparece automaticamente na', 'Anything you log here shows up automatically in', 'Todo lo que registres aquí aparece automáticamente en la', 'Tout ce que vous enregistrez ici apparaît automatiquement dans la'),
+  c('dos moradores.', 'for residents.', 'para residentes.', 'des résidents.'),
+  c('Valor inválido — use números (ex: 1500 ou 1500,00)', 'Invalid amount — use numbers (e.g. 1500 or 1500.00)', 'Importe inválido — usa números (ej. 1500 o 1500,00)', 'Montant invalide — utilisez des chiffres (ex. 1500 ou 1500,00)'),
+  c('Despesa registrada — visível para os moradores', 'Expense logged — visible to residents', 'Gasto registrado — visible para residentes', 'Dépense enregistrée — visible pour les résidents'),
+  c('Falha ao registrar', 'Failed to log', 'Error al registrar', "Échec de l'enregistrement"),
 ];
 
 function c(pt: string, en: string, es: string, fr: string): Copy {
