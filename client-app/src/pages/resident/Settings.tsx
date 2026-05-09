@@ -72,7 +72,7 @@ export default function Settings() {
         </p>
         <div className="grid md:grid-cols-2 gap-3">
           <div>
-            <label className="text-xs text-dusk-300 uppercase tracking-wider">Número com DDD (ex: +55 11 99999-0000)</label>
+            <label className="text-xs text-dusk-300 uppercase tracking-wider">Número com DDD</label>
             <input
               className="input mt-1"
               type="tel"

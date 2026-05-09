@@ -273,8 +273,8 @@ export default function Login() {
           </div>
 
           <form onSubmit={submit} className="space-y-3">
-            <input type="email"    className="input" placeholder="voce@predio.com.br" value={email}    onChange={(e) => setEmail(e.target.value)}    required />
-            <input type="password" className="input" placeholder="senha"              value={password} onChange={(e) => setPassword(e.target.value)} required />
+            <input type="email"    className="input" placeholder="voce@predio.com.br" value={email}    onChange={(e) => setEmail(e.target.value)}    required autoComplete="email" />
+            <input type="password" className="input" placeholder="senha"              value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" />
             <Button type="submit" variant="primary" size="lg" loading={loading} rightIcon={<ArrowRight className="w-4 h-4" />} className="w-full">
               Entrar
             </Button>

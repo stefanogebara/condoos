@@ -61,8 +61,9 @@ export default function Overview() {
         </GlassCard>
       )}
 
-      {/* Top stats */}
-      <div className="grid md:grid-cols-4 gap-4 mb-8">
+      {/* Top stats — 2-up on mobile so the 4 cards don't eat half the
+          viewport before showing actual content (audit M15). */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-8">
         <StatCard icon={Package}  color="sage"  label="Encomendas aguardando" value={waiting.length}          to="/app/packages" />
         <StatCard icon={DoorOpen} color="peach" label="Próximas visitas"      value={pendingVisitors.length}  to="/app/visitors" />
         <StatCard icon={Waves}    color="sage"  label="Suas reservas"         value={reservations.filter((r) => new Date(r.starts_at) > new Date()).length} to="/app/amenities" />
