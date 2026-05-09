@@ -6,7 +6,7 @@ import GlassCard from '../../components/GlassCard';
 import Badge from '../../components/Badge';
 import Button from '../../components/Button';
 import { apiDelete, apiGet, apiPatch, apiPost } from '../../lib/api';
-import { formatDate } from '../../lib/i18n';
+import { formatDate, t, type AppLocale, useLocale } from '../../lib/i18n';
 
 interface ServiceContact {
   id: number;
@@ -49,7 +49,21 @@ const SERVICE_CATEGORIES = [
   { value: 'legal_admin', label: 'Jurídico / contábil' },
   { value: 'other', label: 'Outro' },
 ];
-const CATEGORY_LABEL: Record<string, string> = Object.fromEntries(SERVICE_CATEGORIES.map((c) => [c.value, c.label]));
+
+function categoryLabel(value: string, locale: AppLocale) {
+  const label = SERVICE_CATEGORIES.find((c) => c.value === value)?.label || value;
+  return t(label, locale);
+}
+
+function isHttpsUrlOrBlank(value: string | null | undefined) {
+  const trimmed = String(value || '').trim();
+  if (!trimmed) return true;
+  try {
+    return new URL(trimmed).protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
 
 const blankForm: ServiceContactForm = {
   category: 'general_maintenance',
@@ -95,6 +109,8 @@ function hasReachableDetail(form: ServiceContactForm) {
 }
 
 export default function BoardServices() {
+  const { locale } = useLocale();
+  const tr = (key: string) => t(key, locale);
   const [contacts, setContacts] = useState<ServiceContact[]>([]);
   const [loading, setLoading] = useState(true);
   const [showNew, setShowNew] = useState(false);
@@ -112,19 +128,22 @@ export default function BoardServices() {
 
   const activeCount = contacts.filter((c) => c.active).length;
   const emergencyCount = contacts.filter((c) => c.active && c.emergency_available).length;
+  const subtitle = loading
+    ? tr('Carregando…')
+    : `${activeCount} ${tr(activeCount === 1 ? 'contato ativo' : 'contatos ativos')} · ${emergencyCount} ${tr(emergencyCount === 1 ? 'atende emergência' : 'atendem emergência')}`;
 
   return (
     <>
       <PageHeader
-        title="Operação"
-        subtitle={loading ? 'Carregando…' : `${activeCount} contatos ativos · ${emergencyCount} atendem emergência`}
+        title={tr('Operação')}
+        subtitle={subtitle}
         actions={
           <Button
             variant={showNew ? 'ghost' : 'primary'}
             onClick={() => setShowNew((x) => !x)}
             leftIcon={showNew ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
           >
-            {showNew ? 'Cancelar' : 'Novo contato'}
+            {showNew ? tr('Cancelar') : tr('Novo contato')}
           </Button>
         }
       />
@@ -135,9 +154,9 @@ export default function BoardServices() {
             <Wrench className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="font-display text-xl text-dusk-500">Rede de serviços do condomínio</h2>
+            <h2 className="font-display text-xl text-dusk-500">{tr('Rede de serviços do condomínio')}</h2>
             <p className="text-sm text-dusk-300 mt-1">
-              Guarde aqui eletricistas, hidráulica, elevadores, fabricantes ou instaladores da academia, piscina, segurança, limpeza e contratos importantes.
+              {tr('Guarde aqui eletricistas, hidráulica, elevadores, fabricantes ou instaladores da academia, piscina, segurança, limpeza e contratos importantes.')}
             </p>
           </div>
         </div>
@@ -160,7 +179,7 @@ export default function BoardServices() {
 
       {!loading && contacts.length === 0 && (
         <GlassCard className="p-6 text-sm text-dusk-300 text-center">
-          Nenhum contato operacional cadastrado ainda. Comece pelos fornecedores que você chamaria em uma emergência.
+          {tr('Nenhum contato operacional cadastrado ainda. Comece pelos fornecedores que você chamaria em uma emergência.')}
         </GlassCard>
       )}
     </>
@@ -168,16 +187,18 @@ export default function BoardServices() {
 }
 
 function ServiceContactRow({ contact, onChanged }: { contact: ServiceContact; onChanged: () => void }) {
+  const { locale } = useLocale();
+  const tr = (key: string) => t(key, locale);
   const [editing, setEditing] = useState(false);
 
   async function deactivate() {
-    if (!confirm(`Desativar "${contact.company_name}"?`)) return;
+    if (!confirm(`${tr('Desativar contato')} "${contact.company_name}"?`)) return;
     try {
       await apiDelete(`/service-contacts/${contact.id}`);
-      toast.success('Contato desativado');
+      toast.success(tr('Contato desativado'));
       onChanged();
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Falha ao desativar');
+      toast.error(err?.response?.data?.error || tr('Falha ao desativar'));
     }
   }
 
@@ -218,29 +239,29 @@ function ServiceContactRow({ contact, onChanged }: { contact: ServiceContact; on
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <h3 className="font-display text-xl text-dusk-500">{contact.company_name}</h3>
-            <Badge tone="neutral">{CATEGORY_LABEL[contact.category] || contact.category}</Badge>
-            {contact.preferred ? <Badge tone="sage"><Star className="w-3 h-3" /> preferido</Badge> : null}
-            {contact.emergency_available ? <Badge tone="warning"><AlertTriangle className="w-3 h-3" /> emergência</Badge> : null}
-            {!contact.active ? <Badge tone="neutral">inativo</Badge> : null}
+            <Badge tone="neutral">{categoryLabel(contact.category, locale)}</Badge>
+            {contact.preferred ? <Badge tone="sage"><Star className="w-3 h-3" /> {tr('preferido')}</Badge> : null}
+            {contact.emergency_available ? <Badge tone="warning"><AlertTriangle className="w-3 h-3" /> {tr('emergência')}</Badge> : null}
+            {!contact.active ? <Badge tone="neutral">{tr('inativo')}</Badge> : null}
           </div>
           {contact.contact_name && <p className="text-sm text-dusk-400 mt-1">{contact.contact_name}</p>}
           {contact.service_scope && <p className="text-sm text-dusk-300 mt-2">{contact.service_scope}</p>}
           <div className="mt-3 flex flex-wrap gap-2 text-xs text-dusk-300">
-            {contact.phone && <span className="rounded-full bg-white/60 px-3 py-1">Tel: {contact.phone}</span>}
+            {contact.phone && <span className="rounded-full bg-white/60 px-3 py-1">{tr('Tel:')} {contact.phone}</span>}
             {contact.whatsapp && <span className="rounded-full bg-white/60 px-3 py-1">WhatsApp: {contact.whatsapp}</span>}
             {contact.email && <a className="inline-flex items-center gap-1 rounded-full bg-white/60 px-3 py-1 hover:text-dusk-500" href={`mailto:${contact.email}`}><Mail className="w-3 h-3" /> {contact.email}</a>}
-            {contact.website && <a className="inline-flex items-center gap-1 rounded-full bg-white/60 px-3 py-1 hover:text-dusk-500" href={contact.website} target="_blank" rel="noopener noreferrer"><ExternalLink className="w-3 h-3" /> site</a>}
-            {contact.contract_url && <a className="inline-flex items-center gap-1 rounded-full bg-white/60 px-3 py-1 hover:text-dusk-500" href={contact.contract_url} target="_blank" rel="noopener noreferrer"><ExternalLink className="w-3 h-3" /> contrato</a>}
-            {contact.last_used_at && <span className="rounded-full bg-white/60 px-3 py-1">último uso: {formatDate(contact.last_used_at)}</span>}
+            {contact.website && <a className="inline-flex items-center gap-1 rounded-full bg-white/60 px-3 py-1 hover:text-dusk-500" href={contact.website} target="_blank" rel="noopener noreferrer"><ExternalLink className="w-3 h-3" /> {tr('site')}</a>}
+            {contact.contract_url && <a className="inline-flex items-center gap-1 rounded-full bg-white/60 px-3 py-1 hover:text-dusk-500" href={contact.contract_url} target="_blank" rel="noopener noreferrer"><ExternalLink className="w-3 h-3" /> {tr('contrato')}</a>}
+            {contact.last_used_at && <span className="rounded-full bg-white/60 px-3 py-1">{tr('último uso:')} {formatDate(contact.last_used_at)}</span>}
           </div>
           {contact.notes && <div className="mt-3 text-xs text-dusk-300 bg-white/50 rounded-2xl p-3">{contact.notes}</div>}
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => setEditing(true)} className="p-2 text-dusk-300 hover:text-dusk-500" title="Editar contato" aria-label={`Editar ${contact.company_name}`}>
+          <button onClick={() => setEditing(true)} className="p-2 text-dusk-300 hover:text-dusk-500" title={tr('Editar contato')} aria-label={`${tr('Editar contato')} ${contact.company_name}`}>
             <Pencil className="w-4 h-4" />
           </button>
           {contact.active ? (
-            <button onClick={deactivate} className="p-2 text-dusk-300 hover:text-peach-600" title="Desativar contato" aria-label={`Desativar ${contact.company_name}`}>
+            <button onClick={deactivate} className="p-2 text-dusk-300 hover:text-peach-600" title={tr('Desativar contato')} aria-label={`${tr('Desativar contato')} ${contact.company_name}`}>
               <Trash2 className="w-4 h-4" />
             </button>
           ) : null}
@@ -263,27 +284,33 @@ function ServiceContactEditor({
   onCancel: () => void;
   onSaved: () => void;
 }) {
+  const { locale } = useLocale();
+  const tr = (key: string) => t(key, locale);
   const [form, setForm] = useState<ServiceContactForm>(initial);
   const [saving, setSaving] = useState(false);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.company_name.trim()) {
-      toast.error('Informe a empresa ou fornecedor.');
+      toast.error(tr('Informe a empresa ou fornecedor.'));
       return;
     }
     if (!hasReachableDetail(form)) {
-      toast.error('Inclua telefone, WhatsApp, email, site, endereço ou observação.');
+      toast.error(tr('Inclua telefone, WhatsApp, email, site, endereço ou observação.'));
+      return;
+    }
+    if (!isHttpsUrlOrBlank(form.website) || !isHttpsUrlOrBlank(form.contract_url)) {
+      toast.error(tr('Links devem ser URLs válidas começando com https://.'));
       return;
     }
     setSaving(true);
     try {
       if (mode === 'create') await apiPost('/service-contacts', normalize(form));
       else await apiPatch(`/service-contacts/${id}`, normalize(form));
-      toast.success(mode === 'create' ? 'Contato criado' : 'Contato atualizado');
+      toast.success(mode === 'create' ? tr('Contato criado') : tr('Contato atualizado'));
       onSaved();
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Falha ao salvar contato');
+      toast.error(err?.response?.data?.error || tr('Falha ao salvar contato'));
     } finally {
       setSaving(false);
     }
@@ -292,83 +319,83 @@ function ServiceContactEditor({
   return (
     <GlassCard className="p-5 mb-5 animate-fade-up">
       <div className="flex items-center justify-between gap-3 mb-4">
-        <h2 className="font-display text-xl text-dusk-500">{mode === 'create' ? 'Novo contato operacional' : 'Editar contato operacional'}</h2>
-        <button onClick={onCancel} className="text-dusk-300 hover:text-dusk-500" aria-label="Cancelar">
+        <h2 className="font-display text-xl text-dusk-500">{mode === 'create' ? tr('Novo contato operacional') : tr('Editar contato operacional')}</h2>
+        <button onClick={onCancel} className="text-dusk-300 hover:text-dusk-500" aria-label={tr('Cancelar')}>
           <X className="w-4 h-4" />
         </button>
       </div>
 
       <form onSubmit={submit} className="grid md:grid-cols-2 gap-3">
         <label className="block text-xs text-dusk-300 font-medium">
-          Tipo de serviço
+          {tr('Tipo de serviço')}
           <select className="input mt-1" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
-            {SERVICE_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+            {SERVICE_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{categoryLabel(c.value, locale)}</option>)}
           </select>
         </label>
         <label className="block text-xs text-dusk-300 font-medium">
-          Empresa / fornecedor
+          {tr('Empresa / fornecedor')}
           <input className="input mt-1" value={form.company_name} onChange={(e) => setForm({ ...form, company_name: e.target.value })} maxLength={140} required />
         </label>
         <label className="block text-xs text-dusk-300 font-medium">
-          Pessoa de contato
+          {tr('Pessoa de contato')}
           <input className="input mt-1" value={form.contact_name || ''} onChange={(e) => setForm({ ...form, contact_name: e.target.value })} maxLength={120} />
         </label>
         <label className="block text-xs text-dusk-300 font-medium">
-          Telefone
+          {tr('Telefone')}
           <input className="input mt-1" value={form.phone || ''} onChange={(e) => setForm({ ...form, phone: e.target.value })} maxLength={40} />
         </label>
         <label className="block text-xs text-dusk-300 font-medium">
-          WhatsApp
+          {tr('WhatsApp')}
           <input className="input mt-1" value={form.whatsapp || ''} onChange={(e) => setForm({ ...form, whatsapp: e.target.value })} maxLength={40} />
         </label>
         <label className="block text-xs text-dusk-300 font-medium">
-          Email
+          {tr('Email')}
           <input className="input mt-1" type="email" value={form.email || ''} onChange={(e) => setForm({ ...form, email: e.target.value })} maxLength={160} />
         </label>
         <label className="block text-xs text-dusk-300 font-medium">
-          Site
+          {tr('Site')}
           <input className="input mt-1" type="url" value={form.website || ''} onChange={(e) => setForm({ ...form, website: e.target.value })} maxLength={2048} placeholder="https://..." />
         </label>
         <label className="block text-xs text-dusk-300 font-medium">
-          Link do contrato / garantia
+          {tr('Link do contrato / garantia')}
           <input className="input mt-1" type="url" value={form.contract_url || ''} onChange={(e) => setForm({ ...form, contract_url: e.target.value })} maxLength={2048} placeholder="https://..." />
         </label>
         <label className="block text-xs text-dusk-300 font-medium md:col-span-2">
-          Endereço
+          {tr('Endereço')}
           <input className="input mt-1" value={form.address || ''} onChange={(e) => setForm({ ...form, address: e.target.value })} maxLength={240} />
         </label>
         <label className="block text-xs text-dusk-300 font-medium md:col-span-2">
-          O que resolve
+          {tr('O que resolve')}
           <input className="input mt-1" value={form.service_scope || ''} onChange={(e) => setForm({ ...form, service_scope: e.target.value })} maxLength={500} />
         </label>
         <label className="block text-xs text-dusk-300 font-medium">
-          Último uso
+          {tr('Último uso')}
           <input className="input mt-1" type="date" value={form.last_used_at || ''} onChange={(e) => setForm({ ...form, last_used_at: e.target.value })} />
         </label>
         <label className="block text-xs text-dusk-300 font-medium">
-          Status
+          {tr('Status')}
           <select className="input mt-1" value={form.active ? '1' : '0'} onChange={(e) => setForm({ ...form, active: e.target.value === '1' })}>
-            <option value="1">Ativo</option>
-            <option value="0">Inativo</option>
+            <option value="1">{tr('Ativo')}</option>
+            <option value="0">{tr('Inativo')}</option>
           </select>
         </label>
         <label className="block text-xs text-dusk-300 font-medium md:col-span-2">
-          Observações
+          {tr('Observações')}
           <textarea className="input mt-1 min-h-[88px]" value={form.notes || ''} onChange={(e) => setForm({ ...form, notes: e.target.value })} maxLength={1200} />
         </label>
         <div className="md:col-span-2 flex items-center gap-2 flex-wrap">
           <label className="inline-flex items-center gap-2 text-xs text-dusk-400 bg-white/60 border border-white/70 rounded-full px-3 py-1.5 cursor-pointer">
             <input type="checkbox" checked={form.emergency_available} onChange={(e) => setForm({ ...form, emergency_available: e.target.checked })} />
-            Atende emergência
+            {tr('Atende emergência')}
           </label>
           <label className="inline-flex items-center gap-2 text-xs text-dusk-400 bg-white/60 border border-white/70 rounded-full px-3 py-1.5 cursor-pointer">
             <input type="checkbox" checked={form.preferred} onChange={(e) => setForm({ ...form, preferred: e.target.checked })} />
-            Fornecedor preferido
+            {tr('Fornecedor preferido')}
           </label>
         </div>
         <div className="md:col-span-2 flex justify-end gap-2">
-          <Button type="button" variant="ghost" onClick={onCancel}>Cancelar</Button>
-          <Button type="submit" variant="primary" loading={saving} leftIcon={<Save className="w-4 h-4" />}>Salvar</Button>
+          <Button type="button" variant="ghost" onClick={onCancel}>{tr('Cancelar')}</Button>
+          <Button type="submit" variant="primary" loading={saving} leftIcon={<Save className="w-4 h-4" />}>{tr('Salvar')}</Button>
         </div>
       </form>
     </GlassCard>

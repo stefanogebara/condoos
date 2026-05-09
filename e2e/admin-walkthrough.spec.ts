@@ -57,10 +57,19 @@ test('admin: overview renders with sidebar nav', async ({ page, request, isMobil
     /^(Meetings|Reuniões)$/i,
     /^(Announcements|Comunicados)$/i,
     /^(Residents|Moradores)$/i,
+    /^(Operations|Operação)$/i,
   ];
   for (const l of links) {
     await expect(menu.getByRole('link', { name: l })).toBeVisible();
   }
+});
+
+test('admin: operations service network page renders', async ({ page, request }) => {
+  await adminLogin(page, request);
+  await page.goto('/board/services');
+  await expect(page.getByRole('heading', { name: /Operations|Operação/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /New contact|Novo contato/i })).toBeVisible();
+  await expect(page.getByText(/service network|Rede de serviços|No operations contacts|Nenhum contato operacional/i).first()).toBeVisible();
 });
 
 // ---------------------------------------------------------------------------

@@ -39,6 +39,12 @@ const PT_LEAKS: RegExp[] = [
   /Insira o código de convite/u,
   /Entrar num prédio/u,
   /Montar um novo prédio/u,
+  /Rede de operação/u,
+  /Registre os fornecedores/u,
+  /Adicionar contato por tipo/u,
+  /Empresa \/ fornecedor/u,
+  /Atende emergência/u,
+  /Último atendimento/u,
 ];
 
 function loginInitScript(token: string, user: unknown) {
@@ -114,7 +120,7 @@ for (const locale of ['pt-BR', 'en-US', 'es-ES', 'fr-FR'] as Locale[]) {
     // page-load test above sees. Walk through every step by filling
     // out the form so we catch leaks on the inner steps the user
     // actually screenshotted.
-    test(`/onboarding/create wizard steps 1-3 in ${locale}`, async ({ page }) => {
+    test(`/onboarding/create wizard steps 1-4 in ${locale}`, async ({ page }) => {
       test.setTimeout(60_000);
       await setLocale(page, locale);
       await loginAs(page, 'admin');
@@ -150,6 +156,17 @@ for (const locale of ['pt-BR', 'en-US', 'es-ES', 'fr-FR'] as Locale[]) {
       if (locale !== 'pt-BR') {
         const leaks3 = PT_LEAKS.flatMap((re) => step3Text.match(re)?.[0] ? [step3Text.match(re)![0]] : []);
         expect(leaks3, `PT leak on /onboarding/create step 3 in ${locale}: ${leaks3.join(', ')}`).toEqual([]);
+      }
+
+      // Step 3 → step 4: operations network with electrician/gym/service contacts.
+      await page.getByRole('button').filter({ hasText: /Continuar|Continue|Continuer/ }).first().click();
+      await page.waitForTimeout(900);
+      await page.screenshot({ path: `test-results/onboarding-langs/${locale}-create-step4.png`, fullPage: true });
+
+      const step4Text = await page.locator('body').innerText();
+      if (locale !== 'pt-BR') {
+        const leaks4 = PT_LEAKS.flatMap((re) => step4Text.match(re)?.[0] ? [step4Text.match(re)![0]] : []);
+        expect(leaks4, `PT leak on /onboarding/create step 4 in ${locale}: ${leaks4.join(', ')}`).toEqual([]);
       }
     });
   });

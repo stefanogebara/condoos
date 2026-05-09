@@ -23,6 +23,7 @@ import {
 import { audit, auditRowsToCsv, listAuditRows } from '../src/lib/audit';
 import { generateInvoices, recordPayment } from '../src/lib/finance';
 import { canAssignTicketToUser } from '../src/lib/tickets';
+import { normalizeServiceContact, serviceContactSchema } from '../src/lib/service-contacts';
 
 function resetDb() {
   const tables = [
@@ -36,6 +37,7 @@ function resetDb() {
     'audit_log',
     'amenity_reservations',
     'amenities',
+    'service_contacts',
     'assembly_votes',
     'assembly_proxies',
     'assembly_attendance',
@@ -145,6 +147,57 @@ test('parseJsonLoose strips markdown fences', () => {
 
 test('parseJsonLoose returns null for garbage', () => {
   assert.equal(parseJsonLoose('totally not json'), null);
+});
+
+test('service contact schema rejects unreachable contacts and non-HTTPS links', () => {
+  const unreachable = serviceContactSchema.safeParse({
+    category: 'electrical',
+    company_name: 'Vendor With No Contact',
+  });
+  assert.equal(unreachable.success, false);
+  if (unreachable.success) throw new Error('expected unreachable contact to fail');
+  assert.match(JSON.stringify(unreachable.error.flatten()), /service_contact_needs_reachable_detail/);
+
+  const insecureWebsite = serviceContactSchema.safeParse({
+    category: 'gym_equipment',
+    company_name: 'Fitness Installer',
+    phone: '+55 11 90000-0001',
+    website: 'http://vendors.example/fitness',
+  });
+  assert.equal(insecureWebsite.success, false);
+  if (insecureWebsite.success) throw new Error('expected insecure website to fail');
+  assert.match(JSON.stringify(insecureWebsite.error.flatten()), /must_be_https_url/);
+
+  const insecureContract = serviceContactSchema.safeParse({
+    category: 'gym_equipment',
+    company_name: 'Fitness Installer',
+    phone: '+55 11 90000-0001',
+    contract_url: 'http://contracts.example/fitness',
+  });
+  assert.equal(insecureContract.success, false);
+  if (insecureContract.success) throw new Error('expected insecure contract link to fail');
+  assert.match(JSON.stringify(insecureContract.error.flatten()), /must_be_https_url/);
+});
+
+test('service contact normalization trims fields and expands date-only usage', () => {
+  const parsed = serviceContactSchema.parse({
+    category: 'gym_equipment',
+    company_name: '  Fitness Installer  ',
+    contact_name: '  ',
+    phone: ' +55 11 90000-0001 ',
+    website: 'https://vendors.example/fitness',
+    contract_url: 'https://contracts.example/fitness',
+    service_scope: '  Instalação da academia  ',
+    last_used_at: '2026-05-01',
+    preferred: true,
+  });
+
+  const normalized = normalizeServiceContact(parsed);
+  assert.equal(normalized.company_name, 'Fitness Installer');
+  assert.equal(normalized.contact_name, null);
+  assert.equal(normalized.phone, '+55 11 90000-0001');
+  assert.equal(normalized.service_scope, 'Instalação da academia');
+  assert.equal(normalized.last_used_at, '2026-05-01T00:00:00.000Z');
 });
 
 test('quorum enforcement: auto-close returns inconclusive when turnout under threshold', () => {

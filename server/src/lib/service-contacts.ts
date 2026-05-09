@@ -16,6 +16,14 @@ export const SERVICE_CATEGORIES = [
   'other',
 ] as const;
 
+function isHttpsUrl(value: string): boolean {
+  try {
+    return new URL(value).protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 export const serviceContactSchema = z.object({
   category: z.enum(SERVICE_CATEGORIES).default('general_maintenance'),
   company_name: z.string().min(1).max(140),
@@ -26,11 +34,11 @@ export const serviceContactSchema = z.object({
   // Audit M1 — both link fields must be https:// to block file:/javascript:/
   // internal-IP URLs that z.string().url() accepts by default and that would
   // otherwise be stored and rendered to admins as a clickable link.
-  website: z.string().url().max(2048).refine((u) => u.startsWith('https://'), { message: 'must_be_https_url' }).optional().nullable().or(z.literal('')),
+  website: z.string().url().max(2048).refine(isHttpsUrl, { message: 'must_be_https_url' }).optional().nullable().or(z.literal('')),
   address: z.string().max(240).optional().nullable(),
   service_scope: z.string().max(500).optional().nullable(),
   notes: z.string().max(1200).optional().nullable(),
-  contract_url: z.string().url().max(2048).refine((u) => u.startsWith('https://'), { message: 'must_be_https_url' }).optional().nullable().or(z.literal('')),
+  contract_url: z.string().url().max(2048).refine(isHttpsUrl, { message: 'must_be_https_url' }).optional().nullable().or(z.literal('')),
   emergency_available: z.boolean().default(false),
   preferred: z.boolean().default(false),
   active: z.boolean().default(true),

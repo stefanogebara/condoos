@@ -68,8 +68,13 @@ test('Onboarding API: multi-block condo creates units across all towers', async 
           company_name: 'E2E Fitness Install',
           contact_name: 'Marina',
           phone: '+55 11 90000-0001',
+          whatsapp: '+55 11 90000-0001',
+          email: 'fitness-install@vendors.test',
+          website: 'https://vendors.example/fitness-install',
+          contract_url: 'https://contracts.example/fitness-install',
           service_scope: 'Instalação e garantia dos equipamentos da academia',
           notes: 'Chamar antes de trocar esteiras ou pesos',
+          last_used_at: '2026-05-01',
           preferred: true,
         },
       ],
@@ -91,7 +96,19 @@ test('Onboarding API: multi-block condo creates units across all towers', async 
   const contacts = await request.get(`${apiURL}/service-contacts`, { headers });
   expect(contacts.ok(), `service contacts failed: ${contacts.status()} ${await contacts.text()}`).toBeTruthy();
   const serviceRows = (await contacts.json()).data as any[];
-  expect(serviceRows.some((c) => c.company_name === 'E2E Fitness Install' && c.category === 'gym_equipment')).toBeTruthy();
+  const fitnessInstall = serviceRows.find((c) => c.company_name === 'E2E Fitness Install');
+  expect(fitnessInstall).toBeTruthy();
+  expect(fitnessInstall).toMatchObject({
+    category: 'gym_equipment',
+    contact_name: 'Marina',
+    phone: '+55 11 90000-0001',
+    whatsapp: '+55 11 90000-0001',
+    email: 'fitness-install@vendors.test',
+    website: 'https://vendors.example/fitness-install',
+    contract_url: 'https://contracts.example/fitness-install',
+    preferred: 1,
+  });
+  expect(String(fitnessInstall.last_used_at)).toContain('2026-05-01');
 });
 
 test('Onboarding API: no-unit admin can create a building and access scoped routes', async ({ request }) => {
@@ -166,8 +183,13 @@ test('Onboarding: create-building wizard renders invite code and dashboard route
 
   // Step 4 — operational service network can be skipped or completed.
   await expect(page.getByRole('heading', { name: /Rede de operação|Operations network/i })).toBeVisible();
-  await page.getByPlaceholder(/Fitness Pro|Elevadores Atlas/i).first().fill('E2E Gym Installer');
-  await page.getByPlaceholder(/\+55 11 99999-0000/i).first().fill('+55 11 90000-0002');
+  await page.getByLabel(/Empresa \/ fornecedor|Company \/ vendor/i).nth(1).fill('E2E Gym Installer');
+  await page.getByLabel(/^Telefone$|^Phone$/i).nth(1).fill('+55 11 90000-0002');
+  await page.getByLabel(/^WhatsApp$/i).nth(1).fill('+55 11 90000-0002');
+  await page.getByLabel(/^Email$/i).nth(1).fill('gym-installer@vendors.test');
+  await page.getByLabel(/^Site$|^Website$/i).nth(1).fill('https://vendors.example/gym-installer');
+  await page.getByLabel(/Link do contrato|Contract \/ warranty link/i).nth(1).fill('https://contracts.example/gym-installer');
+  await page.getByLabel(/Último atendimento|Last service/i).nth(1).fill('2026-05-01');
   await page.getByRole('button', { name: /Criar prédio|Create building/i }).click();
 
   // Step 4 — Success card with invite code + share buttons
@@ -190,6 +212,39 @@ test('Onboarding: create-building wizard renders invite code and dashboard route
   const memberships = (await meRes.json()).data as any[];
   const active = memberships.find((m) => m.status === 'active' && m.condo_name === condoName);
   expect(active, 'expected active membership in newly-created condo').toBeTruthy();
+
+  // Verify the service network entered in the UI was actually persisted,
+  // not just that the wizard landed on the success card.
+  const contactsRes = await request.get(`${apiURL}/service-contacts?include_inactive=1`, {
+    headers: { Authorization: `Bearer ${session.token}` },
+  });
+  expect(contactsRes.ok(), `service contacts failed: ${contactsRes.status()} ${await contactsRes.text()}`).toBeTruthy();
+  const serviceRows = (await contactsRes.json()).data as any[];
+  const saved = serviceRows.find((c) => c.company_name === 'E2E Gym Installer');
+  expect(saved).toBeTruthy();
+  expect(saved).toMatchObject({
+    category: 'gym_equipment',
+    phone: '+55 11 90000-0002',
+    whatsapp: '+55 11 90000-0002',
+    email: 'gym-installer@vendors.test',
+    website: 'https://vendors.example/gym-installer',
+    contract_url: 'https://contracts.example/gym-installer',
+  });
+  expect(String(saved.last_used_at)).toContain('2026-05-01');
+
+  const authMe = await request.get(`${apiURL}/auth/me`, {
+    headers: { Authorization: `Bearer ${session.token}` },
+  });
+  expect(authMe.ok()).toBeTruthy();
+  const refreshedUser = (await authMe.json()).data.user;
+  await page.evaluate(({ token, user }) => {
+    localStorage.setItem('condoos_token', token);
+    localStorage.setItem('condoos_user', JSON.stringify(user));
+  }, { token: session.token, user: refreshedUser });
+  await page.goto('/board/services');
+  await expect(page.getByRole('heading', { name: /Operação|Operations/i })).toBeVisible();
+  await expect(page.getByText('E2E Gym Installer')).toBeVisible();
+  await expect(page.getByText('gym-installer@vendors.test')).toBeVisible();
 });
 
 // ---------------------------------------------------------------------------

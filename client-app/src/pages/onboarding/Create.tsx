@@ -153,6 +153,16 @@ function serviceContactHasReachableDetail(contact: ServiceContactDraft) {
   ].some((value) => value.trim().length > 0);
 }
 
+function isHttpsUrlOrBlank(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return true;
+  try {
+    return new URL(trimmed).protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 function normalizeServiceContact(contact: ServiceContactDraft) {
   return {
     category: contact.category,
@@ -317,8 +327,8 @@ export default function Create() {
     c.company_name.trim().length > 0
     && serviceContactHasReachableDetail(c)
     && (!c.email.trim() || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.email.trim()))
-    && (!c.website.trim() || /^https?:\/\//i.test(c.website.trim()))
-    && (!c.contract_url.trim() || /^https?:\/\//i.test(c.contract_url.trim()))
+    && isHttpsUrlOrBlank(c.website)
+    && isHttpsUrlOrBlank(c.contract_url)
   ));
 
   async function submit() {
@@ -855,6 +865,10 @@ export default function Create() {
                               <input className="input mt-1" value={contact.service_scope} onChange={(e) => updateServiceContact(idx, { service_scope: e.target.value })} maxLength={500} placeholder="ex: manutenção da esteira, instalação de aparelhos, emergência elétrica" />
                             </label>
                             <label className="block text-[11px] text-dusk-300 font-medium md:col-span-2">
+                              Último atendimento / visita
+                              <input className="input mt-1" type="date" value={contact.last_used_at} onChange={(e) => updateServiceContact(idx, { last_used_at: e.target.value })} />
+                            </label>
+                            <label className="block text-[11px] text-dusk-300 font-medium md:col-span-2">
                               Observações importantes
                               <textarea className="input mt-1 min-h-[72px]" value={contact.notes} onChange={(e) => updateServiceContact(idx, { notes: e.target.value })} maxLength={1200} placeholder="ex: horário de atendimento, SLA, quem chama, número do contrato, restrições de acesso" />
                             </label>
@@ -895,7 +909,7 @@ export default function Create() {
 
                 {!serviceContactsValid && (
                   <div className="mt-4 p-3 rounded-2xl bg-peach-100/70 border border-peach-200 text-xs text-peach-700">
-                    Cada contato salvo precisa ter empresa e pelo menos uma forma de contato ou observação. Links devem começar com http:// ou https://.
+                    Cada contato salvo precisa ter empresa e pelo menos uma forma de contato ou observação. Links devem ser URLs válidas começando com https://.
                   </div>
                 )}
 
