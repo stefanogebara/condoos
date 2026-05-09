@@ -169,7 +169,7 @@ router.post('/payments', requireAuth, requireRole('board_admin'), (req: AuthedRe
 // GET is open to all members (residents see where the money goes).
 // POST/DELETE require board_admin.
 // ---------------------------------------------------------------------------
-router.get('/expenses', requireAuth, (req: AuthedRequest, res) => {
+router.get('/expenses', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   // Optional filters: ?since=2026-01-01 (limits history, default = 12 months).
   const sinceParam = String(req.query.since || '').trim();

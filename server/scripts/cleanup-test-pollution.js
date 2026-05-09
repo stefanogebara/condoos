@@ -7,18 +7,20 @@ const Database = require('better-sqlite3');
 const DB_PATH = process.env.DB_PATH || '/data/condoos.sqlite';
 const db = new Database(DB_PATH);
 
-// 2026-05 audit: extended to cover the patterns visible in production:
-// PROD_E2E_GATE_TEST / Cost gate test / Prod maintenance test / 'desc' on
-// proposals; E2E Pending <epoch> on visitors. Patterns chosen so a real
-// resident-authored row can never match (no real condo would title a
-// proposal exactly 'desc' or start a visitor name with 'E2E ').
-const propWhere = "(title LIKE 'Isolation probe%' OR title LIKE 'E2E %' OR title LIKE 'walkthrough %' OR title LIKE 'UI compliance%' OR title LIKE 'Vote-closer%' OR title LIKE 'PROD_E2E%' OR title LIKE '%Cost gate test%' OR title LIKE '%Prod maintenance%' OR title = 'desc')";
-const asmWhere  = "(title LIKE 'Canary AGO%' OR title LIKE 'walkthrough %' OR title LIKE 'E2E %')";
+// 2026-05 audit (round 2): extended further with patterns the fresh-eyes
+// audit found still rendering in prod after the first cleanup. Patterns
+// stay tightly scoped so a real resident-authored row can never match
+// (no real condo would title a proposal "audit dup test" or a package
+// description "WAHA live test").
+const propWhere = "(title LIKE 'Isolation probe%' OR title LIKE 'E2E %' OR title LIKE 'walkthrough %' OR title LIKE 'UI compliance%' OR title LIKE 'Vote-closer%' OR title LIKE 'PROD_E2E%' OR title LIKE '%Cost gate test%' OR title LIKE '%Prod maintenance%' OR title = 'desc' OR title LIKE 'audit dup test%' OR description LIKE 'audit dup test%')";
+const asmWhere  = "(title LIKE 'Canary AGO%' OR title LIKE 'walkthrough %' OR title LIKE 'E2E %' OR title LIKE 'AGO 2026 Smoke%')";
 const meetingWhere = "(title LIKE 'E2E %' OR title LIKE 'walkthrough %')";
 const inviteWhere = "(email LIKE 'e2e-%@example.com' OR email LIKE 'e2e+%@condoos.test')";
 const suggestionWhere = "(body LIKE 'E2E %' OR body LIKE 'A iluminação do hall do 3º andar fica piscando%')";
-const visitorWhere = "(visitor_name LIKE 'E2E %' OR visitor_name LIKE 'PROD_E2E%' OR visitor_name LIKE 'walkthrough %')";
+const visitorWhere = "(visitor_name LIKE 'E2E %' OR visitor_name LIKE 'PROD_E2E%' OR visitor_name LIKE 'walkthrough %' OR visitor_name LIKE 'Prod Pre-approved%' OR visitor_name LIKE 'Prod maintenance test%')";
 const announcementWhere = "(title LIKE 'E2E %' OR title LIKE 'PROD_E2E%' OR title LIKE 'walkthrough %')";
+const packageWhere = "(description LIKE 'WAHA live test%' OR description LIKE 'CondoOS production notification test%' OR description LIKE 'E2E %' OR description LIKE 'PROD_E2E%' OR carrier LIKE 'E2E %')";
+const expenseWhere = "(description LIKE 'audit dup test%' OR description LIKE 'E2E %' OR description LIKE 'PROD_E2E%' OR vendor LIKE 'E2E %')";
 
 const propBefore = db.prepare('SELECT COUNT(*) AS c FROM proposals').get().c;
 const asmBefore  = db.prepare('SELECT COUNT(*) AS c FROM assemblies').get().c;
@@ -27,6 +29,9 @@ const inviteBefore = db.prepare('SELECT COUNT(*) AS c FROM invites').get().c;
 const suggestionBefore = db.prepare('SELECT COUNT(*) AS c FROM suggestions').get().c;
 const visitorBefore = db.prepare('SELECT COUNT(*) AS c FROM visitors').get().c;
 const announcementBefore = db.prepare('SELECT COUNT(*) AS c FROM announcements').get().c;
+const packageBefore = db.prepare('SELECT COUNT(*) AS c FROM packages').get().c;
+const expenseTableExists = !!db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='expenses'`).get();
+const expenseBefore = expenseTableExists ? db.prepare('SELECT COUNT(*) AS c FROM expenses').get().c : 0;
 
 db.prepare('DELETE FROM proposal_votes    WHERE proposal_id IN (SELECT id FROM proposals WHERE ' + propWhere + ')').run();
 db.prepare('DELETE FROM proposal_comments WHERE proposal_id IN (SELECT id FROM proposals WHERE ' + propWhere + ')').run();
@@ -53,6 +58,10 @@ const suggestionRes = db.prepare('DELETE FROM suggestions WHERE ' + suggestionWh
 
 const visitorRes = db.prepare('DELETE FROM visitors WHERE ' + visitorWhere).run();
 const announcementRes = db.prepare('DELETE FROM announcements WHERE ' + announcementWhere).run();
+const packageRes = db.prepare('DELETE FROM packages WHERE ' + packageWhere).run();
+const expenseRes = expenseTableExists
+  ? db.prepare('DELETE FROM expenses WHERE ' + expenseWhere).run()
+  : { changes: 0 };
 
 const propAfter = db.prepare('SELECT COUNT(*) AS c FROM proposals').get().c;
 const asmAfter  = db.prepare('SELECT COUNT(*) AS c FROM assemblies').get().c;
@@ -61,6 +70,8 @@ const inviteAfter = db.prepare('SELECT COUNT(*) AS c FROM invites').get().c;
 const suggestionAfter = db.prepare('SELECT COUNT(*) AS c FROM suggestions').get().c;
 const visitorAfter = db.prepare('SELECT COUNT(*) AS c FROM visitors').get().c;
 const announcementAfter = db.prepare('SELECT COUNT(*) AS c FROM announcements').get().c;
+const packageAfter = db.prepare('SELECT COUNT(*) AS c FROM packages').get().c;
+const expenseAfter = expenseTableExists ? db.prepare('SELECT COUNT(*) AS c FROM expenses').get().c : 0;
 
 console.log('[cleanup] proposals: ' + propBefore + ' → ' + propAfter + ' (deleted ' + propRes.changes + ')');
 console.log('[cleanup] assemblies: ' + asmBefore + ' → ' + asmAfter + ' (deleted ' + asmRes.changes + ')');
@@ -69,6 +80,10 @@ console.log('[cleanup] invites: ' + inviteBefore + ' → ' + inviteAfter + ' (de
 console.log('[cleanup] suggestions: ' + suggestionBefore + ' → ' + suggestionAfter + ' (deleted ' + suggestionRes.changes + ')');
 console.log('[cleanup] visitors: ' + visitorBefore + ' → ' + visitorAfter + ' (deleted ' + visitorRes.changes + ')');
 console.log('[cleanup] announcements: ' + announcementBefore + ' → ' + announcementAfter + ' (deleted ' + announcementRes.changes + ')');
+console.log('[cleanup] packages: ' + packageBefore + ' → ' + packageAfter + ' (deleted ' + packageRes.changes + ')');
+if (expenseTableExists) {
+  console.log('[cleanup] expenses: ' + expenseBefore + ' → ' + expenseAfter + ' (deleted ' + expenseRes.changes + ')');
+}
 
 // E2E onboarding artifacts — condos created by the create-building wizard test
 // and users created by /auth/dev-register. Safe to delete: real users never

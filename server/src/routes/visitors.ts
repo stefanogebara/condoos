@@ -85,10 +85,19 @@ router.post('/:id/decide', requireAuth, requireRole('board_admin', 'concierge'),
 });
 
 router.post('/:id/arrived', requireAuth, (req: AuthedRequest, res) => {
+  // Audit N3 — previously any resident in the condo could mark any visitor
+  // (including someone else's pending visitor) as arrived. The intended gate
+  // is "the resident hosting this visitor confirms the arrival OR a staff
+  // member (concierge / board_admin) does it on their behalf". So either
+  // the row's host_id matches the caller or the caller is staff.
   const u = req.user!;
   const id = Number(req.params.id);
-  const v = db.prepare(`SELECT id FROM visitors WHERE id=? AND condominium_id=?`).get(id, u.condominium_id);
+  const v = db.prepare(
+    `SELECT id, host_id FROM visitors WHERE id=? AND condominium_id=?`
+  ).get(id, u.condominium_id) as { id: number; host_id: number } | undefined;
   if (!v) return fail(res, 'not_found', 404);
+  const isStaff = u.role === 'board_admin' || u.role === 'concierge';
+  if (!isStaff && v.host_id !== u.id) return fail(res, 'forbidden', 403);
   db.prepare(`UPDATE visitors SET status='arrived' WHERE id=?`).run(id);
   audit(req, {
     action: 'visitor.arrived',

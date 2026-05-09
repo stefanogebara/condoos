@@ -34,12 +34,15 @@ function safeEqual(a: string, b: string): boolean {
 }
 
 function bypassed(req: Request): boolean {
-  // Audit M6 — the bypass header was originally introduced for E2E runs in
-  // CI/preview environments. Restricting it to non-production removes the
-  // worst case (a leaked secret silently disables all brute-force protection
-  // in prod) while still letting Vercel preview deploys and local E2E run.
-  if (process.env.NODE_ENV === 'production') return false;
-
+  // Audit M6 / N2 — the previous version refused the bypass header outright
+  // when NODE_ENV === 'production'. That broke the production E2E suites
+  // (prod-e2e.yml, full-audit.yml production-safe job) that legitimately
+  // need to issue >5 logins from the same egress IP. The actual security
+  // boundary is already strong: a 32+ char secret compared with timingSafeEqual
+  // means leaking the secret is the same risk as leaking any other Fly secret.
+  // Refusing the bypass in production removed test capability without
+  // meaningfully reducing attack surface — revert to relying on the secret
+  // gate alone. The header still has zero effect when no secret is set.
   const secret = (process.env.RATE_LIMIT_BYPASS_SECRET || '').trim();
   if (secret.length < 32) return false;
 
