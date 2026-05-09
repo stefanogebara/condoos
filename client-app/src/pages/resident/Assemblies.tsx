@@ -4,6 +4,7 @@ import { Gavel } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 import GlassCard from '../../components/GlassCard';
 import Badge from '../../components/Badge';
+import EmptyState from '../../components/EmptyState';
 import { apiGet } from '../../lib/api';
 import { formatDateTime } from '../../lib/i18n';
 
@@ -28,10 +29,11 @@ export default function Assemblies() {
       <PageHeader title="Assembleias" subtitle="AGO / AGE — conceda procuração se não puder comparecer, ou vote ao vivo." />
       <div className="space-y-4">
         {visible.length === 0 && (
-          <GlassCard className="p-8 text-center">
-            <Gavel className="w-10 h-10 mx-auto text-dusk-200 mb-3" />
-            <p className="text-dusk-400">Nenhuma assembleia agendada.</p>
-          </GlassCard>
+          <EmptyState
+            image="/images/clay-key.png"
+            title="Nenhuma assembleia agendada"
+            body="Quando o síndico convocar uma AGO ou AGE você verá aqui — com a pauta, o horário e a opção de conceder procuração se não puder comparecer."
+          />
         )}
         {visible.map((a) => (
           <Link key={a.id} to={`/app/assemblies/${a.id}`}>

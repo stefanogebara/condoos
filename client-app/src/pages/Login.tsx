@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { GoogleOAuthProvider, GoogleLogin } from '@react-oauth/google';
 import toast from 'react-hot-toast';
-import { Building2, ArrowRight, Shield, User, Plus, LogIn, Sparkles } from 'lucide-react';
+import { Building2, ArrowRight, Shield, User, Plus, LogIn, Sparkles, Loader2 } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { apiGet } from '../lib/api';
 import { track } from '../lib/analytics';
@@ -57,6 +57,10 @@ export default function Login() {
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading]   = useState(false);
+  // Audit L7 — track which demo button is in flight so the user gets a real
+  // spinner on the clicked card. Previously both buttons simply opacity-50
+  // disabled, which read as "the click did nothing".
+  const [loadingKind, setLoadingKind] = useState<'admin' | 'resident' | null>(null);
   const [googleClientId, setGoogleClientId] = useState<string | null>(null);
   const [demoEnabled, setDemoEnabled] = useState(false);
 
@@ -139,10 +143,11 @@ export default function Login() {
       : { e: 'resident@condoos.dev', p: 'resident123' };
     setEmail(creds.e); setPassword(creds.p);
     setLoading(true);
+    setLoadingKind(kind);
     login(creds.e, creds.p)
       .then(async (u) => { toast.success(`${t('Olá')}, ${u.first_name}`); await routeAfterLogin(u); })
       .catch((err) => toast.error(authErrorMessage(err)))
-      .finally(() => setLoading(false));
+      .finally(() => { setLoading(false); setLoadingKind(null); });
   }
 
   async function handleGoogleSuccess(credential: string | undefined) {
@@ -223,7 +228,9 @@ export default function Login() {
                   disabled={loading}
                   className="group relative flex items-center gap-3 p-3 rounded-2xl bg-white/50 hover:bg-white/70 border border-white/60 transition text-left disabled:opacity-50"
                 >
-                  <div className="w-10 h-10 rounded-xl bg-sage-200 flex items-center justify-center text-sage-700 shrink-0"><Shield className="w-5 h-5" /></div>
+                  <div className="w-10 h-10 rounded-xl bg-sage-200 flex items-center justify-center text-sage-700 shrink-0">
+                    {loadingKind === 'admin' ? <Loader2 className="w-5 h-5 animate-spin" /> : <Shield className="w-5 h-5" />}
+                  </div>
                   <div className="min-w-0">
                     <div className="text-sm font-semibold text-dusk-500 truncate">Síndico</div>
                     <div className="text-xs text-dusk-200 truncate">admin@condoos.dev</div>
@@ -235,7 +242,9 @@ export default function Login() {
                   disabled={loading}
                   className="group relative flex items-center gap-3 p-3 rounded-2xl bg-white/50 hover:bg-white/70 border border-white/60 transition text-left disabled:opacity-50"
                 >
-                  <div className="w-10 h-10 rounded-xl bg-peach-100 flex items-center justify-center text-peach-500 shrink-0"><User className="w-5 h-5" /></div>
+                  <div className="w-10 h-10 rounded-xl bg-peach-100 flex items-center justify-center text-peach-500 shrink-0">
+                    {loadingKind === 'resident' ? <Loader2 className="w-5 h-5 animate-spin" /> : <User className="w-5 h-5" />}
+                  </div>
                   <div className="min-w-0">
                     <div className="text-sm font-semibold text-dusk-500 truncate">Morador</div>
                     <div className="text-xs text-dusk-200 truncate">resident@condoos.dev</div>

@@ -8,8 +8,11 @@
     <link rel="icon" href="/favicon.ico" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <!-- Preload the hero image for fast LCP — landing-only. -->
-    <link rel="preload" as="image" href="/images/characters/hero-community-01.webp" type="image/webp" fetchpriority="high" />
+    <!-- Audit L6 — the global hero preload caused "preloaded but not used"
+         warnings on every non-landing page. Removed; Landing's <Picture
+         priority="high"> already prioritizes the asset for LCP without the
+         page-global cost. -->
+
     <link
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Inter+Tight:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"

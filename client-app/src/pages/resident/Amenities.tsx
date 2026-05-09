@@ -7,7 +7,7 @@ import Badge from '../../components/Badge';
 import Button from '../../components/Button';
 import { apiGet, apiPost } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
-import { formatDateTime } from '../../lib/i18n';
+import { formatDateTime, currentIntlLocale } from '../../lib/i18n';
 
 interface Amenity {
   id: number; name: string; description: string; icon: string;
@@ -209,7 +209,7 @@ export default function Amenities() {
                         className={`p-3 rounded-2xl border text-left transition ${active ? 'bg-sage-100 border-sage-300' : 'bg-white/60 border-white/70 hover:bg-white/80'} ${slot.available ? 'text-dusk-500' : 'opacity-45 pointer-events-none'}`}
                       >
                         <div className="text-sm font-semibold">
-                          {start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}–{end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          {start.toLocaleTimeString(currentIntlLocale(), { hour: '2-digit', minute: '2-digit' })}–{end.toLocaleTimeString(currentIntlLocale(), { hour: '2-digit', minute: '2-digit' })}
                         </div>
                         <div className="text-[11px] text-dusk-300">{slot.available_spots} vaga(s)</div>
                       </button>
