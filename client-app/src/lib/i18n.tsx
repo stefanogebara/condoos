@@ -2007,14 +2007,6 @@ export function LanguageSwitcher() {
   if (appSurface) return null;
 
   const handleLocation = async () => {
-    // Audit H3 — silently overriding a manual choice was the actual cause of
-    // "locale flips between routes" (the ⌖ button sits next to the FR pill
-    // and is easy to mis-click). Require explicit confirmation when the user
-    // already chose a language so accidental clicks no longer flip it.
-    if (source === 'manual' && typeof window !== 'undefined') {
-      const ok = window.confirm(t('Substituir sua escolha manual pela detecção de localização?'));
-      if (!ok) return;
-    }
     setDetecting(true);
     try {
       await useLocationLocale();
@@ -2065,14 +2057,6 @@ export function SidebarLangSwitcher() {
   const [detecting, setDetecting] = useState(false);
 
   const handleLocation = async () => {
-    // Audit H3 — same fix as LanguageSwitcher: confirm before overriding a
-    // manual choice. The ⌖ button sits adjacent to the FR pill in this
-    // compact row and was easy to mis-click, silently flipping the user's
-    // saved language to whatever browser+timezone resolved to.
-    if (source === 'manual' && typeof window !== 'undefined') {
-      const ok = window.confirm(t('Substituir sua escolha manual pela detecção de localização?'));
-      if (!ok) return;
-    }
     setDetecting(true);
     try {
       await useLocationLocale();
