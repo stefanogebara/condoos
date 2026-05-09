@@ -31,7 +31,7 @@ test('Concierge staff: admin invites porteiro → staff list includes them', asy
 
   const inviteRes = await request.post(`${apiURL}/concierge/invite`, {
     headers: admH,
-    data: { email, first_name: 'E2E', last_name: 'Porteiro', password: 'porto123' },
+    data: { email, first_name: 'E2E', last_name: 'Porteiro', password: 'porteiro12345' },
   });
   expect(inviteRes.ok(), `invite failed: ${inviteRes.status()} ${await inviteRes.text()}`).toBeTruthy();
   const invited = (await inviteRes.json()).data;
@@ -60,12 +60,12 @@ test('Concierge staff: duplicate email returns 409', async ({ request }) => {
 
   await request.post(`${apiURL}/concierge/invite`, {
     headers: admH,
-    data: { email, first_name: 'First', last_name: 'Dup', password: 'porto123' },
+    data: { email, first_name: 'First', last_name: 'Dup', password: 'porteiro12345' },
   });
 
   const dupRes = await request.post(`${apiURL}/concierge/invite`, {
     headers: admH,
-    data: { email, first_name: 'Second', last_name: 'Dup', password: 'porto456' },
+    data: { email, first_name: 'Second', last_name: 'Dup', password: 'porteiro67890' },
   });
   expect(dupRes.status()).toBe(409);
   expect((await dupRes.json()).success).toBe(false);
