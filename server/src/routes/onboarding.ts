@@ -4,6 +4,7 @@
 //   POST /api/onboarding/join             — resident submits claim on a unit
 //   GET  /api/onboarding/me               — current user's memberships (pending + active)
 import { Router } from 'express';
+import { randomBytes } from 'crypto';
 import { z } from 'zod';
 import db from '../db';
 import { requireAuth, requireActiveMembership, requireRole, getActiveCondoId, AuthedRequest } from '../lib/auth';
@@ -16,10 +17,15 @@ const router = Router();
 const lookupRateLimit = createRateLimit({ keyPrefix: 'onboarding_lookup', windowMs: 60_000, max: 60 });
 const onboardingWriteRateLimit = createRateLimit({ keyPrefix: 'onboarding_write', windowMs: 60 * 60_000, max: 20 });
 
+const INVITE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // avoids 0/O/1/I/L
+
 function randomCode(): string {
-  const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // avoids 0/O/1/I/L
+  // Use crypto.randomBytes for non-predictable codes — Math.random is a non-
+  // CSPRNG and lets a determined attacker enumerate codes much faster than
+  // the rate limiter's 60/min would suggest. Audit M2.
+  const bytes = randomBytes(6);
   let out = '';
-  for (let i = 0; i < 6; i++) out += chars[Math.floor(Math.random() * chars.length)];
+  for (let i = 0; i < 6; i++) out += INVITE_ALPHABET[bytes[i] % INVITE_ALPHABET.length];
   return out;
 }
 

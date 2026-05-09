@@ -31,7 +31,12 @@ const commentSchema = z.object({
 });
 
 const attachmentSchema = z.object({
-  url: z.string().url().max(1_000),
+  // Audit M1 — block file:/javascript:/internal-IP URLs from being stored as
+  // ticket attachment URLs. Same rationale as receipt_url and contract_url.
+  url: z.string().url().max(1_000).refine(
+    (u) => u.startsWith('https://'),
+    { message: 'must_be_https_url' },
+  ),
   filename: z.string().max(240).optional(),
   content_type: z.string().max(120).optional(),
 });

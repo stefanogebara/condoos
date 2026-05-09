@@ -23,11 +23,14 @@ export const serviceContactSchema = z.object({
   phone: z.string().max(40).optional().nullable(),
   whatsapp: z.string().max(40).optional().nullable(),
   email: z.string().email().max(160).optional().nullable().or(z.literal('')),
-  website: z.string().url().max(2048).optional().nullable().or(z.literal('')),
+  // Audit M1 — both link fields must be https:// to block file:/javascript:/
+  // internal-IP URLs that z.string().url() accepts by default and that would
+  // otherwise be stored and rendered to admins as a clickable link.
+  website: z.string().url().max(2048).refine((u) => u.startsWith('https://'), { message: 'must_be_https_url' }).optional().nullable().or(z.literal('')),
   address: z.string().max(240).optional().nullable(),
   service_scope: z.string().max(500).optional().nullable(),
   notes: z.string().max(1200).optional().nullable(),
-  contract_url: z.string().url().max(2048).optional().nullable().or(z.literal('')),
+  contract_url: z.string().url().max(2048).refine((u) => u.startsWith('https://'), { message: 'must_be_https_url' }).optional().nullable().or(z.literal('')),
   emergency_available: z.boolean().default(false),
   preferred: z.boolean().default(false),
   active: z.boolean().default(true),

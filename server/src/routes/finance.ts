@@ -48,7 +48,12 @@ const expenseSchema = z.object({
   vendor: z.string().min(0).max(120).optional().nullable(),
   description: z.string().min(1).max(500),
   spent_at: z.string().datetime().or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)),
-  receipt_url: z.string().url().max(2048).optional().nullable(),
+  // Audit M1 — restrict to https:// to block file:/javascript:/internal-IP
+  // URLs that previously matched z.string().url() and were stored verbatim.
+  receipt_url: z.string().url().max(2048).refine(
+    (u) => u.startsWith('https://'),
+    { message: 'must_be_https_url' },
+  ).optional().nullable(),
   related_proposal_id: z.number().int().positive().optional().nullable(),
 });
 

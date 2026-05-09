@@ -1,10 +1,23 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import db from '../db';
 import { requireAuth, requireRole, AuthedRequest } from '../lib/auth';
 import { ok, fail } from '../lib/respond';
 import { audit } from '../lib/audit';
 
 const router = Router();
+
+// Audit M5 — replace the hand-rolled `if (!visitor_name)` check, which let
+// `{ name: [1,2,3], unit: null }` slip through with a generic
+// missing_visitor_name error, with a typed schema. Now `visitor_name` must be
+// a non-empty string and unknown fields are stripped.
+const createVisitorSchema = z.object({
+  visitor_name: z.string().min(1).max(140),
+  visitor_type: z.enum(['guest', 'delivery', 'service', 'rideshare']).default('guest'),
+  expected_at: z.string().datetime().or(z.string().regex(/^\d{4}-\d{2}-\d{2}/)).optional().nullable(),
+  notes: z.string().max(500).optional().nullable(),
+  pre_approve: z.boolean().optional(),
+});
 
 router.get('/', requireAuth, (req: AuthedRequest, res) => {
   const u = req.user!;
@@ -23,8 +36,9 @@ router.get('/', requireAuth, (req: AuthedRequest, res) => {
 
 router.post('/', requireAuth, (req: AuthedRequest, res) => {
   const u = req.user!;
-  const { visitor_name, visitor_type, expected_at, notes, pre_approve } = req.body || {};
-  if (!visitor_name) return fail(res, 'missing_visitor_name');
+  const parsed = createVisitorSchema.safeParse(req.body);
+  if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
+  const { visitor_name, visitor_type, expected_at, notes, pre_approve } = parsed.data;
 
   // Pre-approval (#9 in the QA checklist): when the resident books a future
   // visit, the host is the one approving — so we set status='approved'
@@ -38,7 +52,7 @@ router.post('/', requireAuth, (req: AuthedRequest, res) => {
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     u.condominium_id, u.id,
-    visitor_name, visitor_type || 'guest',
+    visitor_name, visitor_type,
     expected_at || null, notes || null,
     status, decidedAt,
   );
@@ -47,7 +61,7 @@ router.post('/', requireAuth, (req: AuthedRequest, res) => {
     target_type: 'visitor',
     target_id: Number(row.lastInsertRowid),
     condominium_id: u.condominium_id,
-    metadata: { visitor_type: visitor_type || 'guest', pre_approve: pre_approve === true },
+    metadata: { visitor_type, pre_approve: pre_approve === true },
   });
   return ok(res, { id: row.lastInsertRowid, status });
 });

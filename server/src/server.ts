@@ -37,6 +37,9 @@ initSentry();
 const app = express();
 const PORT = Number(process.env.PORT || 4000);
 app.set('trust proxy', 1);
+// Audit M10 — strip the `X-Powered-By: Express` fingerprint so attackers
+// can't trivially identify the stack from response headers.
+app.disable('x-powered-by');
 const allowedOrigins = (process.env.CORS_ORIGIN || process.env.CLIENT_ORIGIN || '')
   .split(',')
   .map((origin) => origin.trim())
@@ -65,6 +68,17 @@ app.use((_req, res, next) => {
   next();
 });
 app.use(express.json({ limit: '2mb' }));
+// Audit M4 — body-parser surfaces JSON syntax errors with the raw V8
+// message ("Expected property name or '}' in JSON at position 1"), which
+// breaks the {error: <stable_code>} contract every other endpoint follows.
+// Catch the parse failure here and return a stable code so clients can
+// branch on it deterministically.
+app.use((err: any, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (err && err.type === 'entity.parse.failed') {
+    return res.status(400).json({ success: false, error: 'invalid_json' });
+  }
+  return next(err);
+});
 app.use(morgan('dev'));
 
 app.get('/api/health', (_req, res) => {
