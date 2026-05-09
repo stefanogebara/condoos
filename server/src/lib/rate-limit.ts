@@ -13,6 +13,13 @@ interface RateLimitOptions {
   key?: (req: Request) => string;
 }
 
+// Audit M3 — buckets are in-process memory. Effective today because the
+// Fly deployment runs with min_machines_running=1 + auto_stop_machines=true,
+// so all auth traffic hits a single machine. If we ever scale beyond a
+// single VM (multi-region, multiple replicas) this map must be replaced
+// with a shared store such as Redis or fly-replicache. The exposed
+// resetRateLimits() helper is used by tests to clear the bucket between
+// runs and is also a useful one-shot recovery if a bug fills the map.
 const buckets = new Map<string, Bucket>();
 export const RATE_LIMIT_BYPASS_HEADER = 'x-condoos-rate-limit-bypass';
 
@@ -27,6 +34,12 @@ function safeEqual(a: string, b: string): boolean {
 }
 
 function bypassed(req: Request): boolean {
+  // Audit M6 — the bypass header was originally introduced for E2E runs in
+  // CI/preview environments. Restricting it to non-production removes the
+  // worst case (a leaked secret silently disables all brute-force protection
+  // in prod) while still letting Vercel preview deploys and local E2E run.
+  if (process.env.NODE_ENV === 'production') return false;
+
   const secret = (process.env.RATE_LIMIT_BYPASS_SECRET || '').trim();
   if (secret.length < 32) return false;
 

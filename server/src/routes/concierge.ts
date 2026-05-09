@@ -78,11 +78,17 @@ router.get('/today', requireAuth, requireConciergeOrAdmin, (req: AuthedRequest, 
 // Concierge invites a new concierge user (admin-only — concierges shouldn't
 // be able to spawn each other). Bare-bones: just creates the user with a
 // known password the admin can rotate later.
+//
+// Audit M7 — minimum bumped from 6 → 12 chars. A 6-char admin-set password
+// is materially weaker than the resident bcrypt baseline and "rotate later"
+// rarely happens. A forced-rotation flow (must_change_password column +
+// /change-password gate on first login) is a follow-up; bumping the floor
+// removes the weakest passwords without that schema change.
 const inviteSchema = z.object({
   email: z.string().email(),
   first_name: z.string().min(1).max(60),
   last_name: z.string().min(1).max(60).optional().default(''),
-  password: z.string().min(6).max(120),
+  password: z.string().min(12).max(120),
 });
 
 router.post('/invite', requireAuth, requireRole('board_admin'), async (req: AuthedRequest, res) => {

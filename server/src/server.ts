@@ -36,7 +36,13 @@ import { processWhatsAppOutbox } from './lib/whatsapp';
 initSentry();
 const app = express();
 const PORT = Number(process.env.PORT || 4000);
-app.set('trust proxy', 1);
+// Audit M8 — trust the full proxy chain. Fly.io sets x-forwarded-for to
+// the real client IP, but at the edge can chain through more than one
+// internal hop. With trust proxy = 1 (single hop) req.ip occasionally
+// resolved to a Fly internal address, which would collapse all per-IP
+// rate-limit buckets onto a single key. trust proxy = true tells Express
+// to take the leftmost x-forwarded-for entry, which is the real client.
+app.set('trust proxy', true);
 // Audit M10 — strip the `X-Powered-By: Express` fingerprint so attackers
 // can't trivially identify the stack from response headers.
 app.disable('x-powered-by');
@@ -62,6 +68,10 @@ app.use((_req, res, next) => {
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Referrer-Policy', 'no-referrer');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  // Audit M9 — the API only serves JSON; no scripts, no styles, no embeds.
+  // A locked-down CSP costs nothing and removes a class of future XSS-via-
+  // error-page or content-sniffing attack vectors.
+  res.setHeader('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'");
   if (process.env.NODE_ENV === 'production') {
     res.setHeader('Strict-Transport-Security', 'max-age=15552000; includeSubDomains');
   }
