@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import db from '../db';
 import { requireAuth, requireRole, AuthedRequest } from '../lib/auth';
 import { ok, fail } from '../lib/respond';
@@ -20,13 +21,21 @@ router.get('/', requireAuth, (req: AuthedRequest, res) => {
   return ok(res, rows);
 });
 
+// Audit H-N8 — cap body at 4000 chars so a malicious resident can't blow up
+// the AI clustering prompt cost via multi-megabyte suggestions.
+const createSuggestionSchema = z.object({
+  body: z.string().min(1).max(4000),
+});
+
 router.post('/', requireAuth, (req: AuthedRequest, res) => {
   const u = req.user!;
-  const { body } = req.body || {};
-  if (!body || !body.trim()) return fail(res, 'empty_body');
+  const parsed = createSuggestionSchema.safeParse(req.body);
+  if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
+  const body = parsed.data.body.trim();
+  if (!body) return fail(res, 'empty_body');
   const row = db.prepare(
     `INSERT INTO suggestions (condominium_id, author_id, body) VALUES (?, ?, ?)`
-  ).run(u.condominium_id, u.id, body.trim());
+  ).run(u.condominium_id, u.id, body);
   audit(req, {
     action: 'suggestion.create',
     target_type: 'suggestion',

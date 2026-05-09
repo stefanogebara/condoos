@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import db from '../db';
 import { requireAuth, requireRole, AuthedRequest } from '../lib/auth';
 import { ok, fail } from '../lib/respond';
@@ -17,10 +18,21 @@ router.get('/', requireAuth, (req: AuthedRequest, res) => {
   return ok(res, rows);
 });
 
+// Audit H-N8 — same Zod treatment as proposals: reject oversized fields and
+// unknown sources up front instead of relying on the DB CHECK constraints.
+const createAnnouncementSchema = z.object({
+  title: z.string().min(1).max(200),
+  body: z.string().min(1).max(8000),
+  pinned: z.boolean().optional(),
+  source: z.enum(['manual', 'ai', 'system']).optional(),
+  related_proposal_id: z.number().int().positive().optional().nullable(),
+});
+
 router.post('/', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
   const u = req.user!;
-  const { title, body, pinned, source, related_proposal_id } = req.body || {};
-  if (!title || !body) return fail(res, 'missing_fields');
+  const parsed = createAnnouncementSchema.safeParse(req.body);
+  if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
+  const { title, body, pinned, source, related_proposal_id } = parsed.data;
   const row = db.prepare(
     `INSERT INTO announcements (condominium_id, author_id, title, body, pinned, source, related_proposal_id)
      VALUES (?, ?, ?, ?, ?, ?, ?)`

@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import db from '../db';
 import { requireAuth, requireRole, getActiveCondoId, AuthedRequest } from '../lib/auth';
 import { ok, fail } from '../lib/respond';
@@ -71,15 +72,26 @@ router.get('/:id', requireAuth, (req: AuthedRequest, res) => {
   });
 });
 
+// Audit H-N8 — replace raw req.body destructure with Zod so oversized
+// titles/descriptions can't blow up the AI prompt cost or the row size, and
+// invalid types/categories are rejected up front instead of stored as-is.
+const createProposalSchema = z.object({
+  title: z.string().min(1).max(200),
+  description: z.string().min(1).max(8000),
+  category: z.string().max(40).optional().nullable(),
+  estimated_cost: z.number().int().min(0).optional().nullable(),
+  ai_drafted: z.boolean().optional(),
+  source_suggestion_id: z.number().int().positive().optional().nullable(),
+  voter_eligibility: z.enum(['all', 'owners_only', 'primary_contact_only']).optional(),
+});
+
 router.post('/', requireAuth, (req: AuthedRequest, res) => {
   const u = req.user!;
   const condoId = getActiveCondoId(req);
-  const { title, description, category, estimated_cost, ai_drafted, source_suggestion_id, voter_eligibility } = req.body || {};
-  if (!title || !description) return fail(res, 'missing_fields');
-
-  const eligibility = ['all', 'owners_only', 'primary_contact_only'].includes(voter_eligibility)
-    ? voter_eligibility
-    : 'all';
+  const parsed = createProposalSchema.safeParse(req.body);
+  if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
+  const { title, description, category, estimated_cost, ai_drafted, source_suggestion_id, voter_eligibility } = parsed.data;
+  const eligibility = voter_eligibility || 'all';
 
   if (source_suggestion_id) {
     const s = db.prepare(`SELECT condominium_id FROM suggestions WHERE id=?`).get(source_suggestion_id) as any;

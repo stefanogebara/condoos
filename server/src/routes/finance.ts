@@ -229,6 +229,27 @@ router.post('/expenses', requireAuth, requireRole('board_admin'), (req: AuthedRe
     if (!ok) return fail(res, 'related_proposal_not_in_condo', 400);
   }
 
+  // Audit H-N2 — POST was non-idempotent. A double-click or a network retry
+  // booked duplicate expenses (this happened during the audit itself: two
+  // identical "audit dup test" rows). Dedupe within a 60s window on the
+  // tuple (condo, amount, description, spent_at, created_by) and return the
+  // existing row's id. Retries still get a 200, callers don't need to add
+  // an Idempotency-Key header.
+  const sixtySecondsAgo = new Date(Date.now() - 60_000).toISOString();
+  const recent = db.prepare(
+    `SELECT id, spent_at FROM expenses
+     WHERE condominium_id = ?
+       AND amount_cents = ?
+       AND description = ?
+       AND spent_at = ?
+       AND created_by_user_id = ?
+       AND created_at >= ?
+     LIMIT 1`
+  ).get(condoId, body.amount_cents, body.description, spentAt, req.user!.id, sixtySecondsAgo) as { id: number; spent_at: string } | undefined;
+  if (recent) {
+    return ok(res, { id: recent.id, spent_at: recent.spent_at, deduped: true }, 200);
+  }
+
   const result = db.prepare(
     `INSERT INTO expenses (
       condominium_id, amount_cents, currency, category, vendor,

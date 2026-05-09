@@ -65,7 +65,16 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
-router.post('/login', authIpRateLimit, skipDemoCredentialLimit, (req, res) => {
+// Audit H-N1 / M-N1 — `bcrypt.compareSync` was both a timing oracle and a
+// blocking call. The user-not-found branch returned in ~0.22s while the
+// user-found-wrong-password branch took ~0.33s, leaking valid emails. Run
+// the hash compare unconditionally against a precomputed dummy hash on the
+// not-found path so timing is symmetric, and switch to the async API so
+// concurrent logins no longer starve the event loop. Cost factor 12 matches
+// the bcrypt OWASP 2023 floor for new code.
+const DUMMY_BCRYPT_HASH = bcrypt.hashSync('not-a-real-password-timing-padding', 12);
+
+router.post('/login', authIpRateLimit, skipDemoCredentialLimit, asyncHandler(async (req, res) => {
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
   if (isBlockedDemoCredential(parsed.data.email, parsed.data.password)) {
@@ -77,15 +86,17 @@ router.post('/login', authIpRateLimit, skipDemoCredentialLimit, (req, res) => {
      FROM users WHERE email = ?`
   ).get(parsed.data.email) as any;
 
-  if (!row) return fail(res, 'invalid_credentials', 401);
-  const match = bcrypt.compareSync(parsed.data.password, row.password_hash);
-  if (!match) return fail(res, 'invalid_credentials', 401);
+  // Always run a real bcrypt compare so the response time does not depend on
+  // whether the email exists. Result is discarded on the not-found path.
+  const hashToCheck = row?.password_hash || DUMMY_BCRYPT_HASH;
+  const match = await bcrypt.compare(parsed.data.password, hashToCheck);
+  if (!row || !match) return fail(res, 'invalid_credentials', 401);
 
   claimPendingInvitesForUser(row);
   const token = signToken(row.id);
   const { password_hash, ...user } = row;
   return ok(res, { token, user });
-});
+}));
 
 router.get('/me', requireAuth, (req: AuthedRequest, res) => {
   return ok(res, { user: req.user });
