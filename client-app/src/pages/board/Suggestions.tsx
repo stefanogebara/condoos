@@ -8,7 +8,7 @@ import Badge from '../../components/Badge';
 import Button from '../../components/Button';
 import Avatar from '../../components/Avatar';
 import { apiGet, apiPost } from '../../lib/api';
-import { t } from '../../lib/i18n';
+import { t, currentIntlLocale } from '../../lib/i18n';
 
 interface Suggestion {
   id: number;
@@ -47,7 +47,9 @@ export default function Suggestions() {
   async function cluster() {
     setLoading(true);
     try {
-      await apiPost('/ai/cluster-suggestions');
+      // Audit M-N8 — pass the active locale so the model returns cluster
+      // labels + summaries in the admin's language instead of always English.
+      await apiPost('/ai/cluster-suggestions', { locale: currentIntlLocale() });
       toast.success(t('Agrupadas pela IA'));
       load();
     } finally { setLoading(false); }

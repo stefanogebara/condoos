@@ -1989,9 +1989,15 @@ export function formatDateTime(value: string | number | Date) {
 }
 
 export function formatCurrency(value: number, currency = 'BRL') {
+  // Audit M-N3 — Intl.NumberFormat for BRL renders different things per
+  // locale: pt-BR -> "R$ 1.500", en-US -> "BRL 1,500", es-ES -> "1500 BRL",
+  // fr-FR -> "1 500 R$". Pin currencyDisplay to 'narrowSymbol' so every
+  // locale shows the actual symbol ("R$") rather than the ISO code, and
+  // the demo reads consistently for non-PT users.
   return new Intl.NumberFormat(currentIntlLocale(), {
     style: 'currency',
     currency,
+    currencyDisplay: 'narrowSymbol',
     maximumFractionDigits: 0,
   }).format(value);
 }
