@@ -48,6 +48,17 @@ export interface AuthedRequest extends Request {
   memberships?: ActiveMembership[];   // populated by requireActiveMembership
 }
 
+// Audit L1 — JWT lifetime is 7 days with no server-side revocation.
+// Mitigations in place:
+//   * /api/auth/refresh lets the client extend an active session,
+//   * verifyToken loads the user from the DB on every request — a deleted
+//     user's tokens stop working immediately,
+//   * algorithm pinned to HS256, secret enforced ≥ 32 chars.
+// Remaining gap: a stolen-but-unrevoked token is valid until expiry. A
+// proper fix is short-lived access tokens (15-60min) + an HttpOnly refresh
+// token cookie + a token_version column for explicit revocation; tracked
+// as a follow-up because it requires schema work and a logout-everywhere
+// endpoint, neither of which fits this audit pass.
 export function signToken(userId: number): string {
   return jwt.sign({ uid: userId }, JWT_SECRET, { expiresIn: '7d' });
 }

@@ -251,8 +251,14 @@ function run() {
   }
 
   console.log('Seed complete.');
-  console.log('  admin@condoos.dev    / admin123    (board admin)');
-  console.log('  resident@condoos.dev / resident123 (resident)');
+  // Audit L9 — never echo demo credentials to stdout in production. The
+  // strings make it into Fly logs (and any forwarded log aggregator) where
+  // they sit indefinitely. Useful in dev to remind the developer; pointless
+  // (and slightly risky) in prod.
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('  admin@condoos.dev    / admin123    (board admin)');
+    console.log('  resident@condoos.dev / resident123 (resident)');
+  }
 }
 
 run();

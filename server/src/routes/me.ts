@@ -6,6 +6,14 @@ import { listUserMembershipHistory } from '../lib/memberships';
 
 const router = Router();
 
+// Audit L4 — bare GET /api/me used to 404 because only sub-paths were
+// mounted. Return the authenticated user so callers can hit either
+// /api/auth/me or /api/me to fetch the same payload, matching the
+// principle of least-surprise for a /me-namespaced router.
+router.get('/', requireAuth, (req: AuthedRequest, res) => {
+  return ok(res, { user: req.user });
+});
+
 // Read-only access to historical records for moved-out / revoked residents.
 // This intentionally does not require an active membership.
 router.get('/history', requireAuth, (req: AuthedRequest, res) => {

@@ -92,6 +92,24 @@ app.use((err: any, _req: express.Request, res: express.Response, next: express.N
 app.use(morgan('dev'));
 
 app.get('/api/health', (_req, res) => {
+  // Audit L3 — health was previously truthful only about the express layer.
+  // A stuck DB / corrupt SQLite file would still return ok:true, masking a
+  // real outage from Fly health checks. Touch the DB to confirm it's alive.
+  let dbOk = false;
+  try {
+    // Lazily required so a DB init failure surfaces here instead of crashing
+    // the whole server import graph.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const dbModule = require('./db');
+    const handle = dbModule.default || dbModule;
+    handle.prepare('SELECT 1').get();
+    dbOk = true;
+  } catch {
+    dbOk = false;
+  }
+  if (!dbOk) {
+    return res.status(503).json({ ok: false, service: 'condoos-api', error: 'db_unreachable', ts: new Date().toISOString() });
+  }
   res.json({ ok: true, service: 'condoos-api', ts: new Date().toISOString() });
 });
 
