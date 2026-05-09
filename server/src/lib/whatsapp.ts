@@ -1,8 +1,8 @@
 // WhatsApp notifications via Twilio REST API.
 // Graceful fallback: if creds are missing, log to console instead of failing.
 // We avoid the `twilio` npm package to keep dependencies light — just REST + fetch.
+// Audit L-N2 — Node 20+ has built-in fetch; node-fetch dep removed.
 
-import fetch from 'node-fetch';
 import db from '../db';
 
 type WhatsAppProvider = 'twilio' | 'waha' | 'none';

@@ -92,14 +92,14 @@ app.use((err: any, _req: express.Request, res: express.Response, next: express.N
 app.use(morgan('dev'));
 
 app.get('/api/health', (_req, res) => {
-  // Audit L3 — health was previously truthful only about the express layer.
-  // A stuck DB / corrupt SQLite file would still return ok:true, masking a
-  // real outage from Fly health checks. Touch the DB to confirm it's alive.
+  // Audit L3 + M-N11 — health was previously truthful only about the
+  // express layer. A stuck DB / corrupt SQLite file would still return
+  // ok:true, masking a real outage from Fly health checks. Touch the DB
+  // and surface the result in the body so external monitors / synthetic
+  // probes can alert on the DB-down case without needing to parse the
+  // status code.
   let dbOk = false;
   try {
-    // Lazily required so a DB init failure surfaces here instead of crashing
-    // the whole server import graph.
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const dbModule = require('./db');
     const handle = dbModule.default || dbModule;
     handle.prepare('SELECT 1').get();
@@ -107,10 +107,14 @@ app.get('/api/health', (_req, res) => {
   } catch {
     dbOk = false;
   }
-  if (!dbOk) {
-    return res.status(503).json({ ok: false, service: 'condoos-api', error: 'db_unreachable', ts: new Date().toISOString() });
-  }
-  res.json({ ok: true, service: 'condoos-api', ts: new Date().toISOString() });
+  const body = {
+    ok: dbOk,
+    service: 'condoos-api',
+    db: dbOk ? 'ok' : 'down',
+    ts: new Date().toISOString(),
+  };
+  if (!dbOk) return res.status(503).json(body);
+  res.json(body);
 });
 
 // Pre-auth / onboarding routes — no active-membership gate (users here may

@@ -317,10 +317,23 @@ router.post('/cluster-suggestions', requireAuth, aiRateLimit, requireRole('board
 
     if (rows.length === 0) return ok(res, { clusters: [], unclustered_ids: [], _fallback: false });
 
+    // Audit M-N8 — cluster labels + summaries used to come back in English
+    // regardless of the admin's locale (the demo board on /board/suggestions
+    // renders the AI output verbatim). Match the proposal-draft endpoint:
+    // accept an optional `locale` and force the model to respond in that
+    // language. When the caller doesn't send one, leave the prompt unchanged.
+    const localeRaw = typeof req.body?.locale === 'string' ? req.body.locale : '';
+    const localeName = LOCALE_NAMES[localeRaw] || '';
+    const localeOverride = localeName
+      ? `\n\n## Output language\nRespond in ${localeName} for both cluster `
+        + `labels and summaries. The suggestion text below may be in a different `
+        + `language — translate as you cluster.`
+      : '';
+
     const payload = rows.map((r) => `#${r.id}: ${clip(r.body, 1_000)}`).join('\n');
     const out = await tryAI<any>(
       [
-        { role: 'system', content: CLUSTER_SYS },
+        { role: 'system', content: CLUSTER_SYS + localeOverride },
         { role: 'user', content: `Here are the open suggestions:\n\n${payload}` },
       ],
       () => fallbackCluster(rows),

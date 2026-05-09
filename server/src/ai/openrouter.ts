@@ -1,6 +1,6 @@
 // OpenRouter client with graceful degradation.
 // Returns sensible canned output if API key is missing/errors so demo never hangs.
-import fetch from 'node-fetch';
+// Audit L-N2 — Node 20+ has built-in fetch; node-fetch dep removed.
 
 // Two-tier model strategy for cost + quality:
 //   - MODEL:       Claude 3.5 Haiku for user-facing copy (drafts, summaries, announcements, ata).

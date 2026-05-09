@@ -1,4 +1,4 @@
-import fetch from 'node-fetch';
+// Audit L-N2 — Node 20+ has built-in fetch; node-fetch dep removed.
 
 export type EmailDeliveryStatus = 'sent' | 'skipped' | 'failed';
 
