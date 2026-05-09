@@ -70,9 +70,12 @@ const loginSchema = z.object({
 // user-found-wrong-password branch took ~0.33s, leaking valid emails. Run
 // the hash compare unconditionally against a precomputed dummy hash on the
 // not-found path so timing is symmetric, and switch to the async API so
-// concurrent logins no longer starve the event loop. Cost factor 12 matches
-// the bcrypt OWASP 2023 floor for new code.
-const DUMMY_BCRYPT_HASH = bcrypt.hashSync('not-a-real-password-timing-padding', 12);
+// concurrent logins no longer starve the event loop. Cost factor must match
+// the cost actually used to hash stored passwords (currently 10, see
+// db/seed.ts and routes/auth.ts/dev-register) — otherwise the dummy compare
+// is *slower* than a real one and the oracle reverses direction. Once we
+// migrate stored hashes to cost 12 (OWASP 2023 floor), bump this to 12 too.
+const DUMMY_BCRYPT_HASH = bcrypt.hashSync('not-a-real-password-timing-padding', 10);
 
 router.post('/login', authIpRateLimit, skipDemoCredentialLimit, asyncHandler(async (req, res) => {
   const parsed = loginSchema.safeParse(req.body);
