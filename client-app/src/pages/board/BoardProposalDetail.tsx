@@ -8,7 +8,7 @@ import Badge from '../../components/Badge';
 import Avatar from '../../components/Avatar';
 import Button from '../../components/Button';
 import { apiGet, apiPatch, apiPost } from '../../lib/api';
-import { formatCurrency, formatDate } from '../../lib/i18n';
+import { formatCurrency, formatDate, t } from '../../lib/i18n';
 
 const QUORUM_OPTIONS = [0, 25, 50, 67, 75];
 
@@ -61,10 +61,10 @@ export default function BoardProposalDetail() {
         voting_opens_at:   fromLocalInput(form.opens),
         voting_closes_at:  fromLocalInput(form.closes),
       });
-      toast.success('Regras de votação atualizadas');
+      toast.success(t('Regras de votação atualizadas'));
       load();
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Falha ao atualizar');
+      toast.error(err?.response?.data?.error || t('Falha ao atualizar'));
     } finally { setBusy(false); }
   }
 
@@ -72,14 +72,14 @@ export default function BoardProposalDetail() {
     setBusy(true);
     try {
       await apiPost(`/proposals/${id}/status`, { status });
-      toast.success(`Status: ${PROPOSAL_STATUS_LABEL[status] || status}`);
+      toast.success(`${t('Status')}: ${PROPOSAL_STATUS_LABEL[status] || status}`);
       load();
     } catch (err: any) {
       const code = err?.response?.data?.error;
       if (code === 'missing_cost_estimate') {
-        toast.error('Adicione um custo estimado antes de abrir a votação. Use "Analisar com IA" se preferir.');
+        toast.error(t('Adicione um custo estimado antes de abrir a votação. Use "Analisar com IA" se preferir.'));
       } else {
-        toast.error(code || 'Falha ao atualizar status');
+        toast.error(code || t('Falha ao atualizar status'));
       }
     } finally { setBusy(false); }
   }
@@ -88,10 +88,10 @@ export default function BoardProposalDetail() {
     setBusy(true);
     try {
       await apiPost<{ estimated_cost: number; cost_breakdown: string; risk_summary: string }>(`/ai/proposals/${id}/analyze-cost`);
-      toast.success('Análise gerada');
+      toast.success(t('Análise gerada'));
       load();
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Falha ao analisar com IA');
+      toast.error(err?.response?.data?.error || t('Falha ao analisar com IA'));
     } finally { setBusy(false); }
   }
 
@@ -100,7 +100,7 @@ export default function BoardProposalDetail() {
     try {
       const data = await apiPost<any>(`/ai/proposals/${id}/summarize-thread`);
       setSummary(data);
-      toast.success('Discussão resumida');
+      toast.success(t('Discussão resumida'));
     } finally { setBusy(false); }
   }
 
@@ -109,7 +109,7 @@ export default function BoardProposalDetail() {
     try {
       const data = await apiPost<{ explainer: string }>(`/ai/proposals/${id}/explain`);
       setExplainer(data.explainer);
-      toast.success('Explicação gerada');
+      toast.success(t('Explicação gerada'));
     } finally { setBusy(false); }
   }
 
@@ -125,7 +125,7 @@ export default function BoardProposalDetail() {
         source: 'ai_decision',
         related_proposal_id: Number(id),
       });
-      toast.success('Decisão e comunicado publicados');
+      toast.success(t('Decisão e comunicado publicados'));
       load();
     } finally { setBusy(false); }
   }
@@ -222,7 +222,7 @@ export default function BoardProposalDetail() {
                 try {
                   await apiPatch(`/proposals/${id}/eligibility`, { voter_eligibility: e.target.value });
                   load();
-                } catch (err: any) { toast.error(err?.response?.data?.error || 'Falha ao atualizar'); }
+                } catch (err: any) { toast.error(err?.response?.data?.error || t('Falha ao atualizar')); }
               }}
               className="input max-w-xs"
             >

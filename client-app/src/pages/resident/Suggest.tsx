@@ -8,7 +8,7 @@ import Button from '../../components/Button';
 import Badge from '../../components/Badge';
 import { apiPost } from '../../lib/api';
 import { track } from '../../lib/analytics';
-import { formatCurrency, useLocale } from '../../lib/i18n';
+import { formatCurrency, useLocale, t } from '../../lib/i18n';
 
 interface Draft {
   title: string;
@@ -34,7 +34,7 @@ export default function Suggest() {
     try {
       const res = await apiPost<{ id: number }>('/suggestions', { body: text });
       setSuggestionId(res.id);
-      toast.success('Enviado ao síndico');
+      toast.success(t('Enviado ao síndico'));
       setDrafting(true);
       try {
         // Pass the user's UI locale so the AI drafts in their language even
@@ -61,7 +61,7 @@ export default function Suggest() {
         source_suggestion_id: suggestionId,
       });
       track('proposal_published', { proposal_id: res.id, category: draft.category, ai_drafted: true });
-      toast.success('Proposta criada — em discussão');
+      toast.success(t('Proposta criada — em discussão'));
       navigate(`/app/proposals/${res.id}`);
     } finally { setSaving(false); }
   }

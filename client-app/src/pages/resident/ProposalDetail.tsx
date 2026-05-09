@@ -9,7 +9,7 @@ import Avatar from '../../components/Avatar';
 import Button from '../../components/Button';
 import { apiGet, apiPost } from '../../lib/api';
 import { track } from '../../lib/analytics';
-import { formatCurrency, formatDate } from '../../lib/i18n';
+import { formatCurrency, formatDate, t } from '../../lib/i18n';
 
 interface Comment { id: number; body: string; created_at: string; first_name: string; last_name: string; unit_number: string; }
 interface Proposal {
@@ -110,7 +110,7 @@ export default function ProposalDetail() {
       await apiPost(`/proposals/${id}/comments`, { body: comment });
       setComment('');
       setSummary(null);
-      toast.success('Comentário publicado');
+      toast.success(t('Comentário publicado'));
       load();
     } finally { setBusy(false); }
   }
@@ -120,10 +120,10 @@ export default function ProposalDetail() {
     try {
       await apiPost(`/proposals/${id}/vote`, { choice });
       track('vote_cast', { proposal_id: Number(id), choice, surface: 'resident_proposal_detail' });
-      toast.success(`Voto registrado: ${choice === 'yes' ? 'Sim' : choice === 'no' ? 'Não' : 'Abstenção'}`);
+      toast.success(`${t('Voto registrado')}: ${choice === 'yes' ? t('Sim') : choice === 'no' ? t('Não') : t('Abstenção')}`);
       load();
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Voto falhou');
+      toast.error(err?.response?.data?.error || t('Voto falhou'));
     } finally { setBusy(false); }
   }
 
@@ -132,7 +132,7 @@ export default function ProposalDetail() {
     try {
       const data = await apiPost<any>(`/ai/proposals/${id}/summarize-thread`);
       setSummary(data);
-      toast.success('Resumo gerado');
+      toast.success(t('Resumo gerado'));
     } finally { setBusy(false); }
   }
 
@@ -141,7 +141,7 @@ export default function ProposalDetail() {
     try {
       const data = await apiPost<{ explainer: string }>(`/ai/proposals/${id}/explain`);
       setExplainer(data.explainer);
-      toast.success('Explicação gerada');
+      toast.success(t('Explicação gerada'));
     } finally { setBusy(false); }
   }
 

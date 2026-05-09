@@ -7,7 +7,7 @@ import GlassCard from '../../components/GlassCard';
 import Button from '../../components/Button';
 import Badge from '../../components/Badge';
 import { apiDelete, apiGet, apiPost } from '../../lib/api';
-import { formatDateTime } from '../../lib/i18n';
+import { formatDateTime, t } from '../../lib/i18n';
 
 interface AgendaItem {
   id: number;
@@ -64,9 +64,9 @@ export default function BoardAssemblyDetail() {
       for (const item of out.items) {
         await apiPost(`/assemblies/${id}/agenda`, item);
       }
-      toast.success(`IA redigiu ${out.items.length} itens da pauta`);
+      toast.success(`${t('IA redigiu')} ${out.items.length} ${t('itens da pauta')}`);
       load();
-    } catch (err: any) { toast.error(err?.response?.data?.error || 'Falha ao redigir com IA'); }
+    } catch (err: any) { toast.error(err?.response?.data?.error || t('Falha ao redigir com IA')); }
     finally { setBusy(false); }
   }
 
@@ -90,9 +90,9 @@ export default function BoardAssemblyDetail() {
     setBusy(true);
     try {
       await apiPost(`/assemblies/${id}/convoke`);
-      toast.success('Convocada — moradores já podem confirmar presença e conceder procurações');
+      toast.success(t('Convocada — moradores já podem confirmar presença e conceder procurações'));
       load();
-    } catch (err: any) { toast.error(err?.response?.data?.error || 'Falha'); }
+    } catch (err: any) { toast.error(err?.response?.data?.error || t('Falha')); }
     finally { setBusy(false); }
   }
 
@@ -100,7 +100,7 @@ export default function BoardAssemblyDetail() {
     setBusy(true);
     try {
       await apiPost(`/assemblies/${id}/start`);
-      toast.success('Sessão aberta');
+      toast.success(t('Sessão aberta'));
       load();
     } finally { setBusy(false); }
   }
@@ -112,7 +112,7 @@ export default function BoardAssemblyDetail() {
 
   async function closeItem(itemId: number) {
     const r = await apiPost<{ status: string }>(`/assemblies/${id}/agenda/${itemId}/close`);
-    toast.success(`Item: ${statusLabel(r.status as AgendaItem['status'])}`);
+    toast.success(`${t('Item')}: ${statusLabel(r.status as AgendaItem['status'])}`);
     load();
   }
 
@@ -121,7 +121,7 @@ export default function BoardAssemblyDetail() {
     setBusy(true);
     try {
       await apiPost(`/assemblies/${id}/close`);
-      toast.success('Assembleia encerrada');
+      toast.success(t('Assembleia encerrada'));
       load();
     } finally { setBusy(false); }
   }
@@ -130,9 +130,9 @@ export default function BoardAssemblyDetail() {
     setBusy(true);
     try {
       const r = await apiPost<{ ata_markdown: string }>(`/ai/assemblies/${id}/draft-ata`);
-      toast.success('Ata gerada');
+      toast.success(t('Ata gerada'));
       setA((prev) => prev ? { ...prev, ata_markdown: r.ata_markdown } : prev);
-    } catch (err: any) { toast.error(err?.response?.data?.error || 'Falha'); }
+    } catch (err: any) { toast.error(err?.response?.data?.error || t('Falha')); }
     finally { setBusy(false); }
   }
 

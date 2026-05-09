@@ -6,6 +6,7 @@ import GlassCard from '../../components/GlassCard';
 import Badge from '../../components/Badge';
 import Button from '../../components/Button';
 import { apiDelete, apiGet, apiPatch, apiPost } from '../../lib/api';
+import { t } from '../../lib/i18n';
 
 interface Amenity {
   id: number;
@@ -167,10 +168,10 @@ function AmenityRow({ amenity, onChanged }: { amenity: Amenity; onChanged: () =>
     if (!confirm(`Desativar reservas para "${amenity.name}"? Reservas antigas ficam no histórico.`)) return;
     try {
       await apiDelete(`/amenities/${amenity.id}`);
-      toast.success('Área desativada');
+      toast.success(t('Área desativada'));
       onChanged();
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Falha ao desativar');
+      toast.error(err?.response?.data?.error || t('Falha ao desativar'));
     }
   }
 
@@ -259,25 +260,25 @@ function AmenityEditor({
     e.preventDefault();
     const body = normalize(form);
     if (!body.name) {
-      toast.error('Dê um nome para a área.');
+      toast.error(t('Dê um nome para a área.'));
       return;
     }
     if (body.close_hour <= body.open_hour) {
-      toast.error('O horário final precisa ser depois da abertura.');
+      toast.error(t('O horário final precisa ser depois da abertura.'));
       return;
     }
     if (body.slot_minutes > (body.close_hour - body.open_hour) * 60) {
-      toast.error('O slot precisa caber no horário de funcionamento.');
+      toast.error(t('O slot precisa caber no horário de funcionamento.'));
       return;
     }
     setSaving(true);
     try {
       if (mode === 'create') await apiPost('/amenities', body);
       else await apiPatch(`/amenities/${id}`, body);
-      toast.success(mode === 'create' ? 'Área criada' : 'Área atualizada');
+      toast.success(mode === 'create' ? t('Área criada') : t('Área atualizada'));
       onSaved();
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Falha ao salvar área');
+      toast.error(err?.response?.data?.error || t('Falha ao salvar área'));
     } finally {
       setSaving(false);
     }

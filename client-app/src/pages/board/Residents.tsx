@@ -7,6 +7,7 @@ import Avatar from '../../components/Avatar';
 import Badge from '../../components/Badge';
 import Button from '../../components/Button';
 import { apiGet, apiPost } from '../../lib/api';
+import { t } from '../../lib/i18n';
 
 interface Resident { id: number; first_name: string; last_name: string; unit_number: string; role: string; email: string; }
 interface Membership { status: string; condo_name: string; condo_id: number; }
@@ -76,21 +77,21 @@ export default function Residents() {
         '/memberships/import-csv',
         { csv, send_emails: sendEmails },
       );
-      if (res.imported_count > 0) toast.success(`${res.imported_count} convite${res.imported_count > 1 ? 's' : ''} criado${res.imported_count > 1 ? 's' : ''}`);
+      if (res.imported_count > 0) toast.success(`${res.imported_count} ${t('convite')}${res.imported_count > 1 ? 's' : ''} ${t('criado')}${res.imported_count > 1 ? 's' : ''}`);
       if (sendEmails && res.email_delivery) {
         const sent = res.email_delivery.filter((d) => d.delivery.status === 'sent').length;
-        if (sent > 0) toast.success(`${sent} email${sent > 1 ? 's' : ''} de convite enviado${sent > 1 ? 's' : ''}`);
-        if (sent < res.email_delivery.length) toast.error('Alguns emails não foram enviados. Verifique as configurações de email.');
+        if (sent > 0) toast.success(`${sent} email${sent > 1 ? 's' : ''} ${t('de convite enviado')}${sent > 1 ? 's' : ''}`);
+        if (sent < res.email_delivery.length) toast.error(t('Alguns emails não foram enviados. Verifique as configurações de email.'));
       }
       if (res.error_count > 0) {
         setImportErrors(res.errors || []);
-        toast.error(`${res.error_count} linha${res.error_count > 1 ? 's' : ''} ignorada${res.error_count > 1 ? 's' : ''} — detalhes abaixo`);
+        toast.error(`${res.error_count} ${t('linha')}${res.error_count > 1 ? 's' : ''} ${t('ignorada')}${res.error_count > 1 ? 's' : ''} ${t('— detalhes abaixo')}`);
       } else {
         setShowImport(false);
       }
       load();
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Falha na importação');
+      toast.error(err?.response?.data?.error || t('Falha na importação'));
     } finally { setImporting(false); }
   }
 
@@ -98,7 +99,7 @@ export default function Residents() {
     if (!inviteCode) return;
     navigator.clipboard.writeText(inviteCode);
     setCopied(true);
-    toast.success('Código de convite copiado');
+    toast.success(t('Código de convite copiado'));
     setTimeout(() => setCopied(false), 2000);
   }
 
@@ -106,11 +107,11 @@ export default function Residents() {
     setSendingInviteId(invite.id);
     try {
       await apiPost(`/memberships/invites/${invite.id}/send-email`);
-      toast.success(`Email de convite enviado para ${invite.email}`);
+      toast.success(`${t('Email de convite enviado para')} ${invite.email}`);
       load();
     } catch (err: any) {
       const code = err?.response?.data?.error;
-      toast.error(code === 'email_not_configured' ? 'Envio de email não configurado' : code || 'Falha no envio do email');
+      toast.error(code === 'email_not_configured' ? t('Envio de email não configurado') : code || t('Falha no envio do email'));
     } finally {
       setSendingInviteId(null);
     }

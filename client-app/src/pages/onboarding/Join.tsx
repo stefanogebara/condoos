@@ -8,6 +8,7 @@ import Button from '../../components/Button';
 import Badge from '../../components/Badge';
 import { apiGet, apiPost } from '../../lib/api';
 import { track } from '../../lib/analytics';
+import { t } from '../../lib/i18n';
 
 interface UnitOpt { id: number; floor: number | null; number: string; claims: number; }
 interface CondoInfo {
@@ -35,7 +36,7 @@ export default function Join() {
       setCondoInfo(info);
       setStep(2);
     } catch (err: any) {
-      toast.error(err?.response?.data?.error === 'unknown_code' ? 'Esse código não corresponde a nenhum prédio' : 'Falha na busca');
+      toast.error(err?.response?.data?.error === 'unknown_code' ? t('Esse código não corresponde a nenhum prédio') : t('Falha na busca'));
     } finally { setBusy(false); }
   }
 
@@ -55,13 +56,13 @@ export default function Join() {
         condo_name: condoInfo?.condo?.name,
       });
       if (res.status === 'active') {
-        toast.success('Você entrou!');
+        toast.success(t('Você entrou!'));
         window.location.href = '/app';
       } else {
         setStep(3);
       }
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Falha ao entrar');
+      toast.error(err?.response?.data?.error || t('Falha ao entrar'));
     } finally { setBusy(false); }
   }
 

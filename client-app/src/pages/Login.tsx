@@ -264,7 +264,7 @@ export default function Login() {
               <div className="flex justify-center mb-4">
                 <GoogleLogin
                   onSuccess={(c) => handleGoogleSuccess(c.credential)}
-                  onError={() => toast.error('Login com Google cancelado')}
+                  onError={() => toast.error(t('Login com Google cancelado'))}
                   shape="pill"
                   theme="outline"
                   size="large"

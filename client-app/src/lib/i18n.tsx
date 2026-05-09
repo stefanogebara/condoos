@@ -280,7 +280,7 @@ const phrases: Copy[] = [
   c('voce@predio.com.br', 'you@building.dev', 'tu@edificio.dev', 'vous@immeuble.dev'),
   c('senha', 'password', 'contraseña', 'mot de passe'),
   c('Email ou senha incorretos', 'Invalid email or password', 'Email o contraseña incorrectos', 'E-mail ou mot de passe incorrect'),
-  c('Falha ao entrar', 'Sign in failed', 'Error al entrar', 'Échec de la connexion'),
+  c('Falha ao entrar', 'Sign-in failed', 'Error al iniciar sesión', 'Échec de connexion'),
   c('Nenhuma credencial do Google recebida', 'No Google credential received', 'No se recibió credencial de Google', 'Aucun identifiant Google reçu'),
   c('Falha ao entrar com Google', 'Google sign-in failed', 'Error con Google', 'Échec de la connexion Google'),
   c('Login com Google cancelado', 'Google sign-in was cancelled', 'Inicio con Google cancelado', 'Connexion Google annulée'),
@@ -1161,7 +1161,10 @@ const phrases: Copy[] = [
   c('AGO / AGE. Proprietários votam. Procurações e quórum aplicados. A IA redige a ata.', 'AGM / EGM. Owners vote. Proxies and quorum applied. AI drafts the minutes.', 'AGO / AGE. Los propietarios votan. Poderes y quórum aplicados. La IA redacta el acta.', 'AGO / AGE. Les propriétaires votent. Procurations et quorum appliqués. L’IA rédige le procès-verbal.'),
 
   // Onboarding — landing /onboarding
-  c('Olá', 'Hi', 'Hola', 'Salut'),
+  // Audit M-N6: 'Olá' was defined twice with conflicting FR (Salut vs Bonjour);
+  // first match wins so the runtime ignored the later "Bonjour" entry. Removed
+  // the duplicate further down — this single source uses the standard greeting.
+  c('Olá', 'Hello', 'Hola', 'Bonjour'),
   c('Sair', 'Sign out', 'Cerrar sesión', 'Se déconnecter'),
   c('Carregando…', 'Loading…', 'Cargando…', 'Chargement…'),
   c('Passo 1 de 2', 'Step 1 of 2', 'Paso 1 de 2', 'Étape 1 sur 2'),
@@ -1188,7 +1191,6 @@ const phrases: Copy[] = [
   c('Crie seu próprio prédio', 'Create your own building', 'Crea tu propio edificio', 'Créez votre propre immeuble'),
   c('Esse código não corresponde a nenhum prédio', 'That code doesn’t match any building', 'Ese código no corresponde a ningún edificio', 'Ce code ne correspond à aucun immeuble'),
   c('Falha na busca', 'Lookup failed', 'Error en la búsqueda', 'Échec de la recherche'),
-  c('Falha ao entrar', 'Sign-in failed', 'Error al entrar', 'Échec de la connexion'),
   c('Você entrou!', 'You’re in!', '¡Entraste!', 'Vous êtes entré !'),
   c('Prédio encontrado', 'Building found', 'Edificio encontrado', 'Immeuble trouvé'),
   c('Escolha sua unidade', 'Choose your unit', 'Elige tu unidad', 'Choisissez votre lot'),
@@ -1506,8 +1508,8 @@ const phrases: Copy[] = [
   c('discussão', 'discussion', 'discusión', 'discussion'),
   // H2 — login error toasts (rendered in react-hot-toast portal, must resolve via t())
   c('Bem-vindo de volta', 'Welcome back', 'Bienvenido de vuelta', 'Bon retour'),
-  c('Olá', 'Hello', 'Hola', 'Bonjour'),
-  c('Falha ao entrar', 'Sign-in failed', 'Error al iniciar sesión', 'Échec de connexion'),
+  // Note: 'Olá' and 'Falha ao entrar' tuples are at line ~1164 / earlier sections;
+  // not duplicated here (audit M-N6 / M-N7 dedup pass).
   c('Email ou senha incorretos', 'Wrong email or password', 'Correo o contraseña incorrectos', 'Email ou mot de passe incorrects'),
   c('Muitas tentativas. Tente novamente em {n} min.', 'Too many attempts. Try again in {n} min.', 'Demasiados intentos. Inténtalo de nuevo en {n} min.', "Trop d'essais. Réessayez dans {n} min."),
   c('Muitas tentativas. Aguarde um momento.', 'Too many attempts. Please wait a moment.', 'Demasiados intentos. Espera un momento.', "Trop d'essais. Veuillez patienter."),
@@ -1526,6 +1528,49 @@ const phrases: Copy[] = [
   c('Falha ao registrar', 'Failed to log', 'Error al registrar', "Échec de l'enregistrement"),
   // H3 — confirmation prompt before location detection overrides a manual choice
   c('Substituir sua escolha manual pela detecção de localização?', 'Replace your manual choice with location detection?', '¿Reemplazar tu elección manual por la detección de ubicación?', 'Remplacer votre choix manuel par la détection de la localisation ?'),
+  // Audit H-N4 — /app/announcements footer + badge labels were hardcoded EN
+  c('Postado por', 'Posted by', 'Publicado por', 'Publié par'),
+  c('Fixado', 'Pinned', 'Fijado', 'Épinglé'),
+  c('Resumo de reunião pela IA', 'AI meeting recap', 'Resumen de reunión por IA', 'Résumé de réunion par IA'),
+  c('Decisão pela IA', 'AI decision', 'Decisión por IA', 'Décision par IA'),
+  // Audit H-N5 — visitor type badges (TYPE_LABEL) — PT singular forms
+  c('visita', 'visit', 'visita', 'visite'),
+  c('entrega', 'delivery', 'entrega', 'livraison'),
+  c('serviço', 'service', 'servicio', 'service'),
+  // Audit M-N5 — sidebar ⌖ button title/aria-label
+  c('Detect language from location', 'Detect language from location', 'Detectar idioma por ubicación', 'Détecter la langue par la localisation'),
+  c('Using location-detected language', 'Using location-detected language', 'Usando idioma detectado por ubicación', 'Langue détectée par la localisation'),
+  // Audit H-N7 — /board/residents has many JSX literals not in `phrases`.
+  // Add tuples so the MutationObserver runtime can translate them at render.
+  c('Importar CSV', 'Import CSV', 'Importar CSV', 'Importer CSV'),
+  c('Compartilhe este código com quem precisa entrar no prédio. Eles acessam', 'Share this code with anyone who needs to access the building. They go to', 'Comparte este código con quien necesite entrar al edificio. Acceden a', "Partagez ce code avec qui doit entrer dans l'immeuble. Ils accèdent à"),
+  c('digitam, e escolhem a unidade.', 'enter it, and pick their unit.', 'lo escriben y eligen su unidad.', "le saisissent, et choisissent leur lot."),
+  c('Importar lista de moradores', 'Import resident list', 'Importar lista de residentes', 'Importer la liste des résidents'),
+  c('Cole um CSV abaixo. Colunas:', 'Paste a CSV below. Columns:', 'Pega un CSV abajo. Columnas:', 'Collez un CSV ci-dessous. Colonnes :'),
+  c('Quando o morador entrar com esse email, ele é vinculado automaticamente à unidade — sem aprovação manual.', 'When the resident signs in with this email they are automatically linked to the unit — no manual approval.', 'Cuando el residente entre con este email queda vinculado automáticamente a la unidad — sin aprobación manual.', "Quand le résident se connectera avec cet email, il sera automatiquement rattaché au lot — sans approbation manuelle."),
+  c('Enviar email de convite para cada morador agora.', 'Send an invite email to each resident now.', 'Enviar un email de invitación a cada residente ahora.', "Envoyer un email d'invitation à chaque résident maintenant."),
+  c('Precisa das envs do Resend. Os convites são criados mesmo sem email configurado.', 'Requires Resend env vars. Invites are created even without email configured.', 'Requiere las envs de Resend. Las invitaciones se crean aunque no haya email configurado.', "Nécessite les env Resend. Les invitations sont créées même sans email configuré."),
+  c('Linhas com problema', 'Lines with problems', 'Líneas con problemas', 'Lignes avec problèmes'),
+  c('Criar e enviar convites', 'Create and send invites', 'Crear y enviar invitaciones', 'Créer et envoyer les invitations'),
+  c('Criar convites', 'Create invites', 'Crear invitaciones', 'Créer les invitations'),
+  c('Convites pendentes', 'Pending invites', 'Invitaciones pendientes', 'Invitations en attente'),
+  c('principal', 'primary', 'principal', 'principal'),
+  c('Unidade', 'Unit', 'Unidad', 'Lot'),
+  c('Copiado', 'Copied', 'Copiado', 'Copié'),
+  c('Copiar', 'Copy', 'Copiar', 'Copier'),
+  // Audit H-N7 supporting: amenity name fragments shown verbatim in EN
+  c('Padel Court', 'Padel Court', 'Pista de pádel', 'Terrain de padel'),
+  c('Football Field', 'Football Field', 'Cancha de fútbol', 'Terrain de football'),
+  c('Basketball Court', 'Basketball Court', 'Cancha de básquet', 'Terrain de basket'),
+  c('Tennis Court', 'Tennis Court', 'Pista de tenis', 'Court de tennis'),
+  c('Party Room', 'Party Room', 'Salón de fiestas', 'Salle de réception'),
+  c('BBQ Grill', 'BBQ Grill', 'Parrilla', 'Barbecue'),
+  c('Fitness Center', 'Fitness Center', 'Gimnasio', 'Salle de sport'),
+  c('Rooftop Pool', 'Rooftop Pool', 'Piscina en azotea', 'Piscine sur le toit'),
+  c('Heated, with sun deck', 'Heated, with sun deck', 'Climatizada, con solárium', 'Chauffée, avec solarium'),
+  c('Full cardio + weights', 'Full cardio + weights', 'Cardio + pesas completos', 'Cardio + musculation complets'),
+  c('Rooftop grill station', 'Rooftop grill station', 'Parrilla en azotea', 'Station barbecue sur le toit'),
+  c('Lounge, kitchen, seats 40', 'Lounge, kitchen, seats 40', 'Salón, cocina, 40 plazas', 'Salon, cuisine, 40 places'),
 ];
 
 function c(pt: string, en: string, es: string, fr: string): Copy {
@@ -1934,7 +1979,13 @@ export function formatDate(value: string | number | Date) {
 }
 
 export function formatDateTime(value: string | number | Date) {
-  return new Date(value).toLocaleString(currentIntlLocale());
+  // Audit M-N4 — default toLocaleString output included seconds ("16:00:00"),
+  // which read as machine-y on visitor schedules. Pin to short date + short
+  // time so every locale shows e.g. "10/05/2026, 16:00" / "5/10/2026, 4:00 PM".
+  return new Date(value).toLocaleString(currentIntlLocale(), {
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+  });
 }
 
 export function formatCurrency(value: number, currency = 'BRL') {

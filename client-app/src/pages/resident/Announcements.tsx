@@ -4,7 +4,7 @@ import PageHeader from '../../components/PageHeader';
 import GlassCard from '../../components/GlassCard';
 import Badge from '../../components/Badge';
 import { apiGet } from '../../lib/api';
-import { formatDate } from '../../lib/i18n';
+import { formatDate, t } from '../../lib/i18n';
 
 interface Announcement {
   id: number;
@@ -33,14 +33,14 @@ export default function Announcements() {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  {a.pinned ? <Badge tone="peach"><Pin className="w-3 h-3" /> Pinned</Badge> : null}
-                  {a.source === 'ai_meeting'  && <Badge tone="sage">AI meeting recap</Badge>}
-                  {a.source === 'ai_decision' && <Badge tone="sage">AI decision</Badge>}
+                  {a.pinned ? <Badge tone="peach"><Pin className="w-3 h-3" /> {t('Fixado')}</Badge> : null}
+                  {a.source === 'ai_meeting'  && <Badge tone="sage">{t('Resumo de reunião pela IA')}</Badge>}
+                  {a.source === 'ai_decision' && <Badge tone="sage">{t('Decisão pela IA')}</Badge>}
                   <span className="text-xs text-dusk-200 ml-auto">{formatDate(a.created_at)}</span>
                 </div>
                 <h3 className="font-display text-xl text-dusk-500 mt-2">{a.title}</h3>
                 <p className="text-dusk-300 mt-2 whitespace-pre-line leading-relaxed">{a.body}</p>
-                <div className="mt-3 text-xs text-dusk-200">Posted by {a.first_name} {a.last_name}</div>
+                <div className="mt-3 text-xs text-dusk-200">{t('Postado por')} {a.first_name} {a.last_name}</div>
               </div>
             </div>
           </GlassCard>

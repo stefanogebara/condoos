@@ -7,7 +7,7 @@ import GlassCard from '../../components/GlassCard';
 import Button from '../../components/Button';
 import Badge from '../../components/Badge';
 import { apiDelete, apiGet, apiPost } from '../../lib/api';
-import { formatDateTime, pluralize } from '../../lib/i18n';
+import { formatDateTime, pluralize, t } from '../../lib/i18n';
 
 interface AgendaItem {
   id: number;
@@ -61,10 +61,10 @@ export default function AssemblyDetail() {
     setBusy(true);
     try {
       await apiPost(`/assemblies/${id}/proxies`, { grantee_user_id: proxyPick });
-      toast.success('Procuração concedida');
+      toast.success(t('Procuração concedida'));
       setProxyPick('');
       load();
-    } catch (err: any) { toast.error(err?.response?.data?.error || 'Failed'); }
+    } catch (err: any) { toast.error(err?.response?.data?.error || t('Failed')); }
     finally { setBusy(false); }
   }
 
@@ -73,7 +73,7 @@ export default function AssemblyDetail() {
     setBusy(true);
     try {
       await apiDelete(`/assemblies/${id}/proxies/${a.my.grant.id}`);
-      toast.success('Procuração revogada');
+      toast.success(t('Procuração revogada'));
       load();
     } finally { setBusy(false); }
   }
@@ -83,7 +83,7 @@ export default function AssemblyDetail() {
     try {
       await apiPost(`/assemblies/${id}/attendance`, {});
       setCheckedIn(true);
-      toast.success('Presença registrada');
+      toast.success(t('Presença registrada'));
       load();
     } finally { setBusy(false); }
   }
@@ -92,10 +92,10 @@ export default function AssemblyDetail() {
     setBusy(true);
     try {
       await apiPost(`/assemblies/${id}/agenda/${itemId}/vote`, { choice });
-      toast.success(`Voto registrado: ${labelChoice(choice)}`);
+      toast.success(`${t('Voto registrado')}: ${labelChoice(choice)}`);
       load();
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Vote failed');
+      toast.error(err?.response?.data?.error || t('Vote failed'));
     } finally { setBusy(false); }
   }
 

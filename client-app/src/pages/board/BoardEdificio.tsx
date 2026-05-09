@@ -13,7 +13,7 @@
 import React, { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { Building2, Plus, Trash2, Pencil, Check, X, AlertTriangle } from 'lucide-react';
-import { pluralize } from '../../lib/i18n';
+import { pluralize, t } from '../../lib/i18n';
 import PageHeader from '../../components/PageHeader';
 import GlassCard from '../../components/GlassCard';
 import Badge from '../../components/Badge';
@@ -108,10 +108,10 @@ function NewBlockForm({ onCreated }: { onCreated: () => void }) {
     setSaving(true);
     try {
       await apiPost('/buildings', form);
-      toast.success('Bloco criado');
+      toast.success(t('Bloco criado'));
       onCreated();
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Falha ao criar bloco');
+      toast.error(err?.response?.data?.error || t('Falha ao criar bloco'));
     } finally { setSaving(false); }
   }
 
@@ -174,27 +174,27 @@ function BlockCard({
     setSavingName(true);
     try {
       await apiPatch(`/buildings/${building.id}`, { name: name.trim() });
-      toast.success('Bloco renomeado');
+      toast.success(t('Bloco renomeado'));
       setEditingName(false);
       onChanged();
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Falha ao renomear');
+      toast.error(err?.response?.data?.error || t('Falha ao renomear'));
     } finally { setSavingName(false); }
   }
 
   async function deleteBlock() {
     if (building.unit_count > 0) {
-      toast.error('Remova as unidades antes de apagar o bloco.');
+      toast.error(t('Remova as unidades antes de apagar o bloco.'));
       return;
     }
     if (!confirm(`Apagar o bloco "${building.name}"? Essa ação não pode ser desfeita.`)) return;
     try {
       await apiDelete(`/buildings/${building.id}`);
-      toast.success('Bloco apagado');
+      toast.success(t('Bloco apagado'));
       onChanged();
     } catch (err: any) {
       const code = err?.response?.data?.error;
-      toast.error(code === 'building_has_units' ? 'O bloco ainda tem unidades.' : code || 'Falha ao apagar');
+      toast.error(code === 'building_has_units' ? t('O bloco ainda tem unidades.') : code || t('Falha ao apagar'));
     }
   }
 
@@ -282,29 +282,29 @@ function UnitTile({
     setBusy(true);
     try {
       await apiPatch(`/units/${unit.id}`, { number: trimmed });
-      toast.success(`Unidade renomeada para ${trimmed}`);
+      toast.success(`${t('Unidade renomeada para')} ${trimmed}`);
       setEditing(false);
       onChanged();
     } catch (err: any) {
       const code = err?.response?.data?.error;
-      toast.error(code === 'duplicate_number' ? 'Já existe outra unidade com esse número neste bloco.' : code || 'Falha ao salvar');
+      toast.error(code === 'duplicate_number' ? t('Já existe outra unidade com esse número neste bloco.') : code || t('Falha ao salvar'));
     } finally { setBusy(false); }
   }
 
   async function remove() {
     if (unit.active_claims > 0) {
-      toast.error('A unidade tem morador(es). Remova os vínculos antes de apagar.');
+      toast.error(t('A unidade tem morador(es). Remova os vínculos antes de apagar.'));
       return;
     }
     if (!confirm(`Apagar a unidade ${unit.number}?`)) return;
     setBusy(true);
     try {
       await apiDelete(`/units/${unit.id}`);
-      toast.success('Unidade apagada');
+      toast.success(t('Unidade apagada'));
       onChanged();
     } catch (err: any) {
       const code = err?.response?.data?.error;
-      toast.error(code === 'unit_has_active_claims' ? 'A unidade tem morador(es). Remova os vínculos antes de apagar.' : code || 'Falha ao apagar');
+      toast.error(code === 'unit_has_active_claims' ? t('A unidade tem morador(es). Remova os vínculos antes de apagar.') : code || t('Falha ao apagar'));
     } finally { setBusy(false); }
   }
 
@@ -339,7 +339,7 @@ function UnitTile({
           <div className="text-[11px] text-dusk-300 mt-0.5">
             {unit.floor !== null ? `Andar ${unit.floor}` : 'Especial'}
             {unit.active_claims > 0 && (
-              <span className="ml-1 text-sage-700">· {unit.active_claims} morador{unit.active_claims > 1 ? 'es' : ''}</span>
+              <span className="ml-1 text-sage-700">· {pluralize(unit.active_claims, 'morador', 'moradores')}</span>
             )}
           </div>
         </div>
@@ -376,11 +376,11 @@ function NewUnitInline({ buildingId, onDone }: { buildingId: number; onDone: () 
         number: trimmed,
         floor: floor.trim() ? Math.max(0, parseInt(floor) || 0) : null,
       });
-      toast.success(`Unidade ${trimmed} adicionada`);
+      toast.success(`${t('Unidade')} ${trimmed} ${t('adicionada')}`);
       onDone();
     } catch (err: any) {
       const code = err?.response?.data?.error;
-      toast.error(code === 'duplicate_number' ? 'Já existe outra unidade com esse número neste bloco.' : code || 'Falha ao adicionar');
+      toast.error(code === 'duplicate_number' ? t('Já existe outra unidade com esse número neste bloco.') : code || t('Falha ao adicionar'));
     } finally { setBusy(false); }
   }
 

@@ -8,6 +8,7 @@ import Badge from '../../components/Badge';
 import Button from '../../components/Button';
 import Avatar from '../../components/Avatar';
 import { apiGet, apiPost } from '../../lib/api';
+import { t } from '../../lib/i18n';
 
 interface Suggestion {
   id: number;
@@ -47,7 +48,7 @@ export default function Suggestions() {
     setLoading(true);
     try {
       await apiPost('/ai/cluster-suggestions');
-      toast.success('Agrupadas pela IA');
+      toast.success(t('Agrupadas pela IA'));
       load();
     } finally { setLoading(false); }
   }
@@ -72,7 +73,7 @@ export default function Suggestions() {
         ai_drafted: true,
         source_suggestion_id: s.id,
       });
-      toast.success('Promovida a proposta');
+      toast.success(t('Promovida a proposta'));
       navigate(`/board/proposals/${proposal.id}`);
     } finally { setDrafting(null); }
   }

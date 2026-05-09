@@ -135,10 +135,10 @@ function ExpenseRow({ expense, onDeleted }: { expense: Expense; onDeleted: () =>
     setDeleting(true);
     try {
       await apiDelete(`/finance/expenses/${expense.id}`);
-      toast.success('Despesa apagada');
+      toast.success(t('Despesa apagada'));
       onDeleted();
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Falha ao apagar');
+      toast.error(err?.response?.data?.error || t('Falha ao apagar'));
     } finally { setDeleting(false); }
   }
 

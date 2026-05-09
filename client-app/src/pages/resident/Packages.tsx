@@ -7,7 +7,7 @@ import EmptyState from '../../components/EmptyState';
 import Badge from '../../components/Badge';
 import Button from '../../components/Button';
 import { apiGet, apiPost } from '../../lib/api';
-import { formatDate } from '../../lib/i18n';
+import { formatDate, t } from '../../lib/i18n';
 
 interface Pkg {
   id: number;
@@ -26,7 +26,7 @@ export default function Packages() {
 
   async function pickup(id: number) {
     await apiPost(`/packages/${id}/pickup`);
-    toast.success('Encomenda retirada');
+    toast.success(t('Encomenda retirada'));
     load();
   }
 

@@ -7,7 +7,7 @@ import EmptyState from '../../components/EmptyState';
 import Badge from '../../components/Badge';
 import Button from '../../components/Button';
 import { apiGet, apiPost } from '../../lib/api';
-import { formatDateTime } from '../../lib/i18n';
+import { formatDateTime, t } from '../../lib/i18n';
 
 interface Visitor {
   id: number;
@@ -290,7 +290,7 @@ export default function Visitors() {
                   : v.status === 'denied' ? 'peach'
                   : 'neutral'
                 }>{STATUS_LABEL[v.status] || v.status}</Badge>
-                <Badge tone="neutral">{TYPE_LABEL[v.visitor_type] || v.visitor_type}</Badge>
+                <Badge tone="neutral">{t(TYPE_LABEL[v.visitor_type] || v.visitor_type)}</Badge>
               </div>
               {v.expected_at && (
                 <div className="text-sm text-dusk-300 mt-1">

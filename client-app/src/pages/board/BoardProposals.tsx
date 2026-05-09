@@ -7,7 +7,7 @@ import GlassCard from '../../components/GlassCard';
 import Badge from '../../components/Badge';
 import Button from '../../components/Button';
 import { apiGet, apiPost } from '../../lib/api';
-import { formatCurrency } from '../../lib/i18n';
+import { formatCurrency, t } from '../../lib/i18n';
 import { track } from '../../lib/analytics';
 
 interface Proposal {
@@ -95,11 +95,11 @@ function NewProposalForm({ onCreated }: { onCreated: () => void }) {
         estimated_cost: parsedCost && parsedCost > 0 ? parsedCost : null,
       });
       track('proposal_published', { proposal_id: res.id, category: form.category, ai_drafted: false });
-      toast.success('Proposta criada — em discussão');
+      toast.success(t('Proposta criada — em discussão'));
       onCreated();
       navigate(`/board/proposals/${res.id}`);
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Falha ao criar proposta');
+      toast.error(err?.response?.data?.error || t('Falha ao criar proposta'));
     } finally {
       setSaving(false);
     }

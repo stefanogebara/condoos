@@ -19,7 +19,7 @@ import Badge from '../../components/Badge';
 import Button from '../../components/Button';
 import { apiGet, apiPost } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
-import { formatDateTime, currentIntlLocale } from '../../lib/i18n';
+import { formatDateTime, currentIntlLocale, t } from '../../lib/i18n';
 
 interface VisitorRow {
   id: number;
@@ -140,39 +140,39 @@ export default function ConciergeApp() {
     const result = await Notification.requestPermission();
     setNotifPerm(result as any);
     if (result === 'granted') {
-      toast.success('Notificações ativadas');
+      toast.success(t('Notificações ativadas'));
     } else if (result === 'denied') {
-      toast.error('Notificações bloqueadas — habilite nas configurações do navegador');
+      toast.error(t('Notificações bloqueadas — habilite nas configurações do navegador'));
     }
   }
 
   async function markArrived(v: VisitorRow) {
     try {
       await apiPost(`/visitors/${v.id}/arrived`);
-      toast.success(`${v.visitor_name} liberado(a)`);
+      toast.success(`${v.visitor_name} ${t('liberado(a)')}`);
       load();
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Falha ao liberar');
+      toast.error(err?.response?.data?.error || t('Falha ao liberar'));
     }
   }
 
   async function decideVisitor(v: VisitorRow, decision: 'approved' | 'denied') {
     try {
       await apiPost(`/visitors/${v.id}/decide`, { decision });
-      toast.success(decision === 'approved' ? `${v.visitor_name} aprovado(a)` : `${v.visitor_name} negado(a)`);
+      toast.success(decision === 'approved' ? `${v.visitor_name} ${t('aprovado(a)')}` : `${v.visitor_name} ${t('negado(a)')}`);
       load();
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Falha ao decidir');
+      toast.error(err?.response?.data?.error || t('Falha ao decidir'));
     }
   }
 
   async function pickupPackage(p: PackageRow) {
     try {
       await apiPost(`/packages/${p.id}/pickup`);
-      toast.success(`Encomenda de ${p.first_name} retirada`);
+      toast.success(`${t('Encomenda de')} ${p.first_name} ${t('retirada')}`);
       load();
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Falha');
+      toast.error(err?.response?.data?.error || t('Falha'));
     }
   }
 

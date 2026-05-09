@@ -6,7 +6,7 @@ import GlassCard from '../../components/GlassCard';
 import Badge from '../../components/Badge';
 import Button from '../../components/Button';
 import { apiGet, apiPost } from '../../lib/api';
-import { formatDate } from '../../lib/i18n';
+import { formatDate, t } from '../../lib/i18n';
 
 interface Announcement { id: number; title: string; body: string; pinned: number; source: string; created_at: string; }
 
@@ -24,7 +24,7 @@ export default function BoardAnnouncements() {
     setSaving(true);
     try {
       await apiPost('/announcements', { ...form, pinned: form.pinned ? 1 : 0, source: 'manual' });
-      toast.success('Comunicado publicado');
+      toast.success(t('Comunicado publicado'));
       setForm({ title: '', body: '', pinned: false });
       setShowForm(false);
       load();

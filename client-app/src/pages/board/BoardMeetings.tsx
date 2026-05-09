@@ -7,7 +7,7 @@ import GlassCard from '../../components/GlassCard';
 import Button from '../../components/Button';
 import Badge from '../../components/Badge';
 import { apiGet, apiPost } from '../../lib/api';
-import { formatDateTime } from '../../lib/i18n';
+import { formatDateTime, t } from '../../lib/i18n';
 
 interface Meeting { id: number; title: string; scheduled_for: string; agenda: string | null; status: string; ai_summary: string | null; raw_notes: string | null; }
 
@@ -25,7 +25,7 @@ export default function BoardMeetings() {
     setSaving(true);
     try {
       await apiPost('/meetings', { ...form, scheduled_for: new Date(form.scheduled_for).toISOString() });
-      toast.success('Reunião agendada');
+      toast.success(t('Reunião agendada'));
       setForm({ title: '', scheduled_for: '', agenda: '' });
       setShowForm(false);
       load();

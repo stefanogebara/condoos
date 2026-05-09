@@ -58,14 +58,14 @@ export default function BoardAssemblies() {
         second_call_at: secondIso,
       });
       track('assembly_created', { assembly_id: created.id, kind: form.kind });
-      toast.success('Assembleia criada — adicione itens à pauta');
+      toast.success(t('Assembleia criada — adicione itens à pauta'));
       setForm({ title: '', kind: 'ordinary', first_call_at: '', second_call_at: '' });
       setShowForm(false);
       await load();
       // Auto-redirect to the new assembly for agenda setup
       window.location.href = `/board/assemblies/${created.id}`;
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Create failed');
+      toast.error(err?.response?.data?.error || t('Create failed'));
     } finally { setSaving(false); }
   }
 

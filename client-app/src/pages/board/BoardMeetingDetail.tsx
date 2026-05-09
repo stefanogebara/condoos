@@ -7,7 +7,7 @@ import GlassCard from '../../components/GlassCard';
 import Badge from '../../components/Badge';
 import Button from '../../components/Button';
 import { apiGet, apiPost, apiPatch } from '../../lib/api';
-import { formatDate, formatDateTime } from '../../lib/i18n';
+import { formatDate, formatDateTime, t } from '../../lib/i18n';
 
 interface ActionItem { id: number; description: string; status: string; owner_label: string | null; due_date: string | null; }
 interface Meeting {
@@ -34,7 +34,7 @@ export default function BoardMeetingDetail() {
     setSaving(true);
     try {
       await apiPatch(`/meetings/${id}/notes`, { raw_notes: notes });
-      toast.success('Anotações salvas');
+      toast.success(t('Anotações salvas'));
       setSummary(null);
       load();
     } finally { setSaving(false); }
@@ -45,7 +45,7 @@ export default function BoardMeetingDetail() {
     try {
       const out = await apiPost<any>(`/ai/meetings/${id}/summarize`);
       setSummary(out);
-      toast.success('Reunião resumida');
+      toast.success(t('Reunião resumida'));
       load();
     } finally { setSaving(false); }
   }
@@ -60,7 +60,7 @@ export default function BoardMeetingDetail() {
         pinned: 1,
         source: 'ai_meeting',
       });
-      toast.success('Comunicado publicado para os moradores');
+      toast.success(t('Comunicado publicado para os moradores'));
     } finally { setSaving(false); }
   }
 

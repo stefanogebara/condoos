@@ -7,6 +7,7 @@ import Button from '../../components/Button';
 import Badge from '../../components/Badge';
 import { apiGet, apiPatch } from '../../lib/api';
 import { track } from '../../lib/analytics';
+import { t } from '../../lib/i18n';
 
 interface Me {
   id: number;
@@ -39,9 +40,9 @@ export default function Settings() {
       });
       track('whatsapp_optin_set', { opt_in: form.whatsapp_opt_in, has_phone: Boolean(form.phone) });
       setMe(updated);
-      toast.success('Preferências salvas');
+      toast.success(t('Preferências salvas'));
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Não foi possível salvar');
+      toast.error(err?.response?.data?.error || t('Não foi possível salvar'));
     } finally { setSaving(false); }
   }
 
