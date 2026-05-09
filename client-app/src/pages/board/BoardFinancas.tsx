@@ -98,7 +98,11 @@ export default function BoardFinancas() {
 }
 
 function CategorySummary({ totals, totalCents }: { totals: CategoryTotal[]; totalCents: number }) {
-  if (totals.length === 0) return null;
+  // Audit M13 — with a single category the bar always rendered at 100% and
+  // had no scale to compare against; it read like a placeholder. Hide the
+  // breakdown until there are at least two categories so the bar actually
+  // communicates relative weight.
+  if (totals.length < 2) return null;
   const max = Math.max(...totals.map((t) => t.total_cents), 1);
   return (
     <GlassCard variant="clay" className="p-6 mb-6">

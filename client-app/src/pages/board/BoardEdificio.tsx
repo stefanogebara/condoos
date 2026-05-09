@@ -249,7 +249,11 @@ function BlockCard({
           <button
             type="button"
             onClick={() => setShowAddUnit(true)}
-            className="p-3 rounded-2xl border border-dashed border-dusk-200 text-sm text-dusk-400 hover:bg-white/40 hover:text-dusk-500 transition flex items-center justify-center gap-2"
+            // Audit M14 — previously this CTA inherited the same neutral
+            // dashed-border style as data tiles, so it read as a disabled
+            // placeholder. Lift it with sage accent, brighter text, and a
+            // hover that signals interactivity.
+            className="p-3 rounded-2xl border-2 border-dashed border-sage-300 bg-sage-100/40 text-sm font-semibold text-sage-700 hover:border-sage-400 hover:bg-sage-200/60 hover:text-sage-900 transition flex items-center justify-center gap-2"
           >
             <Plus className="w-4 h-4" /> Adicionar unidade
           </button>

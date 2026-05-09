@@ -5,7 +5,7 @@ import { LogOut, Menu, X } from 'lucide-react';
 import Logo from './Logo';
 import Avatar from './Avatar';
 import { useAuth } from '../lib/auth';
-import { SidebarLangSwitcher } from '../lib/i18n';
+import { SidebarLangSwitcher, t } from '../lib/i18n';
 
 export interface NavItem {
   to: string;
@@ -53,7 +53,7 @@ export default function Sidebar({ items, title, subtitle }: Props) {
         <button
           onClick={() => setOpen(false)}
           className="lg:hidden w-10 h-10 rounded-2xl bg-white/60 text-dusk-500 flex items-center justify-center hover:bg-white/80 transition"
-          aria-label="Fechar menu"
+          aria-label={t('Fechar menu')}
         >
           <X className="w-5 h-5" />
         </button>
@@ -117,7 +117,7 @@ export default function Sidebar({ items, title, subtitle }: Props) {
           <button
             onClick={() => setOpen(true)}
             className="w-10 h-10 rounded-2xl bg-white/70 text-dusk-500 flex items-center justify-center shadow-clay-sm hover:bg-white/90 transition"
-            aria-label="Abrir menu"
+            aria-label={t('Abrir menu')}
           >
             <Menu className="w-5 h-5" />
           </button>
