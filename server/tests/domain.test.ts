@@ -4,6 +4,7 @@ import db from '../src/db';
 import { claimPendingInvitesForUser } from '../src/lib/invites';
 import { canVote, getProposalVoteTally, resolveVoteOutcome, computeQuorum, countEligibleVoters } from '../src/lib/proposal-tally';
 import { parseJsonLoose } from '../src/ai/openrouter';
+import { fallbackAdminAgent, sanitizeAdminAgentOutput } from '../src/ai/admin-agent';
 import { tickVoteCloser } from '../src/lib/vote-closer';
 import {
   canVoteInAssembly,
@@ -147,6 +148,61 @@ test('parseJsonLoose strips markdown fences', () => {
 
 test('parseJsonLoose returns null for garbage', () => {
   assert.equal(parseJsonLoose('totally not json'), null);
+});
+
+test('admin agent fallback uses saved service contacts and returns work-ready plan', () => {
+  const out = fallbackAdminAgent({
+    task: 'Comparar fornecedores para manutenção da esteira da academia',
+    locale: 'pt-BR',
+    condo: { name: 'Test Condo', address: 'São Paulo' },
+    service_contacts: [
+      {
+        category: 'gym_equipment',
+        company_name: 'Fitness Pro',
+        whatsapp: '+55 11 90000-0001',
+        service_scope: 'Manutenção de esteiras e equipamentos da academia',
+        preferred: 1,
+      },
+    ],
+  });
+
+  assert.equal(out._fallback, true);
+  assert.equal(out.task_type, 'vendor_research');
+  assert.equal(out.existing_network_fit[0].company_name, 'Fitness Pro');
+  assert.ok(out.vendor_search_plan.search_queries.length >= 3);
+  assert.ok(out.vendor_search_plan.outreach_message.includes('Test Condo'));
+  assert.ok(out.proposal_draft?.title);
+  assert.ok(out.action_plan.length >= 3);
+});
+
+test('admin agent sanitizer drops hallucinated saved vendors and repairs invalid proposal fields', () => {
+  const out = sanitizeAdminAgentOutput({
+    summary: 'Use a careful process.',
+    task_type: 'vendor_research',
+    existing_network_fit: [
+      { company_name: 'Imaginary Vendor', category: 'gym_equipment', reason: 'made up', contact_method: '555' },
+    ],
+    options: [
+      { title: 'Compare bids', pros: ['Comparable scope'], cons: ['Takes time'], estimated_cost_range: 'confirm by quote' },
+    ],
+    proposal_draft: {
+      title: 'Fix treadmill',
+      description: 'Repair the treadmill after technical diagnosis.',
+      category: 'made_up',
+      estimated_cost: -10,
+    },
+  }, {
+    task: 'repair treadmill',
+    locale: 'en-US',
+    service_contacts: [
+      { category: 'electrical', company_name: 'Real Electric', phone: '555-0100' },
+    ],
+  });
+
+  assert.deepEqual(out.existing_network_fit, []);
+  assert.equal(out.proposal_draft?.category, 'maintenance');
+  assert.equal(out.proposal_draft?.estimated_cost, null);
+  assert.ok(out.options[0].questions_for_vendor.length > 0);
 });
 
 test('service contact schema rejects unreachable contacts and non-HTTPS links', () => {

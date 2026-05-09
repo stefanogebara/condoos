@@ -196,6 +196,7 @@ async function scan(page: Page, path: string, locale: string) {
 
 const ADMIN_ROUTES = [
   '/board',
+  '/board/agent',
   '/board/edificio',
   '/board/financas',
   '/board/announcements',

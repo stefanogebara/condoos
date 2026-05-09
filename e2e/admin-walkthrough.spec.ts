@@ -51,6 +51,7 @@ test('admin: overview renders with sidebar nav', async ({ page, request, isMobil
   const links = [
     /^(Overview|Visão geral)$/i,
     /^(Suggestions|Sugestões)$/i,
+    /AI agent|Agente IA/i,
     /Pending|Pendentes/i,
     /^(Proposals|Propostas)$/i,
     /^(Assemblies|Assembleias)$/i,
@@ -70,6 +71,18 @@ test('admin: operations service network page renders', async ({ page, request })
   await expect(page.getByRole('heading', { name: /Operations|Operação/i })).toBeVisible();
   await expect(page.getByRole('button', { name: /New contact|Novo contato/i })).toBeVisible();
   await expect(page.getByText(/service network|Rede de serviços|No operations contacts|Nenhum contato operacional/i).first()).toBeVisible();
+});
+
+test('admin: AI agent generates an operational plan', async ({ page, request }) => {
+  await adminLogin(page, request);
+  await page.goto('/board/agent');
+  await expect(page.getByRole('heading', { name: /AI agent|Agente IA/i })).toBeVisible();
+  await page.getByRole('textbox', { name: /What do you want to solve|O que você quer resolver/i }).fill('Compare options to repair the gym treadmill and find maintenance vendors.');
+  await page.getByRole('button', { name: /Generate plan|Gerar plano/i }).click();
+  await expect(page.getByText(/^(Next step|Próximo passo)$/i)).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole('heading', { name: /^(Options|Opções)$/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /^(Research plan|Plano de pesquisa)$/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Create proposal|Criar proposta/i })).toBeVisible();
 });
 
 // ---------------------------------------------------------------------------

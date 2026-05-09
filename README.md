@@ -142,6 +142,10 @@ Click **Cluster with AI** on the Suggestions page. The AI groups semantically re
 
 Each cluster has a **Draft proposal** button that runs the AI draft on the cluster's representative item.
 
+### 5b. Admin operations agent → **AI moment #2b**
+
+Board → **AI agent**. Ask for something operational, e.g. "compare options to repair the gym treadmill and find maintenance vendors." The agent uses the saved service network, amenities, suggestions, and proposals to produce options, vendor search queries, shortlist criteria, outreach copy, resident notice, action plan, and a proposal draft the board can create in one click.
+
 ### 6. Discussion summary → **AI moment #3**
 
 Open a proposal in discussion (e.g. *Install 4 EV charging stations*). Click **Summarize** — the AI reads all 5 comments and returns agreements, disagreements, and open questions.
@@ -194,9 +198,9 @@ condoos/
 │   │   │   ├── resident/ # 9 pages: Overview, Packages, Visitors,
 │   │   │   │             # Amenities, Announcements, Proposals,
 │   │   │   │             # ProposalDetail, Meetings, Suggest
-│   │   │   └── board/    # 8 pages: Overview, Suggestions, Proposals,
-│   │   │                 # ProposalDetail, Meetings, MeetingDetail,
-│   │   │                 # Announcements, Residents
+│   │   │   └── board/    # Board admin app: overview, suggestions, AI agent,
+│   │   │                 # proposals, assemblies, meetings, announcements,
+│   │   │                 # residents, amenities, building, operations, finance
 │   │   ├── components/   # GlassCard, Button, Badge, Avatar, Sidebar,
 │   │   │                 # PageHeader, EmptyState, Logo
 │   │   └── lib/          # api client, auth context
@@ -221,6 +225,7 @@ condoos/
 | Endpoint                                      | What it does                                                                 |
 | --------------------------------------------- | ---------------------------------------------------------------------------- |
 | `POST /api/ai/proposal-draft`                 | Free-text suggestion → `{title, description, category, estimated_cost, rationale}` |
+| `POST /api/ai/admin-agent`                    | Board admin operations workbench → repair/install/vendor options plan, outreach copy, resident notice, proposal draft |
 | `POST /api/ai/cluster-suggestions`            | All open suggestions → semantic clusters + labels                            |
 | `POST /api/ai/proposals/:id/summarize-thread` | Discussion → `{summary, agreements, disagreements, open_questions}`          |
 | `POST /api/ai/proposals/:id/explain`          | Plain-language resident explanation                                          |

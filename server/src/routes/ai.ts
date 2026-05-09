@@ -17,6 +17,7 @@ import {
   PROPOSAL_COST_ANALYSIS_SYS,
   ASSEMBLY_AGENDA_SYS,
   ASSEMBLY_ATA_SYS,
+  ADMIN_AGENT_SYS,
 } from '../ai/prompts';
 import { generateAtaMarkdown } from '../lib/assembly';
 import {
@@ -27,6 +28,12 @@ import {
   fallbackExplain,
   fallbackDecisionSummary,
 } from '../ai/fallbacks';
+import {
+  fallbackAdminAgent,
+  normalizeAdminAgentMode,
+  sanitizeAdminAgentOutput,
+  type AdminAgentInput,
+} from '../ai/admin-agent';
 
 const router = Router();
 const aiRateLimit = createRateLimit({
@@ -45,6 +52,10 @@ function boundedText(value: unknown, max: number): { ok: true; text: string } | 
 
 function clip(value: unknown, max: number): string {
   return String(value || '').slice(0, max);
+}
+
+function optionalText(value: unknown, max: number): string {
+  return String(value || '').trim().slice(0, max);
 }
 
 // Helper to try AI, fall back silently on any error.
@@ -149,6 +160,145 @@ router.post('/proposal-classify', requireAuth, aiRateLimit, asyncHandler(async (
   const confidence = Math.max(0, Math.min(1, Number(out.confidence) || 0));
   const reasoning = typeof out.reasoning === 'string' ? out.reasoning.slice(0, 200) : '';
   return ok(res, { category, confidence, reasoning });
+}));
+
+// 1c. General admin operations agent: repair/install/vendor options workbench.
+router.post('/admin-agent', requireAuth, aiRateLimit, requireRole('board_admin'), asyncHandler(async (req: AuthedRequest, res) => {
+  const input = boundedText(req.body?.task, 6_000);
+  if (!input.ok) return fail(res, input.error, input.error === 'text_too_long' ? 413 : 400);
+  const condoId = getActiveCondoId(req);
+  const mode = normalizeAdminAgentMode(req.body?.mode);
+
+  const condo = db.prepare(`SELECT id, name, address FROM condominiums WHERE id = ?`).get(condoId) as any;
+  if (!condo) return fail(res, 'not_found', 404);
+
+  const footprint = db.prepare(
+    `SELECT COUNT(DISTINCT b.id) AS buildings, COUNT(u.id) AS units
+     FROM buildings b
+     LEFT JOIN units u ON u.building_id = b.id
+     WHERE b.condominium_id = ?`
+  ).get(condoId) as any;
+
+  const serviceContacts = db.prepare(
+    `SELECT category, company_name, contact_name, phone, whatsapp, email, website,
+            service_scope, notes, emergency_available, preferred, last_used_at
+     FROM service_contacts
+     WHERE condominium_id = ? AND active = 1
+     ORDER BY preferred DESC, emergency_available DESC, company_name ASC
+     LIMIT 40`
+  ).all(condoId) as any[];
+
+  const amenities = db.prepare(
+    `SELECT name, description, capacity, admin_notes
+     FROM amenities
+     WHERE condominium_id = ? AND active = 1
+     ORDER BY name ASC
+     LIMIT 12`
+  ).all(condoId) as any[];
+
+  const recentProposals = db.prepare(
+    `SELECT id, title, category, status, estimated_cost, created_at
+     FROM proposals
+     WHERE condominium_id = ?
+     ORDER BY created_at DESC
+     LIMIT 8`
+  ).all(condoId) as any[];
+
+  const openSuggestions = db.prepare(
+    `SELECT id, body, category, created_at
+     FROM suggestions
+     WHERE condominium_id = ? AND status = 'open'
+     ORDER BY created_at DESC
+     LIMIT 8`
+  ).all(condoId) as any[];
+
+  const adminInput: AdminAgentInput = {
+    task: input.text,
+    mode,
+    location: optionalText(req.body?.location, 240),
+    budget: optionalText(req.body?.budget, 120),
+    urgency: optionalText(req.body?.urgency, 120),
+    locale: optionalText(req.body?.locale, 20),
+    condo: { name: condo.name, address: condo.address },
+    service_contacts: serviceContacts,
+  };
+
+  const context = {
+    generated_at: new Date().toISOString(),
+    request: {
+      task: input.text,
+      mode,
+      location: adminInput.location || condo.address,
+      budget: adminInput.budget || null,
+      urgency: adminInput.urgency || null,
+      locale: adminInput.locale || null,
+    },
+    condominium: {
+      name: condo.name,
+      address: condo.address,
+      buildings: Number(footprint?.buildings || 0),
+      units: Number(footprint?.units || 0),
+    },
+    saved_service_contacts: serviceContacts.map((c) => ({
+      category: clip(c.category, 80),
+      company_name: clip(c.company_name, 140),
+      contact_name: clip(c.contact_name, 120),
+      phone: clip(c.phone, 60),
+      whatsapp: clip(c.whatsapp, 60),
+      email: clip(c.email, 160),
+      website: clip(c.website, 240),
+      service_scope: clip(c.service_scope, 500),
+      notes: clip(c.notes, 700),
+      emergency_available: !!c.emergency_available,
+      preferred: !!c.preferred,
+      last_used_at: c.last_used_at,
+    })),
+    amenities: amenities.map((a) => ({
+      name: clip(a.name, 120),
+      description: clip(a.description, 500),
+      capacity: a.capacity,
+      admin_notes: clip(a.admin_notes, 700),
+    })),
+    recent_proposals: recentProposals.map((p) => ({
+      id: p.id,
+      title: clip(p.title, 220),
+      category: p.category,
+      status: p.status,
+      estimated_cost: p.estimated_cost,
+      created_at: p.created_at,
+    })),
+    open_suggestions: openSuggestions.map((s) => ({
+      id: s.id,
+      body: clip(s.body, 700),
+      category: s.category,
+      created_at: s.created_at,
+    })),
+    tool_limitations: 'This route does not perform live web browsing, vendor calls, purchases, bookings, or installation work. It produces a decision-ready plan, search queries, outreach copy, and a proposal draft.',
+  };
+
+  const raw = await tryAI<any>(
+    [
+      { role: 'system', content: ADMIN_AGENT_SYS },
+      { role: 'user', content: JSON.stringify(context) },
+    ],
+    () => fallbackAdminAgent(adminInput),
+    { jsonMode: true, maxTokens: 2_000, label: 'admin-agent' }
+  );
+  const out = sanitizeAdminAgentOutput(raw, adminInput);
+
+  audit(req, {
+    action: 'ai.admin_agent',
+    target_type: 'ai_admin_agent',
+    condominium_id: condoId,
+    metadata: {
+      mode,
+      task_type: out.task_type,
+      option_count: out.options.length,
+      service_contact_matches: out.existing_network_fit.length,
+      fallback: out._fallback === true,
+    },
+  });
+  return ok(res, out);
 }));
 
 // 2. Cluster all open suggestions for the condo

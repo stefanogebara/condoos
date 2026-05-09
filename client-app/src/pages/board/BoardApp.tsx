@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { Home, Inbox, Vote, Calendar, Megaphone, Users, UserCheck, Gavel, Building2, Wallet, Waves, Wrench } from 'lucide-react';
+import { Bot, Home, Inbox, Vote, Calendar, Megaphone, Users, UserCheck, Gavel, Building2, Wallet, Waves, Wrench } from 'lucide-react';
 import Sidebar, { NavItem } from '../../components/Sidebar';
 import BoardOverview from './BoardOverview';
 import Suggestions from './Suggestions';
@@ -17,6 +17,7 @@ import BoardEdificio from './BoardEdificio';
 import BoardFinancas from './BoardFinancas';
 import BoardAmenities from './BoardAmenities';
 import BoardServices from './BoardServices';
+import BoardAgent from './BoardAgent';
 import { apiGet } from '../../lib/api';
 
 export default function BoardApp() {
@@ -33,6 +34,7 @@ export default function BoardApp() {
   const nav: NavItem[] = [
     { to: '/board',               label: 'Visão geral',   icon: Home },
     { to: '/board/suggestions',   label: 'Sugestões',     icon: Inbox },
+    { to: '/board/agent',         label: 'Agente IA',     icon: Bot },
     { to: '/board/pending',       label: 'Pendentes',     icon: UserCheck, badge: pendingCount || undefined },
     { to: '/board/proposals',     label: 'Propostas',     icon: Vote },
     { to: '/board/assemblies',    label: 'Assembleias',   icon: Gavel },
@@ -52,6 +54,7 @@ export default function BoardApp() {
         <Routes>
           <Route index                   element={<BoardOverview />} />
           <Route path="suggestions"      element={<Suggestions />} />
+          <Route path="agent"            element={<BoardAgent />} />
           <Route path="pending"          element={<Pending />} />
           <Route path="proposals"        element={<BoardProposals />} />
           <Route path="proposals/:id"    element={<BoardProposalDetail />} />
