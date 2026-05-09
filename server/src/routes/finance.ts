@@ -234,8 +234,10 @@ router.post('/expenses', requireAuth, requireRole('board_admin'), (req: AuthedRe
   // identical "audit dup test" rows). Dedupe within a 60s window on the
   // tuple (condo, amount, description, spent_at, created_by) and return the
   // existing row's id. Retries still get a 200, callers don't need to add
-  // an Idempotency-Key header.
-  const sixtySecondsAgo = new Date(Date.now() - 60_000).toISOString();
+  // an Idempotency-Key header. Use SQLite's datetime() so the comparison
+  // works regardless of how created_at is formatted (CURRENT_TIMESTAMP
+  // stores "YYYY-MM-DD HH:MM:SS" UTC; mixing that with an ISO string from
+  // JS would make the lexicographic compare unreliable because ' ' < 'T').
   const recent = db.prepare(
     `SELECT id, spent_at FROM expenses
      WHERE condominium_id = ?
@@ -243,9 +245,9 @@ router.post('/expenses', requireAuth, requireRole('board_admin'), (req: AuthedRe
        AND description = ?
        AND spent_at = ?
        AND created_by_user_id = ?
-       AND created_at >= ?
+       AND datetime(created_at) >= datetime('now', '-60 seconds')
      LIMIT 1`
-  ).get(condoId, body.amount_cents, body.description, spentAt, req.user!.id, sixtySecondsAgo) as { id: number; spent_at: string } | undefined;
+  ).get(condoId, body.amount_cents, body.description, spentAt, req.user!.id) as { id: number; spent_at: string } | undefined;
   if (recent) {
     return ok(res, { id: recent.id, spent_at: recent.spent_at, deduped: true }, 200);
   }
