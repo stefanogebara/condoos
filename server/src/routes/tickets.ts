@@ -478,9 +478,14 @@ router.post('/:id/resolve', requireAuth, requireRole('board_admin'), (req: Authe
     if (announce) {
       const announcementTitle = `Resolvido: ${ticket.title}`.slice(0, 200);
       const announcementBody = parsed.data.resolution.slice(0, 8_000);
+      // announcements.source CHECK accepts ('manual','ai_meeting','ai_decision').
+      // The resolution announcement is authored by the admin who clicked
+      // resolve (they typed the text), so 'manual' is the honest value here.
+      // A 'ticket_resolution' source would need a CHECK widen migration —
+      // worth doing if we add more system-authored announcement flows.
       const result = db.prepare(
         `INSERT INTO announcements (condominium_id, author_id, title, body, pinned, source)
-         VALUES (?, ?, ?, ?, 0, 'system')`
+         VALUES (?, ?, ?, ?, 0, 'manual')`
       ).run(condoId, req.user!.id, announcementTitle, announcementBody);
       announcementId = Number(result.lastInsertRowid);
     }
