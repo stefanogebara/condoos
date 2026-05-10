@@ -33,6 +33,7 @@ import ticketsRoutes from './routes/tickets';
 import webhooksRoutes from './routes/webhooks';
 import serviceContactsRoutes from './routes/service-contacts';
 import { processWhatsAppOutbox } from './lib/whatsapp';
+import { startScheduledInvoiceGenerator } from './lib/finance';
 
 initSentry();
 const app = express();
@@ -168,10 +169,12 @@ app.listen(PORT, () => {
   // worst case a vote lands 1 minute late, which is acceptable for a 24h+ window.
   if (process.env.NODE_ENV !== 'test') {
     startVoteCloser(60_000);
+    startScheduledInvoiceGenerator();
     setInterval(() => {
       processWhatsAppOutbox({ limit: 25 }).catch((err) => console.warn('[notification-outbox] retry failed:', err?.message || err));
     }, 60_000);
     console.log('[vote-closer] started (60s interval)');
+    console.log('[finance] scheduled invoice generator started (6h interval)');
     console.log('[notification-outbox] retry loop started (60s interval)');
   }
 });

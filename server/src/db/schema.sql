@@ -18,9 +18,12 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash    TEXT NOT NULL,
   first_name       TEXT NOT NULL,
   last_name        TEXT NOT NULL,
-  role             TEXT NOT NULL CHECK(role IN ('resident','board_admin')),
+  role             TEXT NOT NULL CHECK(role IN ('resident','board_admin','concierge')),
   unit_number      TEXT,
   avatar_url       TEXT,
+  phone            TEXT,
+  whatsapp_opt_in  INTEGER NOT NULL DEFAULT 0,
+  token_version    INTEGER NOT NULL DEFAULT 0,
   created_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 

@@ -221,6 +221,65 @@ test('Tickets: resident community report appears on admin ticket page', async ({
   await expect(page.getByText(/Aguardando verificação|Awaiting verification|Esperando verificación/i)).toBeVisible();
 });
 
+test('Tickets: admin records vendor response through the modal', async ({ request, page }) => {
+  const admin = await loginApi(request, 'admin@condoos.dev', 'admin123');
+  const admH = { Authorization: `Bearer ${admin.token}`, 'Content-Type': 'application/json' };
+  const tag = Date.now();
+  const title = `E2E Vendor Response ${tag}`;
+  const responseSummary = `Confirmou visita E2E ${tag} amanhã às 9h.`;
+
+  const contactRes = await request.post(`${apiURL}/service-contacts`, {
+    headers: admH,
+    data: {
+      category: 'general_maintenance',
+      company_name: `E2E Maintenance ${tag}`,
+      phone: '+55 11 4000-0000',
+      preferred: true,
+    },
+  });
+  expect(contactRes.status()).toBe(201);
+  const contactId: number = (await contactRes.json()).data.id;
+
+  const createRes = await request.post(`${apiURL}/tickets`, {
+    headers: admH,
+    data: {
+      title,
+      description: 'Ticket prepared for vendor response modal coverage.',
+      category: 'general_maintenance',
+      priority: 'normal',
+    },
+  });
+  expect(createRes.status()).toBe(201);
+  const ticketId: number = (await createRes.json()).data.id;
+
+  const dispatchRes = await request.post(`${apiURL}/tickets/${ticketId}/dispatch`, {
+    headers: admH,
+    data: {
+      service_contact_id: contactId,
+      channel: 'manual',
+      message: 'Please inspect this issue and confirm availability.',
+    },
+  });
+  expect(dispatchRes.status()).toBe(201);
+  const dispatchId: number = (await dispatchRes.json()).data.id;
+
+  await installSession(page, admin);
+  await page.goto('/board/tickets', { waitUntil: 'domcontentloaded' });
+  await page.getByText(title).click();
+  await expect(page.getByText(/Histórico de acionamentos|Dispatch history|Historial de activaciones/i)).toBeVisible();
+
+  await page.getByRole('button', { name: /Registrar resposta|Record response|Registrar respuesta/i }).click();
+  await expect(page.getByRole('heading', { name: /Registrar resposta do fornecedor|Record vendor response|Registrar respuesta del proveedor/i })).toBeVisible();
+  await page.getByPlaceholder(/Confirmou visita|Confirmed a visit|Confirmó visita/i).fill(responseSummary);
+  await page.getByRole('button', { name: /Salvar resposta|Save response|Guardar respuesta/i }).click();
+
+  await expect(page.getByText(responseSummary)).toBeVisible();
+  const detail = (await (await request.get(`${apiURL}/tickets/${ticketId}`, { headers: admH })).json()).data;
+  const dispatch = detail.dispatches.find((row: any) => row.id === dispatchId);
+  expect(dispatch.status).toBe('responded');
+  expect(dispatch.response_summary).toBe(responseSummary);
+});
+
 // ---------------------------------------------------------------------------
 // 5. Authorization: resident cannot patch status
 // ---------------------------------------------------------------------------

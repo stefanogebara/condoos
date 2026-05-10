@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { apiPost, apiGet } from './api';
+import { api, apiPost, apiGet } from './api';
 import { identify, reset, track } from './analytics';
 
 // Read a JSON-encoded value from localStorage. If the key holds the literal
@@ -139,6 +139,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = () => {
+    const token = localStorage.getItem('condoos_token');
+    if (token) {
+      void api.delete('/auth/logout', {
+        headers: { Authorization: `Bearer ${token}` },
+      }).catch(() => {});
+    }
     localStorage.removeItem('condoos_token');
     localStorage.removeItem('condoos_user');
     setUser(null);

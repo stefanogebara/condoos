@@ -34,6 +34,15 @@ export interface AuthUser {
   avatar_url: string | null;
 }
 
+interface StoredAuthUser extends AuthUser {
+  token_version: number;
+}
+
+interface TokenPayload {
+  uid: number;
+  token_version?: number;
+}
+
 export interface ActiveMembership {
   user_unit_id: number;
   unit_id: number;
@@ -48,37 +57,44 @@ export interface AuthedRequest extends Request {
   memberships?: ActiveMembership[];   // populated by requireActiveMembership
 }
 
-// Audit L1 — JWT lifetime is 7 days with no server-side revocation.
-// Mitigations in place:
-//   * /api/auth/refresh lets the client extend an active session,
-//   * verifyToken loads the user from the DB on every request — a deleted
-//     user's tokens stop working immediately,
-//   * algorithm pinned to HS256, secret enforced ≥ 32 chars.
-// Remaining gap: a stolen-but-unrevoked token is valid until expiry. A
-// proper fix is short-lived access tokens (15-60min) + an HttpOnly refresh
-// token cookie + a token_version column for explicit revocation; tracked
-// as a follow-up because it requires schema work and a logout-everywhere
-// endpoint, neither of which fits this audit pass.
-export function signToken(userId: number): string {
-  return jwt.sign({ uid: userId }, JWT_SECRET, { expiresIn: '7d' });
+function currentTokenVersion(userId: number): number {
+  const row = db.prepare(
+    `SELECT COALESCE(token_version, 0) AS token_version FROM users WHERE id = ?`
+  ).get(userId) as { token_version: number } | undefined;
+  return Number(row?.token_version || 0);
 }
 
-export function verifyToken(token: string): { uid: number } | null {
+export function signToken(userId: number): string {
+  return jwt.sign({ uid: userId, token_version: currentTokenVersion(userId) }, JWT_SECRET, { expiresIn: '7d' });
+}
+
+export function verifyToken(token: string): TokenPayload | null {
   try {
     // Pin algorithm to HS256 — defense-in-depth against future jsonwebtoken
     // changes that might re-allow algorithm confusion via a forged header.
-    return jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] }) as { uid: number };
+    const payload = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] }) as TokenPayload;
+    if (!Number.isInteger(payload.uid) || payload.uid <= 0) return null;
+    return payload;
   } catch {
     return null;
   }
 }
 
-function loadUser(id: number): AuthUser | null {
+function loadUser(id: number): StoredAuthUser | null {
   const row = db.prepare(
-    `SELECT id, email, role, condominium_id, first_name, last_name, unit_number, avatar_url
+    `SELECT id, email, role, condominium_id, first_name, last_name, unit_number, avatar_url,
+            COALESCE(token_version, 0) AS token_version
      FROM users WHERE id = ?`
-  ).get(id) as AuthUser | undefined;
+  ).get(id) as StoredAuthUser | undefined;
   return row || null;
+}
+
+export function revokeUserTokens(userId: number): void {
+  db.prepare(
+    `UPDATE users
+     SET token_version = COALESCE(token_version, 0) + 1
+     WHERE id = ?`
+  ).run(userId);
 }
 
 export function requireAuth(req: AuthedRequest, res: Response, next: NextFunction) {
@@ -90,7 +106,12 @@ export function requireAuth(req: AuthedRequest, res: Response, next: NextFunctio
   if (!payload) return res.status(401).json({ success: false, error: 'invalid_token' });
   const user = loadUser(payload.uid);
   if (!user) return res.status(401).json({ success: false, error: 'user_not_found' });
-  req.user = user;
+  const tokenVersion = Number(payload.token_version ?? 0);
+  if (tokenVersion !== Number(user.token_version || 0)) {
+    return res.status(401).json({ success: false, error: 'invalid_token_version' });
+  }
+  const { token_version, ...publicUser } = user;
+  req.user = publicUser;
   next();
 }
 

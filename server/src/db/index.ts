@@ -52,16 +52,17 @@ function migrateUsersRoleConcierge() {
         avatar_url       TEXT,
         phone            TEXT,
         whatsapp_opt_in  INTEGER NOT NULL DEFAULT 0,
+        token_version    INTEGER NOT NULL DEFAULT 0,
         created_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
 
       INSERT INTO users_new (
         id, condominium_id, email, password_hash, first_name, last_name,
-        role, unit_number, avatar_url, phone, whatsapp_opt_in, created_at
+        role, unit_number, avatar_url, phone, whatsapp_opt_in, token_version, created_at
       )
       SELECT
         id, condominium_id, email, password_hash, first_name, last_name,
-        role, unit_number, avatar_url, phone, whatsapp_opt_in, created_at
+        role, unit_number, avatar_url, phone, whatsapp_opt_in, COALESCE(token_version, 0), created_at
       FROM users;
 
       DROP TABLE users;
@@ -317,6 +318,9 @@ export function initSchema() {
   // WhatsApp notifications — phone + opt-in on users
   addColumnIfMissing('users',        'phone',              `TEXT`);
   addColumnIfMissing('users',        'whatsapp_opt_in',    `INTEGER NOT NULL DEFAULT 0`);
+  // Explicit JWT revocation. Incremented on logout / forced session reset;
+  // requireAuth rejects tokens whose embedded version no longer matches.
+  addColumnIfMissing('users',        'token_version',      `INTEGER NOT NULL DEFAULT 0`);
   // Concierge role (#11) — widen the role CHECK constraint. Done AFTER
   // the columns above so the rebuilt table preserves them.
   migrateUsersRoleConcierge();

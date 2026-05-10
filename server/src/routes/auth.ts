@@ -3,7 +3,7 @@ import { timingSafeEqual } from 'crypto';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import db from '../db';
-import { signToken, requireAuth, AuthedRequest } from '../lib/auth';
+import { signToken, requireAuth, revokeUserTokens, AuthedRequest } from '../lib/auth';
 import { ok, fail, asyncHandler } from '../lib/respond';
 import { claimPendingInvitesForUser } from '../lib/invites';
 import { GoogleAuthError, verifyGoogleCredential } from '../lib/google-auth';
@@ -145,6 +145,11 @@ router.post('/refresh', requireAuth, (req: AuthedRequest, res) => {
   if (!row) return fail(res, 'user_not_found', 401);
   const token = signToken(row.id);
   return ok(res, { token, user: row });
+});
+
+router.delete('/logout', requireAuth, (req: AuthedRequest, res) => {
+  revokeUserTokens(req.user!.id);
+  return ok(res, { revoked: true });
 });
 
 // GET /api/auth/config — tells the client which sign-in methods are enabled.

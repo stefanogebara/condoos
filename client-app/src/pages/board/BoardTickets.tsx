@@ -48,6 +48,12 @@ interface Dispatch {
   outbox_error: string | null;
 }
 
+interface ResponseTarget {
+  ticketId: number;
+  dispatchId: number;
+  vendorName: string | null;
+}
+
 interface TicketDetail extends Ticket {
   description: string;
   blocked_reason: string | null;
@@ -169,6 +175,7 @@ const BLOCKED_REASON_LABEL: Record<string, string> = {
   vendor_no_response: 'O fornecedor acionado não respondeu dentro do prazo. Considere acionar outro ou contactar manualmente.',
   physical_action_required: 'O agente identificou que é necessária inspeção presencial antes do conserto.',
   ambiguous_reports: 'Os relatos da comunidade estão divididos. Verifique pessoalmente antes de acionar.',
+  agent_failed: 'A IA falhou ao montar o plano automaticamente. Gere novamente ou resolva manualmente.',
 };
 
 function useTicketTranslator() {
@@ -186,12 +193,10 @@ export default function BoardTickets() {
   const [verifyingId, setVerifyingId] = useState<number | null>(null);
   const [dispatchingId, setDispatchingId] = useState<number | null>(null);
   const [resolvingId, setResolvingId] = useState<number | null>(null);
+  const [respondingId, setRespondingId] = useState<number | null>(null);
   const [pickerTicketId, setPickerTicketId] = useState<number | null>(null);
   const [resolveTicketId, setResolveTicketId] = useState<number | null>(null);
-  // UX-H1 — replace native window.prompt with a styled modal. We store both
-  // the ticket id and dispatch id so the modal knows which row to PATCH.
-  const [responseTicketId, setResponseTicketId] = useState<number | null>(null);
-  const [responseDispatchId, setResponseDispatchId] = useState<number | null>(null);
+  const [responseTarget, setResponseTarget] = useState<ResponseTarget | null>(null);
   const [vendors, setVendors] = useState<ServiceContact[]>([]);
   const seenTicketIds = useRef<Set<number> | null>(null);
 
@@ -288,22 +293,28 @@ export default function BoardTickets() {
     } finally { setResolvingId(null); }
   }
 
-  function openResponse(ticketId: number, dispatchId: number) {
-    setResponseTicketId(ticketId);
-    setResponseDispatchId(dispatchId);
+  function openVendorResponse(ticketId: number, dispatchRow: Dispatch) {
+    setResponseTarget({
+      ticketId,
+      dispatchId: dispatchRow.id,
+      vendorName: dispatchRow.vendor_name,
+    });
   }
 
-  async function submitResponse(summary: string) {
-    if (responseTicketId == null || responseDispatchId == null) return;
+  async function submitVendorResponse(target: ResponseTarget, summary: string) {
+    const cleanSummary = summary.trim();
+    if (!cleanSummary) return;
+    setRespondingId(target.dispatchId);
     try {
-      await apiPost(`/tickets/${responseTicketId}/dispatches/${responseDispatchId}/responded`, { response_summary: summary.trim() });
+      await apiPost(`/tickets/${target.ticketId}/dispatches/${target.dispatchId}/responded`, { response_summary: cleanSummary });
       toast.success(tr('Resposta registrada'));
-      apiGet<TicketDetail>(`/tickets/${responseTicketId}`).then(setDetail).catch(() => {});
+      apiGet<TicketDetail>(`/tickets/${target.ticketId}`).then(setDetail).catch(() => {});
       load();
-      setResponseTicketId(null);
-      setResponseDispatchId(null);
+      setResponseTarget(null);
     } catch (err: any) {
       toast.error(err?.response?.data?.error || tr('Falha ao registrar resposta'));
+    } finally {
+      setRespondingId(null);
     }
   }
 
@@ -323,32 +334,32 @@ export default function BoardTickets() {
       {/* UX-H4 — most-actionable section first. M1 — section counts in headers. */}
       <Section title={tr('Precisa do síndico')} tickets={escalated} openId={openId} setOpenId={setOpenId}
                detail={detail} runningId={runningId} verifyingId={verifyingId} dispatchingId={dispatchingId}
-               onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={openResponse}
+               onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={openVendorResponse}
                onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} />
 
       <Section title={tr('Aguardando verificação')} tickets={needsAttention} openId={openId} setOpenId={setOpenId}
                detail={detail} runningId={runningId} verifyingId={verifyingId} dispatchingId={dispatchingId}
-               onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={openResponse}
+               onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={openVendorResponse}
                onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} />
 
       <Section title={tr('Verificados — pronto para acionar a IA')} tickets={verified} openId={openId} setOpenId={setOpenId}
                detail={detail} runningId={runningId} verifyingId={verifyingId} dispatchingId={dispatchingId}
-               onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={openResponse}
+               onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={openVendorResponse}
                onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} />
 
       <Section title={tr('Em andamento — fornecedor acionado')} tickets={inProgress} openId={openId} setOpenId={setOpenId}
                detail={detail} runningId={runningId} verifyingId={verifyingId} dispatchingId={dispatchingId}
-               onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={openResponse}
+               onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={openVendorResponse}
                onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} />
 
       <Section title={tr('Chamados privados')} tickets={privateOpen} openId={openId} setOpenId={setOpenId}
                detail={detail} runningId={runningId} verifyingId={verifyingId} dispatchingId={dispatchingId}
-               onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={openResponse}
+               onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={openVendorResponse}
                onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} />
 
       <Section title={tr('Resolvidos')} tickets={resolvedTickets} openId={openId} setOpenId={setOpenId}
                detail={detail} runningId={runningId} verifyingId={verifyingId} dispatchingId={dispatchingId}
-               onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={openResponse}
+               onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={openVendorResponse}
                onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} />
 
       {pickerTicketId != null && detail && (
@@ -368,10 +379,12 @@ export default function BoardTickets() {
           onSubmit={(resolution, announce) => resolve(resolveTicketId, resolution, announce)} />
       )}
 
-      {responseTicketId != null && responseDispatchId != null && (
+      {responseTarget && (
         <VendorResponseModal
-          onClose={() => { setResponseTicketId(null); setResponseDispatchId(null); }}
-          onSubmit={(summary) => submitResponse(summary)} />
+          vendorName={responseTarget.vendorName}
+          responding={respondingId === responseTarget.dispatchId}
+          onClose={() => setResponseTarget(null)}
+          onSubmit={(summary) => submitVendorResponse(responseTarget, summary)} />
       )}
 
       {rows.length === 0 && (
@@ -402,7 +415,7 @@ function Section({
   onRunAgent: (id: number) => void;
   onVerify: (id: number) => void;
   onDispatch: (id: number, opts?: { service_contact_id?: number; channel?: 'whatsapp' | 'email' | 'manual'; message?: string }) => void;
-  onMarkResponded: (ticketId: number, dispatchId: number) => void;
+  onMarkResponded: (ticketId: number, dispatchRow: Dispatch) => void;
   onOpenPicker: (id: number) => void;
   onOpenResolve: (id: number) => void;
 }) {
@@ -426,7 +439,7 @@ function Section({
                      onRunAgent={() => onRunAgent(tk.id)}
                      onVerify={() => onVerify(tk.id)}
                      onDispatch={(opts) => onDispatch(tk.id, opts)}
-                     onMarkResponded={(dispatchId) => onMarkResponded(tk.id, dispatchId)}
+                     onMarkResponded={(dispatchRow) => onMarkResponded(tk.id, dispatchRow)}
                      onOpenPicker={() => onOpenPicker(tk.id)}
                      onOpenResolve={() => onOpenResolve(tk.id)} />
         ))}
@@ -449,7 +462,7 @@ function AdminCard({
   onRunAgent: () => void;
   onVerify: () => void;
   onDispatch: (opts?: { service_contact_id?: number; channel?: 'whatsapp' | 'email' | 'manual'; message?: string }) => void;
-  onMarkResponded: (dispatchId: number) => void;
+  onMarkResponded: (dispatchRow: Dispatch) => void;
   onOpenPicker: () => void;
   onOpenResolve: () => void;
 }) {
@@ -656,7 +669,7 @@ function AdminCard({
                       <div className="mt-2">
                         <Button size="sm" variant="ghost"
                                 leftIcon={<MessageCircle className="w-3 h-3" />}
-                                onClick={() => onMarkResponded(d.id)}>
+                                onClick={() => onMarkResponded(d)}>
                           {tr('Registrar resposta')}
                         </Button>
                       </div>
@@ -848,6 +861,62 @@ function useEscape(onClose: () => void) {
   }, [onClose]);
 }
 
+function VendorResponseModal({
+  vendorName, responding, onClose, onSubmit,
+}: {
+  vendorName: string | null;
+  responding: boolean;
+  onClose: () => void;
+  onSubmit: (summary: string) => void;
+}) {
+  useEscape(onClose);
+  const tr = useTicketTranslator();
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => { textareaRef.current?.focus(); }, []);
+  const [summary, setSummary] = useState('');
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-dusk-500/40 backdrop-blur-sm">
+      <GlassCard className="w-full max-w-lg p-6">
+        <div className="flex items-start justify-between mb-3">
+          <div>
+            <h3 className="font-display text-xl text-dusk-500">{tr('Registrar resposta do fornecedor')}</h3>
+            <p className="text-xs text-dusk-300 mt-1">{vendorName || tr('Fornecedor')}</p>
+          </div>
+          <button onClick={onClose} className="w-9 h-9 rounded-2xl bg-white/50 hover:bg-white/80 flex items-center justify-center text-dusk-400">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <label className="block text-xs text-dusk-300 font-medium mb-4">
+          {tr('Resumo da resposta')}
+          <textarea
+            ref={textareaRef}
+            className="input mt-1 min-h-[120px]"
+            value={summary}
+            onChange={(e) => setSummary(e.target.value)}
+            maxLength={2000}
+            placeholder={tr('Ex: Confirmou visita amanhã às 9h e pediu foto do problema antes da chegada.')}
+          />
+        </label>
+
+        <div className="flex gap-2 justify-end">
+          <Button variant="ghost" onClick={onClose}>{tr('Cancelar')}</Button>
+          <Button
+            variant="primary"
+            loading={responding}
+            disabled={!summary.trim()}
+            leftIcon={<MessageCircle className="w-4 h-4" />}
+            onClick={() => onSubmit(summary.trim())}
+          >
+            {tr('Salvar resposta')}
+          </Button>
+        </div>
+      </GlassCard>
+    </div>
+  );
+}
+
 function ResolveModal({
   ticket, resolving, onClose, onSubmit,
 }: {
@@ -909,44 +978,3 @@ function ResolveModal({
   );
 }
 
-// UX-H1 — replaces the native window.prompt with a styled modal so admins
-// can paste multi-line vendor replies, the UI stays consistent with the rest
-// of the glass aesthetic, and the experience works on mobile where browser-
-// prompt UX is jarring.
-function VendorResponseModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: (summary: string) => void }) {
-  useEscape(onClose);
-  const tr = useTicketTranslator();
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => { textareaRef.current?.focus(); }, []);
-  const [summary, setSummary] = useState('');
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-dusk-500/40 backdrop-blur-sm">
-      <GlassCard className="w-full max-w-lg p-6">
-        <div className="flex items-start justify-between mb-3">
-          <h3 className="font-display text-xl text-dusk-500">{tr('Resposta do fornecedor')}</h3>
-          <button onClick={onClose} className="w-9 h-9 rounded-2xl bg-white/50 hover:bg-white/80 flex items-center justify-center text-dusk-400">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        <label className="block text-xs text-dusk-300 font-medium mb-3">
-          {tr('O que o fornecedor respondeu?')}
-          <textarea ref={textareaRef} className="input mt-1 min-h-[120px]" value={summary}
-                    onChange={(e) => setSummary(e.target.value)} maxLength={2000}
-                    placeholder={tr('Ex: Confirmado para amanhã às 10h. Trazem a peça nova.')} />
-        </label>
-
-        <div className="flex gap-2 justify-end">
-          <Button variant="ghost" onClick={onClose}>{tr('Cancelar')}</Button>
-          <Button variant="primary"
-                  disabled={!summary.trim()}
-                  leftIcon={<Check className="w-4 h-4" />}
-                  onClick={() => onSubmit(summary.trim())}>
-            {tr('Registrar')}
-          </Button>
-        </div>
-      </GlassCard>
-    </div>
-  );
-}
