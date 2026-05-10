@@ -80,6 +80,25 @@ const PRIORITY_TONE: Record<Ticket['priority'], 'sage' | 'peach' | 'neutral' | '
   low: 'neutral', normal: 'sage', high: 'peach', urgent: 'dark',
 };
 
+// Audit UX-H2 — dispatch enums + channel labels + priority labels render
+// verbatim if not piped through the translator. PT-canonical strings here;
+// matching tuples sit in i18n.tsx phrases so the runtime swaps per locale.
+const DISPATCH_STATUS_LABEL: Record<string, string> = {
+  queued:     'na fila',
+  sent:       'enviado',
+  failed:     'falhou',
+  responded:  'respondeu',
+  cancelled:  'cancelado',
+};
+const CHANNEL_LABEL: Record<string, string> = {
+  whatsapp: 'WhatsApp',
+  email:    'email',
+  manual:   'manual',
+};
+const PRIORITY_PT_LABEL: Record<Ticket['priority'], string> = {
+  low: 'baixa', normal: 'normal', high: 'alta', urgent: 'urgente',
+};
+
 const BLOCKED_REASON_LABEL: Record<string, string> = {
   no_vendor_in_category: 'Nenhum fornecedor cadastrado para essa categoria. Adicione um em Operação para a IA acionar.',
   vendor_no_response: 'O fornecedor acionado não respondeu dentro do prazo. Considere acionar outro ou contactar manualmente.',
@@ -104,6 +123,10 @@ export default function BoardTickets() {
   const [resolvingId, setResolvingId] = useState<number | null>(null);
   const [pickerTicketId, setPickerTicketId] = useState<number | null>(null);
   const [resolveTicketId, setResolveTicketId] = useState<number | null>(null);
+  // UX-H1 — replace native window.prompt with a styled modal. We store both
+  // the ticket id and dispatch id so the modal knows which row to PATCH.
+  const [responseTicketId, setResponseTicketId] = useState<number | null>(null);
+  const [responseDispatchId, setResponseDispatchId] = useState<number | null>(null);
   const [vendors, setVendors] = useState<ServiceContact[]>([]);
   const seenTicketIds = useRef<Set<number> | null>(null);
 
@@ -200,14 +223,20 @@ export default function BoardTickets() {
     } finally { setResolvingId(null); }
   }
 
-  async function markResponded(ticketId: number, dispatchId: number) {
-    const summary = window.prompt(tr('O que o fornecedor respondeu?')) || '';
-    if (!summary.trim()) return;
+  function openResponse(ticketId: number, dispatchId: number) {
+    setResponseTicketId(ticketId);
+    setResponseDispatchId(dispatchId);
+  }
+
+  async function submitResponse(summary: string) {
+    if (responseTicketId == null || responseDispatchId == null) return;
     try {
-      await apiPost(`/tickets/${ticketId}/dispatches/${dispatchId}/responded`, { response_summary: summary.trim() });
+      await apiPost(`/tickets/${responseTicketId}/dispatches/${responseDispatchId}/responded`, { response_summary: summary.trim() });
       toast.success(tr('Resposta registrada'));
-      apiGet<TicketDetail>(`/tickets/${ticketId}`).then(setDetail).catch(() => {});
+      apiGet<TicketDetail>(`/tickets/${responseTicketId}`).then(setDetail).catch(() => {});
       load();
+      setResponseTicketId(null);
+      setResponseDispatchId(null);
     } catch (err: any) {
       toast.error(err?.response?.data?.error || tr('Falha ao registrar resposta'));
     }
@@ -215,41 +244,46 @@ export default function BoardTickets() {
 
   const needsAttention = rows.filter((r) => r.verification_threshold > 0 && r.remediation_status === 'open');
   const verified = rows.filter((r) => r.remediation_status === 'verified' || r.remediation_status === 'agent_dispatched');
-  // Phase 3 — the previous build forgot to render tickets in awaiting_vendor /
-  // vendor_engaged anywhere, so once an admin dispatched a vendor the ticket
-  // vanished from /board/tickets entirely. Give the in-flight states their
-  // own section so the admin can record the vendor response and resolve.
   const inProgress = rows.filter((r) => r.remediation_status === 'awaiting_vendor' || r.remediation_status === 'vendor_engaged');
   const escalated = rows.filter((r) => r.remediation_status === 'blocked_needs_admin');
-  const others = rows.filter((r) => (r.verification_threshold === 0 && r.remediation_status === 'open') || r.remediation_status === 'resolved');
+  // UX-M7 — split "outros" into open-privates + resolved so closed tickets
+  // don't visually compete with active private reports.
+  const privateOpen = rows.filter((r) => r.verification_threshold === 0 && r.remediation_status !== 'resolved');
+  const resolvedTickets = rows.filter((r) => r.remediation_status === 'resolved');
 
   return (
     <>
       <PageHeader title={tr('Chamados')} subtitle={tr('Problemas reportados pelos moradores, verificações da comunidade, e plano de manutenção sugerido pela IA.')} />
 
+      {/* UX-H4 — most-actionable section first. M1 — section counts in headers. */}
+      <Section title={tr('Precisa do síndico')} tickets={escalated} openId={openId} setOpenId={setOpenId}
+               detail={detail} runningId={runningId} verifyingId={verifyingId} dispatchingId={dispatchingId}
+               onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={openResponse}
+               onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} />
+
       <Section title={tr('Aguardando verificação')} tickets={needsAttention} openId={openId} setOpenId={setOpenId}
                detail={detail} runningId={runningId} verifyingId={verifyingId} dispatchingId={dispatchingId}
-               onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={markResponded}
+               onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={openResponse}
                onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} />
 
       <Section title={tr('Verificados — pronto para acionar a IA')} tickets={verified} openId={openId} setOpenId={setOpenId}
                detail={detail} runningId={runningId} verifyingId={verifyingId} dispatchingId={dispatchingId}
-               onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={markResponded}
+               onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={openResponse}
                onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} />
 
       <Section title={tr('Em andamento — fornecedor acionado')} tickets={inProgress} openId={openId} setOpenId={setOpenId}
                detail={detail} runningId={runningId} verifyingId={verifyingId} dispatchingId={dispatchingId}
-               onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={markResponded}
+               onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={openResponse}
                onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} />
 
-      <Section title={tr('Precisa do síndico')} tickets={escalated} openId={openId} setOpenId={setOpenId}
+      <Section title={tr('Chamados privados')} tickets={privateOpen} openId={openId} setOpenId={setOpenId}
                detail={detail} runningId={runningId} verifyingId={verifyingId} dispatchingId={dispatchingId}
-               onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={markResponded}
+               onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={openResponse}
                onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} />
 
-      <Section title={tr('Outros chamados')} tickets={others} openId={openId} setOpenId={setOpenId}
+      <Section title={tr('Resolvidos')} tickets={resolvedTickets} openId={openId} setOpenId={setOpenId}
                detail={detail} runningId={runningId} verifyingId={verifyingId} dispatchingId={dispatchingId}
-               onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={markResponded}
+               onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={openResponse}
                onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} />
 
       {pickerTicketId != null && detail && (
@@ -267,6 +301,12 @@ export default function BoardTickets() {
           resolving={resolvingId === resolveTicketId}
           onClose={() => setResolveTicketId(null)}
           onSubmit={(resolution, announce) => resolve(resolveTicketId, resolution, announce)} />
+      )}
+
+      {responseTicketId != null && responseDispatchId != null && (
+        <VendorResponseModal
+          onClose={() => { setResponseTicketId(null); setResponseDispatchId(null); }}
+          onSubmit={(summary) => submitResponse(summary)} />
       )}
 
       {rows.length === 0 && (
@@ -304,7 +344,11 @@ function Section({
   if (tickets.length === 0) return null;
   return (
     <>
-      <h2 className="font-display text-xl text-dusk-500 mt-8 mb-3">{title}</h2>
+      {/* UX-M1 — surface count in header so admin can scan workloads. */}
+      <h2 className="font-display text-xl text-dusk-500 mt-8 mb-3 flex items-baseline gap-2">
+        <span>{title}</span>
+        <span className="text-sm font-normal text-dusk-200">({tickets.length})</span>
+      </h2>
       <div className="space-y-3">
         {tickets.map((tk) => (
           <AdminCard key={tk.id} ticket={tk}
@@ -360,7 +404,7 @@ function AdminCard({
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-display text-lg text-dusk-500">{ticket.title}</span>
-              <Badge tone={PRIORITY_TONE[ticket.priority]}>{tr(ticket.priority)}</Badge>
+              <Badge tone={PRIORITY_TONE[ticket.priority]}>{tr(PRIORITY_PT_LABEL[ticket.priority])}</Badge>
               {isCommunity && <Badge tone="neutral">{tr('comunidade')}</Badge>}
               {isVerified && <Badge tone="sage"><CheckCircle2 className="w-3 h-3" /> {tr('verificado')}</Badge>}
               {hasPlan && <Badge tone="peach"><Bot className="w-3 h-3" /> {tr('plano da IA')}</Badge>}
@@ -507,10 +551,10 @@ function AdminCard({
                         {d.channel === 'email' && <Mail className="w-3 h-3" />}
                         {d.channel === 'manual' && <Phone className="w-3 h-3" />}
                         {' '}
-                        {d.status}
+                        {tr(CHANNEL_LABEL[d.channel] || d.channel)} · {tr(DISPATCH_STATUS_LABEL[d.status] || d.status)}
                       </Badge>
                       {d.outbox_status && d.outbox_status !== d.status && (
-                        <span className="text-[10px] text-dusk-300">{tr('entrega:')} {d.outbox_status}</span>
+                        <span className="text-[10px] text-dusk-300">{tr('entrega:')} {tr(DISPATCH_STATUS_LABEL[d.outbox_status] || d.outbox_status)}</span>
                       )}
                       <span className="text-dusk-300 ml-auto">{formatDateTime(d.created_at)}</span>
                     </div>
@@ -549,6 +593,7 @@ function VendorPickerModal({
   onClose: () => void;
   onSubmit: (opts: { service_contact_id?: number; channel?: 'whatsapp' | 'email' | 'manual'; message?: string }) => void;
 }) {
+  useEscape(onClose);
   const tr = useTicketTranslator();
   const networkFit = ticket.agent_plan?.existing_network_fit || [];
   const preferred = networkFit[0]?.company_name;
@@ -661,6 +706,17 @@ function VendorPickerModal({
   );
 }
 
+// UX-M4 — Escape closes any modal. Bind once on mount.
+function useEscape(onClose: () => void) {
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose();
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+}
+
 function ResolveModal({
   ticket, resolving, onClose, onSubmit,
 }: {
@@ -669,7 +725,11 @@ function ResolveModal({
   onClose: () => void;
   onSubmit: (resolution: string, announce: boolean) => void;
 }) {
+  useEscape(onClose);
   const tr = useTicketTranslator();
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // UX-M5 — auto-focus the textarea so keyboard users land in the input.
+  useEffect(() => { textareaRef.current?.focus(); }, []);
   const [resolution, setResolution] = useState('');
   const [announce, setAnnounce] = useState(ticket.verification_threshold > 0);
 
@@ -688,7 +748,7 @@ function ResolveModal({
 
         <label className="block text-xs text-dusk-300 font-medium mb-3">
           {tr('O que foi feito?')}
-          <textarea className="input mt-1 min-h-[120px]" value={resolution}
+          <textarea ref={textareaRef} className="input mt-1 min-h-[120px]" value={resolution}
                     onChange={(e) => setResolution(e.target.value)} maxLength={2000}
                     placeholder={tr('Ex: Técnico da Otis trocou a roldana do cabo principal. Funcionando normalmente.')} />
         </label>
@@ -711,6 +771,48 @@ function ResolveModal({
                   leftIcon={<Check className="w-4 h-4" />}
                   onClick={() => onSubmit(resolution.trim(), announce)}>
             {tr('Resolver')}
+          </Button>
+        </div>
+      </GlassCard>
+    </div>
+  );
+}
+
+// UX-H1 — replaces the native window.prompt with a styled modal so admins
+// can paste multi-line vendor replies, the UI stays consistent with the rest
+// of the glass aesthetic, and the experience works on mobile where browser-
+// prompt UX is jarring.
+function VendorResponseModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: (summary: string) => void }) {
+  useEscape(onClose);
+  const tr = useTicketTranslator();
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => { textareaRef.current?.focus(); }, []);
+  const [summary, setSummary] = useState('');
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-dusk-500/40 backdrop-blur-sm">
+      <GlassCard className="w-full max-w-lg p-6">
+        <div className="flex items-start justify-between mb-3">
+          <h3 className="font-display text-xl text-dusk-500">{tr('Resposta do fornecedor')}</h3>
+          <button onClick={onClose} className="w-9 h-9 rounded-2xl bg-white/50 hover:bg-white/80 flex items-center justify-center text-dusk-400">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <label className="block text-xs text-dusk-300 font-medium mb-3">
+          {tr('O que o fornecedor respondeu?')}
+          <textarea ref={textareaRef} className="input mt-1 min-h-[120px]" value={summary}
+                    onChange={(e) => setSummary(e.target.value)} maxLength={2000}
+                    placeholder={tr('Ex: Confirmado para amanhã às 10h. Trazem a peça nova.')} />
+        </label>
+
+        <div className="flex gap-2 justify-end">
+          <Button variant="ghost" onClick={onClose}>{tr('Cancelar')}</Button>
+          <Button variant="primary"
+                  disabled={!summary.trim()}
+                  leftIcon={<Check className="w-4 h-4" />}
+                  onClick={() => onSubmit(summary.trim())}>
+            {tr('Registrar')}
           </Button>
         </div>
       </GlassCard>

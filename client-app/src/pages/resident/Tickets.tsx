@@ -81,6 +81,12 @@ export default function Tickets() {
     apiGet<Ticket[]>('/tickets').then(setRows).catch(() => {});
   }, []);
   useEffect(() => { load(); }, [load]);
+  // UX-H3 — match the admin page's 15s polling cadence so residents see
+  // fresh verification counts and status flips without a manual reload.
+  useEffect(() => {
+    const timer = window.setInterval(load, 15_000);
+    return () => window.clearInterval(timer);
+  }, [load]);
 
   useEffect(() => {
     if (openId == null) { setDetail(null); return; }
@@ -98,7 +104,11 @@ export default function Tickets() {
     }
   }
 
-  const community = rows.filter((r) => r.verification_threshold > 0);
+  // UX-M2 — resolved community tickets used to sit under "Aguardando
+  // verificação" with a `resolvido` badge, which read as contradictory.
+  // Split open vs resolved into separate sections.
+  const communityOpen = rows.filter((r) => r.verification_threshold > 0 && r.remediation_status !== 'resolved');
+  const communityResolved = rows.filter((r) => r.verification_threshold > 0 && r.remediation_status === 'resolved');
   const mine = rows.filter((r) => r.reporter_id === user?.id && r.verification_threshold === 0);
 
   return (
@@ -116,11 +126,36 @@ export default function Tickets() {
 
       {showForm && <ReportForm onCreated={() => { setShowForm(false); load(); }} />}
 
-      {community.length > 0 && (
+      {communityOpen.length > 0 && (
         <>
-          <h2 className="font-display text-xl text-dusk-500 mt-8 mb-3">{t('Aguardando verificação')}</h2>
+          <h2 className="font-display text-xl text-dusk-500 mt-8 mb-3 flex items-baseline gap-2">
+            <span>{t('Aguardando verificação')}</span>
+            <span className="text-sm font-normal text-dusk-200">({communityOpen.length})</span>
+          </h2>
           <div className="space-y-3">
-            {community.map((tk) => (
+            {communityOpen.map((tk) => (
+              <TicketCard
+                key={tk.id}
+                ticket={tk}
+                expanded={openId === tk.id}
+                detail={openId === tk.id ? detail : null}
+                onToggle={() => setOpenId((cur) => (cur === tk.id ? null : tk.id))}
+                onVote={(choice) => vote(tk.id, choice)}
+                isOwn={tk.reporter_id === user?.id}
+              />
+            ))}
+          </div>
+        </>
+      )}
+
+      {communityResolved.length > 0 && (
+        <>
+          <h2 className="font-display text-xl text-dusk-500 mt-8 mb-3 flex items-baseline gap-2">
+            <span>{t('Resolvidos pela comunidade')}</span>
+            <span className="text-sm font-normal text-dusk-200">({communityResolved.length})</span>
+          </h2>
+          <div className="space-y-3">
+            {communityResolved.map((tk) => (
               <TicketCard
                 key={tk.id}
                 ticket={tk}

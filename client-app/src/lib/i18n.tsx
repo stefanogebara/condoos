@@ -1714,6 +1714,26 @@ const phrases: Copy[] = [
   c('Full cardio + weights', 'Full cardio + weights', 'Cardio + pesas completos', 'Cardio + musculation complets'),
   c('Rooftop grill station', 'Rooftop grill station', 'Parrilla en azotea', 'Station barbecue sur le toit'),
   c('Lounge, kitchen, seats 40', 'Lounge, kitchen, seats 40', 'Salón, cocina, 40 plazas', 'Salon, cuisine, 40 places'),
+  // Incident Loop UX round 1 — dispatch status + channel labels, modal copy,
+  // section headers. PT canonical strings match the constants in BoardTickets.tsx.
+  c('na fila',      'queued',     'en cola',    'en attente'),
+  c('enviado',      'sent',       'enviado',    'envoyé'),
+  c('falhou',       'failed',     'falló',      'échec'),
+  c('respondeu',    'responded',  'respondió',  'a répondu'),
+  c('cancelado',    'cancelled',  'cancelado',  'annulé'),
+  c('WhatsApp',     'WhatsApp',   'WhatsApp',   'WhatsApp'),
+  c('email',        'email',      'correo',     'email'),
+  c('manual',       'manual',     'manual',     'manuel'),
+  c('Resposta do fornecedor', "Vendor's reply", 'Respuesta del proveedor', 'Réponse du prestataire'),
+  c('O que o fornecedor respondeu?', 'What did the vendor reply?', '¿Qué respondió el proveedor?', "Qu'a répondu le prestataire ?"),
+  c('Ex: Confirmado para amanhã às 10h. Trazem a peça nova.', 'Ex: Confirmed for tomorrow at 10am. Bringing the new part.', 'Ej: Confirmado para mañana a las 10h. Traen la pieza nueva.', 'Ex: Confirmé pour demain 10h. Apportent la nouvelle pièce.'),
+  c('Registrar',    'Record',     'Registrar',  'Enregistrer'),
+  c('Resolvidos pela comunidade', 'Resolved by the community', 'Resueltos por la comunidad', 'Résolus par la communauté'),
+  c('Chamados privados', 'Private tickets', 'Tickets privados', 'Tickets privés'),
+  c('Resolvidos',   'Resolved',   'Resueltos',  'Résolus'),
+  c('baixa',        'low',        'baja',       'basse'),
+  c('alta',         'high',       'alta',       'haute'),
+  c('urgente',      'urgent',     'urgente',    'urgent'),
 ];
 
 function c(pt: string, en: string, es: string, fr: string): Copy {
