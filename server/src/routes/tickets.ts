@@ -6,8 +6,28 @@ import { ok, fail, asyncHandler } from '../lib/respond';
 import { audit } from '../lib/audit';
 import { canAssignTicketToUser } from '../lib/tickets';
 import { runAdminAgent } from '../ai/admin-agent-runner';
+import { notifyUsers } from '../lib/whatsapp';
 
 const router = Router();
+
+// Phase 3 — severity fast-track. When the report combines high/urgent priority
+// with a safety-critical category, override the verification_threshold down to
+// 1 so a single neighbour can confirm a gas leak / fire / elevator entrapment
+// without waiting for the 3-confirms default. Anything in this set also gets
+// the agent fired without further admin confirmation.
+const SAFETY_CRITICAL_CATEGORIES = new Set([
+  'elevator',
+  'fire_safety',
+  'gas',
+  'gas_leak',
+  'water',
+  'water_damage',
+  'security',
+]);
+
+function isFastTrackCategory(category: string, priority: string): boolean {
+  return SAFETY_CRITICAL_CATEGORIES.has(category) && (priority === 'urgent' || priority === 'high');
+}
 
 // Incident Loop Phase 1 — when `verification_threshold > 0` the ticket is
 // "community-visible": every member of the condo can read it and vote
@@ -37,6 +57,16 @@ const dispatchSchema = z.object({
 
 const markRespondedSchema = z.object({
   response_summary: z.string().min(1).max(2_000),
+});
+
+const resolveSchema = z.object({
+  // Short note from the admin describing what was done. We use it as the
+  // body for the auto-generated announcement so the rest of the condo sees
+  // closure on the problem they reported.
+  resolution: z.string().min(1).max(2_000),
+  // Announce the resolution to the whole condo? Default true for community
+  // tickets, false for private ones — the route falls back if absent.
+  announce: z.boolean().optional(),
 });
 
 // Phase 2 — fire-and-forget agent invocation triggered the moment a ticket
@@ -182,10 +212,20 @@ router.post('/', requireAuth, (req: AuthedRequest, res) => {
     if (!ownsUnit) return fail(res, 'forbidden', 403);
   }
 
+  // Phase 3 — severity fast-track. Urgent/high reports about elevator
+  // entrapment, gas/water/fire emergencies, security door — pull the
+  // verification_threshold down to 1 so one neighbour can confirm before
+  // the agent fires. Otherwise: respect the caller's choice, defaulting
+  // to the previous 0 / threshold passed by the client.
+  const fastTrack = isFastTrackCategory(body.category, body.priority);
+  const effectiveThreshold = fastTrack
+    ? Math.max(1, Math.min(body.verification_threshold || 1, 1))
+    : body.verification_threshold;
+
   const result = db.prepare(
     `INSERT INTO tickets (condominium_id, unit_id, reporter_id, title, description, category, priority, verification_threshold)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(condoId, body.unit_id || null, req.user!.id, body.title, body.description, body.category, body.priority, body.verification_threshold);
+  ).run(condoId, body.unit_id || null, req.user!.id, body.title, body.description, body.category, body.priority, effectiveThreshold);
   const id = Number(result.lastInsertRowid);
   audit(req, {
     action: 'ticket.create',
@@ -195,10 +235,37 @@ router.post('/', requireAuth, (req: AuthedRequest, res) => {
     metadata: {
       unit_id: body.unit_id || null,
       priority: body.priority,
-      verification_threshold: body.verification_threshold,
+      verification_threshold: effectiveThreshold,
+      fast_track: fastTrack,
     },
   });
-  return ok(res, { id }, 201);
+
+  // Phase 3 — when a community ticket lands, push a notification to every
+  // other resident in the condo who opted in to WhatsApp. Phase 1+2 left
+  // residents to come find the report on /app/tickets; this closes the
+  // discovery loop. Skipped for private tickets and skipped when the
+  // reporter is alone in the condo. notifyUsers does its own opt-in /
+  // missing-phone filtering and runs the outbox synchronously after queue.
+  if (effectiveThreshold > 0) {
+    const peers = db.prepare(
+      `SELECT DISTINCT uu.user_id
+       FROM user_unit uu
+       JOIN units un ON un.id = uu.unit_id
+       JOIN buildings b ON b.id = un.building_id
+       WHERE b.condominium_id = ? AND uu.status = 'active' AND uu.user_id <> ?`
+    ).all(condoId, req.user!.id) as Array<{ user_id: number }>;
+    const ids = peers.map((p) => p.user_id);
+    if (ids.length > 0) {
+      const msg = fastTrack
+        ? `⚠️ URGENTE — ${body.title}. Confirma se você também notou. (ID #${id})`
+        : `Novo problema reportado por vizinho: ${body.title}. Confirma se você também notou? (ID #${id})`;
+      void notifyUsers(ids, msg).catch((err) => {
+        console.warn(`[tickets:${id}] fanout failed:`, (err as Error)?.message || err);
+      });
+    }
+  }
+
+  return ok(res, { id, fast_track: fastTrack, verification_threshold: effectiveThreshold }, 201);
 });
 
 // Resident (or admin) records a confirm/deny vote on a community-visible
@@ -376,6 +443,80 @@ router.post('/:id/dispatch', requireAuth, requireRole('board_admin'), (req: Auth
     channel,
     outbox_id: outboxId,
   }, 201);
+});
+
+// Phase 3 — admin closes the loop. Marks the ticket as resolved on both
+// status fields, stamps resolved_at, and (by default for community
+// tickets) auto-posts an announcement so every resident in the condo sees
+// the fix landed without having to go check /app/tickets. The announcement
+// reuses the existing announcements table + its WhatsApp fanout, so
+// residents who opted into notifications get a push for the resolution.
+router.post('/:id/resolve', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+  const parsed = resolveSchema.safeParse(req.body);
+  if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
+  const condoId = getActiveCondoId(req);
+  const id = Number(req.params.id);
+  const ticket = getScopedTicket(id, condoId);
+  if (!ticket) return fail(res, 'not_found', 404);
+  if (ticket.status === 'closed' || ticket.remediation_status === 'resolved') {
+    return fail(res, 'already_resolved', 409);
+  }
+
+  const announce = parsed.data.announce ?? (ticket.verification_threshold > 0);
+
+  const tx = db.transaction(() => {
+    db.prepare(
+      `UPDATE tickets
+       SET status = 'resolved',
+           remediation_status = 'resolved',
+           resolved_at = CURRENT_TIMESTAMP,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`
+    ).run(id);
+
+    let announcementId: number | null = null;
+    if (announce) {
+      const announcementTitle = `Resolvido: ${ticket.title}`.slice(0, 200);
+      const announcementBody = parsed.data.resolution.slice(0, 8_000);
+      const result = db.prepare(
+        `INSERT INTO announcements (condominium_id, author_id, title, body, pinned, source)
+         VALUES (?, ?, ?, ?, 0, 'system')`
+      ).run(condoId, req.user!.id, announcementTitle, announcementBody);
+      announcementId = Number(result.lastInsertRowid);
+    }
+    return { announcementId };
+  });
+  const txResult = tx();
+
+  audit(req, {
+    action: 'ticket.resolve',
+    target_type: 'ticket',
+    target_id: id,
+    condominium_id: condoId,
+    metadata: { announced: !!txResult.announcementId, announcement_id: txResult.announcementId },
+  });
+
+  // Fan out to the condo so residents see the closure. Same notification
+  // path as ticket creation — opted-in WhatsApp + skipping users without
+  // phone or opt-in. Best-effort: failures don't roll back the resolve.
+  if (txResult.announcementId) {
+    const peers = db.prepare(
+      `SELECT DISTINCT uu.user_id
+       FROM user_unit uu
+       JOIN units un ON un.id = uu.unit_id
+       JOIN buildings b ON b.id = un.building_id
+       WHERE b.condominium_id = ? AND uu.status = 'active'`
+    ).all(condoId) as Array<{ user_id: number }>;
+    const ids = peers.map((p) => p.user_id);
+    if (ids.length > 0) {
+      const msg = `✅ Resolvido: ${ticket.title}\n\n${parsed.data.resolution.slice(0, 300)}`;
+      void notifyUsers(ids, msg).catch((err) => {
+        console.warn(`[tickets:${id}] resolution fanout failed:`, (err as Error)?.message || err);
+      });
+    }
+  }
+
+  return ok(res, { id, resolved_at: new Date().toISOString(), announcement_id: txResult.announcementId });
 });
 
 // Admin records that the vendor replied — closes the awaiting_vendor loop

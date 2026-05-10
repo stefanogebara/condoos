@@ -4,7 +4,7 @@
 // Phase 2 will auto-fire on threshold; Phase 1 keeps the human in the loop.
 import React, { useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
-import { AlertTriangle, Bot, CheckCircle2, Loader2, Mail, MessageCircle, Phone, Send, ShieldAlert, ThumbsUp, Wrench } from 'lucide-react';
+import { AlertTriangle, Bot, CheckCircle2, Check, Edit3, Loader2, Mail, MessageCircle, Phone, Send, ShieldAlert, ThumbsUp, Wrench, X } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 import GlassCard from '../../components/GlassCard';
 import Button from '../../components/Button';
@@ -48,10 +48,24 @@ interface Dispatch {
 }
 
 interface TicketDetail extends Ticket {
+  description: string;
   blocked_reason: string | null;
   agent_plan: AgentPlan | null;
   verifications: Array<{ id: number; vote: string; comment: string | null; first_name: string; last_name: string; unit_number: string | null }>;
   dispatches: Dispatch[];
+}
+
+interface ServiceContact {
+  id: number;
+  category: string;
+  company_name: string;
+  contact_name: string | null;
+  phone: string | null;
+  whatsapp: string | null;
+  email: string | null;
+  emergency_available: number;
+  preferred: number;
+  service_scope: string | null;
 }
 
 interface AgentPlan {
@@ -81,6 +95,15 @@ export default function BoardTickets() {
   const [runningId, setRunningId] = useState<number | null>(null);
   const [verifyingId, setVerifyingId] = useState<number | null>(null);
   const [dispatchingId, setDispatchingId] = useState<number | null>(null);
+  const [resolvingId, setResolvingId] = useState<number | null>(null);
+  const [pickerTicketId, setPickerTicketId] = useState<number | null>(null);
+  const [resolveTicketId, setResolveTicketId] = useState<number | null>(null);
+  const [vendors, setVendors] = useState<ServiceContact[]>([]);
+
+  useEffect(() => {
+    if (pickerTicketId == null) return;
+    apiGet<ServiceContact[]>('/service-contacts').then(setVendors).catch(() => setVendors([]));
+  }, [pickerTicketId]);
 
   const load = useCallback(() => {
     apiGet<Ticket[]>('/tickets').then(setRows).catch(() => {});
@@ -124,7 +147,7 @@ export default function BoardTickets() {
     } finally { setVerifyingId(null); }
   }
 
-  async function dispatch(id: number, opts?: { channel?: 'whatsapp' | 'email' | 'manual'; message?: string }) {
+  async function dispatch(id: number, opts?: { service_contact_id?: number; channel?: 'whatsapp' | 'email' | 'manual'; message?: string }) {
     setDispatchingId(id);
     try {
       const result = await apiPost<{ vendor: { id: number; company_name: string }; channel: string }>(
@@ -133,6 +156,7 @@ export default function BoardTickets() {
       toast.success(`${t('Acionado:')} ${result.vendor.company_name} (${result.channel})`);
       apiGet<TicketDetail>(`/tickets/${id}`).then(setDetail).catch(() => {});
       load();
+      setPickerTicketId(null);
     } catch (err: any) {
       const code = err?.response?.data?.error;
       if (code === 'no_vendor_available') {
@@ -141,6 +165,21 @@ export default function BoardTickets() {
         toast.error(code || t('Falha ao acionar fornecedor'));
       }
     } finally { setDispatchingId(null); }
+  }
+
+  async function resolve(id: number, resolution: string, announce: boolean) {
+    setResolvingId(id);
+    try {
+      const result = await apiPost<{ id: number; announcement_id: number | null }>(
+        `/tickets/${id}/resolve`, { resolution, announce }
+      );
+      toast.success(result.announcement_id ? t('Resolvido — comunicado publicado') : t('Resolvido'));
+      apiGet<TicketDetail>(`/tickets/${id}`).then(setDetail).catch(() => {});
+      load();
+      setResolveTicketId(null);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || t('Falha ao resolver'));
+    } finally { setResolvingId(null); }
   }
 
   async function markResponded(ticketId: number, dispatchId: number) {
@@ -166,15 +205,35 @@ export default function BoardTickets() {
 
       <Section title="Aguardando verificação" tickets={needsAttention} openId={openId} setOpenId={setOpenId}
                detail={detail} runningId={runningId} verifyingId={verifyingId} dispatchingId={dispatchingId}
-               onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={markResponded} />
+               onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={markResponded}
+               onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} />
 
       <Section title="Verificados — pronto para acionar a IA" tickets={verified} openId={openId} setOpenId={setOpenId}
                detail={detail} runningId={runningId} verifyingId={verifyingId} dispatchingId={dispatchingId}
-               onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={markResponded} />
+               onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={markResponded}
+               onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} />
 
       <Section title="Outros chamados" tickets={others} openId={openId} setOpenId={setOpenId}
                detail={detail} runningId={runningId} verifyingId={verifyingId} dispatchingId={dispatchingId}
-               onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={markResponded} />
+               onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={markResponded}
+               onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} />
+
+      {pickerTicketId != null && detail && (
+        <VendorPickerModal
+          ticket={detail}
+          vendors={vendors}
+          dispatching={dispatchingId === pickerTicketId}
+          onClose={() => setPickerTicketId(null)}
+          onSubmit={(opts) => dispatch(pickerTicketId, opts)} />
+      )}
+
+      {resolveTicketId != null && detail && (
+        <ResolveModal
+          ticket={detail}
+          resolving={resolvingId === resolveTicketId}
+          onClose={() => setResolveTicketId(null)}
+          onSubmit={(resolution, announce) => resolve(resolveTicketId, resolution, announce)} />
+      )}
 
       {rows.length === 0 && (
         <GlassCard className="p-8 text-center">
@@ -191,7 +250,7 @@ export default function BoardTickets() {
 
 function Section({
   title, tickets, openId, setOpenId, detail, runningId, verifyingId, dispatchingId,
-  onRunAgent, onVerify, onDispatch, onMarkResponded,
+  onRunAgent, onVerify, onDispatch, onMarkResponded, onOpenPicker, onOpenResolve,
 }: {
   title: string;
   tickets: Ticket[];
@@ -203,8 +262,10 @@ function Section({
   dispatchingId: number | null;
   onRunAgent: (id: number) => void;
   onVerify: (id: number) => void;
-  onDispatch: (id: number, opts?: { channel?: 'whatsapp' | 'email' | 'manual'; message?: string }) => void;
+  onDispatch: (id: number, opts?: { service_contact_id?: number; channel?: 'whatsapp' | 'email' | 'manual'; message?: string }) => void;
   onMarkResponded: (ticketId: number, dispatchId: number) => void;
+  onOpenPicker: (id: number) => void;
+  onOpenResolve: (id: number) => void;
 }) {
   if (tickets.length === 0) return null;
   return (
@@ -222,7 +283,9 @@ function Section({
                      onRunAgent={() => onRunAgent(tk.id)}
                      onVerify={() => onVerify(tk.id)}
                      onDispatch={(opts) => onDispatch(tk.id, opts)}
-                     onMarkResponded={(dispatchId) => onMarkResponded(tk.id, dispatchId)} />
+                     onMarkResponded={(dispatchId) => onMarkResponded(tk.id, dispatchId)}
+                     onOpenPicker={() => onOpenPicker(tk.id)}
+                     onOpenResolve={() => onOpenResolve(tk.id)} />
         ))}
       </div>
     </>
@@ -231,7 +294,7 @@ function Section({
 
 function AdminCard({
   ticket, expanded, detail, onToggle, running, verifying, dispatching,
-  onRunAgent, onVerify, onDispatch, onMarkResponded,
+  onRunAgent, onVerify, onDispatch, onMarkResponded, onOpenPicker, onOpenResolve,
 }: {
   ticket: Ticket;
   expanded: boolean;
@@ -242,8 +305,10 @@ function AdminCard({
   dispatching: boolean;
   onRunAgent: () => void;
   onVerify: () => void;
-  onDispatch: (opts?: { channel?: 'whatsapp' | 'email' | 'manual'; message?: string }) => void;
+  onDispatch: (opts?: { service_contact_id?: number; channel?: 'whatsapp' | 'email' | 'manual'; message?: string }) => void;
   onMarkResponded: (dispatchId: number) => void;
+  onOpenPicker: () => void;
+  onOpenResolve: () => void;
 }) {
   const isCommunity = ticket.verification_threshold > 0;
   const isVerified = !!ticket.verified_at;
@@ -319,10 +384,27 @@ function AdminCard({
               {hasPlan ? 'Refazer plano IA' : 'Gerar plano IA'}
             </Button>
             {hasPlan && !isBlocked && (
-              <Button size="sm" variant="primary"
-                      leftIcon={dispatching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                      onClick={() => onDispatch()} disabled={dispatching}>
-                Acionar fornecedor
+              <>
+                <Button size="sm" variant="primary"
+                        leftIcon={dispatching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                        onClick={() => onDispatch()} disabled={dispatching}>
+                  Acionar (auto)
+                </Button>
+                <Button size="sm" variant="ghost"
+                        leftIcon={<Edit3 className="w-3.5 h-3.5" />}
+                        onClick={onOpenPicker} disabled={dispatching}>
+                  Escolher fornecedor
+                </Button>
+              </>
+            )}
+            {(ticket.remediation_status === 'awaiting_vendor'
+              || ticket.remediation_status === 'vendor_engaged'
+              || ticket.remediation_status === 'agent_dispatched'
+              || ticket.remediation_status === 'blocked_needs_admin') && (
+              <Button size="sm" variant="ghost"
+                      leftIcon={<Check className="w-3.5 h-3.5" />}
+                      onClick={onOpenResolve}>
+                Marcar resolvido
               </Button>
             )}
           </div>
@@ -420,5 +502,176 @@ function AdminCard({
         </div>
       )}
     </GlassCard>
+  );
+}
+
+function VendorPickerModal({
+  ticket, vendors, dispatching, onClose, onSubmit,
+}: {
+  ticket: TicketDetail;
+  vendors: ServiceContact[];
+  dispatching: boolean;
+  onClose: () => void;
+  onSubmit: (opts: { service_contact_id?: number; channel?: 'whatsapp' | 'email' | 'manual'; message?: string }) => void;
+}) {
+  const networkFit = ticket.agent_plan?.existing_network_fit || [];
+  const preferred = networkFit[0]?.company_name;
+  const sameCategory = vendors.filter((v) => v.category === ticket.category);
+  const otherCategory = vendors.filter((v) => v.category !== ticket.category);
+  const sorted = [...sameCategory, ...otherCategory];
+
+  const initialVendor = sorted.find((v) => v.company_name === preferred)
+    || sorted.find((v) => v.preferred === 1)
+    || sorted[0];
+
+  const [vendorId, setVendorId] = useState<number | null>(initialVendor?.id ?? null);
+  const [channel, setChannel] = useState<'whatsapp' | 'email' | 'manual'>(
+    initialVendor?.whatsapp ? 'whatsapp' : initialVendor?.email ? 'email' : 'manual',
+  );
+  const [message, setMessage] = useState<string>(
+    ticket.agent_plan?.vendor_search_plan?.outreach_message
+      || `Olá, somos do condomínio. Precisamos de ajuda com: ${ticket.title}. Pode nos atender?`,
+  );
+
+  useEffect(() => {
+    const v = sorted.find((x) => x.id === vendorId);
+    if (!v) return;
+    if (v.whatsapp) setChannel('whatsapp');
+    else if (v.email) setChannel('email');
+    else setChannel('manual');
+  }, [vendorId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const v = sorted.find((x) => x.id === vendorId) || null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-dusk-500/40 backdrop-blur-sm">
+      <GlassCard className="w-full max-w-xl p-6 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-start justify-between mb-3">
+          <div>
+            <h3 className="font-display text-xl text-dusk-500">Acionar fornecedor</h3>
+            <p className="text-xs text-dusk-300 mt-1">{ticket.title}</p>
+          </div>
+          <button onClick={onClose} className="w-9 h-9 rounded-2xl bg-white/50 hover:bg-white/80 flex items-center justify-center text-dusk-400">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <label className="block text-xs text-dusk-300 font-medium mb-3">
+          Fornecedor
+          <select className="input mt-1" value={vendorId ?? ''} onChange={(e) => setVendorId(Number(e.target.value))}>
+            {sorted.length === 0 && <option value="">Nenhum cadastrado</option>}
+            {sorted.map((vv) => (
+              <option key={vv.id} value={vv.id}>
+                {vv.preferred === 1 ? '★ ' : ''}{vv.company_name} ({vv.category})
+                {vv.emergency_available === 1 ? ' · 24h' : ''}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        {v && (
+          <div className="text-xs text-dusk-300 mb-3 bg-white/45 border border-white/60 rounded-2xl p-3 space-y-0.5">
+            {v.contact_name && <div><strong className="text-dusk-500">{v.contact_name}</strong></div>}
+            {v.phone && <div>📞 {v.phone}</div>}
+            {v.whatsapp && <div>💬 {v.whatsapp}</div>}
+            {v.email && <div>✉️ {v.email}</div>}
+            {v.service_scope && <div className="text-dusk-400 mt-1">{v.service_scope}</div>}
+          </div>
+        )}
+
+        <fieldset className="mb-3">
+          <legend className="text-xs text-dusk-300 font-medium mb-2">Canal</legend>
+          <div className="flex flex-wrap gap-2">
+            {(['whatsapp', 'email', 'manual'] as const).map((ch) => {
+              const available = ch === 'whatsapp' ? !!v?.whatsapp : ch === 'email' ? !!v?.email : true;
+              return (
+                <label key={ch} className={`px-3 py-2 rounded-2xl border text-xs cursor-pointer ${
+                  channel === ch ? 'bg-sage-200/80 border-sage-300 text-sage-900' : 'bg-white/50 border-white/70 text-dusk-400'
+                } ${!available && ch !== 'manual' ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                  <input type="radio" className="hidden" checked={channel === ch}
+                         disabled={!available && ch !== 'manual'}
+                         onChange={() => setChannel(ch)} />
+                  {ch === 'whatsapp' && <><MessageCircle className="inline w-3 h-3 mr-1" />WhatsApp</>}
+                  {ch === 'email' && <><Mail className="inline w-3 h-3 mr-1" />Email</>}
+                  {ch === 'manual' && <><Phone className="inline w-3 h-3 mr-1" />Manual (telefone)</>}
+                </label>
+              );
+            })}
+          </div>
+        </fieldset>
+
+        <label className="block text-xs text-dusk-300 font-medium mb-3">
+          Mensagem
+          <textarea className="input mt-1 min-h-[140px]" value={message}
+                    onChange={(e) => setMessage(e.target.value)} maxLength={4000} />
+        </label>
+
+        <div className="flex gap-2 justify-end">
+          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+          <Button variant="primary" loading={dispatching}
+                  disabled={!vendorId || !message.trim()}
+                  leftIcon={<Send className="w-4 h-4" />}
+                  onClick={() => onSubmit({ service_contact_id: vendorId ?? undefined, channel, message })}>
+            Enviar
+          </Button>
+        </div>
+      </GlassCard>
+    </div>
+  );
+}
+
+function ResolveModal({
+  ticket, resolving, onClose, onSubmit,
+}: {
+  ticket: TicketDetail;
+  resolving: boolean;
+  onClose: () => void;
+  onSubmit: (resolution: string, announce: boolean) => void;
+}) {
+  const [resolution, setResolution] = useState('');
+  const [announce, setAnnounce] = useState(ticket.verification_threshold > 0);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-dusk-500/40 backdrop-blur-sm">
+      <GlassCard className="w-full max-w-lg p-6">
+        <div className="flex items-start justify-between mb-3">
+          <div>
+            <h3 className="font-display text-xl text-dusk-500">Marcar como resolvido</h3>
+            <p className="text-xs text-dusk-300 mt-1">{ticket.title}</p>
+          </div>
+          <button onClick={onClose} className="w-9 h-9 rounded-2xl bg-white/50 hover:bg-white/80 flex items-center justify-center text-dusk-400">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <label className="block text-xs text-dusk-300 font-medium mb-3">
+          O que foi feito?
+          <textarea className="input mt-1 min-h-[120px]" value={resolution}
+                    onChange={(e) => setResolution(e.target.value)} maxLength={2000}
+                    placeholder="Ex: Técnico da Otis trocou a roldana do cabo principal. Funcionando normalmente." />
+        </label>
+
+        <label className="flex items-start gap-3 rounded-2xl bg-white/45 border border-white/60 p-3 text-sm text-dusk-400 mb-4">
+          <input type="checkbox" className="mt-1" checked={announce}
+                 onChange={(e) => setAnnounce(e.target.checked)} />
+          <span>
+            Publicar comunicado para todos os moradores.
+            <span className="block text-xs text-dusk-300 mt-0.5">
+              Posta em /app/comunicados e dispara WhatsApp para quem aceitou notificações.
+            </span>
+          </span>
+        </label>
+
+        <div className="flex gap-2 justify-end">
+          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+          <Button variant="primary" loading={resolving}
+                  disabled={!resolution.trim()}
+                  leftIcon={<Check className="w-4 h-4" />}
+                  onClick={() => onSubmit(resolution.trim(), announce)}>
+            Resolver
+          </Button>
+        </div>
+      </GlassCard>
+    </div>
   );
 }
