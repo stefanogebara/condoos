@@ -1734,6 +1734,27 @@ const phrases: Copy[] = [
   c('baixa',        'low',        'baja',       'basse'),
   c('alta',         'high',       'alta',       'haute'),
   c('urgente',      'urgent',     'urgente',    'urgent'),
+  // UX round 2 — vendor category labels (replace raw enum render
+  // `general_maintenance`). Keys are PT labels emitted by vendorCategoryLabel.
+  c('Manutenção geral', 'General maintenance', 'Mantenimiento general', 'Maintenance générale'),
+  c('Manutenção',      'Maintenance',         'Mantenimiento',         'Maintenance'),
+  c('Elétrica',         'Electrical',          'Eléctrica',             'Électrique'),
+  c('Hidráulica',       'Plumbing',            'Fontanería',            'Plomberie'),
+  c('Climatização',     'HVAC',                'Climatización',         'Climatisation'),
+  c('Elevador',         'Elevator',            'Ascensor',              'Ascenseur'),
+  c('Limpeza',          'Cleaning',            'Limpieza',              'Nettoyage'),
+  c('Segurança',        'Security',            'Seguridad',             'Sécurité'),
+  c('Segurança / acesso', 'Security / access', 'Seguridad / acceso',    'Sécurité / accès'),
+  c('Áreas comuns',     'Amenities',           'Áreas comunes',         'Espaces communs'),
+  c('Segurança contra incêndio', 'Fire safety', 'Seguridad contra incendios', 'Sécurité incendie'),
+  c('Gás',              'Gas',                 'Gas',                   'Gaz'),
+  c('Gás (vazamento)',  'Gas (leak)',          'Gas (fuga)',            'Gaz (fuite)'),
+  c('Hidráulica (vazamento)', 'Plumbing (leak)', 'Fontanería (fuga)', 'Plomberie (fuite)'),
+  c('Jardinagem',       'Landscaping',         'Jardinería',            'Jardinage'),
+  c('Internet / CCTV',  'Internet / CCTV',     'Internet / CCTV',       'Internet / CCTV'),
+  c('Controle de pragas', 'Pest control',      'Control de plagas',     'Lutte antiparasitaire'),
+  c('Administrativo / jurídico', 'Admin / legal', 'Administrativo / legal', 'Administratif / juridique'),
+  c('Outros',           'Other',               'Otros',                 'Autres'),
 ];
 
 function c(pt: string, en: string, es: string, fr: string): Copy {

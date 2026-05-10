@@ -99,6 +99,65 @@ const PRIORITY_PT_LABEL: Record<Ticket['priority'], string> = {
   low: 'baixa', normal: 'normal', high: 'alta', urgent: 'urgente',
 };
 
+// UX-H-NEW-2 — historical drift: the ticket form uses `maintenance` while
+// service_contacts seeds use `general_maintenance` (and similar variants for
+// HVAC / safety / etc.). Without aliasing, the picker's same-category
+// filter is empty and it falls through to the ★ preferred vendor, which is
+// often the wrong specialty. The map is bidirectional — list each ticket
+// category with the vendor categories that should match it.
+const CATEGORY_ALIASES: Record<string, string[]> = {
+  maintenance:    ['maintenance', 'general_maintenance'],
+  hvac:           ['hvac', 'climatization'],
+  plumbing:       ['plumbing'],
+  electrical:     ['electrical'],
+  elevator:       ['elevator'],
+  security:       ['security', 'security_access'],
+  amenity:        ['amenity', 'amenities'],
+  cleaning:       ['cleaning'],
+  fire_safety:    ['fire_safety', 'safety'],
+  gas:            ['gas', 'gas_leak'],
+  water:          ['water', 'water_damage'],
+};
+
+function categoryMatches(ticketCat: string, vendorCat: string): boolean {
+  if (ticketCat === vendorCat) return true;
+  const aliases = CATEGORY_ALIASES[ticketCat];
+  return !!aliases && aliases.includes(vendorCat);
+}
+
+// Vendor category labels in PT (translated via i18n tuples). Replaces the
+// raw enum render (`general_maintenance`) seen in the picker + dispatch
+// history. Falls back to the raw value if not mapped.
+const VENDOR_CATEGORY_LABEL: Record<string, string> = {
+  general_maintenance: 'Manutenção geral',
+  maintenance:         'Manutenção',
+  electrical:          'Elétrica',
+  plumbing:            'Hidráulica',
+  hvac:                'Climatização',
+  climatization:       'Climatização',
+  elevator:            'Elevador',
+  cleaning:            'Limpeza',
+  security:            'Segurança',
+  security_access:     'Segurança / acesso',
+  amenity:             'Áreas comuns',
+  amenities:           'Áreas comuns',
+  fire_safety:         'Segurança contra incêndio',
+  safety:              'Segurança',
+  gas:                 'Gás',
+  gas_leak:            'Gás (vazamento)',
+  water:               'Hidráulica',
+  water_damage:        'Hidráulica (vazamento)',
+  landscaping:         'Jardinagem',
+  internet_cctv:       'Internet / CCTV',
+  pest_control:        'Controle de pragas',
+  legal_admin:         'Administrativo / jurídico',
+  other:               'Outros',
+};
+
+function vendorCategoryLabel(category: string): string {
+  return VENDOR_CATEGORY_LABEL[category] || category;
+}
+
 const BLOCKED_REASON_LABEL: Record<string, string> = {
   no_vendor_in_category: 'Nenhum fornecedor cadastrado para essa categoria. Adicione um em Operação para a IA acionar.',
   vendor_no_response: 'O fornecedor acionado não respondeu dentro do prazo. Considere acionar outro ou contactar manualmente.',
@@ -395,6 +454,11 @@ function AdminCard({
   const isBlocked = ticket.remediation_status === 'blocked_needs_admin';
   const isAwaitingVendor = ticket.remediation_status === 'awaiting_vendor';
   const vendorEngaged = ticket.remediation_status === 'vendor_engaged';
+  // UX-H-NEW-1 — `hasPlan` stays true after resolve (the agent_plan column
+  // never gets cleared), so the action buttons used to keep rendering on
+  // closed tickets and no `resolvido` badge ever appeared. Treat resolved as
+  // a hard terminal state — no dispatch / re-plan actions, dedicated badge.
+  const isResolved = ticket.remediation_status === 'resolved';
   const progress = Math.min(100, Math.round((ticket.verification_count / Math.max(1, ticket.verification_threshold)) * 100));
 
   return (
@@ -411,9 +475,14 @@ function AdminCard({
               {isAwaitingVendor && <Badge tone="peach"><Send className="w-3 h-3" /> {tr('aguardando fornecedor')}</Badge>}
               {vendorEngaged && <Badge tone="sage"><MessageCircle className="w-3 h-3" /> {tr('fornecedor respondeu')}</Badge>}
               {isBlocked && <Badge tone="dark"><ShieldAlert className="w-3 h-3" /> {tr('precisa do síndico')}</Badge>}
+              {isResolved && <Badge tone="sage"><CheckCircle2 className="w-3 h-3" /> {tr('resolvido')}</Badge>}
             </div>
             <div className="text-xs text-dusk-300 mt-1">
-              {ticket.reporter_first} {ticket.reporter_last}{ticket.unit_number ? ` · ${ticket.unit_number}` : ''} · {formatDateTime(ticket.created_at)}
+              {[
+                `${ticket.reporter_first || ''} ${ticket.reporter_last || ''}`.trim(),
+                ticket.unit_number || null,
+                formatDateTime(ticket.created_at),
+              ].filter(Boolean).join(' · ')}
             </div>
             {isCommunity && (
               <>
@@ -449,44 +518,49 @@ function AdminCard({
             </GlassCard>
           )}
 
-          <div className="flex gap-2 flex-wrap">
-            {!isVerified && (
-              <Button size="sm" variant="ghost"
-                      leftIcon={verifying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ThumbsUp className="w-3.5 h-3.5" />}
-                      onClick={onVerify} disabled={verifying}>
-                {tr('Verificar como síndico')}
-              </Button>
-            )}
-            <Button size="sm" variant={hasPlan ? 'ghost' : 'primary'}
-                    leftIcon={running ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wrench className="w-3.5 h-3.5" />}
-                    onClick={onRunAgent} disabled={running}>
-              {hasPlan ? tr('Refazer plano IA') : tr('Gerar plano IA')}
-            </Button>
-            {hasPlan && !isBlocked && (
-              <>
-                <Button size="sm" variant="primary"
-                        leftIcon={dispatching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                        onClick={() => onDispatch()} disabled={dispatching}>
-                  {tr('Acionar (auto)')}
-                </Button>
+          {/* UX-H-NEW-1 — hide all action buttons on resolved tickets. The
+              card stays expandable so the admin can review the dispatch
+              history + plan, but the actions belong to live tickets only. */}
+          {!isResolved && (
+            <div className="flex gap-2 flex-wrap">
+              {!isVerified && (
                 <Button size="sm" variant="ghost"
-                        leftIcon={<Edit3 className="w-3.5 h-3.5" />}
-                        onClick={onOpenPicker} disabled={dispatching}>
-                  {tr('Escolher fornecedor')}
+                        leftIcon={verifying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ThumbsUp className="w-3.5 h-3.5" />}
+                        onClick={onVerify} disabled={verifying}>
+                  {tr('Verificar como síndico')}
                 </Button>
-              </>
-            )}
-            {(ticket.remediation_status === 'awaiting_vendor'
-              || ticket.remediation_status === 'vendor_engaged'
-              || ticket.remediation_status === 'agent_dispatched'
-              || ticket.remediation_status === 'blocked_needs_admin') && (
-              <Button size="sm" variant="ghost"
-                      leftIcon={<Check className="w-3.5 h-3.5" />}
-                      onClick={onOpenResolve}>
-                {tr('Marcar resolvido')}
+              )}
+              <Button size="sm" variant={hasPlan ? 'ghost' : 'primary'}
+                      leftIcon={running ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wrench className="w-3.5 h-3.5" />}
+                      onClick={onRunAgent} disabled={running}>
+                {hasPlan ? tr('Refazer plano IA') : tr('Gerar plano IA')}
               </Button>
-            )}
-          </div>
+              {hasPlan && !isBlocked && (
+                <>
+                  <Button size="sm" variant="primary"
+                          leftIcon={dispatching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                          onClick={() => onDispatch()} disabled={dispatching}>
+                    {tr('Acionar (auto)')}
+                  </Button>
+                  <Button size="sm" variant="ghost"
+                          leftIcon={<Edit3 className="w-3.5 h-3.5" />}
+                          onClick={onOpenPicker} disabled={dispatching}>
+                    {tr('Escolher fornecedor')}
+                  </Button>
+                </>
+              )}
+              {(ticket.remediation_status === 'awaiting_vendor'
+                || ticket.remediation_status === 'vendor_engaged'
+                || ticket.remediation_status === 'agent_dispatched'
+                || ticket.remediation_status === 'blocked_needs_admin') && (
+                <Button size="sm" variant="ghost"
+                        leftIcon={<Check className="w-3.5 h-3.5" />}
+                        onClick={onOpenResolve}>
+                  {tr('Marcar resolvido')}
+                </Button>
+              )}
+            </div>
+          )}
 
           {detail?.agent_plan && (
             <GlassCard variant="clay-sage" className="p-4">
@@ -507,7 +581,7 @@ function AdminCard({
                   <ul className="space-y-1">
                     {detail.agent_plan.existing_network_fit.slice(0, 3).map((fit, i) => (
                       <li key={i} className="text-xs text-dusk-400">
-                        <strong className="text-dusk-500">{fit.company_name}</strong> ({fit.category}) — {fit.reason}
+                        <strong className="text-dusk-500">{fit.company_name}</strong> ({tr(vendorCategoryLabel(fit.category))}) — {fit.reason}
                       </li>
                     ))}
                   </ul>
@@ -545,7 +619,7 @@ function AdminCard({
                   <li key={d.id} className="rounded-2xl border border-white/60 bg-white/45 p-3 text-xs text-dusk-400">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-semibold text-dusk-500">{d.vendor_name || '—'}</span>
-                      {d.vendor_category && <Badge tone="neutral">{d.vendor_category}</Badge>}
+                      {d.vendor_category && <Badge tone="neutral">{tr(vendorCategoryLabel(d.vendor_category))}</Badge>}
                       <Badge tone={d.status === 'responded' ? 'sage' : d.status === 'failed' ? 'dark' : 'peach'}>
                         {d.channel === 'whatsapp' && <MessageCircle className="w-3 h-3" />}
                         {d.channel === 'email' && <Mail className="w-3 h-3" />}
@@ -597,8 +671,12 @@ function VendorPickerModal({
   const tr = useTicketTranslator();
   const networkFit = ticket.agent_plan?.existing_network_fit || [];
   const preferred = networkFit[0]?.company_name;
-  const sameCategory = vendors.filter((v) => v.category === ticket.category);
-  const otherCategory = vendors.filter((v) => v.category !== ticket.category);
+  // UX-H-NEW-2 — categoryMatches handles the maintenance ↔ general_maintenance
+  // alias (and other historical drift between ticket and vendor enums) so a
+  // `maintenance` ticket actually finds a `general_maintenance` vendor here
+  // instead of falling through to a wrong-specialty ★ preferred.
+  const sameCategory = vendors.filter((v) => categoryMatches(ticket.category, v.category));
+  const otherCategory = vendors.filter((v) => !categoryMatches(ticket.category, v.category));
   const sorted = [...sameCategory, ...otherCategory];
 
   // Pre-select priority: exact name match against the AI's top suggestion >
@@ -648,7 +726,7 @@ function VendorPickerModal({
             {sorted.length === 0 && <option value="">{tr('Nenhum cadastrado')}</option>}
             {sorted.map((vv) => (
               <option key={vv.id} value={vv.id}>
-                {vv.preferred === 1 ? '★ ' : ''}{vv.company_name} ({vv.category})
+                {vv.preferred === 1 ? '★ ' : ''}{vv.company_name} ({tr(vendorCategoryLabel(vv.category))})
                 {vv.emergency_available === 1 ? ' · 24h' : ''}
               </option>
             ))}

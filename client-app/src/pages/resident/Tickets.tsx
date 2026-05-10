@@ -232,7 +232,14 @@ function TicketCard({
               {ticket.remediation_status === 'resolved' && <Badge tone="sage"><CheckCircle2 className="w-3 h-3" /> {t('resolvido')}</Badge>}
             </div>
             <div className="text-xs text-dusk-300 mt-1">
-              {t('Reportado por')} {ticket.reporter_first} {ticket.unit_number ? `· ${t('Apto')} ${ticket.unit_number}` : ''} · {formatDateTime(ticket.created_at)}
+              {/* UX-L-NEW-1 — used to render `Reportado por Maya  · 10/05…`
+                  (double space) when unit_number was null. Build the byline
+                  pieces conditionally and join with a single separator. */}
+              {[
+                `${t('Reportado por')} ${ticket.reporter_first || ''}`.trim(),
+                ticket.unit_number ? `${t('Apto')} ${ticket.unit_number}` : null,
+                formatDateTime(ticket.created_at),
+              ].filter(Boolean).join(' · ')}
             </div>
             <div className="mt-2 flex items-center gap-2 text-xs">
               <span className="text-sage-700 font-semibold">{ticket.verification_count} {t('confirmações')}</span>
