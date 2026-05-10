@@ -187,6 +187,10 @@ function TicketCard({
               <Badge tone={PRIORITY_TONE[ticket.priority]}>{PRIORITY_LABEL[ticket.priority]}</Badge>
               {verified && <Badge tone="sage"><CheckCircle2 className="w-3 h-3" /> verificado</Badge>}
               {ticket.remediation_status === 'agent_dispatched' && <Badge tone="peach">IA acionada</Badge>}
+              {ticket.remediation_status === 'awaiting_vendor' && <Badge tone="peach">aguardando fornecedor</Badge>}
+              {ticket.remediation_status === 'vendor_engaged' && <Badge tone="sage">fornecedor respondeu</Badge>}
+              {ticket.remediation_status === 'blocked_needs_admin' && <Badge tone="dark">síndico vai resolver</Badge>}
+              {ticket.remediation_status === 'resolved' && <Badge tone="sage"><CheckCircle2 className="w-3 h-3" /> resolvido</Badge>}
             </div>
             <div className="text-xs text-dusk-300 mt-1">
               Reportado por {ticket.reporter_first} {ticket.unit_number ? `· Apto ${ticket.unit_number}` : ''} · {formatDateTime(ticket.created_at)}

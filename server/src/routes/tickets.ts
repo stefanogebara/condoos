@@ -29,6 +29,68 @@ const verifyVoteSchema = z.object({
   comment: z.string().max(500).optional(),
 });
 
+const dispatchSchema = z.object({
+  service_contact_id: z.number().int().positive().optional(),
+  channel: z.enum(['whatsapp', 'email', 'manual']).optional(),
+  message: z.string().min(1).max(4_000).optional(),
+});
+
+const markRespondedSchema = z.object({
+  response_summary: z.string().min(1).max(2_000),
+});
+
+// Phase 2 — fire-and-forget agent invocation triggered the moment a ticket
+// flips to remediation_status='verified'. We can't block the verify HTTP
+// response on a 5-15s LLM call, so the agent runs in the background and
+// updates the ticket row when it lands. Failures are logged but never
+// propagate — the admin can always click "Generate plan" manually if the
+// auto-attempt failed.
+function dispatchAgentInBackground(ticketId: number, condoId: number, locale: string | undefined): void {
+  void (async () => {
+    try {
+      const ticket = db.prepare(
+        `SELECT title, description, priority, category FROM tickets WHERE id = ? AND condominium_id = ?`
+      ).get(ticketId, condoId) as { title: string; description: string; priority: string; category: string } | undefined;
+      if (!ticket) return;
+
+      const result = await runAdminAgent({
+        condoId,
+        locale: locale || '',
+        task: `${ticket.title}\n\n${ticket.description}`,
+        mode: ticket.priority === 'urgent' ? 'repair' : 'general',
+      });
+
+      // If the model can't find any matching vendor in the condo's saved
+      // service network, mark the ticket as needing admin attention rather
+      // than leaving it stuck in agent_dispatched. The blocked_reason gives
+      // the UI banner a stable code to render.
+      const networkHits = Array.isArray(result.plan?.existing_network_fit)
+        ? result.plan.existing_network_fit.length
+        : 0;
+      const categoryMatch = db.prepare(
+        `SELECT 1 FROM service_contacts WHERE condominium_id = ? AND active = 1 AND category = ? LIMIT 1`
+      ).get(condoId, ticket.category);
+      const blocked = networkHits === 0 && !categoryMatch;
+
+      db.prepare(
+        `UPDATE tickets
+         SET agent_plan = ?,
+             agent_run_at = CURRENT_TIMESTAMP,
+             remediation_status = CASE
+               WHEN ? = 1 THEN 'blocked_needs_admin'
+               WHEN remediation_status IN ('open','verified') THEN 'agent_dispatched'
+               ELSE remediation_status
+             END,
+             blocked_reason = CASE WHEN ? = 1 THEN 'no_vendor_in_category' ELSE blocked_reason END,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?`
+      ).run(JSON.stringify(result.plan), blocked ? 1 : 0, blocked ? 1 : 0, ticketId);
+    } catch (err) {
+      console.warn(`[tickets:${ticketId}] background agent failed:`, (err as Error)?.message || err);
+    }
+  })();
+}
+
 const ticketUpdateSchema = z.object({
   title: z.string().min(1).max(160).optional(),
   description: z.string().min(1).max(4_000).optional(),
@@ -143,7 +205,9 @@ router.post('/', requireAuth, (req: AuthedRequest, res) => {
 // ticket. Re-voting overwrites the previous vote (UNIQUE constraint on
 // ticket_id + user_id). When confirm_count reaches verification_threshold
 // the ticket flips to remediation_status='verified' and stamps verified_at.
-// Admins implicitly verify with one vote regardless of threshold.
+// Admins implicitly verify with one vote regardless of threshold. On the
+// verification flip we fire the AI agent in the background (Phase 2 —
+// previously this required a manual "Generate plan" click from the admin).
 router.post('/:id/verify', requireAuth, (req: AuthedRequest, res) => {
   const parsed = verifyVoteSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
@@ -153,6 +217,7 @@ router.post('/:id/verify', requireAuth, (req: AuthedRequest, res) => {
   if (!ticket) return fail(res, 'not_found', 404);
   if (ticket.verification_threshold <= 0) return fail(res, 'not_community_ticket', 400);
   if (ticket.remediation_status !== 'open') return fail(res, 'already_resolved', 409);
+  const locale = typeof req.body?.locale === 'string' ? req.body.locale : '';
 
   const { vote, comment } = parsed.data;
   db.prepare(
@@ -203,7 +268,150 @@ router.post('/:id/verify', requireAuth, (req: AuthedRequest, res) => {
     condominium_id: condoId,
     metadata: { vote, confirms, denies, threshold: ticket.verification_threshold, verified, by_admin: isAdmin },
   });
+  // Phase 2 — kick off the AI agent the moment verification lands. The
+  // background helper updates the ticket row when the model returns; we
+  // don't block the HTTP response on the LLM call.
+  if (verified) dispatchAgentInBackground(id, condoId, locale);
   return ok(res, { id, verified, confirms, denies, threshold: ticket.verification_threshold });
+});
+
+// Dispatch the AI-drafted (or admin-edited) outreach message to a vendor.
+// Picks a service_contact from the agent's existing_network_fit suggestions
+// if none is specified, falls back to category match. Queues the message in
+// notification_outbox (whatsapp/email) and records the attempt in
+// ticket_dispatches for audit / response tracking. Channel='manual' lets
+// the admin record an offline contact (phone call, in person) by hand.
+router.post('/:id/dispatch', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+  const parsed = dispatchSchema.safeParse(req.body);
+  if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
+  const condoId = getActiveCondoId(req);
+  const id = Number(req.params.id);
+  const ticket = getScopedTicket(id, condoId);
+  if (!ticket) return fail(res, 'not_found', 404);
+
+  let agentPlan: any = null;
+  if (ticket.agent_plan) {
+    try { agentPlan = JSON.parse(ticket.agent_plan); } catch { /* fall through */ }
+  }
+
+  // Pick vendor: explicit id wins, then top-of-network-fit by company name,
+  // then any active service_contact in the ticket's category.
+  let vendor: any = null;
+  if (parsed.data.service_contact_id) {
+    vendor = db.prepare(
+      `SELECT * FROM service_contacts WHERE id = ? AND condominium_id = ? AND active = 1`
+    ).get(parsed.data.service_contact_id, condoId);
+  } else if (agentPlan?.existing_network_fit?.[0]?.company_name) {
+    vendor = db.prepare(
+      `SELECT * FROM service_contacts WHERE condominium_id = ? AND active = 1 AND company_name = ? LIMIT 1`
+    ).get(condoId, agentPlan.existing_network_fit[0].company_name);
+  }
+  if (!vendor) {
+    vendor = db.prepare(
+      `SELECT * FROM service_contacts WHERE condominium_id = ? AND active = 1 AND category = ?
+       ORDER BY preferred DESC, emergency_available DESC, last_used_at DESC NULLS LAST LIMIT 1`
+    ).get(condoId, ticket.category);
+  }
+  if (!vendor) {
+    // No vendor available — surface the block so the UI can prompt the
+    // admin to add one (or pick manual mode).
+    db.prepare(
+      `UPDATE tickets SET remediation_status='blocked_needs_admin', blocked_reason='no_vendor_in_category', updated_at=CURRENT_TIMESTAMP WHERE id = ?`
+    ).run(id);
+    return fail(res, 'no_vendor_available', 400);
+  }
+
+  // Resolve channel preference: explicit > whatsapp if vendor.whatsapp >
+  // email if vendor.email > manual.
+  const channel = parsed.data.channel
+    || (vendor.whatsapp ? 'whatsapp' : vendor.email ? 'email' : 'manual');
+  const message = (parsed.data.message
+    || agentPlan?.vendor_search_plan?.outreach_message
+    || `Olá ${vendor.contact_name || vendor.company_name}, somos do condomínio. Precisamos de ajuda com: ${ticket.title}. Pode nos atender?`
+  ).slice(0, 4_000);
+
+  // Queue the actual delivery for whatsapp/email channels. Manual rows go
+  // straight to ticket_dispatches as a record-of-action; no outbox row.
+  let outboxId: number | null = null;
+  if (channel === 'whatsapp' && vendor.whatsapp) {
+    const out = db.prepare(
+      `INSERT INTO notification_outbox (channel, provider, phone, body, status, next_attempt_at)
+       VALUES ('whatsapp', ?, ?, ?, 'pending', CURRENT_TIMESTAMP)`
+    ).run(process.env.WHATSAPP_PROVIDER || 'twilio', vendor.whatsapp, message);
+    outboxId = Number(out.lastInsertRowid);
+  } else if (channel === 'email' && vendor.email) {
+    const out = db.prepare(
+      `INSERT INTO notification_outbox (channel, provider, email, body, status, next_attempt_at)
+       VALUES ('email', ?, ?, ?, 'pending', CURRENT_TIMESTAMP)`
+    ).run(process.env.EMAIL_PROVIDER || 'resend', vendor.email, message);
+    outboxId = Number(out.lastInsertRowid);
+  }
+
+  const dispatch = db.prepare(
+    `INSERT INTO ticket_dispatches
+       (ticket_id, service_contact_id, channel, outbox_id, message_body, status, dispatched_by_user_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  ).run(id, vendor.id, channel, outboxId, message, outboxId ? 'queued' : 'sent', req.user!.id);
+
+  db.prepare(
+    `UPDATE tickets
+     SET remediation_status = CASE WHEN remediation_status IN ('blocked_needs_admin','resolved') THEN remediation_status ELSE 'awaiting_vendor' END,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = ?`
+  ).run(id);
+  // Stamp service_contact.last_used_at so the next agent run ranks it
+  // higher in the "recently engaged" tiebreak.
+  db.prepare(`UPDATE service_contacts SET last_used_at = CURRENT_TIMESTAMP WHERE id = ?`).run(vendor.id);
+
+  audit(req, {
+    action: 'ticket.dispatch',
+    target_type: 'ticket_dispatch',
+    target_id: Number(dispatch.lastInsertRowid),
+    condominium_id: condoId,
+    metadata: { ticket_id: id, service_contact_id: vendor.id, channel, outbox_id: outboxId },
+  });
+  return ok(res, {
+    id: Number(dispatch.lastInsertRowid),
+    vendor: { id: vendor.id, company_name: vendor.company_name },
+    channel,
+    outbox_id: outboxId,
+  }, 201);
+});
+
+// Admin records that the vendor replied — closes the awaiting_vendor loop
+// and flips the ticket to vendor_engaged. A short summary captures what
+// the vendor said so the next admin action has context.
+router.post('/:id/dispatches/:dispatchId/responded', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+  const parsed = markRespondedSchema.safeParse(req.body);
+  if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
+  const condoId = getActiveCondoId(req);
+  const id = Number(req.params.id);
+  const dispatchId = Number(req.params.dispatchId);
+  const ticket = getScopedTicket(id, condoId);
+  if (!ticket) return fail(res, 'not_found', 404);
+
+  const updated = db.prepare(
+    `UPDATE ticket_dispatches
+     SET status = 'responded', responded_at = CURRENT_TIMESTAMP, response_summary = ?
+     WHERE id = ? AND ticket_id = ?`
+  ).run(parsed.data.response_summary, dispatchId, id);
+  if (updated.changes === 0) return fail(res, 'dispatch_not_found', 404);
+
+  db.prepare(
+    `UPDATE tickets
+     SET remediation_status = CASE WHEN remediation_status IN ('resolved','blocked_needs_admin') THEN remediation_status ELSE 'vendor_engaged' END,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = ?`
+  ).run(id);
+
+  audit(req, {
+    action: 'ticket.dispatch_responded',
+    target_type: 'ticket_dispatch',
+    target_id: dispatchId,
+    condominium_id: condoId,
+    metadata: { ticket_id: id },
+  });
+  return ok(res, { id: dispatchId, status: 'responded' });
 });
 
 // Admin manually fires the operations AI agent against this ticket. Pulls
@@ -291,12 +499,25 @@ router.get('/:id', requireAuth, (req: AuthedRequest, res) => {
   if (ticket.agent_plan) {
     try { agent_plan = JSON.parse(ticket.agent_plan); } catch { agent_plan = null; }
   }
+  // Vendor outreach trail (Phase 2). Only meaningful for community tickets
+  // but harmless on private ones — empty array.
+  const dispatches = db.prepare(
+    `SELECT d.id, d.channel, d.status, d.message_body, d.created_at, d.responded_at, d.response_summary,
+            sc.company_name AS vendor_name, sc.contact_name AS vendor_contact, sc.category AS vendor_category,
+            o.status AS outbox_status, o.sent_at AS outbox_sent_at, o.last_error AS outbox_error
+     FROM ticket_dispatches d
+     LEFT JOIN service_contacts sc ON sc.id = d.service_contact_id
+     LEFT JOIN notification_outbox o ON o.id = d.outbox_id
+     WHERE d.ticket_id = ?
+     ORDER BY d.created_at DESC`
+  ).all(id);
   return ok(res, {
     ...ticket,
     agent_plan,
     comments,
     attachments,
     verifications,
+    dispatches,
     my_vote: myVoteRow?.vote || null,
   });
 });

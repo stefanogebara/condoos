@@ -374,6 +374,28 @@ export function initSchema() {
     )
   `).run();
   db.prepare(`CREATE INDEX IF NOT EXISTS idx_ticket_verifications_ticket ON ticket_verifications(ticket_id)`).run();
+  // Phase 2 — audit trail of every vendor contact attempt the AI agent or
+  // an admin makes on behalf of a verified ticket. outbox_id ties back to
+  // the actual queued notification (whatsapp/email) so we can follow up on
+  // delivery status; channel='manual' covers offline contacts (phone call,
+  // in-person) that the admin records by hand.
+  db.prepare(`
+    CREATE TABLE IF NOT EXISTS ticket_dispatches (
+      id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+      ticket_id             INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+      service_contact_id    INTEGER REFERENCES service_contacts(id) ON DELETE SET NULL,
+      channel               TEXT NOT NULL CHECK(channel IN ('whatsapp','email','manual')),
+      outbox_id             INTEGER REFERENCES notification_outbox(id) ON DELETE SET NULL,
+      message_body          TEXT NOT NULL,
+      status                TEXT NOT NULL DEFAULT 'queued'
+        CHECK(status IN ('queued','sent','failed','responded','cancelled')),
+      dispatched_by_user_id INTEGER REFERENCES users(id),
+      created_at            TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      responded_at          TEXT,
+      response_summary      TEXT
+    )
+  `).run();
+  db.prepare(`CREATE INDEX IF NOT EXISTS idx_ticket_dispatches_ticket ON ticket_dispatches(ticket_id, created_at)`).run();
 
   // Ensure Pine Ridge has an invite code so the demo condo is joinable via code too.
   const pine = db.prepare(`SELECT id, invite_code FROM condominiums LIMIT 1`).get() as
