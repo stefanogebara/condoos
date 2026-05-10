@@ -343,6 +343,38 @@ export function initSchema() {
 
   migrateLegacyUnits();
 
+  // Incident Loop (Phase 1) — community-verified tickets that auto-route to
+  // the admin AI agent. Additive columns + a verifications table; the base
+  // `tickets` schema is unchanged so existing private tickets keep working.
+  // A ticket is "community-visible" when verification_threshold > 0.
+  addColumnIfMissing('tickets', 'verification_threshold', `INTEGER NOT NULL DEFAULT 0`);
+  addColumnIfMissing('tickets', 'verification_count',     `INTEGER NOT NULL DEFAULT 0`);
+  addColumnIfMissing('tickets', 'denial_count',           `INTEGER NOT NULL DEFAULT 0`);
+  addColumnIfMissing('tickets', 'verified_at',            `TEXT`);
+  addColumnIfMissing('tickets', 'verified_by_user_id',    `INTEGER REFERENCES users(id)`);
+  // remediation_status walks: open → verified → agent_dispatched →
+  // awaiting_vendor → vendor_engaged → blocked_needs_admin → resolved.
+  // The existing `status` column tracks the lifecycle handle that admins
+  // close manually; remediation_status tracks the auto-pipeline state.
+  addColumnIfMissing('tickets', 'remediation_status',     `TEXT NOT NULL DEFAULT 'open'`);
+  addColumnIfMissing('tickets', 'blocked_reason',         `TEXT`);
+  // agent_plan is the most recent JSON response from /api/ai/admin-agent —
+  // stored as text so the admin can review it without re-running the model.
+  addColumnIfMissing('tickets', 'agent_plan',             `TEXT`);
+  addColumnIfMissing('tickets', 'agent_run_at',           `TEXT`);
+  db.prepare(`
+    CREATE TABLE IF NOT EXISTS ticket_verifications (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      ticket_id   INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+      user_id     INTEGER NOT NULL REFERENCES users(id),
+      vote        TEXT NOT NULL CHECK(vote IN ('confirm','deny')),
+      comment     TEXT,
+      created_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(ticket_id, user_id)
+    )
+  `).run();
+  db.prepare(`CREATE INDEX IF NOT EXISTS idx_ticket_verifications_ticket ON ticket_verifications(ticket_id)`).run();
+
   // Ensure Pine Ridge has an invite code so the demo condo is joinable via code too.
   const pine = db.prepare(`SELECT id, invite_code FROM condominiums LIMIT 1`).get() as
     | { id: number; invite_code: string | null }

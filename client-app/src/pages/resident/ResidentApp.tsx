@@ -1,6 +1,6 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { Home, Package, DoorOpen, Waves, Megaphone, Vote, Calendar, Sparkles, Gavel, SlidersHorizontal, Wallet } from 'lucide-react';
+import { Home, Package, DoorOpen, Waves, Megaphone, Vote, Calendar, Sparkles, Gavel, SlidersHorizontal, Wallet, AlertTriangle } from 'lucide-react';
 import Sidebar, { NavItem } from '../../components/Sidebar';
 import Overview from './Overview';
 import Packages from './Packages';
@@ -15,11 +15,13 @@ import Assemblies from './Assemblies';
 import AssemblyDetail from './AssemblyDetail';
 import Settings from './Settings';
 import Transparencia from './Transparencia';
+import Tickets from './Tickets';
 
 const NAV: NavItem[] = [
   { to: '/app',               label: 'Início',        icon: Home },
   { to: '/app/packages',      label: 'Encomendas',    icon: Package },
   { to: '/app/visitors',      label: 'Visitantes',    icon: DoorOpen },
+  { to: '/app/tickets',       label: 'Problemas',     icon: AlertTriangle },
   { to: '/app/amenities',     label: 'Áreas comuns',  icon: Waves },
   { to: '/app/announcements', label: 'Comunicados',   icon: Megaphone },
   { to: '/app/proposals',     label: 'Propostas',     icon: Vote },
@@ -39,6 +41,7 @@ export default function ResidentApp() {
           <Route index               element={<Overview />} />
           <Route path="packages"     element={<Packages />} />
           <Route path="visitors"     element={<Visitors />} />
+          <Route path="tickets"      element={<Tickets />} />
           <Route path="amenities"    element={<Amenities />} />
           <Route path="announcements"element={<Announcements />} />
           <Route path="proposals"    element={<Proposals />} />
