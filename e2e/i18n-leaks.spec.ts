@@ -95,6 +95,12 @@ const PT_MARKERS: RegExp[] = [
   /\bRetirar\b/iu,
   /\bChegou em\b/iu,
   /\bChegou (?:hoje|agora|no)\b/iu,
+  /\bChamados\b/iu,
+  /\bcomunidade\b/iu,
+  /\bnegaram\b/iu,
+  /\bacionar\b/iu,
+  /\bGerar plano\b/iu,
+  /\bProblemas reportados pelos\b/iu,
 ];
 
 // Per-locale exclusion: many words overlap with Spanish (visitantes, moradores, salvar, etc.)
@@ -183,11 +189,43 @@ async function loginAs(page: Page, role: 'admin' | 'resident' | 'porteiro') {
     localStorage.setItem('condoos_token', args.t);
     localStorage.setItem('condoos_user', JSON.stringify(args.u));
   }, { t: token, u: user });
+
+  return { token, user };
+}
+
+async function seedCommunityTicket(page: Page) {
+  const res = await page.request.post(`${apiURL}/auth/login`, {
+    data: { email: 'resident@condoos.dev', password: 'resident123' },
+  });
+  expect(res.ok(), 'resident login for ticket fixture should succeed').toBeTruthy();
+  const body = await res.json();
+  const token = body?.data?.token || body?.token;
+  expect(token, 'resident fixture token returned').toBeTruthy();
+
+  const created = await page.request.post(`${apiURL}/tickets`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: {
+      title: 'Lights in lobby are not working',
+      description: 'since yesterday lights in lobby dont work',
+      category: 'maintenance',
+      priority: 'normal',
+      verification_threshold: 3,
+    },
+  });
+  expect(created.ok(), 'community ticket fixture should be created').toBeTruthy();
 }
 
 async function scan(page: Page, path: string, locale: string) {
   await page.goto(path, { waitUntil: 'domcontentloaded' });
-  // Let MutationObserver translate
+  await page.waitForLoadState('networkidle').catch(() => {});
+  if (path === '/board/tickets') {
+    const ticket = page.getByRole('button', { name: /Lights in lobby are not working/i }).first();
+    if (await ticket.isVisible().catch(() => false)) {
+      await ticket.click();
+      await page.getByText(/Generate AI plan|Generar plan IA|Générer le plan IA|Gerar plano IA/i).first().waitFor({ state: 'visible', timeout: 3000 }).catch(() => {});
+    }
+  }
+  // Let MutationObserver translate any late-rendered text.
   await page.waitForTimeout(800);
   const text = await page.locator('body').innerText();
   const leaks = findLeaks(text, locale);
@@ -281,6 +319,7 @@ test.describe('i18n reverse-leak scan — pt-BR (no EN strings should leak)', ()
   test('admin pages have no EN leaks (pt-BR)', async ({ page }) => {
     await setLocaleAndReload(page, 'pt-BR' as 'en-US');
     await loginAs(page, 'admin');
+    await seedCommunityTicket(page);
     const results = [] as Array<{ path: string; leaks: Leak[] }>;
     for (const path of ADMIN_ROUTES) {
       await page.goto(path, { waitUntil: 'domcontentloaded' });
@@ -324,6 +363,7 @@ for (const locale of ['en-US', 'es-ES', 'fr-FR'] as const) {
     test(`admin pages have no PT leaks (${locale})`, async ({ page }) => {
       await setLocaleAndReload(page, locale);
       await loginAs(page, 'admin');
+      await seedCommunityTicket(page);
       const results = [] as Array<{ path: string; leaks: Leak[] }>;
       for (const path of ADMIN_ROUTES) {
         const r = await scan(page, path, locale);

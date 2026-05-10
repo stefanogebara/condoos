@@ -5,7 +5,7 @@ import { LogOut, Menu, X } from 'lucide-react';
 import Logo from './Logo';
 import Avatar from './Avatar';
 import { useAuth } from '../lib/auth';
-import { SidebarLangSwitcher, t } from '../lib/i18n';
+import { SidebarLangSwitcher, t, useLocale } from '../lib/i18n';
 
 export interface NavItem {
   to: string;
@@ -22,6 +22,8 @@ interface Props {
 
 export default function Sidebar({ items, title, subtitle }: Props) {
   const { user, logout } = useAuth();
+  const { locale } = useLocale();
+  const tr = (key: string) => t(key, locale);
   const [open, setOpen] = useState(false);
   const [isDesktop, setIsDesktop] = useState(() =>
     typeof window !== 'undefined' ? window.matchMedia('(min-width: 1024px)').matches : true,
@@ -53,7 +55,7 @@ export default function Sidebar({ items, title, subtitle }: Props) {
         <button
           onClick={() => setOpen(false)}
           className="lg:hidden w-10 h-10 rounded-2xl bg-white/60 text-dusk-500 flex items-center justify-center hover:bg-white/80 transition"
-          aria-label={t('Fechar menu')}
+          aria-label={tr('Fechar menu')}
         >
           <X className="w-5 h-5" />
         </button>
@@ -67,7 +69,7 @@ export default function Sidebar({ items, title, subtitle }: Props) {
             <div className="text-xs text-dusk-200 truncate">{subtitle || (user?.unit_number ? `Unit ${user.unit_number}` : user?.email)}</div>
           </div>
         </div>
-        <div className="mt-3 chip">{title}</div>
+        <div className="mt-3 chip">{tr(title)}</div>
       </div>
 
       <nav className="flex-1 overflow-y-auto space-y-1 pr-1">
@@ -84,7 +86,7 @@ export default function Sidebar({ items, title, subtitle }: Props) {
             )}
           >
             <it.icon className="w-[18px] h-[18px]" />
-            <span className="flex-1">{it.label}</span>
+            <span className="flex-1">{tr(it.label)}</span>
             {it.badge !== undefined && (
               <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-peach-200 text-peach-500">{it.badge}</span>
             )}
@@ -99,7 +101,7 @@ export default function Sidebar({ items, title, subtitle }: Props) {
           className="flex w-full shrink-0 items-center gap-3 px-3.5 py-2.5 rounded-2xl text-sm font-medium text-dusk-300 hover:bg-white/40 hover:text-dusk-500 transition"
         >
           <LogOut className="w-[18px] h-[18px]" />
-          Sair
+          {tr('Sair')}
         </button>
       </div>
     </>
@@ -113,11 +115,11 @@ export default function Sidebar({ items, title, subtitle }: Props) {
       <header className="lg:hidden sticky top-0 z-20 px-4 py-3 flex items-center justify-between backdrop-blur-xl bg-cream-50/60 border-b border-white/40">
         <Logo size={24} />
         <div className="flex items-center gap-2">
-          <div className="chip !py-1 !px-2.5 text-[11px]">{title}</div>
+          <div className="chip !py-1 !px-2.5 text-[11px]">{tr(title)}</div>
           <button
             onClick={() => setOpen(true)}
             className="w-10 h-10 rounded-2xl bg-white/70 text-dusk-500 flex items-center justify-center shadow-clay-sm hover:bg-white/90 transition"
-            aria-label={t('Abrir menu')}
+            aria-label={tr('Abrir menu')}
           >
             <Menu className="w-5 h-5" />
           </button>
