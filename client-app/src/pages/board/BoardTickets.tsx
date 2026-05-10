@@ -209,7 +209,13 @@ export default function BoardTickets() {
 
   const needsAttention = rows.filter((r) => r.verification_threshold > 0 && r.remediation_status === 'open');
   const verified = rows.filter((r) => r.remediation_status === 'verified' || r.remediation_status === 'agent_dispatched');
-  const others = rows.filter((r) => r.verification_threshold === 0 || ['resolved', 'blocked_needs_admin'].includes(r.remediation_status));
+  // Phase 3 — the previous build forgot to render tickets in awaiting_vendor /
+  // vendor_engaged anywhere, so once an admin dispatched a vendor the ticket
+  // vanished from /board/tickets entirely. Give the in-flight states their
+  // own section so the admin can record the vendor response and resolve.
+  const inProgress = rows.filter((r) => r.remediation_status === 'awaiting_vendor' || r.remediation_status === 'vendor_engaged');
+  const escalated = rows.filter((r) => r.remediation_status === 'blocked_needs_admin');
+  const others = rows.filter((r) => (r.verification_threshold === 0 && r.remediation_status === 'open') || r.remediation_status === 'resolved');
 
   return (
     <>
@@ -221,6 +227,16 @@ export default function BoardTickets() {
                onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} />
 
       <Section title={t('Verificados — pronto para acionar a IA')} tickets={verified} openId={openId} setOpenId={setOpenId}
+               detail={detail} runningId={runningId} verifyingId={verifyingId} dispatchingId={dispatchingId}
+               onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={markResponded}
+               onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} />
+
+      <Section title={t('Em andamento — fornecedor acionado')} tickets={inProgress} openId={openId} setOpenId={setOpenId}
+               detail={detail} runningId={runningId} verifyingId={verifyingId} dispatchingId={dispatchingId}
+               onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={markResponded}
+               onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} />
+
+      <Section title={t('Precisa do síndico')} tickets={escalated} openId={openId} setOpenId={setOpenId}
                detail={detail} runningId={runningId} verifyingId={verifyingId} dispatchingId={dispatchingId}
                onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={markResponded}
                onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} />
@@ -532,7 +548,12 @@ function VendorPickerModal({
   const otherCategory = vendors.filter((v) => v.category !== ticket.category);
   const sorted = [...sameCategory, ...otherCategory];
 
+  // Pre-select priority: exact name match against the AI's top suggestion >
+  // first same-category vendor > any preferred vendor > first row. Previously
+  // the preferred fallback won over same-category, so a `maintenance` ticket
+  // defaulted to the ★ Otis (elevator) instead of the actual matching vendor.
   const initialVendor = sorted.find((v) => v.company_name === preferred)
+    || sameCategory[0]
     || sorted.find((v) => v.preferred === 1)
     || sorted[0];
 
