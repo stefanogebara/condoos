@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './lib/auth';
 import LandingPage from './pages/Landing';
 import LoginPage from './pages/Login';
+import SignupPage from './pages/Signup';
 import DesignSystemPage from './pages/DesignSystem';
 import LogosPage from './pages/Logos';
 import OnboardingHome from './pages/onboarding/Onboarding';
@@ -60,6 +61,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<RootRoute />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/signup" element={<SignupPage />} />
         {exposeInternalPages && <Route path="/design" element={<DesignSystemPage />} />}
         {exposeInternalPages && <Route path="/logos"  element={<LogosPage />} />}
 

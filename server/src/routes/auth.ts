@@ -65,6 +65,13 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
+const registerSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(12).max(120),
+  first_name: z.string().min(1).max(60),
+  last_name: z.string().min(1).max(60),
+});
+
 // Audit H-N1 / M-N1 — `bcrypt.compareSync` was both a timing oracle and a
 // blocking call. The user-not-found branch returned in ~0.22s while the
 // user-found-wrong-password branch took ~0.33s, leaking valid emails. Run
@@ -99,6 +106,31 @@ router.post('/login', authIpRateLimit, skipDemoCredentialLimit, asyncHandler(asy
   const token = signToken(row.id);
   const { password_hash, ...user } = row;
   return ok(res, { token, user });
+}));
+
+router.post('/register', authIpRateLimit, authCredentialRateLimit, asyncHandler(async (req, res) => {
+  const parsed = registerSchema.safeParse(req.body);
+  if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
+
+  const body = parsed.data;
+  const email = body.email.trim().toLowerCase();
+  const existing = db.prepare(`SELECT id FROM users WHERE email = ?`).get(email);
+  if (existing) return fail(res, 'email_taken', 409);
+
+  const pwHash = await bcrypt.hash(body.password, 12);
+  const result = db.prepare(
+    `INSERT INTO users (condominium_id, email, password_hash, first_name, last_name, role, unit_number, avatar_url)
+     VALUES (NULL, ?, ?, ?, ?, 'resident', NULL, NULL)`
+  ).run(email, pwHash, body.first_name.trim(), body.last_name.trim());
+
+  const user = db.prepare(
+    `SELECT id, email, role, condominium_id, first_name, last_name, unit_number, avatar_url
+     FROM users WHERE id = ?`
+  ).get(result.lastInsertRowid) as any;
+
+  claimPendingInvitesForUser(user);
+  const token = signToken(user.id);
+  return ok(res, { token, user }, 201);
 }));
 
 router.get('/me', requireAuth, (req: AuthedRequest, res) => {

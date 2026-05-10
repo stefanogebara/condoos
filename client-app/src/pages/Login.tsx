@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { GoogleOAuthProvider, GoogleLogin } from '@react-oauth/google';
 import toast from 'react-hot-toast';
-import { Building2, ArrowRight, Shield, User, Plus, LogIn, Sparkles, Loader2 } from 'lucide-react';
+import { Building2, ArrowRight, Shield, User, Plus, LogIn, Sparkles, Loader2, KeyRound } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { apiGet } from '../lib/api';
 import { track } from '../lib/analytics';
@@ -165,6 +165,9 @@ export default function Login() {
   }
 
   const intentBanner = intent ? intentCopy[intent] : null;
+  const signupJoinHref = inviteCode
+    ? `/signup?intent=join&code=${encodeURIComponent(inviteCode)}`
+    : '/signup?intent=join';
 
   const form = (
     <div className="relative min-h-screen grid lg:grid-cols-2">
@@ -288,6 +291,36 @@ export default function Login() {
               Entrar
             </Button>
           </form>
+
+          <div className="mt-6 rounded-[2rem] border border-white/70 bg-white/45 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.65)]">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-dusk-200 mb-3">Novo no CondoOS?</p>
+            <div className="grid sm:grid-cols-2 gap-2">
+              <Link
+                to={signupJoinHref}
+                className="flex items-center gap-3 rounded-2xl bg-white/65 border border-white/70 p-3 text-left hover:bg-white/85 focus:outline-none focus:ring-2 focus:ring-dusk-300"
+              >
+                <span className="w-10 h-10 rounded-xl bg-peach-100 text-peach-500 flex items-center justify-center shrink-0">
+                  <KeyRound className="w-5 h-5" />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold text-dusk-500">Criar conta com código</span>
+                  <span className="block text-xs text-dusk-300">Entre no prédio do administrador.</span>
+                </span>
+              </Link>
+              <Link
+                to="/signup?intent=create"
+                className="flex items-center gap-3 rounded-2xl bg-white/65 border border-white/70 p-3 text-left hover:bg-white/85 focus:outline-none focus:ring-2 focus:ring-dusk-300"
+              >
+                <span className="w-10 h-10 rounded-xl bg-sage-200 text-sage-700 flex items-center justify-center shrink-0">
+                  <Plus className="w-5 h-5" />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold text-dusk-500">Criar um prédio</span>
+                  <span className="block text-xs text-dusk-300">Comece como administrador.</span>
+                </span>
+              </Link>
+            </div>
+          </div>
 
           <p className="mt-8 text-xs text-dusk-200 flex items-center gap-2">
             <Building2 className="w-3.5 h-3.5" />

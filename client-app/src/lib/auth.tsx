@@ -35,7 +35,7 @@ export interface User {
   email: string;
   first_name: string;
   last_name: string;
-  role: 'resident' | 'board_admin';
+  role: 'resident' | 'board_admin' | 'concierge';
   condominium_id: number | null;
   unit_number: string | null;
   avatar_url: string | null;
@@ -47,6 +47,7 @@ interface AuthCtx {
   membershipStatus: 'unknown' | 'checking' | 'active' | 'none';
   hasActiveMembership: boolean | null;
   login: (email: string, password: string) => Promise<User>;
+  register: (input: { email: string; password: string; first_name: string; last_name: string }) => Promise<User>;
   loginWithGoogle: (credential: string) => Promise<User>;
   logout: () => void;
 }
@@ -54,6 +55,7 @@ interface AuthCtx {
 const Ctx = createContext<AuthCtx>({
   user: null, loading: true, membershipStatus: 'unknown', hasActiveMembership: null,
   login: async () => { throw new Error('not ready'); },
+  register: async () => { throw new Error('not ready'); },
   loginWithGoogle: async () => { throw new Error('not ready'); },
   logout: () => {},
 });
@@ -126,6 +128,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return completeLogin(data, 'password');
   };
 
+  const register = async (input: { email: string; password: string; first_name: string; last_name: string }): Promise<User> => {
+    const data = await apiPost<{ token: string; user: User }>('/auth/register', input);
+    return completeLogin(data, 'password');
+  };
+
   const loginWithGoogle = async (credential: string): Promise<User> => {
     const data = await apiPost<{ token: string; user: User }>('/auth/google', { credential });
     return completeLogin(data, 'google');
@@ -147,7 +154,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       : null;
 
   return (
-    <Ctx.Provider value={{ user, loading, membershipStatus, hasActiveMembership, login, loginWithGoogle, logout }}>
+    <Ctx.Provider value={{ user, loading, membershipStatus, hasActiveMembership, login, register, loginWithGoogle, logout }}>
       {children}
     </Ctx.Provider>
   );
