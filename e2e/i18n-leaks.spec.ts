@@ -205,6 +205,7 @@ const ADMIN_ROUTES = [
   '/board/visitors',
   '/board/packages',
   '/board/amenities',
+  '/board/tickets',
 ];
 const RESIDENT_ROUTES = [
   '/app',
@@ -212,6 +213,7 @@ const RESIDENT_ROUTES = [
   '/app/amenities',
   '/app/proposals',
   '/app/announcements',
+  '/app/tickets',
   '/app/transparencia',
   '/app/suggest',
   '/app/settings',

@@ -1,6 +1,6 @@
 // Tickets module: full CRUD, comments, attachments, status lifecycle,
 // role-based access control, and tenant scoping.
-import { expect, test, type APIRequestContext } from '@playwright/test';
+import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 
 const apiURL = process.env.E2E_API_URL
   || (process.env.E2E_BASE_URL ? `${process.env.E2E_BASE_URL.replace(/\/$/, '')}/api` : 'http://127.0.0.1:4316/api');
@@ -16,6 +16,13 @@ async function loginApi(request: APIRequestContext, email: string, password: str
   const session = (await r.json()).data as Session;
   sessionCache.set(email, session);
   return session;
+}
+
+async function installSession(page: Page, session: Session) {
+  await page.addInitScript((args: { token: string; user: unknown }) => {
+    localStorage.setItem('condoos_token', args.token);
+    localStorage.setItem('condoos_user', JSON.stringify(args.user));
+  }, { token: session.token, user: session.user });
 }
 
 // ---------------------------------------------------------------------------
@@ -183,6 +190,35 @@ test('Tickets: resident only sees own tickets; admin sees all', async ({ request
   const resIds = resList.map((t: any) => t.id);
   expect(resIds).toContain(resTicketId);
   expect(resIds).not.toContain(adminTicketId);
+});
+
+test('Tickets: resident community report appears on admin ticket page', async ({ request, page }) => {
+  const admin = await loginApi(request, 'admin@condoos.dev', 'admin123');
+  const resident = await loginApi(request, 'resident@condoos.dev', 'resident123');
+  const resH = { Authorization: `Bearer ${resident.token}`, 'Content-Type': 'application/json' };
+  const admH = { Authorization: `Bearer ${admin.token}`, 'Content-Type': 'application/json' };
+  const title = `E2E Community Visibility ${Date.now()}`;
+
+  const createRes = await request.post(`${apiURL}/tickets`, {
+    headers: resH,
+    data: {
+      title,
+      description: 'Community-visible issue that should land on the admin board.',
+      category: 'maintenance',
+      priority: 'normal',
+      verification_threshold: 3,
+    },
+  });
+  expect(createRes.status()).toBe(201);
+  const ticketId: number = (await createRes.json()).data.id;
+
+  const adminList = (await (await request.get(`${apiURL}/tickets`, { headers: admH })).json()).data as any[];
+  expect(adminList.some((ticket: any) => ticket.id === ticketId && ticket.verification_threshold === 3)).toBe(true);
+
+  await installSession(page, admin);
+  await page.goto('/board/tickets', { waitUntil: 'domcontentloaded' });
+  await expect(page.getByText(title)).toBeVisible();
+  await expect(page.getByText(/Aguardando verificação|Awaiting verification|Esperando verificación/i)).toBeVisible();
 });
 
 // ---------------------------------------------------------------------------

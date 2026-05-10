@@ -66,6 +66,10 @@ const PRIORITY_LABEL: Record<Ticket['priority'], string> = {
   low: 'baixa', normal: 'normal', high: 'alta', urgent: 'urgente',
 };
 
+function priorityLabel(priority: Ticket['priority']) {
+  return t(PRIORITY_LABEL[priority]);
+}
+
 export default function Tickets() {
   const { user } = useAuth();
   const [rows, setRows] = useState<Ticket[]>([]);
@@ -100,12 +104,12 @@ export default function Tickets() {
   return (
     <>
       <PageHeader
-        title="Problemas no prédio"
-        subtitle="Reporte uma falha, ajude a verificar relatos de vizinhos ou acompanhe o seu chamado."
+        title={t('Problemas no prédio')}
+        subtitle={t('Reporte uma falha, ajude a verificar relatos de vizinhos ou acompanhe o seu chamado.')}
         actions={
           <Button onClick={() => setShowForm((x) => !x)} variant={showForm ? 'ghost' : 'primary'}
                   leftIcon={showForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}>
-            {showForm ? 'Cancelar' : 'Reportar problema'}
+            {showForm ? t('Cancelar') : t('Reportar problema')}
           </Button>
         }
       />
@@ -114,7 +118,7 @@ export default function Tickets() {
 
       {community.length > 0 && (
         <>
-          <h2 className="font-display text-xl text-dusk-500 mt-8 mb-3">Aguardando verificação</h2>
+          <h2 className="font-display text-xl text-dusk-500 mt-8 mb-3">{t('Aguardando verificação')}</h2>
           <div className="space-y-3">
             {community.map((tk) => (
               <TicketCard
@@ -133,7 +137,7 @@ export default function Tickets() {
 
       {mine.length > 0 && (
         <>
-          <h2 className="font-display text-xl text-dusk-500 mt-8 mb-3">Meus chamados privados</h2>
+          <h2 className="font-display text-xl text-dusk-500 mt-8 mb-3">{t('Meus chamados privados')}</h2>
           <div className="space-y-3">
             {mine.map((tk) => (
               <GlassCard key={tk.id} className="p-4">
@@ -142,7 +146,7 @@ export default function Tickets() {
                     <div className="font-semibold text-dusk-500">{tk.title}</div>
                     <div className="text-xs text-dusk-300 mt-1">{tk.category} · {formatDateTime(tk.created_at)}</div>
                   </div>
-                  <Badge tone={PRIORITY_TONE[tk.priority]}>{PRIORITY_LABEL[tk.priority]}</Badge>
+                  <Badge tone={PRIORITY_TONE[tk.priority]}>{priorityLabel(tk.priority)}</Badge>
                 </div>
               </GlassCard>
             ))}
@@ -153,9 +157,9 @@ export default function Tickets() {
       {rows.length === 0 && !showForm && (
         <GlassCard className="p-8 text-center mt-6">
           <AlertTriangle className="w-10 h-10 mx-auto text-dusk-200 mb-3" />
-          <h3 className="font-display text-lg text-dusk-500">Nenhum problema reportado</h3>
+          <h3 className="font-display text-lg text-dusk-500">{t('Nenhum problema reportado')}</h3>
           <p className="text-sm text-dusk-300 mt-2 max-w-md mx-auto">
-            Se algo no prédio quebrar, reporte aqui. Os vizinhos confirmam e o síndico aciona a manutenção certa.
+            {t('Se algo no prédio quebrar, reporte aqui. Os vizinhos confirmam e o síndico aciona a manutenção certa.')}
           </p>
         </GlassCard>
       )}
@@ -184,23 +188,23 @@ function TicketCard({
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-semibold text-dusk-500">{ticket.title}</span>
-              <Badge tone={PRIORITY_TONE[ticket.priority]}>{PRIORITY_LABEL[ticket.priority]}</Badge>
-              {verified && <Badge tone="sage"><CheckCircle2 className="w-3 h-3" /> verificado</Badge>}
-              {ticket.remediation_status === 'agent_dispatched' && <Badge tone="peach">IA acionada</Badge>}
-              {ticket.remediation_status === 'awaiting_vendor' && <Badge tone="peach">aguardando fornecedor</Badge>}
-              {ticket.remediation_status === 'vendor_engaged' && <Badge tone="sage">fornecedor respondeu</Badge>}
-              {ticket.remediation_status === 'blocked_needs_admin' && <Badge tone="dark">síndico vai resolver</Badge>}
-              {ticket.remediation_status === 'resolved' && <Badge tone="sage"><CheckCircle2 className="w-3 h-3" /> resolvido</Badge>}
+              <Badge tone={PRIORITY_TONE[ticket.priority]}>{priorityLabel(ticket.priority)}</Badge>
+              {verified && <Badge tone="sage"><CheckCircle2 className="w-3 h-3" /> {t('verificado')}</Badge>}
+              {ticket.remediation_status === 'agent_dispatched' && <Badge tone="peach">{t('IA acionada')}</Badge>}
+              {ticket.remediation_status === 'awaiting_vendor' && <Badge tone="peach">{t('aguardando fornecedor')}</Badge>}
+              {ticket.remediation_status === 'vendor_engaged' && <Badge tone="sage">{t('fornecedor respondeu')}</Badge>}
+              {ticket.remediation_status === 'blocked_needs_admin' && <Badge tone="dark">{t('síndico vai resolver')}</Badge>}
+              {ticket.remediation_status === 'resolved' && <Badge tone="sage"><CheckCircle2 className="w-3 h-3" /> {t('resolvido')}</Badge>}
             </div>
             <div className="text-xs text-dusk-300 mt-1">
-              Reportado por {ticket.reporter_first} {ticket.unit_number ? `· Apto ${ticket.unit_number}` : ''} · {formatDateTime(ticket.created_at)}
+              {t('Reportado por')} {ticket.reporter_first} {ticket.unit_number ? `· ${t('Apto')} ${ticket.unit_number}` : ''} · {formatDateTime(ticket.created_at)}
             </div>
             <div className="mt-2 flex items-center gap-2 text-xs">
-              <span className="text-sage-700 font-semibold">{ticket.verification_count} confirmações</span>
+              <span className="text-sage-700 font-semibold">{ticket.verification_count} {t('confirmações')}</span>
               <span className="text-dusk-200">·</span>
-              <span className="text-peach-500 font-semibold">{ticket.denial_count} negaram</span>
+              <span className="text-peach-500 font-semibold">{ticket.denial_count} {t('negaram')}</span>
               <span className="text-dusk-200">·</span>
-              <span className="text-dusk-300">meta: {ticket.verification_threshold}</span>
+              <span className="text-dusk-300">{t('meta:')} {ticket.verification_threshold}</span>
             </div>
             <div className="mt-1.5 h-1.5 rounded-full bg-white/40 overflow-hidden">
               <div className={`h-full ${verified ? 'bg-sage-500' : 'bg-sage-400'}`} style={{ width: `${progress}%` }} />
@@ -219,24 +223,24 @@ function TicketCard({
                       variant={myVote === 'confirm' ? 'primary' : 'ghost'}
                       leftIcon={<ThumbsUp className="w-3.5 h-3.5" />}
                       onClick={() => onVote('confirm')}>
-                Confirmo
+                {t('Confirmo')}
               </Button>
               <Button size="sm"
                       variant={myVote === 'deny' ? 'primary' : 'ghost'}
                       leftIcon={<ThumbsDown className="w-3.5 h-3.5" />}
                       onClick={() => onVote('deny')}>
-                Não confirmo
+                {t('Não confirmo')}
               </Button>
             </div>
           )}
 
           {isOwn && (
-            <div className="text-xs text-dusk-200">Você reportou este problema; aguardando vizinhos verificarem.</div>
+            <div className="text-xs text-dusk-200">{t('Você reportou este problema; aguardando vizinhos verificarem.')}</div>
           )}
 
           {detail && detail.verifications.length > 0 && (
             <div>
-              <div className="text-xs uppercase tracking-wider text-dusk-200 mb-2">Votos</div>
+              <div className="text-xs uppercase tracking-wider text-dusk-200 mb-2">{t('Votos')}</div>
               <ul className="space-y-1">
                 {detail.verifications.map((v) => (
                   <li key={v.id} className="text-xs text-dusk-300 flex items-center gap-2">
@@ -289,34 +293,34 @@ function ReportForm({ onCreated }: { onCreated: () => void }) {
 
   return (
     <GlassCard className="p-6 mb-2 animate-fade-up">
-      <h3 className="font-display text-xl text-dusk-500 tracking-tight">Novo problema</h3>
+      <h3 className="font-display text-xl text-dusk-500 tracking-tight">{t('Novo problema')}</h3>
       <p className="text-sm text-dusk-300 mt-1">
-        Descreva o que quebrou ou está com defeito. Os vizinhos podem confirmar e o síndico acompanha pela operação.
+        {t('Descreva o que quebrou ou está com defeito. Os vizinhos podem confirmar e o síndico acompanha pela operação.')}
       </p>
       <form onSubmit={submit} className="space-y-3 mt-4">
-        <input className="input" placeholder="Título (ex: Elevador A parado no 12)"
+        <input className="input" placeholder={t('Título (ex: Elevador A parado no 12)')}
                value={form.title} maxLength={140}
                onChange={(e) => setForm({ ...form, title: e.target.value })} required />
         <textarea className="input min-h-[100px]"
-                  placeholder="O que aconteceu, onde, quando você notou."
+                  placeholder={t('O que aconteceu, onde, quando você notou.')}
                   value={form.description}
                   onChange={(e) => setForm({ ...form, description: e.target.value })} required />
         <div className="grid md:grid-cols-2 gap-3">
           <label className="block text-xs text-dusk-300 font-medium">
-            Categoria
+            {t('Categoria')}
             <select className="input mt-1" value={form.category}
                     onChange={(e) => setForm({ ...form, category: e.target.value })}>
-              {CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+              {CATEGORIES.map((c) => <option key={c.value} value={c.value}>{t(c.label)}</option>)}
             </select>
           </label>
           <label className="block text-xs text-dusk-300 font-medium">
-            Prioridade
+            {t('Prioridade')}
             <select className="input mt-1" value={form.priority}
                     onChange={(e) => setForm({ ...form, priority: e.target.value as Ticket['priority'] })}>
-              <option value="low">Baixa</option>
-              <option value="normal">Normal</option>
-              <option value="high">Alta</option>
-              <option value="urgent">Urgente</option>
+              <option value="low">{t('Baixa')}</option>
+              <option value="normal">{t('Normal')}</option>
+              <option value="high">{t('Alta')}</option>
+              <option value="urgent">{t('Urgente')}</option>
             </select>
           </label>
         </div>
@@ -324,16 +328,16 @@ function ReportForm({ onCreated }: { onCreated: () => void }) {
           <input type="checkbox" checked={form.community} className="mt-1"
                  onChange={(e) => setForm({ ...form, community: e.target.checked })} />
           <span>
-            Vísivel para os vizinhos (eles confirmam o problema).
+            {t('Visível para os vizinhos (eles confirmam o problema).')}
             <span className="block text-xs text-dusk-300 mt-0.5">
-              Desmarque para um chamado privado direto ao síndico.
+              {t('Desmarque para um chamado privado direto ao síndico.')}
             </span>
           </span>
         </label>
         <div className="flex justify-end gap-2 pt-1">
           <Button type="submit" variant="primary" loading={saving}
                   disabled={!form.title.trim() || !form.description.trim()}>
-            Reportar problema
+            {t('Reportar problema')}
           </Button>
         </div>
       </form>

@@ -2,7 +2,7 @@
 // Lists every ticket in the condo, surfaces verification progress, and lets
 // the admin manually fire the AI operations agent against a verified report.
 // Phase 2 will auto-fire on threshold; Phase 1 keeps the human in the loop.
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { AlertTriangle, Bot, CheckCircle2, Check, Edit3, Loader2, Mail, MessageCircle, Phone, Send, ShieldAlert, ThumbsUp, Wrench, X } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
@@ -99,16 +99,28 @@ export default function BoardTickets() {
   const [pickerTicketId, setPickerTicketId] = useState<number | null>(null);
   const [resolveTicketId, setResolveTicketId] = useState<number | null>(null);
   const [vendors, setVendors] = useState<ServiceContact[]>([]);
+  const seenTicketIds = useRef<Set<number> | null>(null);
 
   useEffect(() => {
     if (pickerTicketId == null) return;
     apiGet<ServiceContact[]>('/service-contacts').then(setVendors).catch(() => setVendors([]));
   }, [pickerTicketId]);
 
-  const load = useCallback(() => {
-    apiGet<Ticket[]>('/tickets').then(setRows).catch(() => {});
+  const load = useCallback((notify = false) => {
+    apiGet<Ticket[]>('/tickets').then((next) => {
+      if (notify && seenTicketIds.current) {
+        const fresh = next.filter((ticket) => !seenTicketIds.current!.has(ticket.id));
+        if (fresh.length > 0) toast.success(t('Novo problema recebido'));
+      }
+      seenTicketIds.current = new Set(next.map((ticket) => ticket.id));
+      setRows(next);
+    }).catch(() => {});
   }, []);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const timer = window.setInterval(() => load(true), 15_000);
+    return () => window.clearInterval(timer);
+  }, [load]);
 
   useEffect(() => {
     if (openId == null) { setDetail(null); return; }
@@ -201,19 +213,19 @@ export default function BoardTickets() {
 
   return (
     <>
-      <PageHeader title="Chamados" subtitle="Problemas reportados pelos moradores, verificações da comunidade, e plano de manutenção sugerido pela IA." />
+      <PageHeader title={t('Chamados')} subtitle={t('Problemas reportados pelos moradores, verificações da comunidade, e plano de manutenção sugerido pela IA.')} />
 
-      <Section title="Aguardando verificação" tickets={needsAttention} openId={openId} setOpenId={setOpenId}
+      <Section title={t('Aguardando verificação')} tickets={needsAttention} openId={openId} setOpenId={setOpenId}
                detail={detail} runningId={runningId} verifyingId={verifyingId} dispatchingId={dispatchingId}
                onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={markResponded}
                onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} />
 
-      <Section title="Verificados — pronto para acionar a IA" tickets={verified} openId={openId} setOpenId={setOpenId}
+      <Section title={t('Verificados — pronto para acionar a IA')} tickets={verified} openId={openId} setOpenId={setOpenId}
                detail={detail} runningId={runningId} verifyingId={verifyingId} dispatchingId={dispatchingId}
                onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={markResponded}
                onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} />
 
-      <Section title="Outros chamados" tickets={others} openId={openId} setOpenId={setOpenId}
+      <Section title={t('Outros chamados')} tickets={others} openId={openId} setOpenId={setOpenId}
                detail={detail} runningId={runningId} verifyingId={verifyingId} dispatchingId={dispatchingId}
                onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={markResponded}
                onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} />
@@ -238,9 +250,9 @@ export default function BoardTickets() {
       {rows.length === 0 && (
         <GlassCard className="p-8 text-center">
           <AlertTriangle className="w-10 h-10 mx-auto text-dusk-200 mb-3" />
-          <h3 className="font-display text-lg text-dusk-500">Nenhum chamado aberto</h3>
+          <h3 className="font-display text-lg text-dusk-500">{t('Nenhum chamado aberto')}</h3>
           <p className="text-sm text-dusk-300 mt-2 max-w-md mx-auto">
-            Quando um morador reportar um problema, ele aparece aqui com a verificação dos vizinhos e um plano da IA.
+            {t('Quando um morador reportar um problema, ele aparece aqui com a verificação dos vizinhos e um plano da IA.')}
           </p>
         </GlassCard>
       )}
@@ -325,13 +337,13 @@ function AdminCard({
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-display text-lg text-dusk-500">{ticket.title}</span>
-              <Badge tone={PRIORITY_TONE[ticket.priority]}>{ticket.priority}</Badge>
-              {isCommunity && <Badge tone="neutral">comunidade</Badge>}
-              {isVerified && <Badge tone="sage"><CheckCircle2 className="w-3 h-3" /> verificado</Badge>}
-              {hasPlan && <Badge tone="peach"><Bot className="w-3 h-3" /> plano da IA</Badge>}
-              {isAwaitingVendor && <Badge tone="peach"><Send className="w-3 h-3" /> aguardando fornecedor</Badge>}
-              {vendorEngaged && <Badge tone="sage"><MessageCircle className="w-3 h-3" /> fornecedor respondeu</Badge>}
-              {isBlocked && <Badge tone="dark"><ShieldAlert className="w-3 h-3" /> precisa do síndico</Badge>}
+              <Badge tone={PRIORITY_TONE[ticket.priority]}>{t(ticket.priority)}</Badge>
+              {isCommunity && <Badge tone="neutral">{t('comunidade')}</Badge>}
+              {isVerified && <Badge tone="sage"><CheckCircle2 className="w-3 h-3" /> {t('verificado')}</Badge>}
+              {hasPlan && <Badge tone="peach"><Bot className="w-3 h-3" /> {t('plano da IA')}</Badge>}
+              {isAwaitingVendor && <Badge tone="peach"><Send className="w-3 h-3" /> {t('aguardando fornecedor')}</Badge>}
+              {vendorEngaged && <Badge tone="sage"><MessageCircle className="w-3 h-3" /> {t('fornecedor respondeu')}</Badge>}
+              {isBlocked && <Badge tone="dark"><ShieldAlert className="w-3 h-3" /> {t('precisa do síndico')}</Badge>}
             </div>
             <div className="text-xs text-dusk-300 mt-1">
               {ticket.reporter_first} {ticket.reporter_last}{ticket.unit_number ? ` · ${ticket.unit_number}` : ''} · {formatDateTime(ticket.created_at)}
@@ -340,11 +352,11 @@ function AdminCard({
               <>
                 <div className="mt-2 text-xs flex items-center gap-2">
                   <span className="text-sage-700 font-semibold">{ticket.verification_count}</span>
-                  <span className="text-dusk-200">de</span>
+                  <span className="text-dusk-200">{t('de')}</span>
                   <span className="text-dusk-400">{ticket.verification_threshold}</span>
                   <span className="text-dusk-200">·</span>
                   <span className="text-peach-500 font-semibold">{ticket.denial_count}</span>
-                  <span className="text-dusk-200">negaram</span>
+                  <span className="text-dusk-200">{t('negaram')}</span>
                 </div>
                 <div className="mt-1.5 h-1.5 rounded-full bg-white/40 overflow-hidden">
                   <div className={`h-full ${isVerified ? 'bg-sage-500' : 'bg-sage-400'}`} style={{ width: `${progress}%` }} />
@@ -362,7 +374,7 @@ function AdminCard({
           {isBlocked && detail?.blocked_reason && (
             <GlassCard variant="clay" className="p-3 border border-peach-300/50 bg-peach-100/40">
               <div className="text-xs uppercase tracking-wider text-peach-700 mb-1 flex items-center gap-1.5">
-                <ShieldAlert className="w-3.5 h-3.5" /> Atenção do síndico
+                <ShieldAlert className="w-3.5 h-3.5" /> {t('Atenção do síndico')}
               </div>
               <p className="text-sm text-dusk-500">
                 {BLOCKED_REASON_LABEL[detail.blocked_reason] || detail.blocked_reason}
@@ -375,25 +387,25 @@ function AdminCard({
               <Button size="sm" variant="ghost"
                       leftIcon={verifying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ThumbsUp className="w-3.5 h-3.5" />}
                       onClick={onVerify} disabled={verifying}>
-                Verificar como síndico
+                {t('Verificar como síndico')}
               </Button>
             )}
             <Button size="sm" variant={hasPlan ? 'ghost' : 'primary'}
                     leftIcon={running ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wrench className="w-3.5 h-3.5" />}
                     onClick={onRunAgent} disabled={running}>
-              {hasPlan ? 'Refazer plano IA' : 'Gerar plano IA'}
+              {hasPlan ? t('Refazer plano IA') : t('Gerar plano IA')}
             </Button>
             {hasPlan && !isBlocked && (
               <>
                 <Button size="sm" variant="primary"
                         leftIcon={dispatching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
                         onClick={() => onDispatch()} disabled={dispatching}>
-                  Acionar (auto)
+                  {t('Acionar (auto)')}
                 </Button>
                 <Button size="sm" variant="ghost"
                         leftIcon={<Edit3 className="w-3.5 h-3.5" />}
                         onClick={onOpenPicker} disabled={dispatching}>
-                  Escolher fornecedor
+                  {t('Escolher fornecedor')}
                 </Button>
               </>
             )}
@@ -404,7 +416,7 @@ function AdminCard({
               <Button size="sm" variant="ghost"
                       leftIcon={<Check className="w-3.5 h-3.5" />}
                       onClick={onOpenResolve}>
-                Marcar resolvido
+                {t('Marcar resolvido')}
               </Button>
             )}
           </div>
@@ -412,19 +424,19 @@ function AdminCard({
           {detail?.agent_plan && (
             <GlassCard variant="clay-sage" className="p-4">
               <div className="text-xs uppercase tracking-wider text-sage-900 mb-2 flex items-center gap-1.5">
-                <Bot className="w-3.5 h-3.5" /> Plano sugerido
+                <Bot className="w-3.5 h-3.5" /> {t('Plano sugerido')}
               </div>
               {detail.agent_plan.summary && (
                 <p className="text-sm text-dusk-500 mb-2">{detail.agent_plan.summary}</p>
               )}
               {detail.agent_plan.recommended_next_step && (
                 <p className="text-xs text-dusk-400 mb-3">
-                  <strong className="text-dusk-500">Próximo passo:</strong> {detail.agent_plan.recommended_next_step}
+                  <strong className="text-dusk-500">{t('Próximo passo:')}</strong> {detail.agent_plan.recommended_next_step}
                 </p>
               )}
               {detail.agent_plan.existing_network_fit && detail.agent_plan.existing_network_fit.length > 0 && (
                 <div className="mt-2">
-                  <div className="text-[11px] uppercase tracking-wider text-dusk-300 mb-1">Da rede já cadastrada</div>
+                  <div className="text-[11px] uppercase tracking-wider text-dusk-300 mb-1">{t('Da rede já cadastrada')}</div>
                   <ul className="space-y-1">
                     {detail.agent_plan.existing_network_fit.slice(0, 3).map((fit, i) => (
                       <li key={i} className="text-xs text-dusk-400">
@@ -436,7 +448,7 @@ function AdminCard({
               )}
               {detail.agent_plan.options && detail.agent_plan.options.length > 0 && (
                 <div className="mt-3">
-                  <div className="text-[11px] uppercase tracking-wider text-dusk-300 mb-1">Opções avaliadas</div>
+                  <div className="text-[11px] uppercase tracking-wider text-dusk-300 mb-1">{t('Opções avaliadas')}</div>
                   <ul className="space-y-1.5">
                     {detail.agent_plan.options.slice(0, 3).map((opt, i) => (
                       <li key={i} className="text-xs text-dusk-400">
@@ -449,7 +461,7 @@ function AdminCard({
               )}
               {detail.agent_plan.vendor_search_plan?.outreach_message && (
                 <div className="mt-3">
-                  <div className="text-[11px] uppercase tracking-wider text-dusk-300 mb-1">Mensagem de contato</div>
+                  <div className="text-[11px] uppercase tracking-wider text-dusk-300 mb-1">{t('Mensagem de contato')}</div>
                   <pre className="text-xs text-dusk-400 whitespace-pre-wrap font-sans bg-white/40 rounded-xl p-2 border border-white/60">
                     {detail.agent_plan.vendor_search_plan.outreach_message}
                   </pre>
@@ -460,7 +472,7 @@ function AdminCard({
 
           {detail?.dispatches && detail.dispatches.length > 0 && (
             <div>
-              <div className="text-xs uppercase tracking-wider text-dusk-200 mb-2">Histórico de acionamentos</div>
+              <div className="text-xs uppercase tracking-wider text-dusk-200 mb-2">{t('Histórico de acionamentos')}</div>
               <ul className="space-y-2">
                 {detail.dispatches.map((d) => (
                   <li key={d.id} className="rounded-2xl border border-white/60 bg-white/45 p-3 text-xs text-dusk-400">
@@ -475,14 +487,14 @@ function AdminCard({
                         {d.status}
                       </Badge>
                       {d.outbox_status && d.outbox_status !== d.status && (
-                        <span className="text-[10px] text-dusk-300">entrega: {d.outbox_status}</span>
+                        <span className="text-[10px] text-dusk-300">{t('entrega:')} {d.outbox_status}</span>
                       )}
                       <span className="text-dusk-300 ml-auto">{formatDateTime(d.created_at)}</span>
                     </div>
                     <div className="mt-1 text-dusk-300 whitespace-pre-line">{d.message_body}</div>
                     {d.response_summary && (
                       <div className="mt-2 pt-2 border-t border-white/50 text-dusk-400">
-                        <strong className="text-dusk-500">Resposta:</strong> {d.response_summary}
+                        <strong className="text-dusk-500">{t('Resposta:')}</strong> {d.response_summary}
                       </div>
                     )}
                     {d.status === 'queued' || d.status === 'sent' ? (
@@ -490,7 +502,7 @@ function AdminCard({
                         <Button size="sm" variant="ghost"
                                 leftIcon={<MessageCircle className="w-3 h-3" />}
                                 onClick={() => onMarkResponded(d.id)}>
-                          Registrar resposta
+                          {t('Registrar resposta')}
                         </Button>
                       </div>
                     ) : null}
@@ -548,7 +560,7 @@ function VendorPickerModal({
       <GlassCard className="w-full max-w-xl p-6 max-h-[90vh] overflow-y-auto">
         <div className="flex items-start justify-between mb-3">
           <div>
-            <h3 className="font-display text-xl text-dusk-500">Acionar fornecedor</h3>
+            <h3 className="font-display text-xl text-dusk-500">{t('Acionar fornecedor')}</h3>
             <p className="text-xs text-dusk-300 mt-1">{ticket.title}</p>
           </div>
           <button onClick={onClose} className="w-9 h-9 rounded-2xl bg-white/50 hover:bg-white/80 flex items-center justify-center text-dusk-400">
@@ -557,9 +569,9 @@ function VendorPickerModal({
         </div>
 
         <label className="block text-xs text-dusk-300 font-medium mb-3">
-          Fornecedor
+          {t('Fornecedor')}
           <select className="input mt-1" value={vendorId ?? ''} onChange={(e) => setVendorId(Number(e.target.value))}>
-            {sorted.length === 0 && <option value="">Nenhum cadastrado</option>}
+            {sorted.length === 0 && <option value="">{t('Nenhum cadastrado')}</option>}
             {sorted.map((vv) => (
               <option key={vv.id} value={vv.id}>
                 {vv.preferred === 1 ? '★ ' : ''}{vv.company_name} ({vv.category})
@@ -580,7 +592,7 @@ function VendorPickerModal({
         )}
 
         <fieldset className="mb-3">
-          <legend className="text-xs text-dusk-300 font-medium mb-2">Canal</legend>
+          <legend className="text-xs text-dusk-300 font-medium mb-2">{t('Canal')}</legend>
           <div className="flex flex-wrap gap-2">
             {(['whatsapp', 'email', 'manual'] as const).map((ch) => {
               const available = ch === 'whatsapp' ? !!v?.whatsapp : ch === 'email' ? !!v?.email : true;
@@ -593,7 +605,7 @@ function VendorPickerModal({
                          onChange={() => setChannel(ch)} />
                   {ch === 'whatsapp' && <><MessageCircle className="inline w-3 h-3 mr-1" />WhatsApp</>}
                   {ch === 'email' && <><Mail className="inline w-3 h-3 mr-1" />Email</>}
-                  {ch === 'manual' && <><Phone className="inline w-3 h-3 mr-1" />Manual (telefone)</>}
+                  {ch === 'manual' && <><Phone className="inline w-3 h-3 mr-1" />{t('Manual (telefone)')}</>}
                 </label>
               );
             })}
@@ -601,18 +613,18 @@ function VendorPickerModal({
         </fieldset>
 
         <label className="block text-xs text-dusk-300 font-medium mb-3">
-          Mensagem
+          {t('Mensagem')}
           <textarea className="input mt-1 min-h-[140px]" value={message}
                     onChange={(e) => setMessage(e.target.value)} maxLength={4000} />
         </label>
 
         <div className="flex gap-2 justify-end">
-          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+          <Button variant="ghost" onClick={onClose}>{t('Cancelar')}</Button>
           <Button variant="primary" loading={dispatching}
                   disabled={!vendorId || !message.trim()}
                   leftIcon={<Send className="w-4 h-4" />}
                   onClick={() => onSubmit({ service_contact_id: vendorId ?? undefined, channel, message })}>
-            Enviar
+            {t('Enviar')}
           </Button>
         </div>
       </GlassCard>
@@ -636,7 +648,7 @@ function ResolveModal({
       <GlassCard className="w-full max-w-lg p-6">
         <div className="flex items-start justify-between mb-3">
           <div>
-            <h3 className="font-display text-xl text-dusk-500">Marcar como resolvido</h3>
+            <h3 className="font-display text-xl text-dusk-500">{t('Marcar como resolvido')}</h3>
             <p className="text-xs text-dusk-300 mt-1">{ticket.title}</p>
           </div>
           <button onClick={onClose} className="w-9 h-9 rounded-2xl bg-white/50 hover:bg-white/80 flex items-center justify-center text-dusk-400">
@@ -645,30 +657,30 @@ function ResolveModal({
         </div>
 
         <label className="block text-xs text-dusk-300 font-medium mb-3">
-          O que foi feito?
+          {t('O que foi feito?')}
           <textarea className="input mt-1 min-h-[120px]" value={resolution}
                     onChange={(e) => setResolution(e.target.value)} maxLength={2000}
-                    placeholder="Ex: Técnico da Otis trocou a roldana do cabo principal. Funcionando normalmente." />
+                    placeholder={t('Ex: Técnico da Otis trocou a roldana do cabo principal. Funcionando normalmente.')} />
         </label>
 
         <label className="flex items-start gap-3 rounded-2xl bg-white/45 border border-white/60 p-3 text-sm text-dusk-400 mb-4">
           <input type="checkbox" className="mt-1" checked={announce}
                  onChange={(e) => setAnnounce(e.target.checked)} />
           <span>
-            Publicar comunicado para todos os moradores.
+            {t('Publicar comunicado para todos os moradores.')}
             <span className="block text-xs text-dusk-300 mt-0.5">
-              Posta em /app/comunicados e dispara WhatsApp para quem aceitou notificações.
+              {t('Posta em /app/comunicados e dispara WhatsApp para quem aceitou notificações.')}
             </span>
           </span>
         </label>
 
         <div className="flex gap-2 justify-end">
-          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+          <Button variant="ghost" onClick={onClose}>{t('Cancelar')}</Button>
           <Button variant="primary" loading={resolving}
                   disabled={!resolution.trim()}
                   leftIcon={<Check className="w-4 h-4" />}
                   onClick={() => onSubmit(resolution.trim(), announce)}>
-            Resolver
+            {t('Resolver')}
           </Button>
         </div>
       </GlassCard>
