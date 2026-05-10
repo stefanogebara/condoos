@@ -320,6 +320,7 @@ const phrases: Copy[] = [
   c('Crie sua conta para entrar', 'Create your account to join', 'Crea tu cuenta para unirte', 'Créez votre compte pour rejoindre'),
   c('Depois de criar sua conta, configuramos o prédio e geramos o código para moradores.', 'After you create your account, we set up the building and generate the resident code.', 'Después de crear tu cuenta, configuramos el edificio y generamos el código para residentes.', 'Après avoir créé votre compte, nous configurons l’immeuble et générons le code résident.'),
   c('Depois de criar sua conta, insira o código do administrador e escolha sua unidade.', 'After you create your account, enter the admin code and choose your unit.', 'Después de crear tu cuenta, ingresa el código del administrador y elige tu unidad.', 'Après avoir créé votre compte, entrez le code du syndic et choisissez votre lot.'),
+  c('ou com email', 'or with email', 'o con email', 'ou avec e-mail'),
   c('Nome', 'First name', 'Nombre', 'Prénom'),
   c('Sobrenome', 'Last name', 'Apellido', 'Nom'),
   c('Senha', 'Password', 'Contraseña', 'Mot de passe'),

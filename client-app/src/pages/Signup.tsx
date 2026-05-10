@@ -1,11 +1,13 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { GoogleOAuthProvider, GoogleLogin } from '@react-oauth/google';
 import toast from 'react-hot-toast';
 import { ArrowLeft, ArrowRight, Building2, KeyRound, Plus, UserPlus } from 'lucide-react';
 import Logo from '../components/Logo';
 import GlassCard from '../components/GlassCard';
 import Button from '../components/Button';
 import { useAuth } from '../lib/auth';
+import { apiGet } from '../lib/api';
 import { track } from '../lib/analytics';
 import { t } from '../lib/i18n';
 
@@ -20,7 +22,7 @@ function signupErrorMessage(err: any): string {
 
 export default function Signup() {
   const navigate = useNavigate();
-  const { register } = useAuth();
+  const { register, loginWithGoogle } = useAuth();
   const { intent, initialCode } = useMemo(() => {
     const params = new URLSearchParams(window.location.search);
     const raw = params.get('intent');
@@ -35,6 +37,26 @@ export default function Signup() {
   const [password, setPassword] = useState('');
   const [code, setCode] = useState(initialCode);
   const [loading, setLoading] = useState(false);
+  const [googleClientId, setGoogleClientId] = useState<string | null>(null);
+
+  useEffect(() => {
+    track('signup_viewed', { intent, has_code: !!initialCode });
+    const envClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+    if (envClientId) {
+      setGoogleClientId(envClientId);
+    }
+    apiGet<{ google_client_id: string | null; google_enabled: boolean }>('/auth/config')
+      .then((cfg) => {
+        if (!envClientId && cfg.google_enabled && cfg.google_client_id) setGoogleClientId(cfg.google_client_id);
+      })
+      .catch(() => {});
+  }, [intent, initialCode]);
+
+  function nextOnboardingPath() {
+    if (intent === 'create') return '/onboarding/create';
+    const trimmed = code.trim().toUpperCase();
+    return trimmed ? `/onboarding/join?code=${encodeURIComponent(trimmed)}` : '/onboarding/join';
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -48,12 +70,7 @@ export default function Signup() {
       });
       track('signup_completed', { intent, has_code: !!code.trim() });
       toast.success(t('Conta criada'));
-      if (intent === 'create') {
-        navigate('/onboarding/create');
-      } else {
-        const trimmed = code.trim().toUpperCase();
-        navigate(trimmed ? `/onboarding/join?code=${encodeURIComponent(trimmed)}` : '/onboarding/join');
-      }
+      navigate(nextOnboardingPath());
     } catch (err: any) {
       toast.error(signupErrorMessage(err));
     } finally {
@@ -61,7 +78,22 @@ export default function Signup() {
     }
   }
 
-  return (
+  async function handleGoogleSuccess(credential: string | undefined) {
+    if (!credential) return toast.error(t('Nenhuma credencial do Google recebida'));
+    setLoading(true);
+    try {
+      await loginWithGoogle(credential);
+      track('signup_google_completed', { intent, has_code: !!code.trim() });
+      toast.success(t('Conta criada'));
+      navigate(nextOnboardingPath());
+    } catch {
+      toast.error(t('Falha ao entrar com Google'));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const page = (
     <div className="relative min-h-screen grid lg:grid-cols-2">
       <div className="relative hidden lg:flex items-end overflow-hidden">
         <img src="/images/bg-dusk.webp" alt="" className="absolute inset-0 w-full h-full object-cover" />
@@ -104,6 +136,27 @@ export default function Signup() {
               </div>
             </div>
           </GlassCard>
+
+          {googleClientId && (
+            <>
+              <div className="mb-4 flex justify-center">
+                <GoogleLogin
+                  onSuccess={(c) => handleGoogleSuccess(c.credential)}
+                  onError={() => toast.error(t('Login com Google cancelado'))}
+                  shape="pill"
+                  theme="outline"
+                  size="large"
+                  text="signup_with"
+                  width="340"
+                />
+              </div>
+              <div className="flex items-center gap-3 my-4">
+                <div className="flex-1 h-px bg-dusk-100/40" />
+                <span className="text-xs text-dusk-200">ou com email</span>
+                <div className="flex-1 h-px bg-dusk-100/40" />
+              </div>
+            </>
+          )}
 
           <form onSubmit={submit} className="space-y-3">
             <div className="grid sm:grid-cols-2 gap-3">
@@ -151,4 +204,9 @@ export default function Signup() {
       </div>
     </div>
   );
+
+  if (googleClientId) {
+    return <GoogleOAuthProvider clientId={googleClientId}>{page}</GoogleOAuthProvider>;
+  }
+  return page;
 }
