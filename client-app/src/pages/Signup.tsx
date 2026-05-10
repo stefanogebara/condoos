@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { GoogleOAuthProvider, GoogleLogin } from '@react-oauth/google';
 import toast from 'react-hot-toast';
@@ -14,9 +14,24 @@ import { t } from '../lib/i18n';
 type SignupIntent = 'join' | 'create';
 
 function signupErrorMessage(err: any): string {
+  const status = err?.response?.status;
   const error = err?.response?.data?.error;
+  if (status === 429 || error === 'rate_limited') {
+    const retry = Number(err?.response?.data?.retry_after_seconds);
+    if (Number.isFinite(retry) && retry > 0) {
+      const minutes = Math.max(1, Math.ceil(retry / 60));
+      return t('Muitas tentativas. Tente novamente em {n} min.').replace('{n}', String(minutes));
+    }
+    return t('Muitas tentativas. Aguarde um momento.');
+  }
   if (error === 'email_taken') return t('Esse email já tem conta. Entre com sua senha.');
-  if (error === 'invalid_input') return t('Confira os dados e use uma senha com pelo menos 12 caracteres.');
+  if (error === 'invalid_input') {
+    const fields = err?.response?.data?.details?.fieldErrors || {};
+    if (fields.password?.length) return t('Use uma senha com pelo menos 12 caracteres.');
+    if (fields.email?.length) return t('Use um email válido.');
+    return t('Confira os dados e use uma senha com pelo menos 12 caracteres.');
+  }
+  if (!err?.response) return t('Não conseguimos falar com o servidor. Tente novamente em alguns segundos.');
   return t('Falha ao criar conta');
 }
 
@@ -38,6 +53,7 @@ export default function Signup() {
   const [code, setCode] = useState(initialCode);
   const [loading, setLoading] = useState(false);
   const [googleClientId, setGoogleClientId] = useState<string | null>(null);
+  const submittingRef = useRef(false);
 
   useEffect(() => {
     track('signup_viewed', { intent, has_code: !!initialCode });
@@ -60,13 +76,19 @@ export default function Signup() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (submittingRef.current || loading) return;
+    if (password.length < 12) {
+      toast.error(t('Use uma senha com pelo menos 12 caracteres.'));
+      return;
+    }
+    submittingRef.current = true;
     setLoading(true);
     try {
       await register({
-        email,
+        email: email.trim().toLowerCase(),
         password,
-        first_name: firstName,
-        last_name: lastName,
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
       });
       track('signup_completed', { intent, has_code: !!code.trim() });
       toast.success(t('Conta criada'));
@@ -75,11 +97,14 @@ export default function Signup() {
       toast.error(signupErrorMessage(err));
     } finally {
       setLoading(false);
+      submittingRef.current = false;
     }
   }
 
   async function handleGoogleSuccess(credential: string | undefined) {
     if (!credential) return toast.error(t('Nenhuma credencial do Google recebida'));
+    if (submittingRef.current || loading) return;
+    submittingRef.current = true;
     setLoading(true);
     try {
       await loginWithGoogle(credential);
@@ -90,6 +115,7 @@ export default function Signup() {
       toast.error(t('Falha ao entrar com Google'));
     } finally {
       setLoading(false);
+      submittingRef.current = false;
     }
   }
 
@@ -158,7 +184,7 @@ export default function Signup() {
             </>
           )}
 
-          <form onSubmit={submit} className="space-y-3">
+          <form onSubmit={submit} className="space-y-3" noValidate>
             <div className="grid sm:grid-cols-2 gap-3">
               <input className="input" aria-label="Nome" placeholder="Nome" value={firstName} onChange={(e) => setFirstName(e.target.value)} required autoComplete="given-name" />
               <input className="input" aria-label="Sobrenome" placeholder="Sobrenome" value={lastName} onChange={(e) => setLastName(e.target.value)} required autoComplete="family-name" />

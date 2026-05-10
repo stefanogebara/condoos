@@ -53,6 +53,18 @@ test('Signup with invite code creates account and lands on join flow', async ({ 
   await expect(page.getByRole('heading', { name: /Insira o código de convite|Enter the invite code|Ingresa el código de invitación/i })).toBeVisible();
 });
 
+test('Signup manual form explains short passwords without generic failure', async ({ page }) => {
+  await gotoApp(page, '/signup?intent=join&code=DEMO123');
+  const tag = Date.now();
+  await page.getByRole('textbox', { name: 'Nome', exact: true }).fill('E2E');
+  await page.getByRole('textbox', { name: 'Sobrenome', exact: true }).fill('Short');
+  await page.getByRole('textbox', { name: /Email/i }).fill(`e2e+short-${tag}@condoos.test`);
+  await page.getByLabel(/Senha|Password|Contraseña/i).fill('short');
+  await page.getByRole('button', { name: /Criar conta e entrar|Create account and join|Crear cuenta y unirme/i }).click();
+  await expect(page.getByText(/Use uma senha com pelo menos 12 caracteres|Use a password with at least 12 characters|Usa una contraseña de al menos 12 caracteres/i)).toBeVisible();
+  await expect(page.getByText(/No se pudo crear la cuenta|Falha ao criar conta|Could not create account/i)).toHaveCount(0);
+});
+
 test.describe('Spanish signup entry points', () => {
   test.use({ locale: 'es-ES', timezoneId: 'Europe/Madrid' });
 

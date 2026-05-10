@@ -333,6 +333,9 @@ const phrases: Copy[] = [
   c('Você pode administrar mesmo sem morar no prédio.', 'You can manage even if you do not live in the building.', 'Puedes administrar aunque no vivas en el edificio.', 'Vous pouvez gérer même si vous n’habitez pas dans l’immeuble.'),
   c('Conta criada', 'Account created', 'Cuenta creada', 'Compte créé'),
   c('Esse email já tem conta. Entre com sua senha.', 'That email already has an account. Sign in with your password.', 'Ese email ya tiene cuenta. Entra con tu contraseña.', 'Cet e-mail a déjà un compte. Connectez-vous avec votre mot de passe.'),
+  c('Use uma senha com pelo menos 12 caracteres.', 'Use a password with at least 12 characters.', 'Usa una contraseña de al menos 12 caracteres.', 'Utilisez un mot de passe d’au moins 12 caractères.'),
+  c('Use um email válido.', 'Use a valid email.', 'Usa un email válido.', 'Utilisez un e-mail valide.'),
+  c('Não conseguimos falar com o servidor. Tente novamente em alguns segundos.', 'We could not reach the server. Try again in a few seconds.', 'No pudimos conectar con el servidor. Inténtalo de nuevo en unos segundos.', 'Nous n’avons pas pu joindre le serveur. Réessayez dans quelques secondes.'),
   c('Confira os dados e use uma senha com pelo menos 12 caracteres.', 'Check the details and use a password with at least 12 characters.', 'Revisa los datos y usa una contraseña de al menos 12 caracteres.', 'Vérifiez les informations et utilisez un mot de passe d’au moins 12 caractères.'),
   c('Falha ao criar conta', 'Could not create account', 'No se pudo crear la cuenta', 'Impossible de créer le compte'),
 
