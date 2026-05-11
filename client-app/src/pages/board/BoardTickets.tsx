@@ -322,6 +322,18 @@ export default function BoardTickets() {
   const verified = rows.filter((r) => r.remediation_status === 'verified' || r.remediation_status === 'agent_dispatched');
   const inProgress = rows.filter((r) => r.remediation_status === 'awaiting_vendor' || r.remediation_status === 'vendor_engaged');
   const escalated = rows.filter((r) => r.remediation_status === 'blocked_needs_admin');
+  // Inbox sort — within the "Precisa do síndico" section, prioritise by
+  // urgency (priority weight) then by oldest-first within each tier. Urgent
+  // gas leaks shouldn't sit below stale low-priority items.
+  const PRIORITY_WEIGHT: Record<Ticket['priority'], number> = { urgent: 0, high: 1, normal: 2, low: 3 };
+  const escalatedSorted = [...escalated].sort((a, b) => {
+    const pa = PRIORITY_WEIGHT[a.priority] ?? 2;
+    const pb = PRIORITY_WEIGHT[b.priority] ?? 2;
+    if (pa !== pb) return pa - pb;
+    return a.created_at.localeCompare(b.created_at);
+  });
+  const blockedNoVendor = escalated.filter((r) => r.blocked_reason === 'no_vendor_in_category').length;
+  const blockedNoResponse = escalated.filter((r) => r.blocked_reason === 'vendor_no_response').length;
   // UX-M7 — split "outros" into open-privates + resolved so closed tickets
   // don't visually compete with active private reports.
   const privateOpen = rows.filter((r) => r.verification_threshold === 0 && r.remediation_status === 'open');
@@ -331,8 +343,16 @@ export default function BoardTickets() {
     <>
       <PageHeader title={tr('Chamados')} subtitle={tr('Problemas reportados pelos moradores, verificações da comunidade, e plano de manutenção sugerido pela IA.')} />
 
+      {escalated.length > 0 && (
+        <NeedsAttentionBanner
+          total={escalated.length}
+          noVendor={blockedNoVendor}
+          noResponse={blockedNoResponse}
+        />
+      )}
+
       {/* UX-H4 — most-actionable section first. M1 — section counts in headers. */}
-      <Section title={tr('Precisa do síndico')} tickets={escalated} openId={openId} setOpenId={setOpenId}
+      <Section title={tr('Precisa do síndico')} tickets={escalatedSorted} openId={openId} setOpenId={setOpenId}
                detail={detail} runningId={runningId} verifyingId={verifyingId} dispatchingId={dispatchingId}
                onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={openVendorResponse}
                onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} />
@@ -397,6 +417,44 @@ export default function BoardTickets() {
         </GlassCard>
       )}
     </>
+  );
+}
+
+// Inbox banner — page-top affordance that pulls focus when the admin has
+// real work waiting. Only renders when escalated.length > 0; otherwise the
+// page stays clean. Breakdown chips give the admin a 1-second read on what
+// kind of unblock each ticket needs: add a vendor vs chase the silent one.
+function NeedsAttentionBanner({ total, noVendor, noResponse }: { total: number; noVendor: number; noResponse: number }) {
+  const tr = useTicketTranslator();
+  return (
+    <GlassCard variant="clay" className="p-4 mb-4 border border-peach-300/60 bg-peach-100/40 animate-fade-up">
+      <div className="flex items-start gap-3">
+        <div className="rounded-full bg-peach-200/70 p-2 flex-shrink-0">
+          <ShieldAlert className="w-4 h-4 text-peach-700" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="font-semibold text-dusk-500">
+            {total === 1
+              ? tr('1 chamado esperando você')
+              : `${total} ${tr('chamados esperando você')}`}
+          </div>
+          <div className="flex flex-wrap gap-2 mt-2 text-xs">
+            {noVendor > 0 && (
+              <span className="rounded-full bg-white/70 px-2.5 py-1 text-dusk-400">
+                <span className="font-semibold text-dusk-500">{noVendor}</span>{' '}
+                {noVendor === 1 ? tr('sem fornecedor') : tr('sem fornecedor (n)')}
+              </span>
+            )}
+            {noResponse > 0 && (
+              <span className="rounded-full bg-white/70 px-2.5 py-1 text-dusk-400">
+                <span className="font-semibold text-dusk-500">{noResponse}</span>{' '}
+                {noResponse === 1 ? tr('sem resposta do fornecedor') : tr('sem resposta do fornecedor (n)')}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    </GlassCard>
   );
 }
 
@@ -494,6 +552,16 @@ function AdminCard({
               {isAwaitingVendor && <Badge tone="peach"><Send className="w-3 h-3" /> {tr('aguardando fornecedor')}</Badge>}
               {vendorEngaged && <Badge tone="sage"><MessageCircle className="w-3 h-3" /> {tr('fornecedor respondeu')}</Badge>}
               {isBlocked && <Badge tone="dark"><ShieldAlert className="w-3 h-3" /> {tr('precisa do síndico')}</Badge>}
+              {/* Inline reason chip — admin gets the "why blocked" before
+                  expanding. The full label is rendered in the expanded
+                  banner; here we keep it terse so the badge row stays
+                  scannable. */}
+              {isBlocked && ticket.blocked_reason === 'no_vendor_in_category' && (
+                <Badge tone="peach">{tr('sem fornecedor')}</Badge>
+              )}
+              {isBlocked && ticket.blocked_reason === 'vendor_no_response' && (
+                <Badge tone="peach">{tr('sem resposta do fornecedor')}</Badge>
+              )}
               {isResolved && <Badge tone="sage"><CheckCircle2 className="w-3 h-3" /> {tr('resolvido')}</Badge>}
             </div>
             <div className="text-xs text-dusk-300 mt-1">

@@ -170,6 +170,35 @@ function canSeeTicket(req: AuthedRequest, ticket: any): boolean {
   return Number(ticket.verification_threshold) > 0;
 }
 
+// Admin inbox summary — counts the tickets that want the admin's attention,
+// broken down by reason. Cheap aggregate query; the sidebar polls this every
+// 30s to drive the "Chamados" badge without re-fetching the full list.
+// Public to any board_admin in the condo; private/empty for residents (a
+// resident hitting this gets zeros).
+router.get('/summary', requireAuth, (req: AuthedRequest, res) => {
+  const condoId = getActiveCondoId(req);
+  if (req.user!.role !== 'board_admin') {
+    return ok(res, { needs_admin: 0, blocked_no_vendor: 0, blocked_no_response: 0, verified_ready: 0, awaiting_verification: 0 });
+  }
+  const row = db.prepare(
+    `SELECT
+       SUM(CASE WHEN remediation_status = 'blocked_needs_admin' THEN 1 ELSE 0 END)                          AS needs_admin,
+       SUM(CASE WHEN remediation_status = 'blocked_needs_admin' AND blocked_reason = 'no_vendor_in_category' THEN 1 ELSE 0 END) AS blocked_no_vendor,
+       SUM(CASE WHEN remediation_status = 'blocked_needs_admin' AND blocked_reason = 'vendor_no_response'    THEN 1 ELSE 0 END) AS blocked_no_response,
+       SUM(CASE WHEN remediation_status IN ('verified','agent_dispatched') THEN 1 ELSE 0 END)                AS verified_ready,
+       SUM(CASE WHEN verification_threshold > 0 AND remediation_status = 'open' THEN 1 ELSE 0 END)           AS awaiting_verification
+     FROM tickets
+     WHERE condominium_id = ?`
+  ).get(condoId) as any;
+  return ok(res, {
+    needs_admin:           Number(row?.needs_admin || 0),
+    blocked_no_vendor:     Number(row?.blocked_no_vendor || 0),
+    blocked_no_response:   Number(row?.blocked_no_response || 0),
+    verified_ready:        Number(row?.verified_ready || 0),
+    awaiting_verification: Number(row?.awaiting_verification || 0),
+  });
+});
+
 router.get('/', requireAuth, (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const status = typeof req.query.status === 'string' ? req.query.status : null;

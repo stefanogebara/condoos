@@ -31,6 +31,8 @@ function resetDb() {
   const tables = [
     'ticket_attachments',
     'ticket_comments',
+    'ticket_dispatches',
+    'ticket_verifications',
     'tickets',
     'payments',
     'invoices',

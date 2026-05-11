@@ -1839,6 +1839,14 @@ const phrases: Copy[] = [
   c('Contato salvo — 1 chamado bloqueado foi reaberto.', 'Contact saved — 1 blocked ticket was reopened.', 'Contacto guardado — se reabrió 1 ticket bloqueado.', 'Contact enregistré — 1 ticket bloqué a été rouvert.'),
   c('Contato salvo —', 'Contact saved —', 'Contacto guardado —', 'Contact enregistré —'),
   c('chamados bloqueados foram reabertos.', 'blocked tickets were reopened.', 'tickets bloqueados fueron reabiertos.', 'tickets bloqués ont été rouverts.'),
+  // Admin inbox banner (BoardTickets) — surfaces escalated work at top of page.
+  c('1 chamado esperando você', '1 ticket waiting for you', '1 ticket esperando por ti', '1 ticket en attente de votre intervention'),
+  c('chamados esperando você', 'tickets waiting for you', 'tickets esperando por ti', 'tickets en attente de votre intervention'),
+  c('sem fornecedor', 'no vendor', 'sin proveedor', 'aucun prestataire'),
+  // Plural-suffix variant — kept distinct so the (n) marker only renders when count>1.
+  c('sem fornecedor (n)', 'no vendor', 'sin proveedor', 'aucun prestataire'),
+  c('sem resposta do fornecedor', 'no vendor reply', 'sin respuesta del proveedor', 'aucune réponse du prestataire'),
+  c('sem resposta do fornecedor (n)', 'no vendor reply', 'sin respuesta del proveedor', 'aucune réponse du prestataire'),
 ];
 
 function c(pt: string, en: string, es: string, fr: string): Copy {
