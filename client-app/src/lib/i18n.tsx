@@ -566,7 +566,7 @@ const phrases: Copy[] = [
   c('Minhas cobranças', 'My charges', 'Mis cobros', 'Mes appels de charges'),
   c('Saldo aberto', 'Open balance', 'Saldo pendiente', 'Solde ouvert'),
   c('Em dia', 'Up to date', 'Al día', 'À jour'),
-  c('Próximo vencimento', 'Next due date', 'Próximo vencimiento', 'Prochaine échéance'),
+  c('Próximo vencimento', 'Next due date', 'Siguiente vencimiento', 'Prochaine échéance'),
   c('Nenhuma cobrança aberta', 'No open charges', 'Sin cobros pendientes', 'Aucune charge ouverte'),
   c('Pagamentos registrados', 'Recorded payments', 'Pagos registrados', 'Paiements enregistrés'),
   c('Nenhuma unidade ativa encontrada para exibir cobranças.', 'No active unit was found to show charges.', 'No se encontró una unidad activa para mostrar cobros.', 'Aucun lot actif trouvé pour afficher les charges.'),
@@ -1246,6 +1246,8 @@ const phrases: Copy[] = [
   c('Simulado de incêndio em todo o prédio nesta quinta às 10h. Alarmes vão tocar por uns 10 minutos.', 'Building-wide fire drill this Thursday at 10 a.m. Alarms will sound for about 10 minutes.', 'Simulacro de incendio en todo el edificio este jueves a las 10 h. Las alarmas sonarán unos 10 minutos.', 'Exercice incendie dans tout l’immeuble jeudi à 10 h. Les alarmes sonneront environ 10 minutes.'),
   c('Nova orientação de reciclagem', 'New recycling guidance', 'Nueva orientación de reciclaje', 'Nouvelle consigne de recyclage'),
   c('Desmonte as caixas de papelão antes de colocar no contêiner. Coleta segundas e quintas.', 'Break down cardboard boxes before placing them in the bin. Collection on Mondays and Thursdays.', 'Desmonta las cajas de cartón antes de ponerlas en el contenedor. Recogida lunes y jueves.', 'Démontez les cartons avant de les déposer dans le conteneur. Collecte les lundis et jeudis.'),
+  c('Manutenção programada do elevador nesta sexta-feira das 8h às 18h.', 'Scheduled elevator maintenance this Friday from 8 a.m. to 6 p.m.', 'Mantenimiento programado del ascensor este viernes de 8 h a 18 h.', 'Maintenance programmée de l’ascenseur ce vendredi de 8 h à 18 h.'),
+  c('A proposta de reforma foi aprovada em assembleia.', 'The renovation proposal was approved at the assembly.', 'La propuesta de reforma fue aprobada en la asamblea.', 'La proposition de rénovation a été approuvée en assemblée.'),
   c('Redigido pela IA', 'AI-drafted', 'Redactado por IA', 'Rédigé par IA'),
 
   // Suggestions
