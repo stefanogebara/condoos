@@ -230,6 +230,31 @@ router.post('/', requireAuth, (req: AuthedRequest, res) => {
     ? Math.max(1, Math.min(body.verification_threshold || 1, 1))
     : body.verification_threshold;
 
+  // Round 3 follow-up — POST was non-idempotent. A double-click or a
+  // network retry from the resident report form created duplicate tickets
+  // (Playwright walks left ~10 "Lights in lobby" rows in prod). Dedupe
+  // within a 60s window on (condo, reporter, title) using SQLite's own
+  // datetime() so the comparison is timezone-format-safe — same pattern
+  // used by POST /api/finance/expenses.
+  const recent = db.prepare(
+    `SELECT id FROM tickets
+     WHERE condominium_id = ?
+       AND reporter_id = ?
+       AND title = ?
+       AND datetime(created_at) >= datetime('now', '-60 seconds')
+     LIMIT 1`
+  ).get(condoId, req.user!.id, body.title) as { id: number } | undefined;
+  if (recent) {
+    audit(req, {
+      action: 'ticket.create_deduped',
+      target_type: 'ticket',
+      target_id: recent.id,
+      condominium_id: condoId,
+      metadata: { title: body.title },
+    });
+    return ok(res, { id: recent.id, fast_track: fastTrack, verification_threshold: effectiveThreshold, deduped: true }, 200);
+  }
+
   const result = db.prepare(
     `INSERT INTO tickets (condominium_id, unit_id, reporter_id, title, description, category, priority, verification_threshold)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`

@@ -18,6 +18,11 @@ const meetingWhere = "(title LIKE 'E2E %' OR title LIKE 'walkthrough %')";
 const inviteWhere = "(email LIKE 'e2e-%@example.com' OR email LIKE 'e2e+%@condoos.test')";
 const suggestionWhere = "(body LIKE 'E2E %' OR body LIKE 'A iluminação do hall do 3º andar fica piscando%')";
 const visitorWhere = "(visitor_name LIKE 'E2E %' OR visitor_name LIKE 'PROD_E2E%' OR visitor_name LIKE 'walkthrough %' OR visitor_name LIKE 'Prod Pre-approved%' OR visitor_name LIKE 'Prod maintenance test%')";
+// Tickets (Incident Loop) — Playwright walks accidentally seeded ~10
+// "Lights in lobby" duplicates plus a mojibake-titled "Fast-track test"
+// row. Scrub them by title pattern. Patterns chosen so a real resident-
+// reported issue ("Elevador A travando…") would never match.
+const ticketWhere = "(title LIKE 'Lights in lobby are not working%' OR title LIKE 'Fast-track test%' OR title LIKE 'Playwright walk%' OR title LIKE 'Playwright test%' OR title LIKE 'UX fast-track%' OR title LIKE 'UX walk%' OR title LIKE 'Round2 picker test%' OR title LIKE 'walkthrough %' OR title LIKE 'E2E %' OR description LIKE 'Playwright%' OR description LIKE 'UX walk%')";
 const announcementWhere = "(title LIKE 'E2E %' OR title LIKE 'PROD_E2E%' OR title LIKE 'walkthrough %')";
 const packageWhere = "(description LIKE 'WAHA live test%' OR description LIKE 'CondoOS production notification test%' OR description LIKE 'E2E %' OR description LIKE 'PROD_E2E%' OR carrier LIKE 'E2E %')";
 const expenseWhere = "(description LIKE 'audit dup test%' OR description LIKE 'E2E %' OR description LIKE 'PROD_E2E%' OR vendor LIKE 'E2E %')";
@@ -28,6 +33,7 @@ const meetingBefore = db.prepare('SELECT COUNT(*) AS c FROM meetings').get().c;
 const inviteBefore = db.prepare('SELECT COUNT(*) AS c FROM invites').get().c;
 const suggestionBefore = db.prepare('SELECT COUNT(*) AS c FROM suggestions').get().c;
 const visitorBefore = db.prepare('SELECT COUNT(*) AS c FROM visitors').get().c;
+const ticketBefore = db.prepare('SELECT COUNT(*) AS c FROM tickets').get().c;
 const announcementBefore = db.prepare('SELECT COUNT(*) AS c FROM announcements').get().c;
 const packageBefore = db.prepare('SELECT COUNT(*) AS c FROM packages').get().c;
 const expenseTableExists = !!db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='expenses'`).get();
@@ -57,6 +63,33 @@ db.prepare('UPDATE proposals SET source_suggestion_id = NULL WHERE source_sugges
 const suggestionRes = db.prepare('DELETE FROM suggestions WHERE ' + suggestionWhere).run();
 
 const visitorRes = db.prepare('DELETE FROM visitors WHERE ' + visitorWhere).run();
+// Tickets — cascade order: verifications + dispatches + comments + attachments first,
+// then the tickets themselves. notification_outbox rows referenced by dispatches keep
+// existing (audit trail). Idempotent via the same title-pattern guard.
+const ticketIdsRow = db.prepare('SELECT id FROM tickets WHERE ' + ticketWhere).all();
+const ticketIdsToWipe = ticketIdsRow.map((r) => r.id);
+let ticketRes = { changes: 0 };
+if (ticketIdsToWipe.length > 0) {
+  const placeholders = ticketIdsToWipe.map(() => '?').join(',');
+  // Only attempt if the cascaded tables exist (defensive — these were all
+  // added by Incident Loop Phase 1/2 and may be missing on older DBs).
+  function tableExistsLocal(name) {
+    return !!db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name=?`).get(name);
+  }
+  if (tableExistsLocal('ticket_verifications')) {
+    db.prepare(`DELETE FROM ticket_verifications WHERE ticket_id IN (${placeholders})`).run(...ticketIdsToWipe);
+  }
+  if (tableExistsLocal('ticket_dispatches')) {
+    db.prepare(`DELETE FROM ticket_dispatches WHERE ticket_id IN (${placeholders})`).run(...ticketIdsToWipe);
+  }
+  if (tableExistsLocal('ticket_comments')) {
+    db.prepare(`DELETE FROM ticket_comments WHERE ticket_id IN (${placeholders})`).run(...ticketIdsToWipe);
+  }
+  if (tableExistsLocal('ticket_attachments')) {
+    db.prepare(`DELETE FROM ticket_attachments WHERE ticket_id IN (${placeholders})`).run(...ticketIdsToWipe);
+  }
+  ticketRes = db.prepare(`DELETE FROM tickets WHERE id IN (${placeholders})`).run(...ticketIdsToWipe);
+}
 const announcementRes = db.prepare('DELETE FROM announcements WHERE ' + announcementWhere).run();
 const packageRes = db.prepare('DELETE FROM packages WHERE ' + packageWhere).run();
 const expenseRes = expenseTableExists
@@ -79,6 +112,8 @@ console.log('[cleanup] meetings: ' + meetingBefore + ' → ' + meetingAfter + ' 
 console.log('[cleanup] invites: ' + inviteBefore + ' → ' + inviteAfter + ' (deleted ' + inviteRes.changes + ')');
 console.log('[cleanup] suggestions: ' + suggestionBefore + ' → ' + suggestionAfter + ' (deleted ' + suggestionRes.changes + ')');
 console.log('[cleanup] visitors: ' + visitorBefore + ' → ' + visitorAfter + ' (deleted ' + visitorRes.changes + ')');
+const ticketAfter = db.prepare('SELECT COUNT(*) AS c FROM tickets').get().c;
+console.log('[cleanup] tickets: ' + ticketBefore + ' → ' + ticketAfter + ' (deleted ' + ticketRes.changes + ')');
 console.log('[cleanup] announcements: ' + announcementBefore + ' → ' + announcementAfter + ' (deleted ' + announcementRes.changes + ')');
 console.log('[cleanup] packages: ' + packageBefore + ' → ' + packageAfter + ' (deleted ' + packageRes.changes + ')');
 if (expenseTableExists) {

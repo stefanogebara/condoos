@@ -250,6 +250,50 @@ function run() {
     );
   }
 
+  // Seed a small vendor directory so the Incident Loop demo has matching
+  // network entries to fire against. Three contacts cover the common
+  // categories + one deliberately phone-only entry so the picker's
+  // "somente telefone" suffix renders in demos (Round 3 follow-up).
+  const insertServiceContact = db.prepare(
+    `INSERT INTO service_contacts (
+      condominium_id, category, company_name, contact_name, phone, whatsapp, email,
+      service_scope, emergency_available, preferred, active, created_by_user_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`
+  );
+  const serviceContacts = [
+    {
+      category: 'elevator', company_name: 'Otis Elevadores SP',
+      contact_name: 'Ricardo Souza', phone: '+55 11 5555-1100',
+      whatsapp: '+5511955551100', email: 'manutencao@otis.example.com',
+      service_scope: 'Manutenção corretiva e preventiva de elevadores',
+      emergency: 1, preferred: 1,
+    },
+    {
+      category: 'general_maintenance', company_name: 'Manutenção Geral SP',
+      contact_name: 'Carlos Mendes', phone: '+55 11 5555-2200',
+      whatsapp: '+5511955552200', email: 'contato@manutencao.example.com',
+      service_scope: 'Pequenos reparos, troca de lâmpadas, fechaduras',
+      emergency: 0, preferred: 1,
+    },
+    {
+      // Phone-only vendor — exists so the picker can demo the
+      // "somente telefone" suffix. Real condos sometimes only have a
+      // landline for their old-school plumber.
+      category: 'plumbing', company_name: 'Encanador Plantão 24h',
+      contact_name: 'Seu João', phone: '+55 11 5555-3300',
+      whatsapp: null, email: null,
+      service_scope: 'Vazamentos, entupimentos, emergências hidráulicas',
+      emergency: 1, preferred: 0,
+    },
+  ];
+  for (const sc of serviceContacts) {
+    insertServiceContact.run(
+      condoId, sc.category, sc.company_name, sc.contact_name,
+      sc.phone, sc.whatsapp, sc.email, sc.service_scope,
+      sc.emergency, sc.preferred, admin,
+    );
+  }
+
   console.log('Seed complete.');
   // Audit L9 — never echo demo credentials to stdout in production. The
   // strings make it into Fly logs (and any forwarded log aggregator) where
