@@ -75,7 +75,7 @@ const resolveSchema = z.object({
 // updates the ticket row when it lands. Failures are logged but never
 // propagate — the admin can always click "Generate plan" manually if the
 // auto-attempt failed.
-function dispatchAgentInBackground(ticketId: number, condoId: number, locale: string | undefined): void {
+export function dispatchAgentInBackground(ticketId: number, condoId: number, locale: string | undefined): void {
   void (async () => {
     try {
       const ticket = db.prepare(

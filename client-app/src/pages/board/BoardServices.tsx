@@ -305,9 +305,23 @@ function ServiceContactEditor({
     }
     setSaving(true);
     try {
-      if (mode === 'create') await apiPost('/service-contacts', normalize(form));
-      else await apiPatch(`/service-contacts/${id}`, normalize(form));
-      toast.success(mode === 'create' ? tr('Contato criado') : tr('Contato atualizado'));
+      // The backend auto-rewires blocked tickets when a vendor in the
+      // matching category lands — surface that to the admin so they know
+      // their addition just unstuck N reports without them having to dig.
+      const result = mode === 'create'
+        ? await apiPost<{ id: number; rewired_ticket_ids?: number[] }>('/service-contacts', normalize(form))
+        : await apiPatch<{ id: number; rewired_ticket_ids?: number[] }>(`/service-contacts/${id}`, normalize(form));
+      const rewiredCount = result?.rewired_ticket_ids?.length || 0;
+      if (rewiredCount > 0) {
+        toast.success(
+          rewiredCount === 1
+            ? tr('Contato salvo — 1 chamado bloqueado foi reaberto.')
+            : `${tr('Contato salvo —')} ${rewiredCount} ${tr('chamados bloqueados foram reabertos.')}`,
+          { duration: 6_000 }
+        );
+      } else {
+        toast.success(mode === 'create' ? tr('Contato criado') : tr('Contato atualizado'));
+      }
       onSaved();
     } catch (err: any) {
       toast.error(err?.response?.data?.error || tr('Falha ao salvar contato'));

@@ -4,8 +4,59 @@ import { requireAuth, requireRole, getActiveCondoId, AuthedRequest } from '../li
 import { ok, fail } from '../lib/respond';
 import { audit } from '../lib/audit';
 import { normalizeServiceContact, serviceContactSchema } from '../lib/service-contacts';
+import { ticketCategoriesForVendor } from '../lib/category-aliases';
+import { dispatchAgentInBackground } from './tickets';
 
 const router = Router();
+
+// When a new vendor lands (or an existing one's category changes), look up
+// every ticket in this condo that was stuck on remediation_status =
+// 'blocked_needs_admin' / blocked_reason = 'no_vendor_in_category' and whose
+// ticket category now matches the vendor's category (via the alias map).
+// For each match: clear the block, flip the ticket back to 'verified' so
+// the loop can re-trigger, and fire the AI agent in the background to
+// refresh agent_plan against the new service network. Capped at 10 per
+// vendor change so a single add can't fan out into a huge LLM bill.
+function rewireBlockedTickets(
+  condoId: number,
+  vendorCategory: string,
+  locale: string | undefined,
+): { rewiredIds: number[] } {
+  const ticketCats = ticketCategoriesForVendor(vendorCategory);
+  if (ticketCats.length === 0) return { rewiredIds: [] };
+
+  const placeholders = ticketCats.map(() => '?').join(',');
+  const rows = db.prepare(
+    `SELECT id FROM tickets
+     WHERE condominium_id = ?
+       AND remediation_status = 'blocked_needs_admin'
+       AND blocked_reason = 'no_vendor_in_category'
+       AND category IN (${placeholders})
+     ORDER BY
+       CASE priority WHEN 'urgent' THEN 1 WHEN 'high' THEN 2 WHEN 'normal' THEN 3 ELSE 4 END,
+       created_at ASC
+     LIMIT 10`
+  ).all(condoId, ...ticketCats) as Array<{ id: number }>;
+  if (rows.length === 0) return { rewiredIds: [] };
+
+  const ids = rows.map((r) => r.id);
+  // Unblock in one statement, then re-fire the agent per ticket. We reset
+  // to 'verified' (not 'open') because the community already met the
+  // confirmation threshold — we're just retrying the dispatch loop with a
+  // bigger vendor pool.
+  const inPlaceholders = ids.map(() => '?').join(',');
+  db.prepare(
+    `UPDATE tickets
+     SET remediation_status = 'verified',
+         blocked_reason = NULL,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id IN (${inPlaceholders})`
+  ).run(...ids);
+  for (const ticketId of ids) {
+    dispatchAgentInBackground(ticketId, condoId, locale);
+  }
+  return { rewiredIds: ids };
+}
 
 router.get('/', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
@@ -77,14 +128,26 @@ router.post('/', requireAuth, requireRole('board_admin'), (req: AuthedRequest, r
     req.user!.id,
   );
   const id = Number(result.lastInsertRowid);
+  // Auto-adjust — new vendor may match tickets that were previously stuck
+  // on no_vendor_in_category. Unblock them and re-fire the AI agent so the
+  // plan can recommend this newcomer.
+  const locale = typeof req.body?.locale === 'string' ? req.body.locale : '';
+  const rewired = body.active
+    ? rewireBlockedTickets(condoId, body.category, locale)
+    : { rewiredIds: [] };
   audit(req, {
     action: 'service_contact.create',
     target_type: 'service_contact',
     target_id: id,
     condominium_id: condoId,
-    metadata: { category: body.category, preferred: body.preferred, emergency_available: body.emergency_available },
+    metadata: {
+      category: body.category,
+      preferred: body.preferred,
+      emergency_available: body.emergency_available,
+      rewired_ticket_ids: rewired.rewiredIds,
+    },
   });
-  return ok(res, { id }, 201);
+  return ok(res, { id, rewired_ticket_ids: rewired.rewiredIds }, 201);
 });
 
 router.patch('/:id', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
@@ -93,10 +156,10 @@ router.patch('/:id', requireAuth, requireRole('board_admin'), (req: AuthedReques
   const condoId = getActiveCondoId(req);
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) return fail(res, 'invalid_id', 400);
-  const exists = db.prepare(
-    `SELECT id FROM service_contacts WHERE id = ? AND condominium_id = ?`
-  ).get(id, condoId);
-  if (!exists) return fail(res, 'not_found', 404);
+  const existing = db.prepare(
+    `SELECT id, category, active FROM service_contacts WHERE id = ? AND condominium_id = ?`
+  ).get(id, condoId) as { id: number; category: string; active: number } | undefined;
+  if (!existing) return fail(res, 'not_found', 404);
 
   const body = normalizeServiceContact(parsed.data);
   db.prepare(
@@ -125,14 +188,27 @@ router.patch('/:id', requireAuth, requireRole('board_admin'), (req: AuthedReques
     id,
     condoId,
   );
+  // Auto-adjust on category change or reactivation. A vendor moving from
+  // 'cleaning' to 'plumbing', or coming back from inactive, can suddenly
+  // serve previously-blocked tickets — same rewire path as POST.
+  const categoryChanged = body.category !== existing.category;
+  const becameActive = body.active && !existing.active;
+  const locale = typeof req.body?.locale === 'string' ? req.body.locale : '';
+  const rewired = (body.active && (categoryChanged || becameActive))
+    ? rewireBlockedTickets(condoId, body.category, locale)
+    : { rewiredIds: [] };
   audit(req, {
     action: 'service_contact.update',
     target_type: 'service_contact',
     target_id: id,
     condominium_id: condoId,
-    metadata: { category: body.category, active: body.active },
+    metadata: {
+      category: body.category,
+      active: body.active,
+      rewired_ticket_ids: rewired.rewiredIds,
+    },
   });
-  return ok(res, { id });
+  return ok(res, { id, rewired_ticket_ids: rewired.rewiredIds });
 });
 
 router.delete('/:id', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {

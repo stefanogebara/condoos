@@ -1807,6 +1807,11 @@ const phrases: Copy[] = [
   c('fornecedor', 'vendor', 'proveedor', 'prestataire'),
   c('Aguardando síndico — sem fornecedor disponível', 'Awaiting manager — no vendor available', 'Esperando al administrador — sin proveedor disponible', 'En attente du syndic — aucun prestataire disponible'),
   c('Problema resolvido', 'Issue resolved', 'Problema resuelto', 'Problème résolu'),
+  // Vendor auto-rewire toast (BoardServices) — fired when a new contact
+  // unsticks tickets that were blocked on no_vendor_in_category.
+  c('Contato salvo — 1 chamado bloqueado foi reaberto.', 'Contact saved — 1 blocked ticket was reopened.', 'Contacto guardado — se reabrió 1 ticket bloqueado.', 'Contact enregistré — 1 ticket bloqué a été rouvert.'),
+  c('Contato salvo —', 'Contact saved —', 'Contacto guardado —', 'Contact enregistré —'),
+  c('chamados bloqueados foram reabertos.', 'blocked tickets were reopened.', 'tickets bloqueados fueron reabiertos.', 'tickets bloqués ont été rouverts.'),
 ];
 
 function c(pt: string, en: string, es: string, fr: string): Copy {
