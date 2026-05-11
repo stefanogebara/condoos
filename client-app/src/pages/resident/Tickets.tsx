@@ -10,7 +10,7 @@ import Button from '../../components/Button';
 import Badge from '../../components/Badge';
 import { apiGet, apiPost } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
-import { formatDateTime, t } from '../../lib/i18n';
+import { formatDateTime, formatRelativeTime, t } from '../../lib/i18n';
 
 interface Ticket {
   id: number;
@@ -24,6 +24,7 @@ interface Ticket {
   reporter_first: string | null;
   reporter_last: string | null;
   unit_number: string | null;
+  reporter_unit_number: string | null;
   verification_threshold: number;
   verification_count: number;
   denial_count: number;
@@ -232,13 +233,14 @@ function TicketCard({
               {ticket.remediation_status === 'resolved' && <Badge tone="sage"><CheckCircle2 className="w-3 h-3" /> {t('resolvido')}</Badge>}
             </div>
             <div className="text-xs text-dusk-300 mt-1">
-              {/* UX-L-NEW-1 — used to render `Reportado por Maya  · 10/05…`
-                  (double space) when unit_number was null. Build the byline
-                  pieces conditionally and join with a single separator. */}
+              {/* Use reporter_unit_number (their home unit) not unit_number
+                  (the ticket's affected unit, which is rarely set on
+                  community reports). formatRelativeTime keeps fresh reports
+                  reading "há 5 min" instead of the full datestamp. */}
               {[
                 `${t('Reportado por')} ${ticket.reporter_first || ''}`.trim(),
-                ticket.unit_number ? `${t('Apto')} ${ticket.unit_number}` : null,
-                formatDateTime(ticket.created_at),
+                ticket.reporter_unit_number ? `${t('Apto')} ${ticket.reporter_unit_number}` : null,
+                formatRelativeTime(ticket.created_at),
               ].filter(Boolean).join(' · ')}
             </div>
             <div className="mt-2 flex items-center gap-2 text-xs">
@@ -248,8 +250,18 @@ function TicketCard({
               <span className="text-dusk-200">·</span>
               <span className="text-dusk-300">{t('meta:')} {ticket.verification_threshold}</span>
             </div>
+            {/* UX-M8 — at 0/threshold the green fill was width:0% leaving a
+                completely empty track that read as a missing UI element.
+                Render a faint striped pattern when nothing's been counted
+                so the bar communicates "waiting on votes" instead. */}
             <div className="mt-1.5 h-1.5 rounded-full bg-white/40 overflow-hidden">
-              <div className={`h-full ${verified ? 'bg-sage-500' : 'bg-sage-400'}`} style={{ width: `${progress}%` }} />
+              {ticket.verification_count === 0 ? (
+                <div className="h-full" style={{
+                  backgroundImage: 'repeating-linear-gradient(135deg, rgba(102,80,74,0.18) 0 4px, transparent 4px 8px)',
+                }} />
+              ) : (
+                <div className={`h-full ${verified ? 'bg-sage-500' : 'bg-sage-400'}`} style={{ width: `${progress}%` }} />
+              )}
             </div>
           </div>
         </div>

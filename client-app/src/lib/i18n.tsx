@@ -1781,6 +1781,9 @@ const phrases: Copy[] = [
   c('Controle de pragas', 'Pest control',      'Control de plagas',     'Lutte antiparasitaire'),
   c('Administrativo / jurídico', 'Admin / legal', 'Administrativo / legal', 'Administratif / juridique'),
   c('Outros',           'Other',               'Otros',                 'Autres'),
+  // Round 3 — picker enhancements + reporter byline
+  c('Adicionar novo fornecedor', 'Add new vendor', 'Añadir nuevo proveedor', 'Ajouter un prestataire'),
+  c('somente telefone', 'phone only', 'solo teléfono', 'téléphone uniquement'),
 ];
 
 function c(pt: string, en: string, es: string, fr: string): Copy {
@@ -2186,6 +2189,38 @@ export function currentIntlLocale(): AppLocale {
 
 export function formatDate(value: string | number | Date) {
   return new Date(value).toLocaleDateString(currentIntlLocale());
+}
+
+// Round 3 — relative time for "fresh" timestamps. Tickets, dispatches, and
+// comments rendered with formatDateTime always showed the full date even
+// for events 10 minutes ago, which buried recency. Use formatRelativeTime
+// for timelines where freshness matters; falls back to the absolute format
+// once the gap exceeds ~24h so old entries stay deterministic.
+const REL_UNITS: Array<{ ms: number; unit: Intl.RelativeTimeFormatUnit }> = [
+  { ms: 60_000,           unit: 'second' },
+  { ms: 60 * 60_000,      unit: 'minute' },
+  { ms: 24 * 60 * 60_000, unit: 'hour' },
+];
+export function formatRelativeTime(value: string | number | Date) {
+  const now = Date.now();
+  const then = new Date(value).getTime();
+  if (Number.isNaN(then)) return formatDateTime(value);
+  const diffMs = then - now; // negative = past
+  const absMs = Math.abs(diffMs);
+  if (absMs >= REL_UNITS[REL_UNITS.length - 1].ms) return formatDateTime(value);
+  let unit: Intl.RelativeTimeFormatUnit = 'second';
+  let unitMs = 1_000;
+  for (const u of REL_UNITS) {
+    if (absMs < u.ms) break;
+    unit = u.unit; unitMs = u.ms;
+  }
+  const value2 = Math.round(diffMs / unitMs);
+  try {
+    const rtf = new Intl.RelativeTimeFormat(currentIntlLocale(), { numeric: 'auto' });
+    return rtf.format(value2, unit);
+  } catch {
+    return formatDateTime(value);
+  }
 }
 
 export function formatDateTime(value: string | number | Date) {

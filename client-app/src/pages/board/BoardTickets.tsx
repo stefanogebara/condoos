@@ -10,7 +10,7 @@ import GlassCard from '../../components/GlassCard';
 import Button from '../../components/Button';
 import Badge from '../../components/Badge';
 import { apiGet, apiPost } from '../../lib/api';
-import { formatDateTime, t as translate, useLocale } from '../../lib/i18n';
+import { formatDateTime, formatRelativeTime, t as translate, useLocale } from '../../lib/i18n';
 
 interface Ticket {
   id: number;
@@ -23,6 +23,7 @@ interface Ticket {
   reporter_first: string | null;
   reporter_last: string | null;
   unit_number: string | null;
+  reporter_unit_number: string | null;
   verification_threshold: number;
   verification_count: number;
   denial_count: number;
@@ -480,8 +481,8 @@ function AdminCard({
             <div className="text-xs text-dusk-300 mt-1">
               {[
                 `${ticket.reporter_first || ''} ${ticket.reporter_last || ''}`.trim(),
-                ticket.unit_number || null,
-                formatDateTime(ticket.created_at),
+                ticket.reporter_unit_number || ticket.unit_number || null,
+                formatRelativeTime(ticket.created_at),
               ].filter(Boolean).join(' · ')}
             </div>
             {isCommunity && (
@@ -494,8 +495,16 @@ function AdminCard({
                   <span className="text-peach-500 font-semibold">{ticket.denial_count}</span>
                   <span className="text-dusk-200">{tr('negaram')}</span>
                 </div>
+                {/* UX-M8 — faint striped track at 0/threshold so the bar
+                    reads as "awaiting votes" instead of "missing UI". */}
                 <div className="mt-1.5 h-1.5 rounded-full bg-white/40 overflow-hidden">
-                  <div className={`h-full ${isVerified ? 'bg-sage-500' : 'bg-sage-400'}`} style={{ width: `${progress}%` }} />
+                  {ticket.verification_count === 0 ? (
+                    <div className="h-full" style={{
+                      backgroundImage: 'repeating-linear-gradient(135deg, rgba(102,80,74,0.18) 0 4px, transparent 4px 8px)',
+                    }} />
+                  ) : (
+                    <div className={`h-full ${isVerified ? 'bg-sage-500' : 'bg-sage-400'}`} style={{ width: `${progress}%` }} />
+                  )}
                 </div>
               </>
             )}
@@ -721,15 +730,32 @@ function VendorPickerModal({
         </div>
 
         <label className="block text-xs text-dusk-300 font-medium mb-3">
-          {tr('Fornecedor')}
+          <div className="flex items-center justify-between">
+            <span>{tr('Fornecedor')}</span>
+            {/* UX-M3 — admin used to have to close the modal + navigate to
+                /board/services + add + come back. A direct link keeps the
+                workflow in one tab; target=_blank so the modal context
+                survives. */}
+            <a href="/board/services" target="_blank" rel="noopener noreferrer"
+               className="text-[11px] font-normal text-sage-700 hover:text-sage-900 underline decoration-dotted underline-offset-4">
+              + {tr('Adicionar novo fornecedor')}
+            </a>
+          </div>
           <select className="input mt-1" value={vendorId ?? ''} onChange={(e) => setVendorId(Number(e.target.value))}>
             {sorted.length === 0 && <option value="">{tr('Nenhum cadastrado')}</option>}
-            {sorted.map((vv) => (
-              <option key={vv.id} value={vv.id}>
-                {vv.preferred === 1 ? '★ ' : ''}{vv.company_name} ({tr(vendorCategoryLabel(vv.category))})
-                {vv.emergency_available === 1 ? ' · 24h' : ''}
-              </option>
-            ))}
+            {sorted.map((vv) => {
+              // UX-M6 — surface vendors that can only be contacted manually
+              // (no whatsapp + no email) so the admin knows up front the
+              // WhatsApp / Email pill below will be disabled.
+              const noChannel = !vv.whatsapp && !vv.email;
+              return (
+                <option key={vv.id} value={vv.id}>
+                  {vv.preferred === 1 ? '★ ' : ''}{vv.company_name} ({tr(vendorCategoryLabel(vv.category))})
+                  {vv.emergency_available === 1 ? ' · 24h' : ''}
+                  {noChannel ? ` · ${tr('somente telefone')}` : ''}
+                </option>
+              );
+            })}
           </select>
         </label>
 

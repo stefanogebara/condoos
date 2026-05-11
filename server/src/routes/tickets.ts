@@ -184,12 +184,20 @@ router.get('/', requireAuth, (req: AuthedRequest, res) => {
     clauses.push('t.status = ?');
     params.push(status);
   }
+  // Audit follow-up — the previous payload only exposed `unit_number` joined
+  // off `t.unit_id` (the unit the TICKET is about). Community reports rarely
+  // set unit_id, so the resident byline rendered without any unit info. Add
+  // `reporter_unit_number` joined off the reporter's primary active
+  // user_unit row so the UI can show "Maya · 704 · 10/05/2026" reliably.
   const rows = db.prepare(
     `SELECT t.*, u.number AS unit_number, r.first_name AS reporter_first, r.last_name AS reporter_last,
+            ru.number AS reporter_unit_number,
             a.first_name AS assignee_first, a.last_name AS assignee_last
      FROM tickets t
      LEFT JOIN units u ON u.id = t.unit_id
      JOIN users r ON r.id = t.reporter_id
+     LEFT JOIN user_unit ruu ON ruu.user_id = r.id AND ruu.status = 'active' AND ruu.primary_contact = 1
+     LEFT JOIN units ru ON ru.id = ruu.unit_id
      LEFT JOIN users a ON a.id = t.assigned_to_user_id
      WHERE ${clauses.join(' AND ')}
      ORDER BY
@@ -608,6 +616,19 @@ router.get('/:id', requireAuth, (req: AuthedRequest, res) => {
   const ticket = getScopedTicket(id, condoId);
   if (!ticket) return fail(res, 'not_found', 404);
   if (!canSeeTicket(req, ticket)) return fail(res, 'forbidden', 403);
+
+  // Reporter byline enrichment — matches the join used by GET /. Surfaces
+  // the reporter's primary active unit so the detail page can render the
+  // same `Name · Unit · Date` byline as the list view.
+  const reporter = db.prepare(
+    `SELECT r.first_name AS reporter_first, r.last_name AS reporter_last,
+            ru.number AS reporter_unit_number
+     FROM users r
+     LEFT JOIN user_unit ruu ON ruu.user_id = r.id AND ruu.status = 'active' AND ruu.primary_contact = 1
+     LEFT JOIN units ru ON ru.id = ruu.unit_id
+     WHERE r.id = ?`
+  ).get(ticket.reporter_id) as { reporter_first: string; reporter_last: string; reporter_unit_number: string | null } | undefined;
+  if (reporter) Object.assign(ticket, reporter);
 
   const comments = db.prepare(
     `SELECT c.*, u.first_name, u.last_name
