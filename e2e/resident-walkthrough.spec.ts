@@ -105,9 +105,71 @@ test('resident: amenities page lists bookable areas', async ({ page, request }) 
   await residentLogin(page, request);
   await page.goto('/app/amenities');
   await expect(page.getByRole('heading', { level: 1, name: /Amenities|Áreas/i })).toBeVisible();
-  // The seed has Rooftop Pool, Gym, Party Room — at least one card should render
-  const anyCard = page.locator('aside ~ * h3, aside ~ * h2').first();
-  await expect(anyCard).toBeVisible();
+  await expect(page.getByText(/Book a common area|Reservar área/i)).toBeVisible();
+  await expect(page.getByTestId('amenity-card').first().or(page.getByText(/No bookable areas yet|Aún no hay áreas reservables|Ainda não há áreas reserváveis/i))).toBeVisible();
+});
+
+test('resident: amenities page can create a reservation from an amenity card', async ({ page, request }) => {
+  const admin = await loginApi(request, 'admin@condoos.dev', 'admin123');
+  const resident = await loginApi(request, 'resident@condoos.dev', 'resident123');
+  const name = `E2E Booking Court ${Date.now()}`;
+  let amenityId: number | undefined;
+  let reservationId: number | undefined;
+
+  try {
+    const created = await request.post(`${apiURL}/amenities`, {
+      headers: { Authorization: `Bearer ${admin.token}` },
+      data: {
+        name,
+        description: 'Resident booking flow test',
+        icon: 'Trophy',
+        capacity: 3,
+        open_hour: 8,
+        close_hour: 22,
+        slot_minutes: 60,
+        booking_window_days: 14,
+        active: true,
+      },
+    });
+    expect(created.ok(), `amenity create failed: ${created.status()} ${await created.text()}`).toBeTruthy();
+    amenityId = (await created.json()).data.id;
+
+    await residentLogin(page, request);
+    await page.goto('/app/amenities');
+    await expect(page.getByRole('heading', { level: 1, name: /Amenities|Áreas/i })).toBeVisible();
+    await page.getByRole('button', { name: new RegExp(`Reservar ${name}|Book ${name}`, 'i') }).click();
+    await expect(page.getByTestId('amenity-booking-form')).toBeVisible();
+
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    await page.getByTestId('amenity-date').fill(tomorrow.toISOString().slice(0, 10));
+    const slot = page.getByTestId('amenity-slot').filter({ hasText: /spot|cupo|vaga|place/i }).first();
+    await expect(slot).toBeVisible();
+    await slot.click();
+    await expect(page.getByTestId('amenity-submit')).toBeEnabled();
+    await page.getByTestId('amenity-submit').click();
+    await expect(page.getByText(/Reservation confirmed|Reserva confirmada|Réservation confirmée/i)).toBeVisible();
+    await expect(page.getByText(name).first()).toBeVisible();
+
+    const reservations = await request.get(`${apiURL}/amenities/reservations`, {
+      headers: { Authorization: `Bearer ${resident.token}` },
+    });
+    expect(reservations.ok(), `reservation list failed: ${reservations.status()} ${await reservations.text()}`).toBeTruthy();
+    const rows = (await reservations.json()).data as Array<{ id: number; amenity_id: number; status: string }>;
+    reservationId = rows.find((r) => r.amenity_id === amenityId && r.status !== 'cancelled')?.id;
+    expect(reservationId).toBeTruthy();
+  } finally {
+    if (reservationId) {
+      await request.delete(`${apiURL}/amenities/reservations/${reservationId}`, {
+        headers: { Authorization: `Bearer ${resident.token}` },
+      });
+    }
+    if (amenityId) {
+      await request.delete(`${apiURL}/amenities/${amenityId}`, {
+        headers: { Authorization: `Bearer ${admin.token}` },
+      });
+    }
+  }
 });
 
 // ---------------------------------------------------------------------------

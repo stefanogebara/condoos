@@ -1,13 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
-import { Clock, Trophy, Users, Waves, Dumbbell, Flame, PartyPopper } from 'lucide-react';
+import { CalendarPlus, Clock, Trophy, Users, Waves, Dumbbell, Flame, PartyPopper } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 import GlassCard from '../../components/GlassCard';
 import Badge from '../../components/Badge';
 import Button from '../../components/Button';
 import { apiGet, apiPost } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
-import { formatDateTime, currentIntlLocale } from '../../lib/i18n';
+import { formatDateTime, currentIntlLocale, t, useLocale } from '../../lib/i18n';
 
 interface Amenity {
   id: number; name: string; description: string; icon: string;
@@ -55,6 +55,8 @@ function friendlyBookingError(code: string | undefined): string {
 
 export default function Amenities() {
   const { user } = useAuth();
+  const { locale } = useLocale();
+  const tr = (key: string) => t(key, locale);
   const [amenities, setAmenities]       = useState<Amenity[]>([]);
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [selected, setSelected]         = useState<Amenity | null>(null);
@@ -65,11 +67,18 @@ export default function Amenities() {
   const [guestList, setGuestList]       = useState('');
   const [partyNotes, setPartyNotes]     = useState('');
   const [saving, setSaving]             = useState(false);
+  const [loading, setLoading]           = useState(true);
+  const [loadError, setLoadError]       = useState(false);
 
-  const load = () => Promise.all([
-    apiGet<Amenity[]>('/amenities').then(setAmenities),
-    apiGet<Reservation[]>('/amenities/reservations').then(setReservations),
-  ]).catch(() => {});
+  const load = () => {
+    setLoadError(false);
+    return Promise.all([
+      apiGet<Amenity[]>('/amenities').then(setAmenities),
+      apiGet<Reservation[]>('/amenities/reservations').then(setReservations),
+    ])
+      .catch(() => setLoadError(true))
+      .finally(() => setLoading(false));
+  };
   useEffect(() => { load(); }, []);
   useEffect(() => {
     if (!selected) {
@@ -102,7 +111,7 @@ export default function Amenities() {
     if (!selected || !selectedSlot) return;
     const groupSize = Math.max(1, Math.min(selected.capacity, parseInt(partySize, 10) || 1));
     if (groupSize > selectedSlot.available_spots) {
-      toast.error(`Esse horário só tem ${selectedSlot.available_spots} vaga(s) disponível(is).`);
+      toast.error(`${tr('Esse horário só tem')} ${selectedSlot.available_spots} ${tr('vaga(s) disponível(is).')}`);
       return;
     }
     setSaving(true);
@@ -118,14 +127,14 @@ export default function Amenities() {
       });
       toast.success(
         guestsNum > 0
-          ? `Reserva confirmada para ${groupSize} pessoas`
-          : `Reserva confirmada: ${selected.name}`,
+          ? `${tr('Reserva confirmada para')} ${groupSize} ${tr('pessoas')}`
+          : `${tr('Reserva confirmada')}: ${selected.name}`,
       );
       setSelected(null); setSelectedSlot(null); setSlots([]);
       setPartySize('1'); setGuestList(''); setPartyNotes('');
       load();
     } catch (err: any) {
-      toast.error(friendlyBookingError(err?.response?.data?.error));
+      toast.error(tr(friendlyBookingError(err?.response?.data?.error)));
     } finally { setSaving(false); }
   }
 
@@ -135,40 +144,106 @@ export default function Amenities() {
 
   return (
     <>
-      <PageHeader title="Áreas comuns" subtitle="Reserve a piscina, academia, churrasqueira ou salão de festas. Sem conflitos." />
+      <PageHeader
+        title={tr('Áreas comuns')}
+        subtitle={tr('Reserve a piscina, academia, churrasqueira ou salão de festas. Sem conflitos.')}
+      />
 
-      <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
-        {amenities.map((a) => {
-          const Icon = ICONS[a.icon] || Waves;
-          return (
-            <GlassCard key={a.id} variant="clay" hover className="p-5 cursor-pointer" onClick={() => chooseAmenity(a)}>
-              <div className="w-12 h-12 rounded-2xl bg-sage-200 text-sage-700 flex items-center justify-center mb-3">
-                <Icon className="w-6 h-6" />
+      <section className="mb-10" aria-labelledby="available-amenities">
+        <div className="flex items-end justify-between gap-4 mb-4">
+          <div>
+            <h2 id="available-amenities" className="font-display text-xl text-dusk-500">{tr('Reservar área comum')}</h2>
+            <p className="text-sm text-dusk-300 mt-1">{tr('Escolha um espaço e um horário disponível.')}</p>
+          </div>
+          {selected && (
+            <Badge tone="sage">
+              <CalendarPlus className="w-3 h-3" /> {selected.name}
+            </Badge>
+          )}
+        </div>
+
+        {loading ? (
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {[0, 1, 2, 3].map((i) => (
+              <GlassCard key={i} variant="clay" className="p-5">
+                <div className="w-12 h-12 rounded-2xl bg-white/60 mb-3 animate-pulse" />
+                <div className="h-5 rounded bg-white/60 mb-2 animate-pulse" />
+                <div className="h-4 rounded bg-white/50 w-4/5 animate-pulse" />
+              </GlassCard>
+            ))}
+          </div>
+        ) : loadError ? (
+          <GlassCard className="p-6 text-sm text-dusk-300">
+            {tr('Não conseguimos carregar as áreas comuns. Atualize a página e tente de novo.')}
+          </GlassCard>
+        ) : amenities.length === 0 ? (
+          <GlassCard className="p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-sage-200 text-sage-700 flex items-center justify-center shrink-0">
+                <CalendarPlus className="w-6 h-6" />
               </div>
-              <h3 className="font-display text-lg text-dusk-500">{a.name}</h3>
-              <p className="text-sm text-dusk-300 mt-1 line-clamp-2">{a.description}</p>
-              <div className="mt-3 flex flex-wrap gap-2 text-xs text-dusk-200">
-                <span className="inline-flex items-center gap-1"><Clock className="w-3 h-3" /> {a.open_hour}h–{a.close_hour}h</span>
-                <span className="inline-flex items-center gap-1"><Users className="w-3 h-3" /> {a.capacity}</span>
+              <div>
+                <h3 className="font-display text-lg text-dusk-500">{tr('Ainda não há áreas reserváveis')}</h3>
+                <p className="text-sm text-dusk-300 mt-1 max-w-2xl">
+                  {tr('Quando o administrador ativar uma piscina, academia, quadra ou salão, você poderá reservar um horário nesta página.')}
+                </p>
               </div>
-            </GlassCard>
-          );
-        })}
-      </div>
+            </div>
+          </GlassCard>
+        ) : (
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {amenities.map((a) => {
+              const Icon = ICONS[a.icon] || Waves;
+              const active = selected?.id === a.id;
+              return (
+                <GlassCard key={a.id} variant="clay" hover className={`p-5 ${active ? 'ring-2 ring-sage-300' : ''}`} data-testid="amenity-card">
+                  <button
+                    type="button"
+                    className="block w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-sage-400 rounded-2xl"
+                    onClick={() => chooseAmenity(a)}
+                    aria-label={`${tr('Reservar')} ${a.name}`}
+                  >
+                    <div className="w-12 h-12 rounded-2xl bg-sage-200 text-sage-700 flex items-center justify-center mb-3">
+                      <Icon className="w-6 h-6" />
+                    </div>
+                    <h3 className="font-display text-lg text-dusk-500">{a.name}</h3>
+                    <p className="text-sm text-dusk-300 mt-1 line-clamp-2">{a.description}</p>
+                    <div className="mt-3 flex flex-wrap gap-2 text-xs text-dusk-200">
+                      <span className="inline-flex items-center gap-1"><Clock className="w-3 h-3" /> {a.open_hour}h-{a.close_hour}h</span>
+                      <span className="inline-flex items-center gap-1"><Users className="w-3 h-3" /> {a.capacity}</span>
+                    </div>
+                  </button>
+                  <Button
+                    type="button"
+                    variant={active ? 'primary' : 'ghost'}
+                    size="sm"
+                    className="mt-4 w-full"
+                    leftIcon={<CalendarPlus className="w-4 h-4" />}
+                    onClick={() => chooseAmenity(a)}
+                  >
+                    {tr('Reservar')}
+                  </Button>
+                </GlassCard>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
       {selected && (
         <GlassCard className="p-6 mb-10 animate-fade-up">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-display text-xl text-dusk-500">Reservar: {selected.name}</h3>
-            <button className="text-sm text-dusk-200 hover:text-dusk-400" onClick={() => setSelected(null)}>Cancelar</button>
+            <h3 className="font-display text-xl text-dusk-500">{tr('Reservar')}: {selected.name}</h3>
+            <button className="text-sm text-dusk-200 hover:text-dusk-400" onClick={() => setSelected(null)}>{tr('Cancelar')}</button>
           </div>
-          <form onSubmit={book} noValidate className="space-y-4">
+          <form onSubmit={book} noValidate className="space-y-4" data-testid="amenity-booking-form">
             <div className="grid md:grid-cols-2 gap-3">
               <label className="text-xs text-dusk-300">
-                Data
+                {tr('Data')}
                 <input
                   type="date"
                   className="input mt-1"
+                  data-testid="amenity-date"
                   value={bookingDate}
                   min={new Date().toISOString().slice(0, 10)}
                   onChange={(e) => setBookingDate(e.target.value)}
@@ -176,12 +251,13 @@ export default function Amenities() {
                 />
               </label>
               <label className="text-xs text-dusk-300">
-                Pessoas na reserva
+                {tr('Pessoas na reserva')}
                 <input
                   type="number"
                   min={1}
                   max={selected.capacity}
                   className="input mt-1"
+                  data-testid="amenity-party-size"
                   value={partySize}
                   onChange={(e) => setPartySize(e.target.value)}
                 />
@@ -189,10 +265,10 @@ export default function Amenities() {
             </div>
 
             <div>
-              <div className="text-xs text-dusk-300 mb-2">Horários disponíveis · slots de {selected.slot_minutes} min</div>
+              <div className="text-xs text-dusk-300 mb-2">{tr('Horários disponíveis')} · {tr('slots de')} {selected.slot_minutes} min</div>
               {slots.length === 0 ? (
                 <div className="rounded-2xl bg-white/60 border border-white/70 p-4 text-sm text-dusk-300">
-                  Nenhum horário disponível para esta data.
+                  {tr('Nenhum horário disponível para esta data.')}
                 </div>
               ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
@@ -206,12 +282,13 @@ export default function Amenities() {
                         type="button"
                         disabled={!slot.available}
                         onClick={() => setSelectedSlot(slot)}
+                        data-testid="amenity-slot"
                         className={`p-3 rounded-2xl border text-left transition ${active ? 'bg-sage-100 border-sage-300' : 'bg-white/60 border-white/70 hover:bg-white/80'} ${slot.available ? 'text-dusk-500' : 'opacity-45 pointer-events-none'}`}
                       >
                         <div className="text-sm font-semibold">
                           {start.toLocaleTimeString(currentIntlLocale(), { hour: '2-digit', minute: '2-digit' })}–{end.toLocaleTimeString(currentIntlLocale(), { hour: '2-digit', minute: '2-digit' })}
                         </div>
-                        <div className="text-[11px] text-dusk-300">{slot.available_spots} vaga(s)</div>
+                        <div className="text-[11px] text-dusk-300">{slot.available_spots} {tr('vaga(s)')}</div>
                       </button>
                     );
                   })}
@@ -223,17 +300,17 @@ export default function Amenities() {
               <div className="p-4 rounded-2xl bg-peach-100/40 border border-peach-200">
                 <div className="flex items-center gap-2 mb-2">
                   <PartyPopper className="w-4 h-4 text-peach-600" />
-                  <span className="text-sm font-semibold text-dusk-500">Vai ter festa? Avise a portaria.</span>
+                  <span className="text-sm font-semibold text-dusk-500">{tr('Vai ter festa? Avise a portaria.')}</span>
                 </div>
                 <p className="text-xs text-dusk-300 mb-3">
-                  Quantos convidados e quem são. O porteiro libera por nome — sem ligação na hora.
+                  {tr('Quantos convidados e quem são. O porteiro libera por nome — sem ligação na hora.')}
                 </p>
                 <div className="grid sm:grid-cols-1 gap-3">
                   <label className="text-xs text-dusk-300">
-                    Observações para a portaria (opcional)
+                    {tr('Observações para a portaria (opcional)')}
                     <input
                       className="input mt-1"
-                      placeholder="ex: aniversário, fornecedor de buffet às 18h"
+                      placeholder={tr('ex: aniversário, fornecedor de buffet às 18h')}
                       maxLength={300}
                       value={partyNotes}
                       onChange={(e) => setPartyNotes(e.target.value)}
@@ -241,35 +318,35 @@ export default function Amenities() {
                   </label>
                 </div>
                 <label className="block text-xs text-dusk-300 mt-3">
-                  Lista de convidados (um nome por linha)
+                  {tr('Lista de convidados (um nome por linha)')}
                   <textarea
                     className="input mt-1 min-h-[110px] font-mono text-[13px]"
-                    placeholder={'Ana Souza\nBruno Lima\nCarla Ferreira\n…'}
+                    placeholder={tr('Ana Souza\nBruno Lima\nCarla Ferreira\n…')}
                     maxLength={4000}
                     value={guestList}
                     onChange={(e) => setGuestList(e.target.value)}
                   />
                   <span className="text-[11px] text-dusk-200 mt-1 block">
-                    A portaria recebe a lista no dia. Pode editar até a hora da festa.
+                    {tr('A portaria recebe a lista no dia. Pode editar até a hora da festa.')}
                   </span>
                 </label>
               </div>
             )}
 
             <div className="flex justify-end">
-              <Button type="submit" variant="primary" loading={saving} disabled={!selectedSlot}>
+              <Button type="submit" variant="primary" loading={saving} disabled={!selectedSlot} data-testid="amenity-submit">
                 {parseInt(partySize, 10) > 1
-                  ? 'Reservar e avisar portaria'
-                  : 'Confirmar reserva'}
+                  ? tr('Reservar e avisar portaria')
+                  : tr('Confirmar reserva')}
               </Button>
             </div>
           </form>
         </GlassCard>
       )}
 
-      <h2 className="font-display text-xl text-dusk-500 mb-4">Próximas reservas</h2>
+      <h2 className="font-display text-xl text-dusk-500 mb-4">{tr('Próximas reservas')}</h2>
       {future.length === 0 ? (
-        <GlassCard className="p-6 text-sm text-dusk-300">Nenhuma reserva futura no prédio.</GlassCard>
+        <GlassCard className="p-6 text-sm text-dusk-300">{tr('Nenhuma reserva futura no prédio.')}</GlassCard>
       ) : (
         <div className="space-y-3">
           {future.map((r) => {
@@ -283,15 +360,15 @@ export default function Amenities() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-semibold text-dusk-500">{r.amenity_name}</span>
-                    {mine && <Badge tone="sage">Você</Badge>}
+                    {mine && <Badge tone="sage">{tr('Você')}</Badge>}
                     {(r.expected_guests || 0) > 0 && (
-                      <Badge tone="peach"><Users className="w-3 h-3" /> {(r.expected_guests || 0) + 1} pessoas</Badge>
+                      <Badge tone="peach"><Users className="w-3 h-3" /> {(r.expected_guests || 0) + 1} {tr('pessoas')}</Badge>
                     )}
                   </div>
-                  <div className="text-xs text-dusk-200">{formatDateTime(r.starts_at)} · {r.first_name} {r.last_name} (Unidade {r.unit_number})</div>
+                  <div className="text-xs text-dusk-200">{formatDateTime(r.starts_at)} · {r.first_name} {r.last_name} ({tr('Unidade')} {r.unit_number})</div>
                   {mine && r.guest_list && (
                     <div className="text-[11px] text-dusk-300 mt-1 italic line-clamp-1">
-                      Lista: {r.guest_list.split('\n').filter(Boolean).slice(0, 3).join(', ')}
+                      {tr('Lista')}: {r.guest_list.split('\n').filter(Boolean).slice(0, 3).join(', ')}
                       {r.guest_list.split('\n').filter(Boolean).length > 3 && '…'}
                     </div>
                   )}
