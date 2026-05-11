@@ -1009,6 +1009,11 @@ const phrases: Copy[] = [
   // Resident amenities
   c('Reserva confirmada', 'Reservation confirmed', 'Reserva confirmada', 'Réservation confirmée'),
   c('Reserva confirmada para', 'Reservation confirmed for', 'Reserva confirmada para', 'Réservation confirmée pour'),
+  c('Reserva cancelada', 'Reservation cancelled', 'Reserva cancelada', 'Réservation annulée'),
+  c('Cancelar reserva', 'Cancel booking', 'Cancelar reserva', 'Annuler la réservation'),
+  c('Falha ao cancelar reserva', 'Failed to cancel booking', 'Error al cancelar la reserva', 'Échec de l’annulation'),
+  c('Veja quem reservou áreas comuns e cancele quando houver erro ou conflito.', 'See who booked amenities and cancel when there is a mistake or conflict.', 'Ve quién reservó áreas comunes y cancela cuando haya un error o conflicto.', 'Voyez qui a réservé les espaces communs et annulez en cas d’erreur ou de conflit.'),
+  c('ativas', 'active', 'activas', 'actives'),
   c('Reservar', 'Book', 'Reservar', 'Réserver'),
   c('Escolha um espaço e um horário disponível.', 'Choose a space and an available time.', 'Elige un espacio y un horario disponible.', 'Choisissez un espace et un créneau disponible.'),
   c('Não conseguimos carregar as áreas comuns. Atualize a página e tente de novo.', 'We could not load the amenities. Refresh the page and try again.', 'No pudimos cargar las áreas comunes. Actualiza la página e inténtalo de nuevo.', 'Impossible de charger les espaces communs. Actualisez la page et réessayez.'),

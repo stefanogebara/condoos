@@ -158,6 +158,18 @@ test('resident: amenities page can create a reservation from an amenity card', a
     const rows = (await reservations.json()).data as Array<{ id: number; amenity_id: number; status: string }>;
     reservationId = rows.find((r) => r.amenity_id === amenityId && r.status !== 'cancelled')?.id;
     expect(reservationId).toBeTruthy();
+
+    const reservationRow = page.getByTestId(`resident-amenity-reservation-${reservationId}`);
+    await expect(reservationRow).toBeVisible();
+    page.once('dialog', (dialog) => dialog.accept());
+    await reservationRow.getByRole('button', { name: /Cancel booking|Cancelar reserva|Annuler la réservation/i }).click();
+    await expect(page.getByText(/Reservation cancelled|Reserva cancelada|Réservation annulée/i)).toBeVisible();
+
+    const afterCancel = await request.get(`${apiURL}/amenities/reservations`, {
+      headers: { Authorization: `Bearer ${resident.token}` },
+    });
+    const updatedRows = (await afterCancel.json()).data as Array<{ id: number; status: string }>;
+    expect(updatedRows.find((r) => r.id === reservationId)?.status).toBe('cancelled');
   } finally {
     if (reservationId) {
       await request.delete(`${apiURL}/amenities/reservations/${reservationId}`, {

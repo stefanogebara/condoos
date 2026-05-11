@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
-import { CalendarPlus, Clock, Trophy, Users, Waves, Dumbbell, Flame, PartyPopper } from 'lucide-react';
+import { CalendarPlus, CalendarX, Clock, Trophy, Users, Waves, Dumbbell, Flame, PartyPopper } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 import GlassCard from '../../components/GlassCard';
 import Badge from '../../components/Badge';
 import Button from '../../components/Button';
-import { apiGet, apiPost } from '../../lib/api';
+import { apiDelete, apiGet, apiPost } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { formatDateTime, currentIntlLocale, t, useLocale } from '../../lib/i18n';
 
@@ -136,6 +136,17 @@ export default function Amenities() {
     } catch (err: any) {
       toast.error(tr(friendlyBookingError(err?.response?.data?.error)));
     } finally { setSaving(false); }
+  }
+
+  async function cancelReservation(reservation: Reservation) {
+    if (!confirm(`${tr('Cancelar reserva')}: ${reservation.amenity_name}?`)) return;
+    try {
+      await apiDelete(`/amenities/reservations/${reservation.id}`);
+      toast.success(tr('Reserva cancelada'));
+      load();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || tr('Falha ao cancelar reserva'));
+    }
   }
 
   const future = reservations
@@ -353,7 +364,7 @@ export default function Amenities() {
             const Icon = ICONS[r.amenity_icon] || Waves;
             const mine = r.user_id === user?.id;
             return (
-              <GlassCard key={r.id} className="p-4 flex items-center gap-4">
+              <GlassCard key={r.id} className="p-4 flex flex-col gap-4 sm:flex-row sm:items-center" data-testid={`resident-amenity-reservation-${r.id}`}>
                 <div className="w-10 h-10 rounded-xl bg-peach-100 text-peach-500 flex items-center justify-center shrink-0">
                   <Icon className="w-5 h-5" />
                 </div>
@@ -373,6 +384,17 @@ export default function Amenities() {
                     </div>
                   )}
                 </div>
+                {mine && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    leftIcon={<CalendarX className="w-4 h-4" />}
+                    onClick={() => cancelReservation(r)}
+                  >
+                    {tr('Cancelar reserva')}
+                  </Button>
+                )}
               </GlassCard>
             );
           })}

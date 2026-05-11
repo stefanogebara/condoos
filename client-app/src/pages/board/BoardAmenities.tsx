@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
-import { Clock, Dumbbell, Flame, PartyPopper, Pencil, Plus, Save, Trash2, Trophy, Users, Waves, X } from 'lucide-react';
+import { CalendarX, Clock, Dumbbell, Flame, PartyPopper, Pencil, Plus, Save, Trash2, Trophy, Users, Waves, X } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 import GlassCard from '../../components/GlassCard';
 import Badge from '../../components/Badge';
 import Button from '../../components/Button';
 import { apiDelete, apiGet, apiPatch, apiPost } from '../../lib/api';
-import { t } from '../../lib/i18n';
+import { formatDateTime, t } from '../../lib/i18n';
 
 interface Amenity {
   id: number;
@@ -20,6 +20,23 @@ interface Amenity {
   booking_window_days: number;
   active: number;
   admin_notes?: string | null;
+}
+
+interface Reservation {
+  id: number;
+  amenity_id: number;
+  user_id: number;
+  amenity_name: string;
+  amenity_icon: string;
+  starts_at: string;
+  ends_at: string;
+  first_name: string;
+  last_name: string;
+  unit_number: string;
+  status: string;
+  expected_guests?: number | null;
+  guest_list?: string | null;
+  notes?: string | null;
 }
 
 type AmenityForm = Omit<Amenity, 'id' | 'active'> & { active?: boolean };
@@ -76,13 +93,19 @@ function normalize(form: AmenityForm) {
 
 export default function BoardAmenities() {
   const [amenities, setAmenities] = useState<Amenity[]>([]);
+  const [reservations, setReservations] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(true);
   const [showNew, setShowNew] = useState(false);
 
   async function load() {
     setLoading(true);
     try {
-      setAmenities(await apiGet<Amenity[]>('/amenities?include_inactive=1'));
+      const [amenityRows, reservationRows] = await Promise.all([
+        apiGet<Amenity[]>('/amenities?include_inactive=1'),
+        apiGet<Reservation[]>('/amenities/reservations'),
+      ]);
+      setAmenities(amenityRows);
+      setReservations(reservationRows);
     } finally {
       setLoading(false);
     }
@@ -91,6 +114,9 @@ export default function BoardAmenities() {
   useEffect(() => { load(); }, []);
 
   const activeCount = amenities.filter((a) => a.active).length;
+  const upcomingReservations = reservations
+    .filter((r) => r.status !== 'cancelled' && new Date(r.ends_at) > new Date())
+    .sort((a, b) => a.starts_at.localeCompare(b.starts_at));
 
   return (
     <>
@@ -145,6 +171,27 @@ export default function BoardAmenities() {
         </div>
       </GlassCard>
 
+      <GlassCard className="p-5 mb-5" data-testid="admin-amenity-reservations">
+        <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
+          <div>
+            <h2 className="font-display text-xl text-dusk-500">{t('Próximas reservas')}</h2>
+            <p className="text-sm text-dusk-300 mt-1">{t('Veja quem reservou áreas comuns e cancele quando houver erro ou conflito.')}</p>
+          </div>
+          <Badge tone="sage">{upcomingReservations.length} {t('ativas')}</Badge>
+        </div>
+        {upcomingReservations.length === 0 ? (
+          <div className="rounded-2xl bg-white/60 border border-white/70 p-4 text-sm text-dusk-300">
+            {t('Nenhuma reserva futura no prédio.')}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {upcomingReservations.map((reservation) => (
+              <ReservationRow key={reservation.id} reservation={reservation} onChanged={load} />
+            ))}
+          </div>
+        )}
+      </GlassCard>
+
       <div className="space-y-4">
         {amenities.map((amenity) => (
           <AmenityRow key={amenity.id} amenity={amenity} onChanged={load} />
@@ -157,6 +204,56 @@ export default function BoardAmenities() {
         </GlassCard>
       )}
     </>
+  );
+}
+
+function ReservationRow({ reservation, onChanged }: { reservation: Reservation; onChanged: () => void }) {
+  const Icon = ICONS[reservation.amenity_icon] || Waves;
+  const people = 1 + Math.max(0, Number(reservation.expected_guests || 0));
+
+  async function cancel() {
+    if (!confirm(`Cancelar reserva de ${reservation.amenity_name} para ${reservation.first_name} ${reservation.last_name}?`)) return;
+    try {
+      await apiDelete(`/amenities/reservations/${reservation.id}`);
+      toast.success(t('Reserva cancelada'));
+      onChanged();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || t('Falha ao cancelar reserva'));
+    }
+  }
+
+  return (
+    <div
+      className="flex flex-col gap-3 rounded-2xl bg-white/60 border border-white/70 p-4 sm:flex-row sm:items-center"
+      data-testid={`admin-amenity-reservation-${reservation.id}`}
+    >
+      <div className="w-10 h-10 rounded-xl bg-sage-200 text-sage-700 flex items-center justify-center shrink-0">
+        <Icon className="w-5 h-5" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-semibold text-dusk-500">{reservation.amenity_name}</span>
+          <Badge tone="peach"><Users className="w-3 h-3" /> {people} {t('pessoas')}</Badge>
+        </div>
+        <div className="text-xs text-dusk-300 mt-1">
+          {formatDateTime(reservation.starts_at)} · {reservation.first_name} {reservation.last_name} · {t('Unidade')} {reservation.unit_number}
+        </div>
+        {reservation.guest_list && (
+          <div className="text-[11px] text-dusk-300 mt-1 line-clamp-1">
+            {t('Lista')}: {reservation.guest_list.split('\n').filter(Boolean).slice(0, 4).join(', ')}
+          </div>
+        )}
+      </div>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        leftIcon={<CalendarX className="w-4 h-4" />}
+        onClick={cancel}
+      >
+        {t('Cancelar')}
+      </Button>
+    </div>
   );
 }
 

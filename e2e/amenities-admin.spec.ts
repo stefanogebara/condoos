@@ -1,6 +1,6 @@
 // Amenities admin: CRUD (create, rename, deactivate), resident access control,
 // reservation overbooking protection.
-import { expect, test, type APIRequestContext } from '@playwright/test';
+import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 
 const apiURL = process.env.E2E_API_URL
   || (process.env.E2E_BASE_URL ? `${process.env.E2E_BASE_URL.replace(/\/$/, '')}/api` : 'http://127.0.0.1:4316/api');
@@ -16,6 +16,14 @@ async function loginApi(request: APIRequestContext, email: string, password: str
   const session = (await r.json()).data as Session;
   sessionCache.set(email, session);
   return session;
+}
+
+async function loginBrowser(page: Page, session: Session) {
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await page.evaluate(({ token, user }) => {
+    localStorage.setItem('condoos_token', token);
+    localStorage.setItem('condoos_user', JSON.stringify(user));
+  }, session);
 }
 
 const BASE_AMENITY = {
@@ -197,6 +205,7 @@ test('Amenities admin: same-slot double reservation is rejected', async ({ reque
     data:    bookPayload,
   });
   expect(first.ok(), `first booking failed: ${first.status()} ${await first.text()}`).toBeTruthy();
+  const firstReservationId: number = (await first.json()).data.id;
 
   // Second booking for the exact same slot — should be rejected
   const second = await request.post(`${apiURL}/amenities/reservations`, {
@@ -205,4 +214,84 @@ test('Amenities admin: same-slot double reservation is rejected', async ({ reque
   });
   expect(second.status()).toBeGreaterThanOrEqual(400);
   expect((await second.json()).success).toBe(false);
+
+  const slotsAfterBooking = await request.get(`${apiURL}/amenities/${amenityId}/slots?date=${dateStr}`, {
+    headers: { Authorization: `Bearer ${resident.token}` },
+  });
+  const updatedSlot = ((await slotsAfterBooking.json()).data.slots as any[])
+    .find((s: any) => s.starts_at === freeSlot.starts_at);
+  expect(updatedSlot.available).toBe(false);
+  expect(updatedSlot.available_spots).toBe(0);
+
+  await request.delete(`${apiURL}/amenities/reservations/${firstReservationId}`, { headers: resH });
+  await request.delete(`${apiURL}/amenities/${amenityId}`, { headers: admH });
+});
+
+// ---------------------------------------------------------------------------
+// 6. Admin can see and cancel upcoming reservations from /board/amenities
+// ---------------------------------------------------------------------------
+
+test('Amenities admin: board amenities page shows current reservations', async ({ page, request }) => {
+  const admin    = await loginApi(request, 'admin@condoos.dev',    'admin123');
+  const resident = await loginApi(request, 'resident@condoos.dev', 'resident123');
+  const admH     = { Authorization: `Bearer ${admin.token}`,    'Content-Type': 'application/json' };
+  const resH     = { Authorization: `Bearer ${resident.token}`, 'Content-Type': 'application/json' };
+  const name = `E2E Admin Visible ${Date.now()}`;
+  let amenityId: number | undefined;
+  let reservationId: number | undefined;
+
+  try {
+    const amenityRes = await request.post(`${apiURL}/amenities`, {
+      headers: admH,
+      data: {
+        ...BASE_AMENITY,
+        name,
+        capacity: 2,
+        slot_minutes: 60,
+      },
+    });
+    expect(amenityRes.ok(), `amenity create failed: ${amenityRes.status()} ${await amenityRes.text()}`).toBeTruthy();
+    amenityId = (await amenityRes.json()).data.id;
+
+    const dateStr = new Date(Date.now() + 2 * 24 * 3600 * 1000).toISOString().slice(0, 10);
+    const slotsRes = await request.get(`${apiURL}/amenities/${amenityId}/slots?date=${dateStr}`, {
+      headers: { Authorization: `Bearer ${resident.token}` },
+    });
+    const freeSlot = ((await slotsRes.json()).data.slots as any[]).find((s) => s.available);
+    expect(freeSlot).toBeTruthy();
+
+    const createdReservation = await request.post(`${apiURL}/amenities/reservations`, {
+      headers: resH,
+      data: {
+        amenity_id: amenityId,
+        starts_at: freeSlot.starts_at,
+        ends_at: freeSlot.ends_at,
+        expected_guests: 0,
+      },
+    });
+    expect(createdReservation.ok(), `reservation create failed: ${createdReservation.status()} ${await createdReservation.text()}`).toBeTruthy();
+    reservationId = (await createdReservation.json()).data.id;
+
+    await loginBrowser(page, admin);
+    await page.goto('/board/amenities');
+    const reservationsPanel = page.getByTestId('admin-amenity-reservations');
+    const reservationRow = page.getByTestId(`admin-amenity-reservation-${reservationId}`);
+    await expect(reservationsPanel).toBeVisible();
+    await expect(reservationRow).toBeVisible();
+    await expect(reservationRow.getByText(name)).toBeVisible();
+    await expect(reservationRow.getByText(/Maya|resident/i)).toBeVisible();
+
+    page.once('dialog', (dialog) => dialog.accept());
+    await reservationRow.getByRole('button', { name: /Cancelar|Cancel/i }).click();
+    await expect(page.getByText(/Reserva cancelada|Reservation cancelled/i)).toBeVisible();
+    const rows = (await (await request.get(`${apiURL}/amenities/reservations`, { headers: resH })).json()).data as Array<{ id: number; status: string }>;
+    expect(rows.find((r) => r.id === reservationId)?.status).toBe('cancelled');
+  } finally {
+    if (reservationId) {
+      await request.delete(`${apiURL}/amenities/reservations/${reservationId}`, { headers: resH });
+    }
+    if (amenityId) {
+      await request.delete(`${apiURL}/amenities/${amenityId}`, { headers: admH });
+    }
+  }
 });
