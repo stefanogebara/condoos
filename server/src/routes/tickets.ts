@@ -693,7 +693,7 @@ router.get('/:id', requireAuth, (req: AuthedRequest, res) => {
   }
   // Vendor outreach trail (Phase 2). Only meaningful for community tickets
   // but harmless on private ones — empty array.
-  const dispatches = db.prepare(
+  const dispatchRows = db.prepare(
     `SELECT d.id, d.channel, d.status, d.message_body, d.created_at, d.responded_at, d.response_summary,
             sc.company_name AS vendor_name, sc.contact_name AS vendor_contact, sc.category AS vendor_category,
             o.status AS outbox_status, o.sent_at AS outbox_sent_at, o.last_error AS outbox_error
@@ -702,7 +702,22 @@ router.get('/:id', requireAuth, (req: AuthedRequest, res) => {
      LEFT JOIN notification_outbox o ON o.id = d.outbox_id
      WHERE d.ticket_id = ?
      ORDER BY d.created_at DESC`
-  ).all(id);
+  ).all(id) as any[];
+  // Pilot-readiness item 3 — the resident timeline only needs status,
+  // timestamps, and the vendor company name. Stripping outreach message
+  // body, vendor contact name, outbox errors, and the channel keeps the
+  // resident view from leaking how the admin actually contacted the vendor.
+  // Admins still get the full record.
+  const isAdminViewer = req.user!.role === 'board_admin';
+  const dispatches = isAdminViewer
+    ? dispatchRows
+    : dispatchRows.map((d) => ({
+        id: d.id,
+        status: d.status,
+        created_at: d.created_at,
+        responded_at: d.responded_at,
+        vendor_name: d.vendor_name,
+      }));
   return ok(res, {
     ...ticket,
     agent_plan,

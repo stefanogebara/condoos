@@ -47,12 +47,30 @@ export async function runAdminAgent(args: RunAdminAgentArgs): Promise<RunAdminAg
      WHERE b.condominium_id = ?`
   ).get(args.condoId) as any;
 
+  // Vendor reputation — joins dispatch stats so the model sees how each
+  // vendor has actually performed (responded N out of M, avg response time).
+  // The picker preselection uses the same stats client-side; here it shapes
+  // the prompt so the AI prefers proven responders over alphabetic-first.
   const serviceContacts = db.prepare(
-    `SELECT category, company_name, contact_name, phone, whatsapp, email, website,
-            service_scope, notes, emergency_available, preferred, last_used_at
-     FROM service_contacts
-     WHERE condominium_id = ? AND active = 1
-     ORDER BY preferred DESC, emergency_available DESC, company_name ASC
+    `WITH stats AS (
+       SELECT service_contact_id,
+              SUM(CASE WHEN channel IN ('whatsapp','email') THEN 1 ELSE 0 END) AS sent,
+              SUM(CASE WHEN status = 'responded' AND channel IN ('whatsapp','email') THEN 1 ELSE 0 END) AS responded,
+              AVG(CASE WHEN status = 'responded' AND responded_at IS NOT NULL
+                       THEN (strftime('%s', responded_at) - strftime('%s', created_at))
+                       ELSE NULL END) AS avg_response_seconds
+       FROM ticket_dispatches
+       GROUP BY service_contact_id
+     )
+     SELECT sc.category, sc.company_name, sc.contact_name, sc.phone, sc.whatsapp, sc.email, sc.website,
+            sc.service_scope, sc.notes, sc.emergency_available, sc.preferred, sc.last_used_at,
+            COALESCE(stats.sent, 0) AS dispatches_total,
+            COALESCE(stats.responded, 0) AS dispatches_responded,
+            stats.avg_response_seconds AS avg_response_seconds
+     FROM service_contacts sc
+     LEFT JOIN stats ON stats.service_contact_id = sc.id
+     WHERE sc.condominium_id = ? AND sc.active = 1
+     ORDER BY sc.preferred DESC, sc.emergency_available DESC, sc.company_name ASC
      LIMIT 40`
   ).all(args.condoId) as any[];
 
@@ -120,6 +138,16 @@ export async function runAdminAgent(args: RunAdminAgentArgs): Promise<RunAdminAg
       emergency_available: !!c.emergency_available,
       preferred: !!c.preferred,
       last_used_at: c.last_used_at,
+      reputation: {
+        dispatches_total: Number(c.dispatches_total || 0),
+        dispatches_responded: Number(c.dispatches_responded || 0),
+        response_rate: c.dispatches_total
+          ? Number(c.dispatches_responded) / Number(c.dispatches_total)
+          : null,
+        avg_response_seconds: c.avg_response_seconds != null
+          ? Math.round(Number(c.avg_response_seconds))
+          : null,
+      },
     })),
     amenities: amenities.map((a) => ({
       name: clip(a.name, 120),

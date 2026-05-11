@@ -1798,6 +1798,15 @@ const phrases: Copy[] = [
   // Round 3 — picker enhancements + reporter byline
   c('Adicionar novo fornecedor', 'Add new vendor', 'Añadir nuevo proveedor', 'Ajouter un prestataire'),
   c('somente telefone', 'phone only', 'solo teléfono', 'téléphone uniquement'),
+  // Pilot-readiness round — resident timeline strings.
+  c('Linha do tempo', 'Timeline', 'Línea de tiempo', 'Chronologie'),
+  c('Vizinhos confirmaram o problema', 'Neighbours confirmed the issue', 'Los vecinos confirmaron el problema', 'Les voisins ont confirmé le problème'),
+  c('IA gerou plano de remediação', 'AI generated remediation plan', 'IA generó plan de remediación', "L'IA a généré un plan de remédiation"),
+  c('Síndico acionou', 'Manager dispatched', 'El administrador contactó', 'Le syndic a contacté'),
+  c('vizinho', 'neighbour', 'vecino', 'voisin'),
+  c('fornecedor', 'vendor', 'proveedor', 'prestataire'),
+  c('Aguardando síndico — sem fornecedor disponível', 'Awaiting manager — no vendor available', 'Esperando al administrador — sin proveedor disponible', 'En attente du syndic — aucun prestataire disponible'),
+  c('Problema resolvido', 'Issue resolved', 'Problema resuelto', 'Problème résolu'),
 ];
 
 function c(pt: string, en: string, es: string, fr: string): Copy {

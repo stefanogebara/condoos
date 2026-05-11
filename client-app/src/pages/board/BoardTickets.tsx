@@ -67,6 +67,11 @@ interface ServiceContact {
   emergency_available: number;
   preferred: number;
   service_scope: string | null;
+  // Reputation — computed by the server from ticket_dispatches history.
+  // Used in the picker to surface track record and to outrank silent vendors.
+  dispatches_total?: number;
+  dispatches_responded?: number;
+  avg_response_seconds?: number | null;
 }
 
 interface AgentPlan {
@@ -686,14 +691,28 @@ function VendorPickerModal({
   // instead of falling through to a wrong-specialty ★ preferred.
   const sameCategory = vendors.filter((v) => categoryMatches(ticket.category, v.category));
   const otherCategory = vendors.filter((v) => !categoryMatches(ticket.category, v.category));
-  const sorted = [...sameCategory, ...otherCategory];
+  // Within same-category, rank by reputation: vendors that responded to
+  // past dispatches outrank silent ones. response_rate breaks ties; recent
+  // activity (last_used_at) breaks deeper ties via the server's ORDER BY.
+  function reputationScore(v: ServiceContact): number {
+    const total = v.dispatches_total || 0;
+    if (total === 0) return 0;
+    const responded = v.dispatches_responded || 0;
+    // Wilson-style smoothing — vendors with 1/1 don't beat vendors with 10/11.
+    return (responded + 1) / (total + 2);
+  }
+  const sameCategorySorted = [...sameCategory].sort((a, b) => {
+    const diff = reputationScore(b) - reputationScore(a);
+    if (Math.abs(diff) > 0.001) return diff;
+    if ((b.preferred || 0) !== (a.preferred || 0)) return (b.preferred || 0) - (a.preferred || 0);
+    return 0;
+  });
+  const sorted = [...sameCategorySorted, ...otherCategory];
 
   // Pre-select priority: exact name match against the AI's top suggestion >
-  // first same-category vendor > any preferred vendor > first row. Previously
-  // the preferred fallback won over same-category, so a `maintenance` ticket
-  // defaulted to the ★ Otis (elevator) instead of the actual matching vendor.
+  // top same-category by reputation > any preferred vendor > first row.
   const initialVendor = sorted.find((v) => v.company_name === preferred)
-    || sameCategory[0]
+    || sameCategorySorted[0]
     || sorted.find((v) => v.preferred === 1)
     || sorted[0];
 
@@ -744,15 +763,23 @@ function VendorPickerModal({
           <select className="input mt-1" value={vendorId ?? ''} onChange={(e) => setVendorId(Number(e.target.value))}>
             {sorted.length === 0 && <option value="">{tr('Nenhum cadastrado')}</option>}
             {sorted.map((vv) => {
-              // UX-M6 — surface vendors that can only be contacted manually
-              // (no whatsapp + no email) so the admin knows up front the
-              // WhatsApp / Email pill below will be disabled.
               const noChannel = !vv.whatsapp && !vv.email;
+              // Reputation suffix — only render when the vendor has been
+              // dispatched at least once, so brand-new vendors aren't
+              // labeled "0/0 respondidos". avg_response_seconds → hours
+              // is the most-useful unit for vendor SLA at this scale.
+              const total = vv.dispatches_total || 0;
+              const responded = vv.dispatches_responded || 0;
+              const avgSec = vv.avg_response_seconds || null;
+              const repPart = total > 0
+                ? ` · ${responded}/${total} ${tr('respondidos')}${avgSec ? ` · ~${Math.max(1, Math.round(avgSec / 3600))}h` : ''}`
+                : '';
               return (
                 <option key={vv.id} value={vv.id}>
                   {vv.preferred === 1 ? '★ ' : ''}{vv.company_name} ({tr(vendorCategoryLabel(vv.category))})
                   {vv.emergency_available === 1 ? ' · 24h' : ''}
                   {noChannel ? ` · ${tr('somente telefone')}` : ''}
+                  {repPart}
                 </option>
               );
             })}

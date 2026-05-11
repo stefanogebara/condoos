@@ -3,7 +3,7 @@
 // confirms → admin dispatches AI agent (Phase 2 will auto-dispatch).
 import React, { useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
-import { AlertTriangle, Check, CheckCircle2, Plus, ThumbsDown, ThumbsUp, X } from 'lucide-react';
+import { AlertTriangle, Bot, Check, CheckCircle2, Megaphone, MessageCircle, Plus, Send, ShieldAlert, Sparkles, ThumbsDown, ThumbsUp, Users, X } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 import GlassCard from '../../components/GlassCard';
 import Button from '../../components/Button';
@@ -29,6 +29,9 @@ interface Ticket {
   verification_count: number;
   denial_count: number;
   verified_at: string | null;
+  agent_run_at: string | null;
+  resolved_at: string | null;
+  blocked_reason: string | null;
   created_at: string;
 }
 
@@ -42,8 +45,17 @@ interface Verification {
   unit_number: string | null;
 }
 
+interface ResidentDispatch {
+  id: number;
+  status: string;
+  created_at: string;
+  responded_at: string | null;
+  vendor_name: string | null;
+}
+
 interface TicketDetail extends Ticket {
   verifications: Verification[];
+  dispatches?: ResidentDispatch[];
   my_vote: 'confirm' | 'deny' | null;
 }
 
@@ -292,6 +304,8 @@ function TicketCard({
             <div className="text-xs text-dusk-200">{t('Você reportou este problema; aguardando vizinhos verificarem.')}</div>
           )}
 
+          {detail && <TicketTimeline ticket={ticket} detail={detail} />}
+
           {detail && detail.verifications.length > 0 && (
             <div>
               <div className="text-xs uppercase tracking-wider text-dusk-200 mb-2">{t('Votos')}</div>
@@ -311,6 +325,133 @@ function TicketCard({
         </div>
       )}
     </GlassCard>
+  );
+}
+
+// Pilot-readiness item 3 — resident-side timeline.
+// Residents only ever saw votes + maybe a "resolved" badge. There was no way
+// to tell whether the admin had actually dispatched someone, who, when, and
+// whether the vendor had replied. The timeline reads the existing
+// verified_at/agent_run_at/resolved_at columns plus the new dispatches[]
+// array off the ticket detail and renders a single chronological strip so
+// the resident has the same situational awareness the admin does — minus
+// any vendor PII (just the company name and event timestamps).
+type TimelineEvent = {
+  key: string;
+  at: string;
+  icon: React.ReactNode;
+  text: React.ReactNode;
+};
+
+function TicketTimeline({ ticket, detail }: { ticket: Ticket; detail: TicketDetail }) {
+  const events: TimelineEvent[] = [];
+
+  events.push({
+    key: 'reported',
+    at: ticket.created_at,
+    icon: <Megaphone className="w-3.5 h-3.5 text-dusk-300" />,
+    text: (
+      <>
+        {t('Reportado por')} <span className="font-medium text-dusk-500">
+          {ticket.reporter_first || t('vizinho')}
+        </span>
+      </>
+    ),
+  });
+
+  if (ticket.verified_at) {
+    events.push({
+      key: 'verified',
+      at: ticket.verified_at,
+      icon: <Users className="w-3.5 h-3.5 text-sage-700" />,
+      text: <>{t('Vizinhos confirmaram o problema')}</>,
+    });
+  }
+
+  if (ticket.agent_run_at) {
+    events.push({
+      key: 'agent',
+      at: ticket.agent_run_at,
+      icon: <Sparkles className="w-3.5 h-3.5 text-peach-500" />,
+      text: <>{t('IA gerou plano de remediação')}</>,
+    });
+  }
+
+  for (const dispatch of detail.dispatches || []) {
+    events.push({
+      key: `dispatch-${dispatch.id}`,
+      at: dispatch.created_at,
+      icon: <Send className="w-3.5 h-3.5 text-peach-500" />,
+      text: (
+        <>
+          {t('Síndico acionou')}{' '}
+          <span className="font-medium text-dusk-500">
+            {dispatch.vendor_name || t('fornecedor')}
+          </span>
+        </>
+      ),
+    });
+    if (dispatch.responded_at) {
+      events.push({
+        key: `responded-${dispatch.id}`,
+        at: dispatch.responded_at,
+        icon: <MessageCircle className="w-3.5 h-3.5 text-sage-700" />,
+        text: (
+          <>
+            <span className="font-medium text-dusk-500">
+              {dispatch.vendor_name || t('fornecedor')}
+            </span>{' '}
+            {t('respondeu')}
+          </>
+        ),
+      });
+    }
+  }
+
+  if (ticket.blocked_reason && ticket.remediation_status === 'blocked_needs_admin') {
+    events.push({
+      key: 'blocked',
+      at: ticket.agent_run_at || ticket.created_at,
+      icon: <ShieldAlert className="w-3.5 h-3.5 text-dusk-400" />,
+      text: <>{t('Aguardando síndico — sem fornecedor disponível')}</>,
+    });
+  }
+
+  if (ticket.resolved_at) {
+    events.push({
+      key: 'resolved',
+      at: ticket.resolved_at,
+      icon: <CheckCircle2 className="w-3.5 h-3.5 text-sage-700" />,
+      text: <>{t('Problema resolvido')}</>,
+    });
+  }
+
+  // Sort chronologically. Lexicographic compare on the SQLite
+  // 'YYYY-MM-DD HH:MM:SS' UTC format gives the same order as Date compare
+  // without the parse overhead.
+  events.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
+
+  if (events.length === 0) return null;
+
+  return (
+    <div>
+      <div className="text-xs uppercase tracking-wider text-dusk-200 mb-2">
+        {t('Linha do tempo')}
+      </div>
+      <ol className="relative border-l border-white/60 pl-4 space-y-2">
+        {events.map((evt) => (
+          <li key={evt.key} className="relative">
+            <span className="absolute -left-[1.4rem] top-0.5 flex items-center justify-center w-5 h-5 rounded-full bg-white/70 border border-white/80">
+              {evt.icon}
+            </span>
+            <div className="text-xs text-dusk-400 leading-snug">{evt.text}</div>
+            <div className="text-[10px] uppercase tracking-wider text-dusk-200 mt-0.5">
+              {formatRelativeTime(evt.at)}
+            </div>
+          </li>
+        ))}
+      </ol>
+    </div>
   );
 }
 

@@ -30,6 +30,7 @@ import unitsRoutes from './routes/units';
 import conciergeRoutes from './routes/concierge';
 import financeRoutes from './routes/finance';
 import ticketsRoutes from './routes/tickets';
+import webhooksRoutes from './routes/webhooks';
 import serviceContactsRoutes from './routes/service-contacts';
 import { processWhatsAppOutbox } from './lib/whatsapp';
 
@@ -122,6 +123,9 @@ app.get('/api/health', (_req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/onboarding', onboardingRoutes);
 app.use('/api/me', meRoutes);
+// Inbound webhooks — public endpoints (no requireAuth). Each handler
+// verifies its provider's signature / shared secret before mutating state.
+app.use('/api/webhooks', webhooksRoutes);
 
 // All real data routes require an active user_unit membership.
 const scoped = [requireAuth, requireActiveMembership];
