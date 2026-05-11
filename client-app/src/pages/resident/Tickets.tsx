@@ -409,11 +409,17 @@ function TicketTimeline({ ticket, detail }: { ticket: Ticket; detail: TicketDeta
   }
 
   if (ticket.blocked_reason && ticket.remediation_status === 'blocked_needs_admin') {
+    // Differentiate the two scenarios so the resident knows whether the
+    // admin needs to add a contact (no_vendor_in_category) vs chase one
+    // that already exists but didn't reply (vendor_no_response).
+    const blockedText = ticket.blocked_reason === 'vendor_no_response'
+      ? t('Sem resposta do fornecedor — síndico vai retomar')
+      : t('Aguardando síndico — sem fornecedor disponível');
     events.push({
       key: 'blocked',
       at: ticket.agent_run_at || ticket.created_at,
       icon: <ShieldAlert className="w-3.5 h-3.5 text-dusk-400" />,
-      text: <>{t('Aguardando síndico — sem fornecedor disponível')}</>,
+      text: <>{blockedText}</>,
     });
   }
 

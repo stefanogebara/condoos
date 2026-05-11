@@ -1832,6 +1832,7 @@ const phrases: Copy[] = [
   c('vizinho', 'neighbour', 'vecino', 'voisin'),
   c('fornecedor', 'vendor', 'proveedor', 'prestataire'),
   c('Aguardando síndico — sem fornecedor disponível', 'Awaiting manager — no vendor available', 'Esperando al administrador — sin proveedor disponible', 'En attente du syndic — aucun prestataire disponible'),
+  c('Sem resposta do fornecedor — síndico vai retomar', 'No response from vendor — manager will follow up', 'Sin respuesta del proveedor — el administrador retomará', 'Pas de réponse du prestataire — le syndic va relancer'),
   c('Problema resolvido', 'Issue resolved', 'Problema resuelto', 'Problème résolu'),
   // Vendor auto-rewire toast (BoardServices) — fired when a new contact
   // unsticks tickets that were blocked on no_vendor_in_category.

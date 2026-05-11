@@ -1024,3 +1024,64 @@ test('WhatsApp: notifyCondoOwners selects only active owners in the condo', asyn
   // 2 owners matched + 1 tenant skipped at the SQL filter
   assert.equal(result.attempted, 2);
 });
+
+test('SLA escalator: flips awaiting_vendor tickets past their priority window', async () => {
+  resetDb();
+  const { tickSlaEscalator } = await import('../src/lib/sla-escalator');
+  const { condoId, unit101 } = createCondoFixture();
+  const resident = createUser('r@sla.test');
+  const admin = createUser('a@sla.test', 'board_admin');
+  db.prepare(
+    `INSERT INTO user_unit (user_id, unit_id, relationship, status, primary_contact, voting_weight) VALUES (?, ?, 'owner', 'active', 1, 1.0), (?, ?, 'owner', 'active', 0, 1.0)`
+  ).run(resident, unit101, admin, unit101);
+
+  // Three tickets, all in awaiting_vendor, with dispatches at different ages.
+  // Helper inserts ticket + matching dispatch row; created_at is rewound by N
+  // hours via a literal string so the test doesn't depend on JS clock skew.
+  function seedTicket(priority: string, dispatchHoursAgo: number): number {
+    const ticketId = Number(db.prepare(
+      `INSERT INTO tickets (condominium_id, reporter_id, title, description, category, priority, status, remediation_status, verification_threshold)
+       VALUES (?, ?, 'test', 'test', 'plumbing', ?, 'open', 'awaiting_vendor', 3)`
+    ).run(condoId, resident, priority).lastInsertRowid);
+    db.prepare(
+      `INSERT INTO ticket_dispatches (ticket_id, channel, message_body, status, created_at, dispatched_by_user_id)
+       VALUES (?, 'whatsapp', 'hi', 'sent', datetime('now', '-' || ? || ' hours'), ?)`
+    ).run(ticketId, dispatchHoursAgo, admin);
+    return ticketId;
+  }
+
+  const urgentBreached = seedTicket('urgent', 3);   // 3h > 2h urgent SLA — breach
+  const normalFresh   = seedTicket('normal', 5);    // 5h < 24h normal SLA — fresh
+  const normalBreach  = seedTicket('normal', 30);   // 30h > 24h normal SLA — breach
+
+  const result = await tickSlaEscalator();
+  assert.equal(result.escalated, 2);
+  assert.deepEqual(new Set(result.ticketIds), new Set([urgentBreached, normalBreach]));
+
+  const status = (id: number) => db.prepare(
+    `SELECT remediation_status, blocked_reason FROM tickets WHERE id = ?`
+  ).get(id) as { remediation_status: string; blocked_reason: string | null };
+
+  assert.deepEqual(status(urgentBreached), { remediation_status: 'blocked_needs_admin', blocked_reason: 'vendor_no_response' });
+  assert.deepEqual(status(normalFresh),   { remediation_status: 'awaiting_vendor',     blocked_reason: null });
+  assert.deepEqual(status(normalBreach),  { remediation_status: 'blocked_needs_admin', blocked_reason: 'vendor_no_response' });
+
+  // Already-responded dispatches must NOT trigger escalation even if old.
+  resetDb();
+  const fix = createCondoFixture();
+  const r = createUser('r2@sla.test');
+  db.prepare(
+    `INSERT INTO user_unit (user_id, unit_id, relationship, status, primary_contact, voting_weight) VALUES (?, ?, 'owner', 'active', 1, 1.0)`
+  ).run(r, fix.unit101);
+  const respondedTicket = Number(db.prepare(
+    `INSERT INTO tickets (condominium_id, reporter_id, title, description, category, priority, status, remediation_status, verification_threshold)
+     VALUES (?, ?, 'r', 'r', 'plumbing', 'normal', 'open', 'awaiting_vendor', 3)`
+  ).run(fix.condoId, r).lastInsertRowid);
+  db.prepare(
+    `INSERT INTO ticket_dispatches (ticket_id, channel, message_body, status, created_at, responded_at, dispatched_by_user_id)
+     VALUES (?, 'whatsapp', 'hi', 'responded', datetime('now', '-30 hours'), datetime('now', '-25 hours'), ?)`
+  ).run(respondedTicket, r);
+
+  const second = await tickSlaEscalator();
+  assert.equal(second.escalated, 0);
+});

@@ -9,6 +9,7 @@ import morgan from 'morgan';
 
 import { requireAuth, requireActiveMembership } from './lib/auth';
 import { startVoteCloser } from './lib/vote-closer';
+import { startSlaEscalator } from './lib/sla-escalator';
 import { captureException, initSentry } from './lib/sentry';
 import authRoutes from './routes/auth';
 import packagesRoutes from './routes/packages';
@@ -173,8 +174,13 @@ app.listen(PORT, () => {
     setInterval(() => {
       processWhatsAppOutbox({ limit: 25 }).catch((err) => console.warn('[notification-outbox] retry failed:', err?.message || err));
     }, 60_000);
+    // 5min cadence — SLAs are measured in hours, so the worst-case escalation
+    // delay is one interval. Cheaper than 60s on Fly's GB-hour billing while
+    // still well under the smallest (urgent=2h) window.
+    startSlaEscalator(5 * 60_000);
     console.log('[vote-closer] started (60s interval)');
     console.log('[finance] scheduled invoice generator started (6h interval)');
     console.log('[notification-outbox] retry loop started (60s interval)');
+    console.log('[sla-escalator] started (5min interval)');
   }
 });
