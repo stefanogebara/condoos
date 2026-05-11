@@ -4,7 +4,7 @@ import db from '../db';
 import { requireAuth, requireRole, getActiveCondoId, AuthedRequest } from '../lib/auth';
 import { ok, fail, asyncHandler } from '../lib/respond';
 import { audit } from '../lib/audit';
-import { canAssignTicketToUser } from '../lib/tickets';
+import { canAssignTicketToUser, markTicketAgentFailed } from '../lib/tickets';
 import { runAdminAgent } from '../ai/admin-agent-runner';
 import { notifyUsers } from '../lib/whatsapp';
 
@@ -72,9 +72,9 @@ const resolveSchema = z.object({
 // Phase 2 — fire-and-forget agent invocation triggered the moment a ticket
 // flips to remediation_status='verified'. We can't block the verify HTTP
 // response on a 5-15s LLM call, so the agent runs in the background and
-// updates the ticket row when it lands. Failures are logged but never
-// propagate — the admin can always click "Generate plan" manually if the
-// auto-attempt failed.
+// updates the ticket row when it lands. Failures are escalated into the same
+// admin-attention state used for missing vendors, so no verified ticket sits
+// silently without a plan.
 export function dispatchAgentInBackground(ticketId: number, condoId: number, locale: string | undefined): void {
   void (async () => {
     try {
@@ -116,6 +116,7 @@ export function dispatchAgentInBackground(ticketId: number, condoId: number, loc
          WHERE id = ?`
       ).run(JSON.stringify(result.plan), blocked ? 1 : 0, blocked ? 1 : 0, ticketId);
     } catch (err) {
+      markTicketAgentFailed(ticketId);
       console.warn(`[tickets:${ticketId}] background agent failed:`, (err as Error)?.message || err);
     }
   })();

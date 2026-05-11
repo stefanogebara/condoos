@@ -9,8 +9,14 @@ interface FinanceError {
 
 interface ScheduleRow {
   id: number;
+  condominium_id: number;
+  name: string;
   amount_cents: number;
   currency: string;
+  frequency: 'monthly' | 'quarterly' | 'annual' | 'one_time';
+  due_day: number;
+  active: number;
+  created_at: string;
 }
 
 interface InvoiceRow {
@@ -55,6 +61,16 @@ export interface PaymentSuccess {
   invoice_status: string;
   duplicate?: boolean;
   remaining_cents?: number;
+}
+
+export interface ScheduledInvoiceGenerationResult {
+  period: string;
+  schedule_count: number;
+  created_count: number;
+  skipped_count: number;
+  invoice_ids: number[];
+  skipped_unit_ids: number[];
+  errors: Array<{ schedule_id: number; error: string }>;
 }
 
 export function unitInCondo(unitId: number, condoId: number): boolean {
@@ -149,6 +165,98 @@ export function generateInvoices(input: InvoiceGenerationInput): InvoiceGenerati
     invoice_ids: created,
     skipped_unit_ids: skipped,
   };
+}
+
+function periodForDate(asOf: Date): string {
+  return asOf.toISOString().slice(0, 7);
+}
+
+function monthIndexFromPeriod(period: string): number {
+  const [year, month] = period.split('-').map(Number);
+  return year * 12 + (month - 1);
+}
+
+function monthIndexFromDate(value: string): number | null {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.getUTCFullYear() * 12 + date.getUTCMonth();
+}
+
+function shouldGenerateForPeriod(schedule: ScheduleRow, period: string): boolean {
+  if (schedule.frequency === 'one_time') return false;
+  if (schedule.frequency === 'monthly') return true;
+
+  const current = monthIndexFromPeriod(period);
+  const anchor = monthIndexFromDate(schedule.created_at) ?? current;
+  const elapsed = current - anchor;
+  if (elapsed < 0) return false;
+  if (schedule.frequency === 'quarterly') return elapsed % 3 === 0;
+  if (schedule.frequency === 'annual') return elapsed % 12 === 0;
+  return false;
+}
+
+function dueDateForPeriod(period: string, dueDay: number): string {
+  const day = String(Math.min(Math.max(Number(dueDay) || 10, 1), 28)).padStart(2, '0');
+  return `${period}-${day}T12:00:00.000Z`;
+}
+
+export function generateScheduledInvoices(asOf = new Date()): ScheduledInvoiceGenerationResult {
+  const period = periodForDate(asOf);
+  const schedules = db.prepare(
+    `SELECT *
+     FROM dues_schedules
+     WHERE active = 1 AND frequency != 'one_time'
+     ORDER BY condominium_id ASC, id ASC`
+  ).all() as ScheduleRow[];
+
+  const summary: ScheduledInvoiceGenerationResult = {
+    period,
+    schedule_count: 0,
+    created_count: 0,
+    skipped_count: 0,
+    invoice_ids: [],
+    skipped_unit_ids: [],
+    errors: [],
+  };
+
+  for (const schedule of schedules) {
+    if (!shouldGenerateForPeriod(schedule, period)) continue;
+    summary.schedule_count += 1;
+    const result = generateInvoices({
+      condoId: schedule.condominium_id,
+      schedule_id: schedule.id,
+      period,
+      due_date: dueDateForPeriod(period, schedule.due_day),
+      notes: `Auto-generated from schedule: ${schedule.name}`,
+    });
+    if (!result.ok) {
+      summary.errors.push({ schedule_id: schedule.id, error: result.error });
+      continue;
+    }
+    summary.created_count += result.created_count;
+    summary.skipped_count += result.skipped_count;
+    summary.invoice_ids.push(...result.invoice_ids);
+    summary.skipped_unit_ids.push(...result.skipped_unit_ids);
+  }
+
+  return summary;
+}
+
+export function startScheduledInvoiceGenerator(intervalMs = 6 * 60 * 60_000): NodeJS.Timeout {
+  const run = () => {
+    try {
+      const summary = generateScheduledInvoices();
+      if (summary.created_count > 0 || summary.errors.length > 0) {
+        console.log(
+          `[finance] scheduled invoices period=${summary.period} schedules=${summary.schedule_count} created=${summary.created_count} skipped=${summary.skipped_count} errors=${summary.errors.length}`,
+        );
+      }
+    } catch (err) {
+      console.warn('[finance] scheduled invoice generation failed:', (err as Error)?.message || err);
+    }
+  };
+  run();
+  return setInterval(run, intervalMs);
 }
 
 function paidCents(invoiceId: number): number {

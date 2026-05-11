@@ -22,8 +22,9 @@ import {
   transferUnit,
 } from '../src/lib/memberships';
 import { audit, auditRowsToCsv, listAuditRows } from '../src/lib/audit';
-import { generateInvoices, recordPayment } from '../src/lib/finance';
-import { canAssignTicketToUser } from '../src/lib/tickets';
+import { generateInvoices, generateScheduledInvoices, recordPayment } from '../src/lib/finance';
+import { requireAuth, revokeUserTokens, signToken } from '../src/lib/auth';
+import { canAssignTicketToUser, markTicketAgentFailed } from '../src/lib/tickets';
 import { normalizeServiceContact, serviceContactSchema } from '../src/lib/service-contacts';
 
 function resetDb() {
@@ -80,6 +81,21 @@ function createUser(email: string, role: 'resident' | 'board_admin' = 'resident'
     `INSERT INTO users (condominium_id, email, password_hash, first_name, last_name, role)
      VALUES (NULL, ?, 'hash', 'Test', 'User', ?)`
   ).run(email, role).lastInsertRowid);
+}
+
+function responseRecorder() {
+  const calls: { statusCode?: number; body?: any } = {};
+  const res = {
+    status(code: number) {
+      calls.statusCode = code;
+      return this;
+    },
+    json(body: any) {
+      calls.body = body;
+      return this;
+    },
+  } as any;
+  return { calls, res };
 }
 
 test('CSV-style pending invite claim preserves membership settings', () => {
@@ -254,6 +270,31 @@ test('service contact normalization trims fields and expands date-only usage', (
   assert.equal(normalized.phone, '+55 11 90000-0001');
   assert.equal(normalized.service_scope, 'Instalação da academia');
   assert.equal(normalized.last_used_at, '2026-05-01T00:00:00.000Z');
+});
+
+test('auth: token_version revokes stale JWTs without rotating the global secret', () => {
+  resetDb();
+  const userId = createUser('revoked-session@example.com');
+  const token = signToken(userId);
+
+  const first = responseRecorder();
+  const req = { headers: { authorization: `Bearer ${token}` } } as any;
+  let nextCalls = 0;
+  requireAuth(req, first.res, () => { nextCalls += 1; });
+  assert.equal(nextCalls, 1);
+  assert.equal(req.user.id, userId);
+
+  revokeUserTokens(userId);
+
+  const stale = responseRecorder();
+  requireAuth({ headers: { authorization: `Bearer ${token}` } } as any, stale.res, () => { nextCalls += 1; });
+  assert.equal(nextCalls, 1);
+  assert.equal(stale.calls.statusCode, 401);
+  assert.equal(stale.calls.body.error, 'invalid_token_version');
+
+  const fresh = responseRecorder();
+  requireAuth({ headers: { authorization: `Bearer ${signToken(userId)}` } } as any, fresh.res, () => { nextCalls += 1; });
+  assert.equal(nextCalls, 2);
 });
 
 test('quorum enforcement: auto-close returns inconclusive when turnout under threshold', () => {
@@ -528,6 +569,38 @@ test('finance: manual invoice generation skips duplicate null-schedule invoices'
   assert.equal(count.count, 1);
 });
 
+test('finance: scheduled monthly dues generate invoices idempotently', () => {
+  resetDb();
+  const { condoId, unit101, unit102 } = createCondoFixture();
+  const scheduleId = Number(db.prepare(
+    `INSERT INTO dues_schedules (condominium_id, name, amount_cents, currency, frequency, due_day, created_at)
+     VALUES (?, 'Monthly dues', 150000, 'BRL', 'monthly', 10, '2026-05-01T00:00:00.000Z')`
+  ).run(condoId).lastInsertRowid);
+
+  const first = generateScheduledInvoices(new Date('2026-05-03T12:00:00.000Z'));
+  assert.equal(first.period, '2026-05');
+  assert.equal(first.schedule_count, 1);
+  assert.equal(first.created_count, 2);
+  assert.equal(first.skipped_count, 0);
+  assert.deepEqual(first.errors, []);
+
+  const dueDates = db.prepare(
+    `SELECT unit_id, schedule_id, amount_cents, due_date, notes
+     FROM invoices
+     WHERE condominium_id = ?
+     ORDER BY unit_id`
+  ).all(condoId) as any[];
+  assert.deepEqual(dueDates.map((row) => row.unit_id), [unit101, unit102]);
+  assert.equal(dueDates[0].schedule_id, scheduleId);
+  assert.equal(dueDates[0].amount_cents, 150000);
+  assert.equal(dueDates[0].due_date, '2026-05-10T12:00:00.000Z');
+  assert.equal(dueDates[0].notes, 'Auto-generated from schedule: Monthly dues');
+
+  const second = generateScheduledInvoices(new Date('2026-05-20T12:00:00.000Z'));
+  assert.equal(second.created_count, 0);
+  assert.equal(second.skipped_count, 2);
+});
+
 test('finance: payments are reference-idempotent and cannot overpay invoices', () => {
   resetDb();
   const { condoId, unit101 } = createCondoFixture();
@@ -616,6 +689,33 @@ test('tickets: assignees must be active board users in the same condo', () => {
   assert.equal(canAssignTicketToUser(boardId, condoId), true);
   assert.equal(canAssignTicketToUser(residentId, condoId), false);
   assert.equal(canAssignTicketToUser(inactiveBoardId, condoId), false);
+});
+
+test('tickets: failed background agent escalates to admin attention', () => {
+  resetDb();
+  const { condoId, unit101 } = createCondoFixture();
+  const reporterId = createUser('ticket-reporter@example.com');
+  const ticketId = Number(db.prepare(
+    `INSERT INTO tickets (
+       condominium_id, unit_id, reporter_id, title, description, category, priority,
+       status, remediation_status
+     ) VALUES (?, ?, ?, 'Elevator stopped', 'Elevator is stuck again', 'elevator', 'high', 'open', 'verified')`
+  ).run(condoId, unit101, reporterId).lastInsertRowid);
+
+  assert.equal(markTicketAgentFailed(ticketId), true);
+  const after = db.prepare(
+    `SELECT remediation_status, blocked_reason FROM tickets WHERE id = ?`
+  ).get(ticketId) as any;
+  assert.deepEqual(after, {
+    remediation_status: 'blocked_needs_admin',
+    blocked_reason: 'agent_failed',
+  });
+
+  db.prepare(
+    `UPDATE tickets SET status = 'closed', remediation_status = 'resolved', blocked_reason = NULL WHERE id = ?`
+  ).run(ticketId);
+  assert.equal(markTicketAgentFailed(ticketId), false);
+  assert.equal((db.prepare(`SELECT blocked_reason FROM tickets WHERE id = ?`).get(ticketId) as any).blocked_reason, null);
 });
 
 test('memberships: reassign only moves pending claims', () => {
