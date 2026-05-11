@@ -324,7 +324,7 @@ export default function BoardTickets() {
   const escalated = rows.filter((r) => r.remediation_status === 'blocked_needs_admin');
   // UX-M7 — split "outros" into open-privates + resolved so closed tickets
   // don't visually compete with active private reports.
-  const privateOpen = rows.filter((r) => r.verification_threshold === 0 && r.remediation_status !== 'resolved');
+  const privateOpen = rows.filter((r) => r.verification_threshold === 0 && r.remediation_status === 'open');
   const resolvedTickets = rows.filter((r) => r.remediation_status === 'resolved');
 
   return (
