@@ -53,9 +53,14 @@ jobs:
             client-app/package-lock.json
 
       # Three-package monorepo — install each in parallel where possible.
+      # client-app uses --legacy-peer-deps because CRA + React 18 +
+      # testing-library@^9 don't all agree on the React peer (CRA pins
+      # react@18 as a peer but testing-library/react@^14 wants ^17 || ^18,
+      # which strict resolution rejects). This matches the local install:all
+      # convention.
       - run: npm ci
       - run: npm --prefix server ci
-      - run: npm --prefix client-app ci
+      - run: npm --prefix client-app ci --legacy-peer-deps
 
       # Cache the Playwright browser bundle so reruns don't re-download
       # ~150 MB every push.
