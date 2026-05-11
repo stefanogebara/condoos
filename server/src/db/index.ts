@@ -325,6 +325,9 @@ export function initSchema() {
   addColumnIfMissing('amenity_reservations', 'expected_guests', `INTEGER NOT NULL DEFAULT 0`);
   addColumnIfMissing('amenity_reservations', 'guest_list',      `TEXT`);
   addColumnIfMissing('amenity_reservations', 'notes',           `TEXT`);
+  addColumnIfMissing('amenity_reservations', 'cancelled_at',    `TEXT`);
+  addColumnIfMissing('amenity_reservations', 'cancelled_by_user_id', `INTEGER REFERENCES users(id) ON DELETE SET NULL`);
+  addColumnIfMissing('amenity_reservations', 'cancel_reason',   `TEXT`);
   // Admin-configurable amenity reservation slots. Capacity is treated as the
   // max number of people in a slot; legacy rows without guests count as 1.
   addColumnIfMissing('amenities', 'slot_minutes',        `INTEGER NOT NULL DEFAULT 60`);

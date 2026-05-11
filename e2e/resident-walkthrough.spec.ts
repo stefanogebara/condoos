@@ -143,7 +143,7 @@ test('resident: amenities page can create a reservation from an amenity card', a
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     await page.getByTestId('amenity-date').fill(tomorrow.toISOString().slice(0, 10));
-    const slot = page.getByTestId('amenity-slot').filter({ hasText: /spot|cupo|vaga|place/i }).first();
+    const slot = page.getByTestId('amenity-slot').filter({ hasText: /spot|cupo|vaga|place|lugar/i }).first();
     await expect(slot).toBeVisible();
     await slot.click();
     await expect(page.getByTestId('amenity-submit')).toBeEnabled();

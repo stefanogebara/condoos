@@ -53,7 +53,7 @@ export async function apiPatch<T>(path: string, body?: unknown): Promise<T> {
   return (res.data?.data ?? res.data) as T;
 }
 
-export async function apiDelete<T>(path: string): Promise<T> {
-  const res = await api.delete(path);
+export async function apiDelete<T>(path: string, body?: unknown): Promise<T> {
+  const res = await api.delete(path, body === undefined ? undefined : { data: body });
   return (res.data?.data ?? res.data) as T;
 }

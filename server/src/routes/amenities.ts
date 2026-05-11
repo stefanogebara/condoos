@@ -3,6 +3,7 @@ import db from '../db';
 import { requireAuth, requireRole, AuthedRequest } from '../lib/auth';
 import { ok, fail } from '../lib/respond';
 import { audit } from '../lib/audit';
+import { notifyUsers } from '../lib/whatsapp';
 
 const router = Router();
 
@@ -56,6 +57,36 @@ function cleanAmenityInput(input: AmenityInput, existing?: any) {
 
 function reservationPeople(row: { expected_guests?: number | null }): number {
   return 1 + Math.max(0, Number(row.expected_guests || 0));
+}
+
+function shortWhen(value: string) {
+  return new Date(value).toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function boardAdminIds(condoId: number) {
+  const rows = db.prepare(
+    `SELECT id FROM users WHERE condominium_id = ? AND role = 'board_admin'`
+  ).all(condoId) as Array<{ id: number }>;
+  return rows.map((r) => r.id);
+}
+
+function queueWhatsAppReminder(userId: number, startsAt: Date, body: string) {
+  const row = db.prepare(
+    `SELECT phone, whatsapp_opt_in FROM users WHERE id = ?`
+  ).get(userId) as { phone: string | null; whatsapp_opt_in: number } | undefined;
+  const sendAt = new Date(startsAt.getTime() - 30 * 60_000);
+  const nextAttemptAt = sendAt > new Date() ? sendAt.toISOString().slice(0, 19).replace('T', ' ') : null;
+  const canSend = !!row?.phone && row.whatsapp_opt_in === 1;
+  db.prepare(
+    `INSERT INTO notification_outbox
+       (channel, user_id, phone, body, status, last_error, next_attempt_at)
+     VALUES ('whatsapp', ?, ?, ?, ?, ?, ?)`
+  ).run(userId, row?.phone || null, body, canSend ? 'pending' : 'skipped', canSend ? null : 'missing_phone_or_opt_in', nextAttemptAt);
 }
 
 router.get('/', requireAuth, (req: AuthedRequest, res) => {
@@ -220,8 +251,8 @@ router.post('/reservations', requireAuth, (req: AuthedRequest, res) => {
 
   // Amenity must belong to the user's condo.
   const amenity = db.prepare(
-    `SELECT id, capacity, open_hour, close_hour, slot_minutes, active FROM amenities WHERE id = ? AND condominium_id = ?`
-  ).get(amenity_id, u.condominium_id) as { id: number; capacity: number; open_hour: number; close_hour: number; slot_minutes: number; active: number } | undefined;
+    `SELECT id, name, capacity, open_hour, close_hour, slot_minutes, active FROM amenities WHERE id = ? AND condominium_id = ?`
+  ).get(amenity_id, u.condominium_id) as { id: number; name: string; capacity: number; open_hour: number; close_hour: number; slot_minutes: number; active: number } | undefined;
   if (!amenity) return fail(res, 'amenity_not_in_condo', 400);
   if (!amenity.active) return fail(res, 'amenity_inactive', 400);
 
@@ -270,27 +301,58 @@ router.post('/reservations', requireAuth, (req: AuthedRequest, res) => {
     condominium_id: u.condominium_id,
     metadata: { amenity_id: amenity.id, starts_at: starts.toISOString(), ends_at: ends.toISOString(), expected_guests: guests, has_guest_list: !!guestListText },
   });
+  void notifyUsers([u.id], `CondoOS: reservation confirmed for ${amenity.name} on ${shortWhen(starts.toISOString())}.`).catch((err) => {
+    console.warn('[amenities/reservation_create] notify resident failed:', err?.message || err);
+  });
+  const admins = boardAdminIds(u.condominium_id!).filter((id) => id !== u.id);
+  if (admins.length) {
+    void notifyUsers(admins, `CondoOS: ${u.first_name} ${u.last_name} booked ${amenity.name} on ${shortWhen(starts.toISOString())}.`).catch((err) => {
+      console.warn('[amenities/reservation_create] notify admins failed:', err?.message || err);
+    });
+  }
+  queueWhatsAppReminder(u.id, starts, `CondoOS reminder: ${amenity.name} reservation starts soon at ${shortWhen(starts.toISOString())}.`);
   return ok(res, { id: row.lastInsertRowid, expected_guests: guests });
 });
 
 router.delete('/reservations/:id', requireAuth, (req: AuthedRequest, res) => {
   const u = req.user!;
   const id = Number(req.params.id);
+  const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim().slice(0, 300) : '';
   const row = db.prepare(
-    `SELECT r.*, a.condominium_id FROM amenity_reservations r
-     JOIN amenities a ON a.id = r.amenity_id WHERE r.id = ?`
+    `SELECT r.*, a.condominium_id, a.name AS amenity_name, usr.first_name, usr.last_name
+     FROM amenity_reservations r
+     JOIN amenities a ON a.id = r.amenity_id
+     JOIN users usr ON usr.id = r.user_id
+     WHERE r.id = ?`
   ).get(id) as any;
   if (!row || row.condominium_id !== u.condominium_id) return fail(res, 'not_found', 404);
   if (u.role !== 'board_admin' && row.user_id !== u.id) return fail(res, 'forbidden', 403);
-  db.prepare(`UPDATE amenity_reservations SET status='cancelled' WHERE id = ?`).run(id);
+  db.prepare(
+    `UPDATE amenity_reservations
+     SET status='cancelled', cancelled_at=CURRENT_TIMESTAMP, cancelled_by_user_id=?, cancel_reason=?
+     WHERE id = ?`
+  ).run(u.id, reason || null, id);
   audit(req, {
     action: 'amenity.reservation_cancel',
     target_type: 'amenity_reservation',
     target_id: id,
     condominium_id: u.condominium_id,
-    metadata: { amenity_id: row.amenity_id },
+    metadata: { amenity_id: row.amenity_id, reason: reason || null },
   });
-  return ok(res, { id, status: 'cancelled' });
+  const actor = u.role === 'board_admin' && u.id !== row.user_id ? 'Admin' : 'Resident';
+  const message = `CondoOS: ${actor} cancelled ${row.amenity_name} reservation for ${shortWhen(row.starts_at)}${reason ? `. Reason: ${reason}` : '.'}`;
+  void notifyUsers([row.user_id], message).catch((err) => {
+    console.warn('[amenities/reservation_cancel] notify resident failed:', err?.message || err);
+  });
+  if (u.role !== 'board_admin') {
+    const admins = boardAdminIds(u.condominium_id!).filter((adminId) => adminId !== u.id);
+    if (admins.length) {
+      void notifyUsers(admins, `${u.first_name} ${u.last_name} cancelled ${row.amenity_name} reservation for ${shortWhen(row.starts_at)}.`).catch((err) => {
+        console.warn('[amenities/reservation_cancel] notify admins failed:', err?.message || err);
+      });
+    }
+  }
+  return ok(res, { id, status: 'cancelled', cancel_reason: reason || null });
 });
 
 export default router;

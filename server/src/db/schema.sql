@@ -74,6 +74,9 @@ CREATE TABLE IF NOT EXISTS amenity_reservations (
   starts_at        TEXT NOT NULL,
   ends_at          TEXT NOT NULL,
   status           TEXT NOT NULL DEFAULT 'confirmed' CHECK(status IN ('confirmed','cancelled')),
+  cancelled_at     TEXT,
+  cancelled_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  cancel_reason    TEXT,
   created_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 

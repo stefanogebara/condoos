@@ -27,6 +27,8 @@ interface Reservation {
   starts_at: string; ends_at: string;
   first_name: string; last_name: string; unit_number: string;
   status: string;
+  cancelled_at?: string | null;
+  cancel_reason?: string | null;
   expected_guests?: number | null;
   guest_list?: string | null;
   notes?: string | null;
@@ -69,6 +71,7 @@ export default function Amenities() {
   const [saving, setSaving]             = useState(false);
   const [loading, setLoading]           = useState(true);
   const [loadError, setLoadError]       = useState(false);
+  const [reservationView, setReservationView] = useState<'mine' | 'building'>('mine');
 
   const load = () => {
     setLoadError(false);
@@ -139,9 +142,10 @@ export default function Amenities() {
   }
 
   async function cancelReservation(reservation: Reservation) {
-    if (!confirm(`${tr('Cancelar reserva')}: ${reservation.amenity_name}?`)) return;
+    const reason = prompt(`${tr('Cancelar reserva')}: ${reservation.amenity_name}?`, '');
+    if (reason === null) return;
     try {
-      await apiDelete(`/amenities/reservations/${reservation.id}`);
+      await apiDelete(`/amenities/reservations/${reservation.id}`, { reason });
       toast.success(tr('Reserva cancelada'));
       load();
     } catch (err: any) {
@@ -152,6 +156,8 @@ export default function Amenities() {
   const future = reservations
     .filter((r) => new Date(r.starts_at) > new Date() && r.status !== 'cancelled')
     .sort((a, b) => a.starts_at.localeCompare(b.starts_at));
+  const mine = future.filter((r) => r.user_id === user?.id);
+  const visibleReservations = reservationView === 'mine' ? mine : future;
 
   return (
     <>
@@ -299,7 +305,11 @@ export default function Amenities() {
                         <div className="text-sm font-semibold">
                           {start.toLocaleTimeString(currentIntlLocale(), { hour: '2-digit', minute: '2-digit' })}–{end.toLocaleTimeString(currentIntlLocale(), { hour: '2-digit', minute: '2-digit' })}
                         </div>
-                        <div className="text-[11px] text-dusk-300">{slot.available_spots} {tr('vaga(s)')}</div>
+                        <div className="text-[11px] text-dusk-300">
+                          {slot.available_spots === 0
+                            ? tr('Reservado')
+                            : `${slot.available_spots}/${selected.capacity} ${tr('lugares disponíveis')}`}
+                        </div>
                       </button>
                     );
                   })}
@@ -355,14 +365,35 @@ export default function Amenities() {
         </GlassCard>
       )}
 
-      <h2 className="font-display text-xl text-dusk-500 mb-4">{tr('Próximas reservas')}</h2>
-      {future.length === 0 ? (
+      <div className="flex items-center justify-between gap-4 mb-4 flex-wrap">
+        <div>
+          <h2 className="font-display text-xl text-dusk-500">{tr('Próximas reservas')}</h2>
+          <p className="text-sm text-dusk-300 mt-1">{tr('Acompanhe suas reservas separadas do calendário geral do prédio.')}</p>
+        </div>
+        <div className="inline-flex rounded-full bg-white/60 border border-white/70 p-1">
+          <button
+            type="button"
+            onClick={() => setReservationView('mine')}
+            className={`px-4 py-2 rounded-full text-sm font-semibold transition ${reservationView === 'mine' ? 'bg-dusk-400 text-cream-50' : 'text-dusk-300 hover:text-dusk-500'}`}
+          >
+            {tr('Minhas reservas')}
+          </button>
+          <button
+            type="button"
+            onClick={() => setReservationView('building')}
+            className={`px-4 py-2 rounded-full text-sm font-semibold transition ${reservationView === 'building' ? 'bg-dusk-400 text-cream-50' : 'text-dusk-300 hover:text-dusk-500'}`}
+          >
+            {tr('Reservas do prédio')}
+          </button>
+        </div>
+      </div>
+      {visibleReservations.length === 0 ? (
         <GlassCard className="p-6 text-sm text-dusk-300">{tr('Nenhuma reserva futura no prédio.')}</GlassCard>
       ) : (
         <div className="space-y-3">
-          {future.map((r) => {
+          {visibleReservations.map((r) => {
             const Icon = ICONS[r.amenity_icon] || Waves;
-            const mine = r.user_id === user?.id;
+            const isMine = r.user_id === user?.id;
             return (
               <GlassCard key={r.id} className="p-4 flex flex-col gap-4 sm:flex-row sm:items-center" data-testid={`resident-amenity-reservation-${r.id}`}>
                 <div className="w-10 h-10 rounded-xl bg-peach-100 text-peach-500 flex items-center justify-center shrink-0">
@@ -371,20 +402,25 @@ export default function Amenities() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-semibold text-dusk-500">{r.amenity_name}</span>
-                    {mine && <Badge tone="sage">{tr('Você')}</Badge>}
+                    {isMine && <Badge tone="sage">{tr('Você')}</Badge>}
                     {(r.expected_guests || 0) > 0 && (
                       <Badge tone="peach"><Users className="w-3 h-3" /> {(r.expected_guests || 0) + 1} {tr('pessoas')}</Badge>
                     )}
                   </div>
                   <div className="text-xs text-dusk-200">{formatDateTime(r.starts_at)} · {r.first_name} {r.last_name} ({tr('Unidade')} {r.unit_number})</div>
-                  {mine && r.guest_list && (
+                  {r.cancel_reason && (
+                    <div className="text-[11px] text-peach-600 mt-1">
+                      {tr('Motivo do cancelamento')}: {r.cancel_reason}
+                    </div>
+                  )}
+                  {isMine && r.guest_list && (
                     <div className="text-[11px] text-dusk-300 mt-1 italic line-clamp-1">
                       {tr('Lista')}: {r.guest_list.split('\n').filter(Boolean).slice(0, 3).join(', ')}
                       {r.guest_list.split('\n').filter(Boolean).length > 3 && '…'}
                     </div>
                   )}
                 </div>
-                {mine && (
+                {isMine && (
                   <Button
                     type="button"
                     variant="ghost"

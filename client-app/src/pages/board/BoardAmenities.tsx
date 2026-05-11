@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
-import { CalendarX, Clock, Dumbbell, Flame, PartyPopper, Pencil, Plus, Save, Trash2, Trophy, Users, Waves, X } from 'lucide-react';
+import { CalendarDays, CalendarX, ChevronLeft, ChevronRight, Clock, Dumbbell, Flame, PartyPopper, Pencil, Plus, Save, Trash2, Trophy, Users, Waves, X } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 import GlassCard from '../../components/GlassCard';
 import Badge from '../../components/Badge';
@@ -34,6 +34,8 @@ interface Reservation {
   last_name: string;
   unit_number: string;
   status: string;
+  cancelled_at?: string | null;
+  cancel_reason?: string | null;
   expected_guests?: number | null;
   guest_list?: string | null;
   notes?: string | null;
@@ -91,11 +93,50 @@ function normalize(form: AmenityForm) {
   };
 }
 
+function addDays(date: Date, days: number) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function startOfWeek(date: Date) {
+  const start = new Date(date);
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - start.getDay());
+  return start;
+}
+
+function dateKey(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function sameDay(value: string, date: Date) {
+  return dateKey(new Date(value)) === dateKey(date);
+}
+
+function timeRange(startsAt: string, endsAt: string) {
+  const opts: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit' };
+  return `${new Date(startsAt).toLocaleTimeString(undefined, opts)}-${new Date(endsAt).toLocaleTimeString(undefined, opts)}`;
+}
+
+function generatedSlots(form: AmenityForm) {
+  const clean = normalize(form);
+  const slots: string[] = [];
+  for (let minute = clean.open_hour * 60; minute + clean.slot_minutes <= clean.close_hour * 60; minute += clean.slot_minutes) {
+    const h = Math.floor(minute / 60);
+    const m = minute % 60;
+    const end = minute + clean.slot_minutes;
+    slots.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}-${String(Math.floor(end / 60)).padStart(2, '0')}:${String(end % 60).padStart(2, '0')}`);
+  }
+  return slots;
+}
+
 export default function BoardAmenities() {
   const [amenities, setAmenities] = useState<Amenity[]>([]);
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(true);
   const [showNew, setShowNew] = useState(false);
+  const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
 
   async function load() {
     setLoading(true);
@@ -192,6 +233,14 @@ export default function BoardAmenities() {
         )}
       </GlassCard>
 
+      <ReservationWeekCalendar
+        weekStart={weekStart}
+        reservations={upcomingReservations}
+        onPrevious={() => setWeekStart((d) => addDays(d, -7))}
+        onNext={() => setWeekStart((d) => addDays(d, 7))}
+        onToday={() => setWeekStart(startOfWeek(new Date()))}
+      />
+
       <div className="space-y-4">
         {amenities.map((amenity) => (
           <AmenityRow key={amenity.id} amenity={amenity} onChanged={load} />
@@ -212,9 +261,10 @@ function ReservationRow({ reservation, onChanged }: { reservation: Reservation; 
   const people = 1 + Math.max(0, Number(reservation.expected_guests || 0));
 
   async function cancel() {
-    if (!confirm(`Cancelar reserva de ${reservation.amenity_name} para ${reservation.first_name} ${reservation.last_name}?`)) return;
+    const reason = prompt(t('Motivo do cancelamento'), '');
+    if (reason === null) return;
     try {
-      await apiDelete(`/amenities/reservations/${reservation.id}`);
+      await apiDelete(`/amenities/reservations/${reservation.id}`, { reason });
       toast.success(t('Reserva cancelada'));
       onChanged();
     } catch (err: any) {
@@ -254,6 +304,64 @@ function ReservationRow({ reservation, onChanged }: { reservation: Reservation; 
         {t('Cancelar')}
       </Button>
     </div>
+  );
+}
+
+function ReservationWeekCalendar({
+  weekStart,
+  reservations,
+  onPrevious,
+  onNext,
+  onToday,
+}: {
+  weekStart: Date;
+  reservations: Reservation[];
+  onPrevious: () => void;
+  onNext: () => void;
+  onToday: () => void;
+}) {
+  const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+  return (
+    <GlassCard className="p-5 mb-5" data-testid="admin-reservation-calendar">
+      <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
+        <div>
+          <h2 className="font-display text-xl text-dusk-500">{t('Calendário da semana')}</h2>
+          <p className="text-sm text-dusk-300 mt-1">{t('Veja rapidamente quais horários já estão ocupados.')}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button type="button" variant="ghost" size="sm" onClick={onPrevious} leftIcon={<ChevronLeft className="w-4 h-4" />}>{t('Anterior')}</Button>
+          <Button type="button" variant="ghost" size="sm" onClick={onToday}>{t('Hoje')}</Button>
+          <Button type="button" variant="ghost" size="sm" onClick={onNext} rightIcon={<ChevronRight className="w-4 h-4" />}>{t('Próxima')}</Button>
+        </div>
+      </div>
+      <div className="grid md:grid-cols-7 gap-2">
+        {days.map((day) => {
+          const dayReservations = reservations.filter((r) => sameDay(r.starts_at, day));
+          return (
+            <div key={dateKey(day)} className="rounded-2xl bg-white/60 border border-white/70 p-3 min-h-[150px]">
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <div>
+                  <div className="text-xs uppercase tracking-[0.12em] text-dusk-200">{day.toLocaleDateString(undefined, { weekday: 'short' })}</div>
+                  <div className="font-semibold text-dusk-500">{day.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</div>
+                </div>
+                <Badge tone={dayReservations.length ? 'sage' : 'neutral'}>{dayReservations.length}</Badge>
+              </div>
+              <div className="space-y-2">
+                {dayReservations.length === 0 ? (
+                  <div className="text-xs text-dusk-200">{t('Livre')}</div>
+                ) : dayReservations.map((r) => (
+                  <div key={r.id} className="rounded-xl bg-cream-50/80 border border-white/80 p-2">
+                    <div className="text-xs font-semibold text-dusk-500">{timeRange(r.starts_at, r.ends_at)}</div>
+                    <div className="text-xs text-dusk-300 truncate">{r.amenity_name}</div>
+                    <div className="text-[11px] text-dusk-200 truncate">{r.first_name} {r.last_name}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </GlassCard>
   );
 }
 
@@ -450,11 +558,32 @@ function AmenityEditor({
           Observações internas
           <textarea className="input mt-1 min-h-[84px]" value={form.admin_notes || ''} onChange={(e) => setForm({ ...form, admin_notes: e.target.value })} maxLength={600} />
         </label>
+        <SlotPreview form={form} />
         <div className="md:col-span-2 flex justify-end gap-2">
           <Button type="button" variant="ghost" onClick={onCancel}>Cancelar</Button>
           <Button type="submit" variant="primary" loading={saving} leftIcon={<Save className="w-4 h-4" />}>Salvar</Button>
         </div>
       </form>
     </GlassCard>
+  );
+}
+
+function SlotPreview({ form }: { form: AmenityForm }) {
+  const slots = generatedSlots(form);
+  return (
+    <div className="md:col-span-2 rounded-2xl bg-white/60 border border-white/70 p-4">
+      <div className="flex items-center gap-2 text-sm font-semibold text-dusk-500 mb-3">
+        <CalendarDays className="w-4 h-4" /> {t('Prévia de horários')}
+      </div>
+      {slots.length === 0 ? (
+        <div className="text-sm text-dusk-300">{t('Ajuste o horário para criar pelo menos um turno.')}</div>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {slots.map((slot) => (
+            <span key={slot} className="rounded-full bg-cream-50 border border-white/80 px-3 py-1 text-xs text-dusk-400">{slot}</span>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
