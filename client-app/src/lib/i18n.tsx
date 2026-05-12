@@ -2023,6 +2023,27 @@ const phrases: Copy[] = [
   c('Fora do horário comercial agora', 'Outside business hours now', 'Fuera del horario comercial ahora', 'Hors des heures ouvrables'),
   c('Para tarefas não urgentes, prefira contatar amanhã de manhã.', 'For non-urgent tasks, prefer contacting tomorrow morning.', 'Para tareas no urgentes, prefiere contactar mañana por la mañana.', 'Pour les tâches non urgentes, préférez contacter demain matin.'),
   c('Resoluções anteriores', 'Past resolutions', 'Resoluciones anteriores', 'Résolutions antérieures'),
+  // Conversational thread — workbench becomes thread-based.
+  c('Conversas', 'Conversations', 'Conversaciones', 'Conversations'),
+  c('Nova conversa', 'New conversation', 'Nueva conversación', 'Nouvelle conversation'),
+  c('Conversas recentes', 'Recent conversations', 'Conversaciones recientes', 'Conversations récentes'),
+  c('Conversa sem título', 'Untitled conversation', 'Conversación sin título', 'Conversation sans titre'),
+  c('turno', 'turn', 'turno', 'tour'),
+  c('turnos', 'turns', 'turnos', 'tours'),
+  c('Turno', 'Turn', 'Turno', 'Tour'),
+  c('Turnos anteriores', 'Previous turns', 'Turnos anteriores', 'Tours précédents'),
+  c('Você', 'You', 'Tú', 'Vous'),
+  c('Agente', 'Agent', 'Agente', 'Agent'),
+  c('Continuar a conversa', 'Continue the conversation', 'Continuar la conversación', 'Continuer la conversation'),
+  c('o agente lembra o que vocês discutiram acima', 'the agent remembers what you discussed above', 'el agente recuerda lo que discutieron arriba', 'l\'agent se souvient de ce que vous avez discuté plus haut'),
+  c('ex: "E se Ricardo disser que está ocupado?" ou "Quanto tempo costuma demorar?"', 'e.g. "What if Ricardo says he\'s busy?" or "How long does it usually take?"', 'ej.: "¿Y si Ricardo dice que está ocupado?" o "¿Cuánto suele tardar?"', 'ex. « Et si Ricardo dit qu\'il est occupé ? » ou « Combien de temps cela prend-il généralement ? »'),
+  c('Enviar', 'Send', 'Enviar', 'Envoyer'),
+  c('Escreva sua pergunta de acompanhamento.', 'Write your follow-up question.', 'Escribe tu pregunta de seguimiento.', 'Écrivez votre question de suivi.'),
+  c('Falha ao enviar pergunta', 'Failed to send question', 'Error al enviar pregunta', 'Échec de l\'envoi de la question'),
+  c('Falha ao abrir conversa', 'Failed to open conversation', 'Error al abrir conversación', 'Échec de l\'ouverture de la conversation'),
+  c('Arquivar essa conversa?', 'Archive this conversation?', '¿Archivar esta conversación?', 'Archiver cette conversation ?'),
+  c('Falha ao arquivar', 'Failed to archive', 'Error al archivar', 'Échec de l\'archivage'),
+  c('Arquivar', 'Archive', 'Archivar', 'Archiver'),
 ];
 
 function c(pt: string, en: string, es: string, fr: string): Copy {

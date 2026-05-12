@@ -418,6 +418,42 @@ export function initSchema() {
   `).run();
   db.prepare(`CREATE INDEX IF NOT EXISTS idx_ticket_dispatches_ticket ON ticket_dispatches(ticket_id, created_at)`).run();
 
+  // Roadmap item 2 — conversational thread. The agent workbench was
+  // single-shot: every query was a fresh agent call with no memory of
+  // what the admin asked five minutes ago. These tables let the runner
+  // carry prior turns into the prompt context so the admin can refine
+  // ("first vendor said booked, try next"), ask follow-ups ("what about
+  // cost?"), or push back ("I think it's a building-wide issue") without
+  // re-explaining context every time.
+  db.prepare(`
+    CREATE TABLE IF NOT EXISTS agent_threads (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      condominium_id  INTEGER NOT NULL REFERENCES condominiums(id) ON DELETE CASCADE,
+      admin_user_id   INTEGER NOT NULL REFERENCES users(id),
+      title           TEXT,
+      mode            TEXT,
+      status          TEXT NOT NULL DEFAULT 'active'
+        CHECK(status IN ('active','archived')),
+      created_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `).run();
+  db.prepare(`CREATE INDEX IF NOT EXISTS idx_agent_threads_admin ON agent_threads(admin_user_id, status, updated_at)`).run();
+
+  db.prepare(`
+    CREATE TABLE IF NOT EXISTS agent_turns (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      thread_id     INTEGER NOT NULL REFERENCES agent_threads(id) ON DELETE CASCADE,
+      turn_index    INTEGER NOT NULL,
+      user_task     TEXT NOT NULL,
+      agent_summary TEXT,
+      agent_plan    TEXT,
+      fallback      INTEGER NOT NULL DEFAULT 0,
+      created_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `).run();
+  db.prepare(`CREATE INDEX IF NOT EXISTS idx_agent_turns_thread ON agent_turns(thread_id, turn_index)`).run();
+
   // Ensure Pine Ridge has an invite code so the demo condo is joinable via code too.
   const pine = db.prepare(`SELECT id, invite_code FROM condominiums LIMIT 1`).get() as
     | { id: number; invite_code: string | null }

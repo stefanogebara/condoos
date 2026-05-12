@@ -90,11 +90,20 @@ export interface RunAdminAgentArgs {
   location?: string;
   budget?: string;
   urgency?: string;
+  // Conversational thread support (roadmap item 2). When threadId is
+  // provided, prior turns are pulled from agent_turns and included in the
+  // prompt context so the agent BUILDS on previous answers rather than
+  // restarting. When adminUserId is also provided, the runner persists
+  // the new turn back into agent_turns after the model returns.
+  threadId?: number;
+  adminUserId?: number;
 }
 
 export interface RunAdminAgentResult {
   plan: any;
   fallback: boolean;
+  thread_id?: number;
+  turn_index?: number;
 }
 
 export async function runAdminAgent(args: RunAdminAgentArgs): Promise<RunAdminAgentResult> {
@@ -392,6 +401,32 @@ export async function runAdminAgent(args: RunAdminAgentArgs): Promise<RunAdminAg
       created_at: s.created_at,
     })),
     building_memory: buildingMemory,
+    // Prior turns in the same thread, oldest first. Capped at 5 so the
+    // prompt doesn't grow unbounded on long conversations. Each turn is
+    // a tight (user_task, agent_summary, recommended_next_step) tuple —
+    // we don't replay the full plan JSON, just the essence, to keep
+    // token cost sane.
+    prior_turns: args.threadId
+      ? db.prepare(
+          `SELECT user_task, agent_summary, agent_plan, turn_index
+           FROM agent_turns
+           WHERE thread_id = ?
+           ORDER BY turn_index DESC
+           LIMIT 5`
+        ).all(args.threadId).reverse().map((t: any) => {
+          let nextStep: string | null = null;
+          try {
+            const p = t.agent_plan ? JSON.parse(t.agent_plan) : null;
+            nextStep = p?.recommended_next_step || null;
+          } catch { /* malformed plan, skip */ }
+          return {
+            turn_index: t.turn_index,
+            user_task: clip(t.user_task, 300),
+            agent_summary: clip(t.agent_summary, 300),
+            recommended_next_step: nextStep ? clip(nextStep, 200) : null,
+          };
+        })
+      : [],
     tool_limitations: 'This route does not perform live web browsing, vendor calls, purchases, bookings, or installation work. It produces a decision-ready plan, search queries, outreach copy, and a proposal draft.',
   };
 
@@ -452,5 +487,31 @@ export async function runAdminAgent(args: RunAdminAgentArgs): Promise<RunAdminAg
   } else {
     plan.building_memory = null;
   }
-  return { plan, fallback: usedFallback };
+
+  // Persist the turn to agent_turns when we have a thread + admin. The
+  // route is responsible for creating the thread row before calling this
+  // helper if it's a fresh conversation; here we just append.
+  let persistedTurnIndex: number | undefined;
+  if (args.threadId && args.adminUserId) {
+    const next = (db.prepare(
+      `SELECT COALESCE(MAX(turn_index), -1) + 1 AS next_index FROM agent_turns WHERE thread_id = ?`
+    ).get(args.threadId) as { next_index: number }).next_index;
+    db.prepare(
+      `INSERT INTO agent_turns (thread_id, turn_index, user_task, agent_summary, agent_plan, fallback)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    ).run(
+      args.threadId,
+      next,
+      args.task,
+      String(plan.summary || '').slice(0, 800),
+      JSON.stringify(plan),
+      usedFallback ? 1 : 0,
+    );
+    db.prepare(
+      `UPDATE agent_threads SET updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+    ).run(args.threadId);
+    persistedTurnIndex = next;
+  }
+
+  return { plan, fallback: usedFallback, thread_id: args.threadId, turn_index: persistedTurnIndex };
 }

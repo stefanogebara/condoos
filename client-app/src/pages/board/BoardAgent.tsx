@@ -78,7 +78,27 @@ interface AgentResult {
   resident_update: { title: string; body: string };
   proposal_draft: { title: string; description: string; category: string; estimated_cost: number | null } | null;
   risks: string[];
+  // Conversational thread metadata — set by the server when the turn is
+  // persisted. Tracks which thread + turn this result belongs to so
+  // follow-up sends know which thread to append to.
+  thread_id?: number;
+  turn_index?: number;
   _fallback?: boolean;
+}
+
+interface Turn {
+  user_task: string;
+  result: AgentResult;
+}
+
+interface ThreadSummary {
+  id: number;
+  title: string;
+  mode: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  turn_count: number;
 }
 
 const MODES: Array<{ value: Mode; label: string }> = [
@@ -121,7 +141,20 @@ export default function BoardAgent() {
   const [budget, setBudget] = useState('');
   const [urgency, setUrgency] = useState('');
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<AgentResult | null>(null);
+  // Conversational thread — each agent run appends a turn instead of
+  // overwriting a single result. threadId is set on the first turn and
+  // re-sent on subsequent turns so the server appends rather than
+  // creating a new thread. followUpTask is the smaller composer that
+  // shows up below the latest turn for "what about X?" style asks.
+  const [turns, setTurns] = useState<Turn[]>([]);
+  const [threadId, setThreadId] = useState<number | null>(null);
+  const [followUpTask, setFollowUpTask] = useState('');
+  const [followUpLoading, setFollowUpLoading] = useState(false);
+  // Side panel — list of recent active threads. Toggled by the admin to
+  // resume a past conversation. Loaded on mount; refreshed after each
+  // send so a brand-new thread appears at the top.
+  const [threads, setThreads] = useState<ThreadSummary[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
   const [creatingProposal, setCreatingProposal] = useState(false);
   // Vendor directory is loaded once a plan exists so we can resolve the
   // model's `existing_network_fit[i].company_name` back to a real service
@@ -130,6 +163,50 @@ export default function BoardAgent() {
   const [vendors, setVendors] = useState<ServiceContactLite[]>([]);
   const [outreachTarget, setOutreachTarget] = useState<{ vendor: ServiceContactLite; initialMessage: string } | null>(null);
   const [waHealth, setWaHealth] = useState<WhatsAppHealth | null>(null);
+
+  // The most-recent turn drives the result UI (network cards, options,
+  // resident update, etc.). Older turns render as small "ago" cards on
+  // top so the conversation reads top-down.
+  const latestTurn = turns.length > 0 ? turns[turns.length - 1] : null;
+  const result = latestTurn?.result || null;
+
+  const refreshThreads = React.useCallback(() => {
+    apiGet<ThreadSummary[]>('/ai/admin-agent/threads').then(setThreads).catch(() => setThreads([]));
+  }, []);
+  React.useEffect(() => { refreshThreads(); }, [refreshThreads]);
+
+  // Reset to a fresh conversation — clears thread state, lets the next
+  // submit create a new thread server-side.
+  function newConversation() {
+    setTurns([]);
+    setThreadId(null);
+    setTask('');
+    setFollowUpTask('');
+  }
+
+  // Open an existing thread from the side panel. Loads every persisted
+  // turn so the admin sees the full conversation, then closes the panel.
+  async function openThread(id: number) {
+    try {
+      const full = await apiGet<{ id: number; turns: Array<{ user_task: string; plan: AgentResult }> }>(`/ai/admin-agent/threads/${id}`);
+      setThreadId(full.id);
+      setTurns(full.turns.map((t) => ({ user_task: t.user_task, result: t.plan })));
+      setShowHistory(false);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || tr('Falha ao abrir conversa'));
+    }
+  }
+
+  async function archiveThread(id: number) {
+    if (!confirm(tr('Arquivar essa conversa?'))) return;
+    try {
+      await apiPost(`/ai/admin-agent/threads/${id}/archive`, {});
+      if (id === threadId) newConversation();
+      refreshThreads();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || tr('Falha ao arquivar'));
+    }
+  }
 
   // Fetch WhatsApp health alongside the page load — admin sees the sending
   // phone right inside the outreach modal, plus the modal can warn if the
@@ -162,8 +239,15 @@ export default function BoardAgent() {
         budget,
         urgency,
         locale,
+        thread_id: threadId ?? undefined,
       });
-      setResult(out);
+      setTurns([...turns, { user_task: task, result: out }]);
+      if (out.thread_id) setThreadId(out.thread_id);
+      refreshThreads();
+      // Clear the main composer so the same text doesn't accidentally
+      // get resubmitted as a follow-up. The form fields (mode/budget/
+      // urgency/location) stay so the admin can refine without retyping.
+      setTask('');
       // Pull vendor list in parallel so the network-fit cards can resolve
       // company_name → id without forcing the user to wait. Failure here is
       // non-fatal: cards still render, just without the send button.
@@ -173,6 +257,35 @@ export default function BoardAgent() {
       toast.error(err?.response?.data?.error || tr('Falha ao gerar plano'));
     } finally {
       setLoading(false);
+    }
+  }
+
+  // Follow-up — appends to the existing thread. Smaller composer, just
+  // text, no mode/budget/urgency reset. Designed for "what about cost?"
+  // / "the first vendor said no, try another" / "wait, isn't this the
+  // same as last time?" patterns. Reuses the same agent endpoint with
+  // thread_id so the server's prior_turns logic kicks in.
+  async function sendFollowUp() {
+    if (followUpTask.trim().length < 3) {
+      toast.error(tr('Escreva sua pergunta de acompanhamento.'));
+      return;
+    }
+    setFollowUpLoading(true);
+    try {
+      const out = await apiPost<AgentResult>('/ai/admin-agent', {
+        task: followUpTask,
+        mode,
+        locale,
+        thread_id: threadId ?? undefined,
+      });
+      setTurns([...turns, { user_task: followUpTask, result: out }]);
+      if (out.thread_id) setThreadId(out.thread_id);
+      setFollowUpTask('');
+      refreshThreads();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || tr('Falha ao enviar pergunta'));
+    } finally {
+      setFollowUpLoading(false);
     }
   }
 
@@ -201,7 +314,72 @@ export default function BoardAgent() {
       <PageHeader
         title={tr('Agente IA')}
         subtitle={tr('Copiloto operacional para consertos, instalações e decisões — usa a sua rede de fornecedores cadastrada para sugerir e enviar o próximo passo.')}
+        actions={
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowHistory((x) => !x)}
+            >
+              {tr('Conversas')} {threads.length > 0 ? `(${threads.length})` : ''}
+            </Button>
+            {(turns.length > 0 || threadId) && (
+              <Button
+                type="button"
+                variant="primary"
+                size="sm"
+                onClick={newConversation}
+                leftIcon={<Sparkles className="w-3.5 h-3.5" />}
+              >
+                {tr('Nova conversa')}
+              </Button>
+            )}
+          </div>
+        }
       />
+
+      {/* Thread history drawer — collapsed by default, opens above the
+          workbench so the admin can pick a past conversation to resume.
+          Hidden when there's nothing to show. */}
+      {showHistory && threads.length > 0 && (
+        <GlassCard className="p-4 mb-5 animate-fade-up">
+          <div className="text-xs uppercase tracking-wider text-dusk-300 mb-2">
+            {tr('Conversas recentes')}
+          </div>
+          <div className="space-y-1.5 max-h-72 overflow-y-auto">
+            {threads.map((t) => (
+              <div
+                key={t.id}
+                className={`flex items-center justify-between gap-3 rounded-2xl border p-2.5 text-sm ${
+                  t.id === threadId
+                    ? 'bg-sage-100/60 border-sage-300/60'
+                    : 'bg-white/60 border-white/70 hover:bg-white/80'
+                }`}
+              >
+                <button
+                  type="button"
+                  className="flex-1 text-left min-w-0"
+                  onClick={() => openThread(t.id)}
+                >
+                  <div className="font-medium text-dusk-500 truncate">{t.title || tr('Conversa sem título')}</div>
+                  <div className="text-xs text-dusk-300 mt-0.5">
+                    {t.turn_count} {tr(t.turn_count === 1 ? 'turno' : 'turnos')} · {new Date(t.updated_at).toLocaleString(locale, { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => archiveThread(t.id)}
+                  className="text-xs text-dusk-300 hover:text-peach-700 px-2"
+                  aria-label={tr('Arquivar')}
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </GlassCard>
+      )}
 
       <GlassCard variant="clay-sage" className="p-5 mb-5 overflow-hidden relative">
         <div className="absolute -right-10 -top-10 w-36 h-36 rounded-full bg-sage-200/60 blur-2xl" />
@@ -272,8 +450,46 @@ export default function BoardAgent() {
         </GlassCard>
       </form>
 
+      {/* Prior turns ribbon — collapsed cards above the latest result so
+          the admin sees what they've already asked. Only renders when
+          there's more than one turn (otherwise the "latest" IS the only
+          turn and there's nothing to scroll past). Compact by design;
+          the latest turn keeps the full plan layout below. */}
+      {turns.length > 1 && (
+        <div className="space-y-2 mb-4 animate-fade-up">
+          <div className="text-xs uppercase tracking-wider text-dusk-300">
+            {tr('Turnos anteriores')}
+          </div>
+          {turns.slice(0, -1).map((t, idx) => (
+            <GlassCard key={idx} className="p-3">
+              <div className="text-xs text-dusk-300 mb-1">
+                <span className="inline-block rounded-full bg-dusk-200/60 text-dusk-500 px-2 py-0.5 font-semibold">
+                  {tr('Você')}
+                </span>
+              </div>
+              <div className="text-sm text-dusk-500 mb-2">{t.user_task}</div>
+              <div className="text-xs text-dusk-300 mb-1">
+                <span className="inline-flex items-center gap-1 rounded-full bg-sage-200/60 text-dusk-500 px-2 py-0.5 font-semibold">
+                  <Bot className="w-3 h-3" /> {tr('Agente')}
+                </span>
+              </div>
+              <div className="text-sm text-dusk-400 whitespace-pre-line">{t.result.summary}</div>
+            </GlassCard>
+          ))}
+        </div>
+      )}
+
       {result && (
         <div className="space-y-5 animate-fade-up">
+          {/* Echo the latest user task above the agent card so the admin
+              has visual anchor — especially helpful on the second+ turn
+              when there's a stack of replies and questions. */}
+          {latestTurn && turns.length > 1 && (
+            <div className="rounded-3xl bg-dusk-200/40 border border-dusk-200/60 p-3 text-sm text-dusk-500">
+              <span className="text-xs uppercase tracking-wider text-dusk-400 mr-2">{tr('Você')}</span>
+              {latestTurn.user_task}
+            </div>
+          )}
           <GlassCard variant="clay" className="p-5">
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -281,6 +497,7 @@ export default function BoardAgent() {
                   <Badge tone="sage">{tr('Plano gerado')}</Badge>
                   {result._fallback ? <Badge tone="warning">{tr('Fallback seguro')}</Badge> : null}
                   <Badge tone="neutral">{tr(result.task_type)}</Badge>
+                  {turns.length > 1 && <Badge tone="neutral">{tr('Turno')} {turns.length}</Badge>}
                 </div>
                 <h2 className="font-display text-2xl text-dusk-500 mt-3">{tr('Resumo')}</h2>
                 <p className="text-sm text-dusk-400 mt-1 whitespace-pre-line">{result.summary}</p>
@@ -514,6 +731,42 @@ export default function BoardAgent() {
               <MiniList items={result.assumptions} />
             </GlassCard>
           </div>
+
+          {/* Follow-up composer — only renders when a result exists, so
+              the admin's mental model is "first plan above → ask a
+              follow-up here." Smaller than the main form: just a textarea
+              + send. Mode/budget/urgency carry over from the parent
+              state so the admin doesn't reconfigure for follow-ups. */}
+          <GlassCard variant="clay-sage" className="p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Bot className="w-4 h-4 text-dusk-400" />
+              <span className="text-sm font-semibold text-dusk-500">{tr('Continuar a conversa')}</span>
+              <span className="text-xs text-dusk-300">— {tr('o agente lembra o que vocês discutiram acima')}</span>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <textarea
+                className="input flex-1 min-h-[60px] resize-none"
+                value={followUpTask}
+                onChange={(e) => setFollowUpTask(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) sendFollowUp();
+                }}
+                maxLength={4000}
+                placeholder={tr('ex: "E se Ricardo disser que está ocupado?" ou "Quanto tempo costuma demorar?"')}
+                disabled={followUpLoading}
+              />
+              <Button
+                type="button"
+                variant="primary"
+                loading={followUpLoading}
+                disabled={followUpTask.trim().length < 3}
+                onClick={sendFollowUp}
+                leftIcon={<Send className="w-4 h-4" />}
+              >
+                {tr('Enviar')}
+              </Button>
+            </div>
+          </GlassCard>
         </div>
       )}
 

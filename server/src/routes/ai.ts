@@ -167,8 +167,31 @@ router.post('/admin-agent', requireAuth, aiRateLimit, requireRole('board_admin')
   const input = boundedText(req.body?.task, 6_000);
   if (!input.ok) return fail(res, input.error, input.error === 'text_too_long' ? 413 : 400);
   const condoId = getActiveCondoId(req);
+  const adminUserId = req.user!.id;
 
-  const { plan, fallback } = await runAdminAgent({
+  // Thread bookkeeping. When the client omits thread_id, we create a
+  // fresh thread on the admin's behalf — title derived from the first
+  // 80 chars of the task so the side panel has a readable label. When
+  // thread_id is provided, validate it belongs to this admin + condo
+  // before appending to it (prevents cross-tenant context leakage).
+  let threadId: number | undefined;
+  const requested = Number(req.body?.thread_id);
+  if (Number.isInteger(requested) && requested > 0) {
+    const owner = db.prepare(
+      `SELECT id FROM agent_threads WHERE id = ? AND condominium_id = ? AND admin_user_id = ?`
+    ).get(requested, condoId, adminUserId);
+    if (!owner) return fail(res, 'thread_not_found', 404);
+    threadId = requested;
+  } else {
+    const title = input.text.split(/[\n.!?]/)[0].slice(0, 80) || 'Nova conversa';
+    const r = db.prepare(
+      `INSERT INTO agent_threads (condominium_id, admin_user_id, title, mode)
+       VALUES (?, ?, ?, ?)`
+    ).run(condoId, adminUserId, title, String(req.body?.mode || 'general').slice(0, 40));
+    threadId = Number(r.lastInsertRowid);
+  }
+
+  const { plan, fallback, turn_index } = await runAdminAgent({
     condoId,
     task: input.text,
     mode: req.body?.mode,
@@ -176,11 +199,14 @@ router.post('/admin-agent', requireAuth, aiRateLimit, requireRole('board_admin')
     location: optionalText(req.body?.location, 240),
     budget: optionalText(req.body?.budget, 120),
     urgency: optionalText(req.body?.urgency, 120),
+    threadId,
+    adminUserId,
   });
 
   audit(req, {
     action: 'ai.admin_agent',
     target_type: 'ai_admin_agent',
+    target_id: threadId,
     condominium_id: condoId,
     metadata: {
       mode: plan.task_type,
@@ -188,10 +214,84 @@ router.post('/admin-agent', requireAuth, aiRateLimit, requireRole('board_admin')
       option_count: plan.options.length,
       service_contact_matches: plan.existing_network_fit.length,
       fallback,
+      thread_id: threadId,
+      turn_index,
     },
   });
-  return ok(res, { ...plan, _fallback: fallback || plan._fallback });
+  return ok(res, { ...plan, _fallback: fallback || plan._fallback, thread_id: threadId, turn_index });
 }));
+
+// List the admin's most-recent active threads. Capped at 20 — older
+// threads are still in the DB (we don't auto-archive) but the UI only
+// needs the recent window for the sidebar dropdown.
+router.get('/admin-agent/threads', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+  const condoId = getActiveCondoId(req);
+  const adminUserId = req.user!.id;
+  const rows = db.prepare(
+    `SELECT t.id, t.title, t.mode, t.status, t.created_at, t.updated_at,
+            (SELECT COUNT(*) FROM agent_turns WHERE thread_id = t.id) AS turn_count
+     FROM agent_threads t
+     WHERE t.condominium_id = ? AND t.admin_user_id = ? AND t.status = 'active'
+     ORDER BY t.updated_at DESC
+     LIMIT 20`
+  ).all(condoId, adminUserId);
+  return ok(res, rows);
+});
+
+// Full thread — used when the admin opens a past conversation from the
+// sidebar. Returns every turn including the persisted plan JSON, so the
+// UI can re-render the conversation without re-running the agent.
+router.get('/admin-agent/threads/:id', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+  const condoId = getActiveCondoId(req);
+  const adminUserId = req.user!.id;
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) return fail(res, 'invalid_id', 400);
+  const thread = db.prepare(
+    `SELECT id, title, mode, status, created_at, updated_at
+     FROM agent_threads WHERE id = ? AND condominium_id = ? AND admin_user_id = ?`
+  ).get(id, condoId, adminUserId) as any;
+  if (!thread) return fail(res, 'not_found', 404);
+  const turns = db.prepare(
+    `SELECT turn_index, user_task, agent_summary, agent_plan, fallback, created_at
+     FROM agent_turns WHERE thread_id = ? ORDER BY turn_index ASC`
+  ).all(id) as any[];
+  // Parse the persisted plan JSON for client convenience.
+  const hydrated = turns.map((t) => {
+    let plan: any = null;
+    try { plan = t.agent_plan ? JSON.parse(t.agent_plan) : null; } catch { plan = null; }
+    return {
+      turn_index: t.turn_index,
+      user_task: t.user_task,
+      agent_summary: t.agent_summary,
+      created_at: t.created_at,
+      fallback: !!t.fallback,
+      plan,
+    };
+  });
+  return ok(res, { ...thread, turns: hydrated });
+});
+
+// Archive a thread — soft delete; turns remain readable until the
+// thread itself is hard-deleted (we don't expose that path yet). Used
+// for the "delete conversation" affordance in the sidebar.
+router.post('/admin-agent/threads/:id/archive', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+  const condoId = getActiveCondoId(req);
+  const adminUserId = req.user!.id;
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) return fail(res, 'invalid_id', 400);
+  const updated = db.prepare(
+    `UPDATE agent_threads SET status = 'archived', updated_at = CURRENT_TIMESTAMP
+     WHERE id = ? AND condominium_id = ? AND admin_user_id = ?`
+  ).run(id, condoId, adminUserId);
+  if (updated.changes === 0) return fail(res, 'not_found', 404);
+  audit(req, {
+    action: 'ai.thread_archive',
+    target_type: 'agent_thread',
+    target_id: id,
+    condominium_id: condoId,
+  });
+  return ok(res, { id, archived: true });
+});
 
 // 2. Cluster all open suggestions for the condo
 router.post('/cluster-suggestions', requireAuth, aiRateLimit, requireRole('board_admin'), asyncHandler(async (req: AuthedRequest, res) => {
