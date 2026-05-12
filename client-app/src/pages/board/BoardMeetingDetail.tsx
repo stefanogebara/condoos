@@ -73,60 +73,60 @@ export default function BoardMeetingDetail() {
 
   return (
     <>
-      <Link to="/board/meetings" className="inline-flex items-center gap-1 text-sm text-dusk-300 hover:text-dusk-500 mb-4"><ArrowLeft className="w-4 h-4" /> Voltar</Link>
-      <PageHeader title={m.title} subtitle={formatDateTime(m.scheduled_for) + (m.agenda ? ` · ${m.agenda}` : '')} />
+      <Link to="/board/meetings" className="inline-flex items-center gap-1 text-sm text-dusk-300 hover:text-dusk-500 mb-4"><ArrowLeft className="w-4 h-4" /> {t('Voltar')}</Link>
+      <PageHeader title={t(m.title)} subtitle={formatDateTime(m.scheduled_for) + (m.agenda ? ` · ${t(m.agenda)}` : '')} />
 
       <div className="grid lg:grid-cols-2 gap-6">
         <GlassCard className="p-6">
-          <h3 className="font-display text-lg text-dusk-500 mb-3">Anotações</h3>
+          <h3 className="font-display text-lg text-dusk-500 mb-3">{t('Anotações')}</h3>
           <textarea
             className="input min-h-[280px] font-mono text-sm"
-            placeholder="Cole as anotações da reunião aqui. Tópicos, abreviações, do jeito que veio — a IA arruma."
+            placeholder={t('Cole as anotações da reunião aqui. Tópicos, abreviações, do jeito que veio — a IA arruma.')}
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
           />
           <div className="mt-3 flex gap-2 justify-end">
-            <Button variant="ghost" onClick={saveNotes} loading={saving} leftIcon={<Save className="w-4 h-4" />}>Salvar</Button>
-            <Button variant="primary" onClick={summarize} loading={saving} leftIcon={<Sparkles className="w-4 h-4" />}>Resumir com IA</Button>
+            <Button variant="ghost" onClick={saveNotes} loading={saving} leftIcon={<Save className="w-4 h-4" />}>{t('Salvar')}</Button>
+            <Button variant="primary" onClick={summarize} loading={saving} leftIcon={<Sparkles className="w-4 h-4" />}>{t('Resumir com IA')}</Button>
           </div>
         </GlassCard>
 
         <GlassCard variant={summary ? 'clay-sage' : 'clay'} className="p-6">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-display text-lg text-dusk-500 flex items-center gap-2"><Sparkles className="w-4 h-4" /> Resumo da IA</h3>
-            {summary && <Badge tone="dark">Pronto</Badge>}
+            <h3 className="font-display text-lg text-dusk-500 flex items-center gap-2"><Sparkles className="w-4 h-4" /> {t('Resumo da IA')}</h3>
+            {summary && <Badge tone="dark">{t('Pronto')}</Badge>}
           </div>
           {summary ? (
             <div className="space-y-4 text-sm">
-              <p className="text-dusk-400 leading-relaxed">{summary.summary}</p>
+              <p className="text-dusk-400 leading-relaxed">{t(summary.summary)}</p>
 
               {summary.decisions?.length > 0 && (
                 <div>
-                  <div className="text-xs uppercase tracking-wider text-dusk-300 mb-1">Decisões</div>
-                  <ul className="space-y-1">{summary.decisions.map((d: string, i: number) => <li key={i} className="text-dusk-400">• {d}</li>)}</ul>
+                  <div className="text-xs uppercase tracking-wider text-dusk-300 mb-1">{t('Decisões')}</div>
+                  <ul className="space-y-1">{summary.decisions.map((d: string, i: number) => <li key={i} className="text-dusk-400">• {t(d)}</li>)}</ul>
                 </div>
               )}
 
               {summary.resident_announcement && (
                 <div className="border-t border-white/60 pt-4">
                   <div className="flex items-center justify-between mb-2">
-                    <div className="text-xs uppercase tracking-wider text-dusk-300">Rascunho do comunicado</div>
-                    <Button size="sm" variant="primary" onClick={publishAnnouncement} leftIcon={<Megaphone className="w-3.5 h-3.5" />}>Publicar</Button>
+                    <div className="text-xs uppercase tracking-wider text-dusk-300">{t('Rascunho do comunicado')}</div>
+                    <Button size="sm" variant="primary" onClick={publishAnnouncement} leftIcon={<Megaphone className="w-3.5 h-3.5" />}>{t('Publicar')}</Button>
                   </div>
                   <div className="p-4 rounded-2xl bg-white/60 backdrop-blur-sm border border-white/70">
-                    <div className="font-semibold text-dusk-500">{summary.resident_announcement.title}</div>
-                    <p className="text-sm text-dusk-400 mt-1 whitespace-pre-line">{summary.resident_announcement.body}</p>
+                    <div className="font-semibold text-dusk-500">{t(summary.resident_announcement.title)}</div>
+                    <p className="text-sm text-dusk-400 mt-1 whitespace-pre-line">{t(summary.resident_announcement.body)}</p>
                   </div>
                 </div>
               )}
             </div>
-          ) : <p className="text-sm text-dusk-300">Salve as anotações e clique em Resumir. Você recebe um resumo limpo, lista de decisões, tarefas, e um comunicado pronto para publicar.</p>}
+          ) : <p className="text-sm text-dusk-300">{t('Salve as anotações e clique em Resumir. Você recebe um resumo limpo, lista de decisões, tarefas, e um comunicado pronto para publicar.')}</p>}
         </GlassCard>
       </div>
 
       {m.action_items?.length > 0 && (
         <>
-          <h3 className="font-display text-xl text-dusk-500 mt-10 mb-4">Tarefas</h3>
+          <h3 className="font-display text-xl text-dusk-500 mt-10 mb-4">{t('Tarefas')}</h3>
           <div className="space-y-2">
             {m.action_items.map((a) => (
               <GlassCard key={a.id} className="p-4 flex items-center gap-3">
@@ -135,11 +135,11 @@ export default function BoardMeetingDetail() {
                 </button>
                 <div className="flex-1">
                   <div className={a.status === 'done' ? 'line-through text-dusk-200 text-sm' : 'text-dusk-400 text-sm'}>
-                    {a.description}
+                    {t(a.description)}
                   </div>
                   <div className="text-xs text-dusk-200 mt-0.5">
-                    {a.owner_label && <span>{a.owner_label}</span>}
-                    {a.due_date && <span> · até {formatDate(a.due_date)}</span>}
+                    {a.owner_label && <span>{t(a.owner_label)}</span>}
+                    {a.due_date && <span> · {t('até')} {formatDate(a.due_date)}</span>}
                   </div>
                 </div>
               </GlassCard>

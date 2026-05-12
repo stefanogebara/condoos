@@ -37,7 +37,7 @@ function describeImportError(e: ImportError): string {
     unit_not_found: 'Unidade não encontrada',
     already_invited: 'Já convidado',
   };
-  return `Linha ${e.row}: ${labels[e.error] || e.error}${details}`;
+  return `${t('Linha')} ${e.row}: ${t(labels[e.error] || e.error)}${details}`;
 }
 
 export default function Residents() {
@@ -122,11 +122,11 @@ export default function Residents() {
   return (
     <>
       <PageHeader
-        title="Moradores"
-        subtitle={`${rows.length} ${rows.length === 1 ? 'pessoa' : 'pessoas'} no ${condoName || 'seu prédio'}.`}
+        title={t('Moradores')}
+        subtitle={`${rows.length} ${t(rows.length === 1 ? 'pessoa' : 'pessoas')} ${t('no')} ${condoName || t('seu prédio')}.`}
         actions={
           <Button onClick={() => setShowImport((x) => !x)} variant={showImport ? 'ghost' : 'primary'} leftIcon={<Upload className="w-4 h-4" />}>
-            {showImport ? 'Cancelar' : 'Importar CSV'}
+            {showImport ? t('Cancelar') : t('Importar CSV')}
           </Button>
         }
       />
@@ -135,16 +135,16 @@ export default function Residents() {
         <GlassCard variant="clay-sage" className="p-6 mb-6">
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div>
-              <Badge tone="dark" className="mb-2">Código de convite</Badge>
+              <Badge tone="dark" className="mb-2">{t('Código de convite')}</Badge>
               <div className="flex items-center gap-3">
                 <div className="font-mono text-2xl font-bold text-dusk-500 tracking-[0.24em]">{inviteCode}</div>
                 <button onClick={copy} className="text-sm text-dusk-400 hover:text-dusk-500 inline-flex items-center gap-1 underline decoration-dotted underline-offset-4">
-                  {copied ? <><Check className="w-4 h-4" /> Copiado</> : <><Copy className="w-4 h-4" /> Copiar</>}
+                  {copied ? <><Check className="w-4 h-4" /> {t('Copiado')}</> : <><Copy className="w-4 h-4" /> {t('Copiar')}</>}
                 </button>
               </div>
             </div>
             <div className="text-sm text-dusk-400 max-w-md">
-              Compartilhe este código com quem precisa entrar no prédio. Eles acessam <span className="font-mono">/onboarding/join</span>, digitam, e escolhem a unidade.
+              {t('Compartilhe este código com quem precisa entrar no prédio. Eles acessam')} <span className="font-mono">/onboarding/join</span>, {t('digitam, e escolhem a unidade.')}
             </div>
           </div>
         </GlassCard>
@@ -152,10 +152,10 @@ export default function Residents() {
 
       {showImport && (
         <GlassCard className="p-6 mb-6 animate-fade-up">
-          <h3 className="font-display text-xl text-dusk-500 tracking-tight">Importar lista de moradores</h3>
+          <h3 className="font-display text-xl text-dusk-500 tracking-tight">{t('Importar lista de moradores')}</h3>
           <p className="text-sm text-dusk-300 mt-1">
-            Cole um CSV abaixo. Colunas: <span className="font-mono">email,unit,relationship,primary_contact,voting_weight</span>.
-            Quando o morador entrar com esse email, ele é vinculado automaticamente à unidade — sem aprovação manual.
+            {t('Cole um CSV abaixo. Colunas:')} <span className="font-mono">email,unit,relationship,primary_contact,voting_weight</span>.
+            {t('Quando o morador entrar com esse email, ele é vinculado automaticamente à unidade — sem aprovação manual.')}
           </p>
           <textarea
             className="input mt-4 min-h-[180px] font-mono text-[13px]"
@@ -171,22 +171,22 @@ export default function Residents() {
               className="mt-1"
             />
             <span>
-              Enviar email de convite para cada morador agora.
-              <span className="block text-xs text-dusk-300 mt-0.5">Precisa das envs do Resend. Os convites são criados mesmo sem email configurado.</span>
+              {t('Enviar email de convite para cada morador agora.')}
+              <span className="block text-xs text-dusk-300 mt-0.5">{t('Precisa das envs do Resend. Os convites são criados mesmo sem email configurado.')}</span>
             </span>
           </label>
           {importErrors.length > 0 && (
             <div role="alert" className="mt-4 rounded-2xl border border-peach-200 bg-peach-100/70 p-4 text-sm text-dusk-500">
-              <div className="font-semibold mb-2">Linhas com problema</div>
+              <div className="font-semibold mb-2">{t('Linhas com problema')}</div>
               <ul className="space-y-1">
                 {importErrors.map((e, idx) => <li key={`${e.row}-${idx}`}>{describeImportError(e)}</li>)}
               </ul>
             </div>
           )}
           <div className="mt-3 flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setShowImport(false)} leftIcon={<X className="w-4 h-4" />}>Cancelar</Button>
+            <Button variant="ghost" onClick={() => setShowImport(false)} leftIcon={<X className="w-4 h-4" />}>{t('Cancelar')}</Button>
             <Button variant="primary" onClick={importCsv} loading={importing} leftIcon={<Mail className="w-4 h-4" />}>
-              {sendEmails ? 'Criar e enviar convites' : 'Criar convites'}
+              {sendEmails ? t('Criar e enviar convites') : t('Criar convites')}
             </Button>
           </div>
         </GlassCard>
@@ -194,7 +194,7 @@ export default function Residents() {
 
       {pendingInvites.length > 0 && (
         <div className="mb-6">
-          <h3 className="font-display text-lg text-dusk-500 mb-3">Convites pendentes ({pendingInvites.length})</h3>
+          <h3 className="font-display text-lg text-dusk-500 mb-3">{t('Convites pendentes')} ({pendingInvites.length})</h3>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
             {pendingInvites.map((i) => (
               <GlassCard key={i.id} className="p-4 flex items-center gap-3 bg-white/40">
@@ -204,13 +204,13 @@ export default function Residents() {
                 <div className="min-w-0 flex-1">
                   <div className="text-sm font-medium text-dusk-500 truncate">{i.email}</div>
                   <div className="text-xs text-dusk-300">
-                    Unidade {i.unit_number} · {i.relationship}{i.primary_contact === 1 ? ' · principal' : ''} · peso {i.voting_weight}
+                    {t('Unidade')} {i.unit_number} · {t(i.relationship)}{i.primary_contact === 1 ? ` · ${t('principal')}` : ''} · {t('peso')} {i.voting_weight}
                   </div>
                 </div>
-                <Badge tone="warning">pendente</Badge>
+                <Badge tone="warning">{t('pendente')}</Badge>
                 <div className="flex flex-col items-end gap-2">
-                  {i.email_status === 'sent' && <Badge tone="sage">enviado</Badge>}
-                  {i.email_status === 'failed' && <Badge tone="warning">falha no email</Badge>}
+                  {i.email_status === 'sent' && <Badge tone="sage">{t('enviado')}</Badge>}
+                  {i.email_status === 'failed' && <Badge tone="warning">{t('falha no email')}</Badge>}
                   {i.email_status !== 'sent' && (
                     <Button
                       size="sm"
@@ -218,7 +218,7 @@ export default function Residents() {
                       onClick={() => sendInviteEmail(i)}
                       loading={sendingInviteId === i.id}
                     >
-                      Enviar
+                      {t('Enviar')}
                     </Button>
                   )}
                 </div>
@@ -236,8 +236,8 @@ export default function Residents() {
               <div className="font-semibold text-dusk-500 truncate">{r.first_name} {r.last_name}</div>
               <div className="text-xs text-dusk-200 truncate">{r.email}</div>
               <div className="mt-2 flex items-center gap-2">
-                {r.unit_number && <Badge tone="neutral">Unidade {r.unit_number}</Badge>}
-                {r.role === 'board_admin' && <Badge tone="sage">Síndico</Badge>}
+                {r.unit_number && <Badge tone="neutral">{t('Unidade')} {r.unit_number}</Badge>}
+                {r.role === 'board_admin' && <Badge tone="sage">{t('Síndico')}</Badge>}
               </div>
             </div>
           </GlassCard>

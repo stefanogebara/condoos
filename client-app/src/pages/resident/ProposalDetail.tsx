@@ -85,6 +85,19 @@ function humanDelta(ms: number): string {
   return '<1m';
 }
 
+const PROPOSAL_STATUS_LABEL: Record<string, string> = {
+  discussion: 'em discussão',
+  voting: 'em votação',
+  approved: 'aprovada',
+  rejected: 'reprovada',
+  completed: 'concluída',
+  inconclusive: 'inconclusiva',
+};
+
+function statusLabel(status: string): string {
+  return t(PROPOSAL_STATUS_LABEL[status] || status);
+}
+
 export default function ProposalDetail() {
   const { id } = useParams();
   const [p, setP] = useState<Proposal | null>(null);
@@ -155,21 +168,21 @@ export default function ProposalDetail() {
 
   return (
     <>
-      <Link to="/app/proposals" className="inline-flex items-center gap-1 text-sm text-dusk-300 hover:text-dusk-500 mb-4"><ArrowLeft className="w-4 h-4" /> Voltar</Link>
+      <Link to="/app/proposals" className="inline-flex items-center gap-1 text-sm text-dusk-300 hover:text-dusk-500 mb-4"><ArrowLeft className="w-4 h-4" /> {t('Voltar')}</Link>
       <PageHeader
-        title={p.title}
-        subtitle={`Proposto por ${p.author_first} ${p.author_last}${p.estimated_cost ? ` · ~${formatCurrency(p.estimated_cost)}` : ''}`}
+        title={t(p.title)}
+        subtitle={`${t('Proposto por')} ${p.author_first} ${p.author_last}${p.estimated_cost ? ` · ~${formatCurrency(p.estimated_cost)}` : ''}`}
       />
       <div className="flex items-center gap-2 mb-6 flex-wrap">
-        <Badge tone={p.status === 'voting' ? 'peach' : 'sage'}>{({ discussion: 'em discussão', voting: 'em votação', approved: 'aprovada', rejected: 'reprovada', completed: 'concluída', inconclusive: 'inconclusiva' } as Record<string,string>)[p.status] || p.status}</Badge>
-        {p.ai_drafted === 1 && <Badge tone="sage">Redigido pela IA</Badge>}
-        {p.category && <Badge tone="neutral">{p.category}</Badge>}
-        {p.voter_eligibility === 'owners_only' && <Badge tone="peach">Só proprietários</Badge>}
-        {p.voter_eligibility === 'primary_contact_only' && <Badge tone="peach">Um voto por unidade</Badge>}
+        <Badge tone={p.status === 'voting' ? 'peach' : 'sage'}>{statusLabel(p.status)}</Badge>
+        {p.ai_drafted === 1 && <Badge tone="sage">{t('Redigido pela IA')}</Badge>}
+        {p.category && <Badge tone="neutral">{t(p.category)}</Badge>}
+        {p.voter_eligibility === 'owners_only' && <Badge tone="peach">{t('Só proprietários')}</Badge>}
+        {p.voter_eligibility === 'primary_contact_only' && <Badge tone="peach">{t('Um voto por unidade')}</Badge>}
       </div>
 
       <GlassCard variant="clay" className="p-7 mb-6">
-        <p className="text-dusk-400 leading-relaxed whitespace-pre-line">{p.description}</p>
+        <p className="text-dusk-400 leading-relaxed whitespace-pre-line">{t(p.description)}</p>
       </GlassCard>
 
       {/* Cost + risk analysis (#13) — surfaces above the vote buttons so
@@ -178,21 +191,21 @@ export default function ProposalDetail() {
         <GlassCard variant="clay-sage" className="p-6 mb-6">
           <div className="flex items-center gap-2 mb-3 flex-wrap">
             <Calculator className="w-5 h-5 text-dusk-400" />
-            <h3 className="font-display text-lg text-dusk-500">Análise técnica</h3>
+            <h3 className="font-display text-lg text-dusk-500">{t('Análise técnica')}</h3>
             {p.estimated_cost ? <Badge tone="sage">~{formatCurrency(p.estimated_cost)}</Badge> : null}
           </div>
           {p.cost_breakdown && (
             <div className="mb-3">
-              <div className="text-xs uppercase tracking-wider text-dusk-300 mb-1 font-medium">Custos</div>
-              <pre className="text-sm text-dusk-400 whitespace-pre-wrap font-sans leading-relaxed">{p.cost_breakdown}</pre>
+              <div className="text-xs uppercase tracking-wider text-dusk-300 mb-1 font-medium">{t('Custos')}</div>
+              <pre className="text-sm text-dusk-400 whitespace-pre-wrap font-sans leading-relaxed">{t(p.cost_breakdown)}</pre>
             </div>
           )}
           {p.risk_summary && (
             <div className={p.cost_breakdown ? 'pt-3 border-t border-white/60' : ''}>
               <div className="text-xs uppercase tracking-wider text-dusk-300 mb-1 font-medium flex items-center gap-1">
-                <AlertTriangle className="w-3 h-3" /> Riscos e considerações
+                <AlertTriangle className="w-3 h-3" /> {t('Riscos e considerações')}
               </div>
-              <p className="text-sm text-dusk-400 leading-relaxed whitespace-pre-line">{p.risk_summary}</p>
+              <p className="text-sm text-dusk-400 leading-relaxed whitespace-pre-line">{t(p.risk_summary)}</p>
             </div>
           )}
         </GlassCard>
@@ -205,17 +218,17 @@ export default function ProposalDetail() {
         <GlassCard variant="clay-sage" className="p-7 mb-6">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h3 className="font-display text-xl text-dusk-500">Aberta para votação</h3>
+              <h3 className="font-display text-xl text-dusk-500">{t('Aberta para votação')}</h3>
               <div className={`text-xs mt-1 font-medium ${win.tone === 'over' ? 'text-peach-500' : win.tone === 'pre' ? 'text-dusk-300' : 'text-sage-700'}`}>
                 {win.label}
               </div>
               {p.quorum && p.quorum.quorum_percent > 0 && (
                 <div className="mt-2 text-xs text-dusk-300">
-                  Quórum: <span className={`font-semibold ${p.quorum.quorum_met ? 'text-sage-700' : 'text-peach-500'}`}>
+                  {t('Quórum')}: <span className={`font-semibold ${p.quorum.quorum_met ? 'text-sage-700' : 'text-peach-500'}`}>
                     {p.quorum.turnout_percent}%
                   </span>
-                  {' / '}{p.quorum.quorum_percent}% exigido
-                  <span className="text-dusk-200"> · {p.quorum.votes_cast} de {p.quorum.eligible_voter_count} votaram</span>
+                  {' / '}{p.quorum.quorum_percent}% {t('exigido')}
+                  <span className="text-dusk-200"> · {p.quorum.votes_cast} {t('de')} {p.quorum.eligible_voter_count} {t('votaram')}</span>
                 </div>
               )}
             </div>
@@ -227,33 +240,33 @@ export default function ProposalDetail() {
             <div className="h-full bg-dusk-200"  style={{ width: `${weightedTotal ? (p.votes.abstain_weight / weightedTotal) * 100 : 0}%` }} />
           </div>
           <div className="flex items-center justify-between text-sm">
-            <span className="text-sage-700 font-semibold">{p.votes.yes} sim ({pct}%)</span>
-            <span className="text-peach-500 font-semibold">{p.votes.no} não</span>
-            <span className="text-dusk-300">{p.votes.abstain} abstenção</span>
+            <span className="text-sage-700 font-semibold">{p.votes.yes} {t('sim')} ({pct}%)</span>
+            <span className="text-peach-500 font-semibold">{p.votes.no} {t('não')}</span>
+            <span className="text-dusk-300">{p.votes.abstain} {t('abstenção')}</span>
           </div>
           {usesWeightedTally && (
             <div className="mt-2 text-xs text-dusk-300">
-              Apuração com peso: {p.votes.yes_weight} sim · {p.votes.no_weight} não · {p.votes.abstain_weight} abstenção
+              {t('Apuração com peso:')} {p.votes.yes_weight} {t('sim')} · {p.votes.no_weight} {t('não')} · {p.votes.abstain_weight} {t('abstenção')}
             </div>
           )}
 
           {p.voter_rights?.can_vote === false ? (
             <div className="mt-5 p-4 rounded-2xl bg-white/60 border border-white/70 text-sm text-dusk-400">
-              <strong className="font-semibold">Você não pode votar nesta proposta.</strong>
+              <strong className="font-semibold">{t('Você não pode votar nesta proposta.')}</strong>
               <span className="ml-1">
                 {p.voter_eligibility === 'owners_only'
-                  ? 'Só proprietários votam em decisões de gastos do condomínio.'
+                  ? t('Só proprietários votam em decisões de gastos do condomínio.')
                   : p.voter_eligibility === 'primary_contact_only'
-                  ? 'Só o contato principal de cada unidade vota aqui.'
-                  : 'Vincule sua unidade primeiro para participar.'}
+                  ? t('Só o contato principal de cada unidade vota aqui.')
+                  : t('Vincule sua unidade primeiro para participar.')}
               </span>
             </div>
           ) : (
             <div className="mt-5 flex gap-2">
-              <Button variant={p.my_vote === 'yes' ? 'sage' : 'ghost'} onClick={() => cast('yes')} disabled={busy}>Sim</Button>
-              <Button variant={p.my_vote === 'no'  ? 'peach' : 'ghost'} onClick={() => cast('no')}  disabled={busy}>Não</Button>
-              <Button variant="ghost" onClick={() => cast('abstain')} disabled={busy}>Abstenção</Button>
-              {p.my_vote && <span className="ml-auto self-center text-xs text-dusk-300">Seu voto: <span className="font-semibold">{p.my_vote === 'yes' ? 'Sim' : p.my_vote === 'no' ? 'Não' : 'Abstenção'}</span></span>}
+              <Button variant={p.my_vote === 'yes' ? 'sage' : 'ghost'} onClick={() => cast('yes')} disabled={busy}>{t('Sim')}</Button>
+              <Button variant={p.my_vote === 'no'  ? 'peach' : 'ghost'} onClick={() => cast('no')}  disabled={busy}>{t('Não')}</Button>
+              <Button variant="ghost" onClick={() => cast('abstain')} disabled={busy}>{t('Abstenção')}</Button>
+              {p.my_vote && <span className="ml-auto self-center text-xs text-dusk-300">{t('Seu voto:')} <span className="font-semibold">{p.my_vote === 'yes' ? t('Sim') : p.my_vote === 'no' ? t('Não') : t('Abstenção')}</span></span>}
             </div>
           )}
         </GlassCard>
@@ -263,10 +276,10 @@ export default function ProposalDetail() {
       {/* Inconclusive / quorum-failure banner */}
       {p.status === 'inconclusive' && (
         <GlassCard variant="clay-peach" className="p-5 mb-6 text-sm text-dusk-500">
-          <span className="font-semibold">Votação encerrada como inconclusiva.</span>{' '}
+          <span className="font-semibold">{t('Votação encerrada como inconclusiva.')}</span>{' '}
           {p.close_reason === 'quorum_not_met'
-            ? `O quórum de ${p.quorum_percent}% não foi atingido${p.quorum ? ` — só ${p.quorum.turnout_percent}% votaram.` : '.'} O síndico pode reabrir a votação depois.`
-            : 'Não houve votos suficientes para qualquer lado. Decisão adiada.'}
+            ? `${t('O quórum de')} ${p.quorum_percent}% ${t('não foi atingido')}${p.quorum ? ` — ${t('só')} ${p.quorum.turnout_percent}% ${t('votaram')}.` : '.'} ${t('O síndico pode reabrir a votação depois.')}`
+            : t('Não houve votos suficientes para qualquer lado. Decisão adiada.')}
         </GlassCard>
       )}
 
@@ -274,32 +287,32 @@ export default function ProposalDetail() {
       <div className="grid md:grid-cols-2 gap-4 mb-6">
         <GlassCard className="p-5">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-display text-lg text-dusk-500 flex items-center gap-2"><Sparkles className="w-4 h-4" /> Resumo da discussão</h3>
-            <Button size="sm" variant="ghost" onClick={summarize} loading={busy && !summary}>Resumir discussão</Button>
+            <h3 className="font-display text-lg text-dusk-500 flex items-center gap-2"><Sparkles className="w-4 h-4" /> {t('Resumo da discussão')}</h3>
+            <Button size="sm" variant="ghost" onClick={summarize} loading={busy && !summary}>{t('Resumir discussão')}</Button>
           </div>
           {summary ? (
             <div className="space-y-3 text-sm">
-              <p className="text-dusk-400 leading-relaxed">{summary.summary}</p>
+              <p className="text-dusk-400 leading-relaxed">{t(summary.summary)}</p>
               {summary.points_of_agreement?.length > 0 && <Group label="Pontos de acordo"  items={summary.points_of_agreement}    tone="sage" />}
               {summary.points_of_disagreement?.length > 0 && <Group label="Pontos de desacordo" items={summary.points_of_disagreement} tone="peach" />}
               {summary.open_questions?.length > 0 && <Group label="Perguntas em aberto" items={summary.open_questions} tone="neutral" />}
             </div>
-          ) : <p className="text-sm text-dusk-300">Peça pra IA ler os {p.comments.length} <>comentários e resumir onde os moradores concordam ou discordam.</></p>}
+          ) : <p className="text-sm text-dusk-300">{t('Peça pra IA ler os comentários e resumir onde os moradores concordam ou discordam.').replace('{count}', String(p.comments.length))}</p>}
         </GlassCard>
 
         <GlassCard className="p-5">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-display text-lg text-dusk-500 flex items-center gap-2"><Sparkles className="w-4 h-4" /> Em linguagem simples</h3>
-            <Button size="sm" variant="ghost" onClick={explain} loading={busy && !explainer}>Explicar pra mim</Button>
+            <h3 className="font-display text-lg text-dusk-500 flex items-center gap-2"><Sparkles className="w-4 h-4" /> {t('Em linguagem simples')}</h3>
+            <Button size="sm" variant="ghost" onClick={explain} loading={busy && !explainer}>{t('Explicar pra mim')}</Button>
           </div>
           {explainer
-            ? <p className="text-sm text-dusk-400 leading-relaxed whitespace-pre-line">{explainer}</p>
-            : <p className="text-sm text-dusk-300">Versão sem juridiquês, sem termo técnico.</p>}
+            ? <p className="text-sm text-dusk-400 leading-relaxed whitespace-pre-line">{t(explainer)}</p>
+            : <p className="text-sm text-dusk-300">{t('Versão sem juridiquês, sem termo técnico.')}</p>}
         </GlassCard>
       </div>
 
       {/* Comments */}
-      <h3 className="font-display text-xl text-dusk-500 mb-4 flex items-center gap-2"><MessageCircle className="w-5 h-5" /> <>Discussão</> ({p.comments.length})</h3>
+      <h3 className="font-display text-xl text-dusk-500 mb-4 flex items-center gap-2"><MessageCircle className="w-5 h-5" /> {t('Discussão')} ({p.comments.length})</h3>
       <div className="space-y-3 mb-5">
         {p.comments.map((c) => (
           <GlassCard key={c.id} className="p-4 flex items-start gap-3">
@@ -307,18 +320,18 @@ export default function ProposalDetail() {
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
                 <span className="font-semibold text-dusk-500 text-sm">{c.first_name} {c.last_name}</span>
-                <span className="text-xs text-dusk-200">Unidade {c.unit_number}</span>
+                <span className="text-xs text-dusk-200">{t('Unidade')} {c.unit_number}</span>
                 <span className="text-xs text-dusk-200 ml-auto">{formatDate(c.created_at)}</span>
               </div>
-              <p className="text-sm text-dusk-400 mt-1 whitespace-pre-line">{c.body}</p>
+              <p className="text-sm text-dusk-400 mt-1 whitespace-pre-line">{t(c.body)}</p>
             </div>
           </GlassCard>
         ))}
       </div>
 
       <form onSubmit={addComment} className="flex gap-2">
-        <input className="input flex-1" placeholder="Diga o que você acha..." value={comment} onChange={(e) => setComment(e.target.value)} />
-        <Button type="submit" variant="primary" loading={busy}>Comentar</Button>
+        <input className="input flex-1" placeholder={t('Diga o que você acha...')} value={comment} onChange={(e) => setComment(e.target.value)} />
+        <Button type="submit" variant="primary" loading={busy}>{t('Comentar')}</Button>
       </form>
     </>
   );
@@ -327,9 +340,9 @@ export default function ProposalDetail() {
 function Group({ label, items, tone }: { label: string; items: string[]; tone: 'sage' | 'peach' | 'neutral' }) {
   return (
     <div>
-      <Badge tone={tone}>{label}</Badge>
+      <Badge tone={tone}>{t(label)}</Badge>
       <ul className="mt-2 space-y-1 ml-1">
-        {items.map((t, i) => <li key={i} className="text-dusk-300 text-sm">• {t}</li>)}
+        {items.map((item, i) => <li key={i} className="text-dusk-300 text-sm">• {t(item)}</li>)}
       </ul>
     </div>
   );
