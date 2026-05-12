@@ -97,7 +97,7 @@ export async function runAdminAgent(args: RunAdminAgentArgs): Promise<RunAdminAg
      LEFT JOIN expenses e
        ON e.condominium_id = sc.condominium_id
       AND LOWER(e.vendor) LIKE LOWER(sc.company_name) || '%'
-      AND date(e.spent_at) >= date('now', '-24 months')
+      AND substr(e.spent_at, 1, 10) >= date('now', '-24 months')
      WHERE sc.condominium_id = ? AND sc.active = 1
      GROUP BY sc.id, sc.company_name
      HAVING expense_count > 0`
