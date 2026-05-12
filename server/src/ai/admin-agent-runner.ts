@@ -21,6 +21,67 @@ function clip(value: unknown, max: number): string {
   return String(value || '').slice(0, max);
 }
 
+// === Helpers for building memory ===
+// Lightweight keyword-based category inference. Cheap, no LLM call. We
+// match on the same category vocabulary the ticket-create form uses; the
+// list mirrors CATEGORIES in client-app/src/pages/resident/Tickets.tsx
+// plus the safety-critical extensions in server/src/routes/tickets.ts.
+// First-match wins — order matters: more specific synonyms before
+// general ones (gas_leak before gas, water_damage before water).
+const CATEGORY_KEYWORDS: Array<{ category: string; words: RegExp }> = [
+  { category: 'gas_leak',    words: /\b(vazamento de g[áa]s|gas leak)\b/i },
+  { category: 'water_damage', words: /\b(inund(a[çc][ãa]o|ada?)|alagamento|water damage)\b/i },
+  { category: 'fire_safety', words: /\b(inc[êe]ndio|fuma[çc]a|alarme de inc|fire safety|fire alarm)\b/i },
+  { category: 'elevator',    words: /\b(elevador|elevator|lift)\b/i },
+  { category: 'electrical',  words: /\b(el[ée]trica?|electrical|tomada|disjuntor|curto-?circuito|fia[çc][ãa]o)\b/i },
+  { category: 'plumbing',    words: /\b(hidr[áa]ulica?|encanamento|vazamento|cano|esgoto|plumbing|leak|pipe)\b/i },
+  { category: 'hvac',        words: /\b(ar condicionado|ventila[çc][ãa]o|climatiza[çc][ãa]o|hvac|a\/c)\b/i },
+  { category: 'security',    words: /\b(seguran[çc]a|porta(o|s|s)|portaria|intercom|c[âa]mera|cctv|security|access|gate)\b/i },
+  { category: 'gas',         words: /\b(g[áa]s)\b/i },
+  { category: 'water',       words: /\b(caixa d'?[áa]gua|reservat[óo]rio|water tank)\b/i },
+  { category: 'cleaning',    words: /\b(limpeza|cleaning|janitor)\b/i },
+  { category: 'amenity',     words: /\b(academia|piscina|sal[ãa]o|gym|pool|amenity)\b/i },
+  { category: 'maintenance', words: /\b(manuten[çc][ãa]o|conserto|maintenance|repair)\b/i },
+];
+
+export function inferCategoryFromTask(task: string): string | null {
+  const text = String(task || '');
+  for (const { category, words } of CATEGORY_KEYWORDS) {
+    if (words.test(text)) return category;
+  }
+  return null;
+}
+
+// Strip stopwords + punctuation; lowercase; keep tokens >= 4 chars. Used
+// to score title overlap between the new task and past resolved tickets.
+const STOPWORDS = new Set([
+  'para','com','sem','que','dos','das','uma','este','esta','esse','essa','isso',
+  'pelo','pela','suas','seus','minha','meu','muito','mais','sobre','tambem',
+  'mas','por','foi','tem','ter','ser','este','isso','aqui','agora','hoje',
+  'entre','sobre','depois','antes','quando','onde','como','porque','quanto',
+  'the','and','for','with','from','that','this','these','those','some','very',
+  'also','more','need','needs','urgent','urgente','again','then','before','after',
+]);
+export function extractKeywords(s: string): string[] {
+  return String(s || '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '') // strip accents for matching
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter((w) => w.length >= 4 && !STOPWORDS.has(w));
+}
+
+// Cheap overlap score. Equal-weight tokens; pre-normalised both sides so
+// "ruído" ↔ "ruido" matches. Returns 0 when no overlap.
+export function scoreTitleOverlap(newTaskKeywords: string[], pastTitle: string): number {
+  if (newTaskKeywords.length === 0) return 0;
+  const pastSet = new Set(extractKeywords(pastTitle));
+  let hits = 0;
+  for (const w of newTaskKeywords) if (pastSet.has(w)) hits += 1;
+  return hits;
+}
+
 export interface RunAdminAgentArgs {
   condoId: number;
   task: string;
@@ -138,6 +199,105 @@ export async function runAdminAgent(args: RunAdminAgentArgs): Promise<RunAdminAg
      LIMIT 8`
   ).all(args.condoId) as any[];
 
+  // === Building memory ===
+  // The agent's biggest weakness was treating every ticket as fresh, even
+  // when the same building had resolved an identical symptom 6 weeks ago.
+  // Three signals get added to the prompt context:
+  //
+  //   1) similar_resolved_tickets — past resolutions in the same category
+  //      with overlapping title keywords. Lets the agent cite "Em março,
+  //      Otis trocou cabo desgastado por R$ 2400 em 4h. Mesma rota?"
+  //
+  //   2) open_similar_count — count of currently-open tickets in the same
+  //      category in the last 30d. When >= 3, the agent surfaces
+  //      "padrão detectado — considere vistoria preventiva."
+  //
+  //   3) current_local_time + is_outside_business_hours — basic temporal
+  //      awareness. Stops the agent from cheerfully suggesting "ligar
+  //      para Ricardo agora" at 11pm.
+  //
+  // Detection: derive a likely category from keywords in the task text
+  // (cheap, no model call). Then SQL on that.
+  const inferredCategory = inferCategoryFromTask(args.task);
+  const taskKeywords = extractKeywords(args.task);
+
+  let similarResolved: any[] = [];
+  let openSimilarCount = 0;
+  if (inferredCategory) {
+    // Resolved tickets in same category, last 12 months. Score each by
+    // how many of the new task's keywords appear in the title — top 3
+    // by (keyword overlap, recency).
+    const candidates = db.prepare(
+      `SELECT t.id, t.title, t.description, t.category, t.resolved_at,
+              t.agent_plan,
+              GROUP_CONCAT(DISTINCT sc.company_name) AS dispatched_vendors,
+              MAX(d.responded_at)                      AS last_vendor_responded_at,
+              MAX(d.response_summary)                  AS last_vendor_response,
+              (SELECT body FROM ticket_comments c
+               WHERE c.ticket_id = t.id ORDER BY c.created_at DESC LIMIT 1) AS last_comment
+       FROM tickets t
+       LEFT JOIN ticket_dispatches d ON d.ticket_id = t.id
+       LEFT JOIN service_contacts sc ON sc.id = d.service_contact_id
+       WHERE t.condominium_id = ?
+         AND t.category = ?
+         AND t.remediation_status = 'resolved'
+         AND substr(t.resolved_at, 1, 10) >= date('now', '-12 months')
+       GROUP BY t.id
+       ORDER BY t.resolved_at DESC
+       LIMIT 20`
+    ).all(args.condoId, inferredCategory) as any[];
+
+    const scored = candidates.map((c) => ({
+      ...c,
+      _score: scoreTitleOverlap(taskKeywords, c.title || ''),
+    })).sort((a, b) => {
+      if (b._score !== a._score) return b._score - a._score;
+      return String(b.resolved_at || '').localeCompare(String(a.resolved_at || ''));
+    });
+    similarResolved = scored.slice(0, 3);
+
+    openSimilarCount = (db.prepare(
+      `SELECT COUNT(*) AS n FROM tickets
+       WHERE condominium_id = ?
+         AND category = ?
+         AND remediation_status != 'resolved'
+         AND substr(created_at, 1, 10) >= date('now', '-30 days')`
+    ).get(args.condoId, inferredCategory) as { n: number }).n;
+  }
+
+  // Time-of-day context. The local hour comes from the condo's timezone if
+  // we ever attach one to condominiums; for now we use UTC + a default of
+  // 9-18 business hours. The intent is to stop "ligar agora" at 22h.
+  const now = new Date();
+  const localHour = now.getUTCHours() - 3; // approx BRT (UTC-3) until tz-per-condo lands
+  const normalizedHour = ((localHour % 24) + 24) % 24;
+  const isOutsideBusinessHours = normalizedHour < 8 || normalizedHour >= 19;
+
+  const buildingMemory = {
+    similar_resolved_tickets: similarResolved.map((t) => {
+      let agentPlanCost: number | null = null;
+      try {
+        if (t.agent_plan) {
+          const parsed = JSON.parse(t.agent_plan);
+          agentPlanCost = parsed?.proposal_draft?.estimated_cost ?? null;
+        }
+      } catch { /* malformed plan — leave cost null */ }
+      return {
+        id: t.id,
+        title: clip(t.title, 160),
+        resolved_at: t.resolved_at,
+        dispatched_vendors: t.dispatched_vendors,
+        resolution_note: clip(t.last_vendor_response || t.last_comment || '', 400),
+        estimated_cost_brl: agentPlanCost,
+      };
+    }),
+    open_similar_count: openSimilarCount,
+    inferred_category: inferredCategory,
+    current_local_time: now.toISOString(),
+    local_hour: normalizedHour,
+    is_outside_business_hours: isOutsideBusinessHours,
+  };
+
   const adminInput: AdminAgentInput = {
     task: args.task,
     mode,
@@ -231,6 +391,7 @@ export async function runAdminAgent(args: RunAdminAgentArgs): Promise<RunAdminAg
       category: s.category,
       created_at: s.created_at,
     })),
+    building_memory: buildingMemory,
     tool_limitations: 'This route does not perform live web browsing, vendor calls, purchases, bookings, or installation work. It produces a decision-ready plan, search queries, outreach copy, and a proposal draft.',
   };
 
@@ -279,6 +440,17 @@ export async function runAdminAgent(args: RunAdminAgentArgs): Promise<RunAdminAg
         },
       };
     });
+  }
+  // Attach the same building_memory the prompt context received, so the
+  // UI can render past resolutions / pattern badges / after-hours
+  // warnings independently of whether the model echoed them in prose.
+  // Filter out empty memory to keep payload size sensible.
+  if (buildingMemory.similar_resolved_tickets.length > 0
+      || buildingMemory.open_similar_count > 0
+      || buildingMemory.is_outside_business_hours) {
+    plan.building_memory = buildingMemory;
+  } else {
+    plan.building_memory = null;
   }
   return { plan, fallback: usedFallback };
 }

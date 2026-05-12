@@ -1983,6 +1983,13 @@ const phrases: Copy[] = [
   c('cobranças anteriores', 'prior expenses', 'cargos anteriores', 'dépenses antérieures'),
   c('Peça orçamento atualizado.', 'Request an updated quote.', 'Solicita una cotización actualizada.', 'Demandez un devis actualisé.'),
   c('Próximos passos manuais', 'Manual next steps', 'Próximos pasos manuales', 'Prochaines étapes manuelles'),
+  // Building memory section — past resolutions + patterns + after-hours.
+  c('Memória do prédio', 'Building memory', 'Memoria del edificio', 'Mémoire du bâtiment'),
+  c('Padrão detectado', 'Pattern detected', 'Patrón detectado', 'Motif détecté'),
+  c('chamados abertos da mesma categoria nos últimos 30 dias. Considere vistoria preventiva antes que vire emergência.', 'open tickets in the same category in the last 30 days. Consider a preventive inspection before it becomes an emergency.', 'tickets abiertos de la misma categoría en los últimos 30 días. Considera una inspección preventiva antes de que sea una emergencia.', 'tickets ouverts dans la même catégorie sur les 30 derniers jours. Envisagez une inspection préventive avant que cela ne devienne une urgence.'),
+  c('Fora do horário comercial agora', 'Outside business hours now', 'Fuera del horario comercial ahora', 'Hors des heures ouvrables'),
+  c('Para tarefas não urgentes, prefira contatar amanhã de manhã.', 'For non-urgent tasks, prefer contacting tomorrow morning.', 'Para tareas no urgentes, prefiere contactar mañana por la mañana.', 'Pour les tâches non urgentes, préférez contacter demain matin.'),
+  c('Resoluções anteriores', 'Past resolutions', 'Resoluciones anteriores', 'Résolutions antérieures'),
 ];
 
 function c(pt: string, en: string, es: string, fr: string): Copy {

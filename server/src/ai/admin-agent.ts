@@ -155,6 +155,24 @@ export interface AdminAgentOutput {
   resident_update: AdminAgentResidentUpdate;
   proposal_draft: AdminAgentProposalDraft | null;
   risks: string[];
+  // Building memory — populated by the runner from SQL, attached to the
+  // response so the UI can render past resolutions / pattern alerts /
+  // after-hours flag without relying on the model's prose. The model
+  // also reads this in its prompt context and is expected to cite it.
+  building_memory?: {
+    similar_resolved_tickets: Array<{
+      id: number;
+      title: string;
+      resolved_at: string | null;
+      dispatched_vendors: string | null;
+      resolution_note: string;
+      estimated_cost_brl: number | null;
+    }>;
+    open_similar_count: number;
+    inferred_category: string | null;
+    is_outside_business_hours: boolean;
+    local_hour: number;
+  } | null;
   _fallback?: boolean;
 }
 

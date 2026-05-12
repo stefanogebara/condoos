@@ -44,6 +44,23 @@ interface NetworkFit {
   } | null;
 }
 
+interface BuildingMemorySimilar {
+  id: number;
+  title: string;
+  resolved_at: string | null;
+  dispatched_vendors: string | null;
+  resolution_note: string;
+  estimated_cost_brl: number | null;
+}
+
+interface BuildingMemory {
+  similar_resolved_tickets: BuildingMemorySimilar[];
+  open_similar_count: number;
+  inferred_category: string | null;
+  is_outside_business_hours: boolean;
+  local_hour: number;
+}
+
 interface AgentResult {
   summary: string;
   task_type: string;
@@ -51,6 +68,7 @@ interface AgentResult {
   recommended_next_step: string;
   existing_network_fit: NetworkFit[];
   options: AgentOption[];
+  building_memory?: BuildingMemory | null;
   vendor_search_plan: {
     search_queries: string[];
     shortlisting_criteria: string[];
@@ -276,6 +294,13 @@ export default function BoardAgent() {
               <p className="text-sm text-dusk-500 mt-1">{result.recommended_next_step}</p>
             </div>
           </GlassCard>
+
+          {/* Building memory: the agent's recall of this building's own
+              history. Rendered before the network because past resolutions
+              are stronger evidence than abstract vendor matching. Renders
+              nothing when memory is empty (new buildings, no patterns,
+              business hours) — empty silence is honest. */}
+          {result.building_memory && <BuildingMemorySection memory={result.building_memory} locale={locale} tr={tr} />}
 
           {/* Hero: the only block in the result panel with a write action.
               Each existing-network-fit card lets the admin send the agent's
@@ -706,6 +731,94 @@ function OutreachModal({ target, onClose, onSent, tr, health }: {
         </div>
       </GlassCard>
     </div>
+  );
+}
+
+// Building memory section — surfaces three signals the model also sees in
+// its prompt context:
+//   1. Past resolved tickets with the same symptom in this building
+//   2. Pattern alert when >=3 similar tickets are open
+//   3. After-hours warning so the admin doesn't get an "act now"
+//      suggestion at 11pm
+// Each signal renders only when present; an empty memory block renders
+// nothing (the parent guards on `result.building_memory` being truthy).
+function BuildingMemorySection({ memory, locale, tr }: {
+  memory: BuildingMemory;
+  locale: string;
+  tr: (k: string) => string;
+}) {
+  const showPattern = memory.open_similar_count >= 3;
+  const showAfterHours = memory.is_outside_business_hours;
+  const showResolutions = memory.similar_resolved_tickets.length > 0;
+  if (!showResolutions && !showPattern && !showAfterHours) return null;
+
+  return (
+    <GlassCard variant="clay" className="p-5">
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <h2 className="font-display text-xl text-dusk-500 flex items-center gap-2">
+          <Sparkles className="w-4 h-4" />
+          {tr('Memória do prédio')}
+        </h2>
+        {memory.inferred_category && (
+          <Badge tone="neutral">{tr(memory.inferred_category)}</Badge>
+        )}
+      </div>
+
+      {showPattern && (
+        <div className="rounded-2xl bg-peach-100/50 border border-peach-300/50 p-3 mb-3 text-sm text-dusk-500">
+          <div className="font-semibold flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-peach-700" />
+            {tr('Padrão detectado')}
+          </div>
+          <div className="text-xs text-dusk-400 mt-1">
+            {memory.open_similar_count} {tr('chamados abertos da mesma categoria nos últimos 30 dias. Considere vistoria preventiva antes que vire emergência.')}
+          </div>
+        </div>
+      )}
+
+      {showAfterHours && (
+        <div className="rounded-2xl bg-white/50 border border-white/70 p-3 mb-3 text-xs text-dusk-400">
+          {tr('Fora do horário comercial agora')} ({String(memory.local_hour).padStart(2, '0')}h). {tr('Para tarefas não urgentes, prefira contatar amanhã de manhã.')}
+        </div>
+      )}
+
+      {showResolutions && (
+        <div>
+          <div className="text-xs uppercase tracking-wider text-dusk-300 mb-2">
+            {tr('Resoluções anteriores')}
+          </div>
+          <div className="space-y-2">
+            {memory.similar_resolved_tickets.map((t) => (
+              <div key={t.id} className="rounded-2xl bg-white/60 border border-white/70 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="font-semibold text-dusk-500 text-sm">{t.title}</div>
+                  {t.resolved_at && (
+                    <div className="text-xs text-dusk-300 shrink-0">
+                      {new Date(t.resolved_at).toLocaleDateString(locale, { year: 'numeric', month: 'short' })}
+                    </div>
+                  )}
+                </div>
+                {t.resolution_note && (
+                  <div className="text-xs text-dusk-400 mt-1.5">{t.resolution_note}</div>
+                )}
+                <div className="flex items-center gap-2 mt-2 flex-wrap text-xs">
+                  {t.dispatched_vendors && (
+                    <span className="rounded-full bg-white/70 border border-white/80 px-2 py-0.5 text-dusk-400">
+                      {t.dispatched_vendors}
+                    </span>
+                  )}
+                  {t.estimated_cost_brl != null && (
+                    <span className="rounded-full bg-sage-100/60 border border-sage-200/60 px-2 py-0.5 text-dusk-500 font-semibold">
+                      {formatEstimatedCost(t.estimated_cost_brl, locale)}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </GlassCard>
   );
 }
 

@@ -1098,6 +1098,36 @@ test('SLA escalator: flips awaiting_vendor tickets past their priority window', 
   assert.equal(second.escalated, 0);
 });
 
+test('building memory: category inference + keyword scoring', async () => {
+  const { inferCategoryFromTask, extractKeywords, scoreTitleOverlap } = await import('../src/ai/admin-agent-runner');
+  // Category inference — first-match wins on the keyword priority order.
+  assert.equal(inferCategoryFromTask('Elevador A com ruído estranho'), 'elevator');
+  assert.equal(inferCategoryFromTask('Vazamento de água na garagem'), 'plumbing');
+  assert.equal(inferCategoryFromTask('Vazamento de gás no térreo'), 'gas_leak');
+  assert.equal(inferCategoryFromTask('Inundação no subsolo'), 'water_damage');
+  assert.equal(inferCategoryFromTask('Ar condicionado da academia parou'), 'hvac');
+  assert.equal(inferCategoryFromTask('Cheguei em casa e tava tudo bom'), null);
+
+  // Accent-insensitive keyword extraction. Stopwords are dropped.
+  const kw = extractKeywords('Elevador A com ruído estranho parando entre andares');
+  assert.ok(kw.includes('elevador'));
+  assert.ok(kw.includes('ruido'));     // accent stripped
+  assert.ok(kw.includes('estranho'));
+  assert.ok(kw.includes('parando'));
+  assert.ok(!kw.includes('com'));      // stopword
+  assert.ok(!kw.includes('entre'));    // stopword (short)
+
+  // Title overlap scoring picks the most-similar past title.
+  const today = 'Elevador A com ruído estranho';
+  const past1 = 'Elevador B parou de funcionar';            // 1 overlap (elevador)
+  const past2 = 'Elevador A ruído entre andares';           // 2 overlaps (elevador, ruido)
+  const past3 = 'Vazamento de água na garagem';             // 0 overlap
+  const taskWords = extractKeywords(today);
+  assert.equal(scoreTitleOverlap(taskWords, past1), 1);
+  assert.equal(scoreTitleOverlap(taskWords, past2), 2);
+  assert.equal(scoreTitleOverlap(taskWords, past3), 0);
+});
+
 test('admin agent sanitizer drops platform-duplicate action_plan items', () => {
   // The agent shouldn't surface "send WhatsApp to vendor" as a manual
   // step because the platform has a button that does exactly that. The
