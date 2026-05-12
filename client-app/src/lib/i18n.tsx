@@ -1869,6 +1869,21 @@ const phrases: Copy[] = [
   c('Mensagem enviada', 'Message sent', 'Mensaje enviado', 'Message envoyé'),
   c('Falha ao enviar mensagem', 'Failed to send message', 'Error al enviar el mensaje', 'Échec de l\'envoi du message'),
   c('Mensagem vazia', 'Empty message', 'Mensaje vacío', 'Message vide'),
+  // Cost history chip — surfaces real spend from expenses ledger on each
+  // vendor card so the admin sees concrete numbers regardless of model output.
+  c('Histórico', 'History', 'Historial', 'Historique'),
+  c('última vez', 'last time', 'última vez', 'la dernière fois'),
+  c('média', 'avg', 'media', 'moy.'),
+  // Overview agent-in-action strip — pulls from /api/tickets/recent-auto-actions.
+  c('Agente em ação', 'Agent in action', 'Agente en acción', 'Agent en action'),
+  c('Ver todos', 'See all', 'Ver todos', 'Tout voir'),
+  c('Sem fornecedor cadastrado', 'No vendor saved', 'Sin proveedor guardado', 'Aucun prestataire enregistré'),
+  c('Verificado', 'Verified', 'Verificado', 'Vérifié'),
+  c('Fornecedor acionado', 'Vendor dispatched', 'Proveedor contactado', 'Prestataire contacté'),
+  c('IA gerou plano', 'AI generated plan', 'IA generó plan', "L'IA a généré un plan"),
+  c('Sem resposta do fornecedor', 'No vendor reply', 'Sin respuesta del proveedor', 'Aucune réponse du prestataire'),
+  c('Resolvido', 'Resolved', 'Resuelto', 'Résolu'),
+  c('Fornecedor respondeu', 'Vendor responded', 'Proveedor respondió', 'Prestataire a répondu'),
 ];
 
 function c(pt: string, en: string, es: string, fr: string): Copy {

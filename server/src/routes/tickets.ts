@@ -199,6 +199,36 @@ router.get('/summary', requireAuth, (req: AuthedRequest, res) => {
   });
 });
 
+// Recent auto-actions feed — surfaces what the agent has been doing on
+// the admin's behalf since the last visit. Powers the "Agente em ação"
+// strip on /board overview so the auto-dispatch path doesn't stay
+// invisible behind the tickets page. Returns the 5 most-recent events
+// across (verified, agent_dispatched, awaiting_vendor → vendor_engaged,
+// blocked, resolved) for the active condo. Residents get an empty list.
+router.get('/recent-auto-actions', requireAuth, (req: AuthedRequest, res) => {
+  const condoId = getActiveCondoId(req);
+  if (req.user!.role !== 'board_admin') return ok(res, []);
+  // We synthesise the event type from whichever timestamp is most recent
+  // on the ticket. updated_at is the master clock; pairing with the
+  // matching state field tells us which step fired last. Cap at 5 — this
+  // is a glance widget, not a log viewer.
+  const rows = db.prepare(
+    `SELECT id, title, priority, remediation_status, blocked_reason,
+            verified_at, agent_run_at, resolved_at, updated_at
+     FROM tickets
+     WHERE condominium_id = ?
+       AND (agent_run_at IS NOT NULL OR resolved_at IS NOT NULL OR verified_at IS NOT NULL)
+     ORDER BY updated_at DESC
+     LIMIT 5`
+  ).all(condoId) as Array<{
+    id: number; title: string; priority: string;
+    remediation_status: string; blocked_reason: string | null;
+    verified_at: string | null; agent_run_at: string | null;
+    resolved_at: string | null; updated_at: string;
+  }>;
+  return ok(res, rows);
+});
+
 router.get('/', requireAuth, (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const status = typeof req.query.status === 'string' ? req.query.status : null;

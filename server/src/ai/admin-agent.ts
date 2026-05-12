@@ -62,6 +62,18 @@ export interface AdminAgentNetworkFit {
   category: string;
   reason: string;
   contact_method: string;
+  // Cost history is decorated by the runner after sanitize from the
+  // expenses ledger. Null when the admin has never logged a spend with
+  // this vendor. last_amount_brl is the headline number the UI surfaces;
+  // avg/min/max give the agent a range to anchor estimated_cost_range on.
+  cost_history?: {
+    expense_count: number;
+    last_amount_brl: number | null;
+    last_spent_at: string | null;
+    avg_brl: number | null;
+    min_brl: number | null;
+    max_brl: number | null;
+  } | null;
 }
 
 export interface AdminAgentOutput {
@@ -383,6 +395,45 @@ function sanitizeNumberOrNull(value: unknown): number | null {
   return Math.round(n * 100) / 100;
 }
 
+// Mojibake fix — when the model echoes back Portuguese characters, we've
+// been getting `Ã¡` (two chars) instead of `á` (one char). That's the
+// classic signature of UTF-8 bytes being interpreted as Latin-1 codepoints
+// somewhere in the request/response chain. The pattern is unmistakable:
+// any `Ã` followed by a char in the 0x80-0xBF range is almost certainly a
+// 2-byte UTF-8 sequence that got decoded as Latin-1 twice.
+//
+// Re-encoding fix: walk the string char-by-char, take the low byte of each
+// codepoint, then decode the byte buffer as UTF-8. Buffer.from(s, 'latin1')
+// does exactly this in one call. We only apply the fix when the suspicious
+// pattern is present so clean strings (English, properly-encoded Portuguese
+// without mojibake) pass through untouched.
+const MOJIBAKE_PATTERN = /[ÂÃ][-¿]/;
+
+function fixMojibake(value: string): string {
+  if (!value || !MOJIBAKE_PATTERN.test(value)) return value;
+  try {
+    const fixed = Buffer.from(value, 'latin1').toString('utf8');
+    // Sanity check — if the fixed version still has the pattern OR has
+    // replacement chars (U+FFFD), we made it worse. Bail and return the
+    // original so we never corrupt a string we couldn't repair cleanly.
+    if (MOJIBAKE_PATTERN.test(fixed) || fixed.includes('�')) return value;
+    return fixed;
+  } catch {
+    return value;
+  }
+}
+
+function fixMojibakeDeep<T>(value: T): T {
+  if (typeof value === 'string') return fixMojibake(value) as unknown as T;
+  if (Array.isArray(value)) return value.map((v) => fixMojibakeDeep(v)) as unknown as T;
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value)) out[k] = fixMojibakeDeep(v);
+    return out as unknown as T;
+  }
+  return value;
+}
+
 export function sanitizeAdminAgentOutput(raw: unknown, input: AdminAgentInput): AdminAgentOutput {
   const fallback = fallbackAdminAgent(input);
   const data = obj(raw);
@@ -435,7 +486,7 @@ export function sanitizeAdminAgentOutput(raw: unknown, input: AdminAgentInput): 
   const fallbackCategory = fallback.proposal_draft?.category || categoryForTask(input);
   const hasProposalDraft = !!(text(proposalDraft.title, 90) || text(proposalDraft.description, 2_000));
 
-  return {
+  const output: AdminAgentOutput = {
     summary: text(data.summary, 700) || fallback.summary,
     task_type: sanitizeTaskType(data.task_type, fallback.task_type),
     assumptions: list(data.assumptions, fallback.assumptions, 6, 220),
@@ -463,4 +514,10 @@ export function sanitizeAdminAgentOutput(raw: unknown, input: AdminAgentInput): 
     risks: list(data.risks, fallback.risks, 8, 220),
     _fallback: data._fallback === true ? true : undefined,
   };
+
+  // Pass every string through the mojibake fixer as the very last step,
+  // after schema sanitization. Has to be last so we fix the strings the
+  // schema produced — not just the raw model output — and so we never
+  // rewind a defaulted-fallback string back into mojibake.
+  return fixMojibakeDeep(output);
 }

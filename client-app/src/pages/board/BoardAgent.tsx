@@ -26,12 +26,29 @@ interface AgentOption {
   evaluation_criteria: string[];
 }
 
+interface NetworkFit {
+  company_name: string;
+  category: string;
+  reason: string;
+  contact_method: string;
+  // Populated server-side from the expenses ledger when the admin has
+  // logged prior spend with this vendor. Null when no history.
+  cost_history?: {
+    expense_count: number;
+    last_amount_brl: number | null;
+    last_spent_at: string | null;
+    avg_brl: number | null;
+    min_brl: number | null;
+    max_brl: number | null;
+  } | null;
+}
+
 interface AgentResult {
   summary: string;
   task_type: string;
   assumptions: string[];
   recommended_next_step: string;
-  existing_network_fit: Array<{ company_name: string; category: string; reason: string; contact_method: string }>;
+  existing_network_fit: NetworkFit[];
   options: AgentOption[];
   vendor_search_plan: {
     search_queries: string[];
@@ -274,6 +291,7 @@ export default function BoardAgent() {
                 {result.existing_network_fit.map((fit) => {
                   const vendor = vendors.find((v) => v.company_name === fit.company_name);
                   const canSend = !!vendor?.whatsapp || !!vendor?.email;
+                  const cost = fit.cost_history;
                   return (
                     <div key={fit.company_name} className="rounded-3xl bg-white/60 border border-white/70 p-4">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -282,6 +300,23 @@ export default function BoardAgent() {
                       </div>
                       <p className="text-sm text-dusk-400 mt-2">{fit.reason}</p>
                       <p className="text-xs text-dusk-300 mt-2">{fit.contact_method}</p>
+                      {cost && cost.expense_count > 0 && (
+                        <div className="mt-3 rounded-2xl bg-sage-100/60 border border-sage-200/60 p-2.5 text-xs text-dusk-400">
+                          <div className="flex items-baseline gap-2 flex-wrap">
+                            <span className="font-semibold text-sage-700">{tr('Histórico')}:</span>
+                            {cost.last_amount_brl != null && (
+                              <span>
+                                {tr('última vez')} <span className="font-semibold text-dusk-500">{formatEstimatedCost(cost.last_amount_brl, locale)}</span>
+                              </span>
+                            )}
+                            {cost.avg_brl != null && cost.expense_count > 1 && (
+                              <span className="text-dusk-300">
+                                · {tr('média')} {formatEstimatedCost(cost.avg_brl, locale)} ({cost.expense_count}×)
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
                       <div className="mt-3">
                         <Button
                           type="button"

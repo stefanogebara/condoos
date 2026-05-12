@@ -1,15 +1,60 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Inbox, Vote, Calendar, Users, ArrowRight, Sparkles } from 'lucide-react';
+import { Inbox, Vote, Calendar, Users, ArrowRight, Bot, CheckCircle2, MessageCircle, Send, ShieldAlert, Sparkles } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 import GlassCard from '../../components/GlassCard';
 import Badge from '../../components/Badge';
 import { apiGet } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
+import { formatRelativeTime, t as translate } from '../../lib/i18n';
 
 interface Proposal { id: number; title: string; status: string; votes: { yes: number; no: number; abstain: number; total: number }; }
 interface Suggestion { id: number; body: string; status: string; }
 interface Meeting { id: number; title: string; scheduled_for: string; status: string; }
+
+interface AutoAction {
+  id: number;
+  title: string;
+  priority: 'low' | 'normal' | 'high' | 'urgent';
+  remediation_status: string;
+  blocked_reason: string | null;
+  verified_at: string | null;
+  agent_run_at: string | null;
+  resolved_at: string | null;
+  updated_at: string;
+}
+
+// Map a ticket row to the most-recent agent step + matching icon/copy.
+// updated_at tracks the master clock; whichever state field is non-null
+// and closest to updated_at is the event we surface. Order matters here:
+// "resolved" trumps everything, then "blocked" (the admin needs to act),
+// then forward progress states.
+function autoActionDescriptor(row: AutoAction, tr: (k: string) => string) {
+  if (row.remediation_status === 'resolved' && row.resolved_at) {
+    return { icon: CheckCircle2, label: tr('Resolvido'), tone: 'sage' as const, at: row.resolved_at };
+  }
+  if (row.remediation_status === 'blocked_needs_admin') {
+    const label = row.blocked_reason === 'vendor_no_response'
+      ? tr('Sem resposta do fornecedor')
+      : row.blocked_reason === 'no_vendor_in_category'
+        ? tr('Sem fornecedor cadastrado')
+        : tr('Precisa do síndico');
+    return { icon: ShieldAlert, label, tone: 'peach' as const, at: row.agent_run_at || row.updated_at };
+  }
+  if (row.remediation_status === 'vendor_engaged') {
+    return { icon: MessageCircle, label: tr('Fornecedor respondeu'), tone: 'sage' as const, at: row.updated_at };
+  }
+  if (row.remediation_status === 'awaiting_vendor') {
+    return { icon: Send, label: tr('Fornecedor acionado'), tone: 'peach' as const, at: row.updated_at };
+  }
+  if (row.remediation_status === 'agent_dispatched' && row.agent_run_at) {
+    return { icon: Bot, label: tr('IA gerou plano'), tone: 'peach' as const, at: row.agent_run_at };
+  }
+  if (row.verified_at) {
+    return { icon: CheckCircle2, label: tr('Verificado'), tone: 'sage' as const, at: row.verified_at };
+  }
+  return { icon: Bot, label: row.remediation_status, tone: 'neutral' as const, at: row.updated_at };
+}
 
 export default function BoardOverview() {
   const { user } = useAuth();
@@ -19,6 +64,8 @@ export default function BoardOverview() {
   const [residents, setResidents] = useState<any[]>([]);
   const [condoName, setCondoName] = useState<string>('');
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [autoActions, setAutoActions] = useState<AutoAction[]>([]);
+  const tr = (k: string) => translate(k);
 
   useEffect(() => {
     let alive = true;
@@ -27,6 +74,7 @@ export default function BoardOverview() {
       apiGet<Suggestion[]>('/suggestions').then(setSuggestions),
       apiGet<Meeting[]>('/meetings').then(setMeetings),
       apiGet<any[]>('/users/residents').then(setResidents),
+      apiGet<AutoAction[]>('/tickets/recent-auto-actions').then(setAutoActions),
       apiGet<Array<{ status: string; condo_name: string }>>('/onboarding/me').then((rows) => {
         const active = rows.find((r) => r.status === 'active');
         if (active) setCondoName(active.condo_name);
@@ -68,6 +116,39 @@ export default function BoardOverview() {
         <Stat icon={Calendar} color="peach" label="Reuniões agendadas" value={upcoming.length}        to="/board/meetings" />
         <Stat icon={Users}    color="sage"  label="Moradores"          value={residents.length}       to="/board/residents" />
       </div>
+
+      {autoActions.length > 0 && (
+        <GlassCard variant="clay-sage" className="p-5 mb-6 animate-fade-up">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <h2 className="font-display text-xl text-dusk-500 flex items-center gap-2">
+              <Bot className="w-4 h-4" /> {tr('Agente em ação')}
+            </h2>
+            <Link to="/board/tickets" className="text-xs font-semibold text-dusk-400 hover:text-dusk-500 inline-flex items-center gap-1">
+              {tr('Ver todos')} <ArrowRight className="w-3 h-3" />
+            </Link>
+          </div>
+          <ul className="space-y-2">
+            {autoActions.map((row) => {
+              const evt = autoActionDescriptor(row, tr);
+              const Icon = evt.icon;
+              return (
+                <li key={row.id}>
+                  <Link to={`/board/tickets`} className="flex items-center justify-between gap-3 rounded-2xl bg-white/60 border border-white/70 p-3 hover:bg-white/80">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <Icon className={`w-4 h-4 shrink-0 ${evt.tone === 'sage' ? 'text-sage-700' : evt.tone === 'peach' ? 'text-peach-500' : 'text-dusk-300'}`} />
+                      <div className="min-w-0">
+                        <div className="text-sm text-dusk-500 truncate">{row.title}</div>
+                        <div className="text-xs text-dusk-300">{evt.label}</div>
+                      </div>
+                    </div>
+                    <div className="text-xs text-dusk-300 shrink-0">{formatRelativeTime(evt.at)}</div>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </GlassCard>
+      )}
 
       <div className="grid lg:grid-cols-2 gap-6">
         <GlassCard variant="clay-peach" className="p-7">

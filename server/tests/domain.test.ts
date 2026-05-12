@@ -1087,3 +1087,35 @@ test('SLA escalator: flips awaiting_vendor tickets past their priority window', 
   const second = await tickSlaEscalator();
   assert.equal(second.escalated, 0);
 });
+
+test('admin agent sanitizer fixes UTF-8-as-Latin1 mojibake in output strings', () => {
+  // Real-world mojibake from the prod agent output: "está" came back as
+  // "estÃ¡" (two chars: 0xC3 0xA1 interpreted as Latin-1 codepoints).
+  // The sanitizer should detect the pattern and round-trip the bytes
+  // back through UTF-8 decoding to recover the proper character.
+  const raw = {
+    summary: 'O elevador A estÃ¡ com problemas crÃ­ticos.',
+    recommended_next_step: 'Acionar manutenÃ§Ã£o emergencial.',
+    options: [{
+      title: 'OpÃ§Ã£o Ãºnica',
+      fit: 'AvaliaÃ§Ã£o operacional',
+      pros: ['ResposÃ¡vel conhecido'],
+      cons: [],
+      estimated_cost_range: 'A confirmar',
+      timeline: 'Hoje',
+      questions_for_vendor: [],
+      evaluation_criteria: [],
+    }],
+    resident_update: { title: 'ManutenÃ§Ã£o do elevador', body: 'InspeÃ§Ã£o hoje.' },
+    risks: ['InterrupÃ§Ã£o total do servoÃ§o'],
+  };
+  const out = sanitizeAdminAgentOutput(raw, { task: 'test', service_contacts: [] });
+  assert.equal(out.summary, 'O elevador A está com problemas críticos.');
+  assert.equal(out.recommended_next_step, 'Acionar manutenção emergencial.');
+  assert.equal(out.options[0].title, 'Opção única');
+  assert.equal(out.resident_update.title, 'Manutenção do elevador');
+  assert.equal(out.resident_update.body, 'Inspeção hoje.');
+  // Pure-ASCII / properly-encoded strings should pass through unchanged.
+  const clean = sanitizeAdminAgentOutput({ summary: 'All good here.' }, { task: 'test', service_contacts: [] });
+  assert.equal(clean.summary, 'All good here.');
+});
