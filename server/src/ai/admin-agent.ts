@@ -28,8 +28,13 @@ const PLATFORM_DUPLICATE_KEYWORDS = [
   /contac?tar\s+(o\s+)?fornecedor/i,
   /send\s+(whatsapp|message|email)\s+to\s+(the\s+)?vendor/i,
   // Publishing the resident comms — resident_update covers it.
-  /(postar|publicar|enviar)\s+(o\s+)?(comunicado|aviso|notifica[çc][ãa]o)\s+(aos|para\s+os)\s+moradores/i,
+  // Broader than the literal "postar comunicado": catches "comunicar
+  // condôminos", "avisar moradores", "informar residentes" too — every
+  // form the model has produced in the wild for this same action.
+  /\b(postar|publicar|enviar|emitir)\s+(o\s+)?(comunicado|aviso|notifica[çc][ãa]o)/i,
+  /\b(comunicar|avisar|informar|notificar)\s+(os\s+)?(condôminos|cond[oô]minos|moradores|residentes)\b/i,
   /post\s+(the\s+)?(announcement|notice)\s+to\s+residents/i,
+  /\b(notify|inform|update)\s+(the\s+)?residents?\b/i,
   // Proposal creation — proposal_draft button covers it.
   /criar\s+(uma\s+)?proposta\s+para\s+vota[çc][ãa]o/i,
   /open\s+(a\s+)?proposal\s+for\s+(resident\s+)?vote/i,
