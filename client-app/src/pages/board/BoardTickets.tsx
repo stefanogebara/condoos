@@ -29,6 +29,11 @@ interface Ticket {
   denial_count: number;
   verified_at: string | null;
   agent_run_at: string | null;
+  // Surfaced by GET /api/tickets via SELECT t.* — the admin-inbox banner +
+  // inline reason chip read this on the list response without needing to
+  // load the full TicketDetail. nullable on every ticket not currently
+  // in remediation_status='blocked_needs_admin'.
+  blocked_reason: string | null;
   created_at: string;
 }
 
@@ -56,7 +61,6 @@ interface ResponseTarget {
 
 interface TicketDetail extends Ticket {
   description: string;
-  blocked_reason: string | null;
   agent_plan: AgentPlan | null;
   verifications: Array<{ id: number; vote: string; comment: string | null; first_name: string; last_name: string; unit_number: string | null }>;
   dispatches: Dispatch[];
