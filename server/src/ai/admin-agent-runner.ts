@@ -113,6 +113,14 @@ export async function runAdminAgent(args: RunAdminAgentArgs): Promise<RunAdminAg
     last_amount_cents: number | null;
   }>;
   const costByVendor = new Map(vendorCostHistory.map((c) => [String(c.company_name).toLowerCase(), c]));
+  if (process.env.AGENT_DEBUG === '1') {
+    const allExpenses = db.prepare(
+      `SELECT id, vendor, amount_cents, spent_at, substr(spent_at,1,10) AS prefix FROM expenses WHERE condominium_id = ? ORDER BY spent_at DESC LIMIT 20`
+    ).all(args.condoId);
+    console.log('[agent-debug] condoId=', args.condoId);
+    console.log('[agent-debug] expenses=', JSON.stringify(allExpenses, null, 2));
+    console.log('[agent-debug] vendorCostHistory=', JSON.stringify(vendorCostHistory, null, 2));
+  }
 
   const amenities = db.prepare(
     `SELECT name, description, capacity, admin_notes
