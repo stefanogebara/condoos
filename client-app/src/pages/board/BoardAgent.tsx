@@ -40,6 +40,7 @@ interface NetworkFit {
     avg_brl: number | null;
     min_brl: number | null;
     max_brl: number | null;
+    confidence: 'high' | 'low';
   } | null;
 }
 
@@ -309,21 +310,42 @@ export default function BoardAgent() {
                       <p className="text-sm text-dusk-400 mt-2">{fit.reason}</p>
                       <p className="text-xs text-dusk-300 mt-2">{fit.contact_method}</p>
                       {cost && cost.expense_count > 0 && (
-                        <div className="mt-3 rounded-2xl bg-sage-100/60 border border-sage-200/60 p-2.5 text-xs text-dusk-400">
-                          <div className="flex items-baseline gap-2 flex-wrap">
-                            <span className="font-semibold text-sage-700">{tr('Histórico')}:</span>
-                            {cost.last_amount_brl != null && (
-                              <span>
-                                {tr('última vez')} <span className="font-semibold text-dusk-500">{formatEstimatedCost(cost.last_amount_brl, locale)}</span>
-                              </span>
-                            )}
-                            {cost.avg_brl != null && cost.expense_count > 1 && (
-                              <span className="text-dusk-300">
-                                · {tr('média')} {formatEstimatedCost(cost.avg_brl, locale)} ({cost.expense_count}×)
-                              </span>
-                            )}
+                        // High confidence (3+ past expenses) → sage chip,
+                        // "Histórico". Low confidence (1-2) → neutral chip,
+                        // "Valor de referência" + explicit caveat. One
+                        // past invoice ≠ a reliable estimate.
+                        cost.confidence === 'high' ? (
+                          <div className="mt-3 rounded-2xl bg-sage-100/60 border border-sage-200/60 p-2.5 text-xs text-dusk-400">
+                            <div className="flex items-baseline gap-2 flex-wrap">
+                              <span className="font-semibold text-sage-700">{tr('Histórico')}:</span>
+                              {cost.last_amount_brl != null && (
+                                <span>
+                                  {tr('última vez')} <span className="font-semibold text-dusk-500">{formatEstimatedCost(cost.last_amount_brl, locale)}</span>
+                                </span>
+                              )}
+                              {cost.avg_brl != null && (
+                                <span className="text-dusk-300">
+                                  · {tr('média')} {formatEstimatedCost(cost.avg_brl, locale)} ({cost.expense_count}×)
+                                </span>
+                              )}
+                            </div>
                           </div>
-                        </div>
+                        ) : (
+                          <div className="mt-3 rounded-2xl bg-white/60 border border-white/70 p-2.5 text-xs text-dusk-400">
+                            <div className="flex items-baseline gap-2 flex-wrap">
+                              <span className="font-semibold text-dusk-400">{tr('Valor de referência')}:</span>
+                              {cost.last_amount_brl != null && (
+                                <span>
+                                  <span className="font-semibold text-dusk-500">{formatEstimatedCost(cost.last_amount_brl, locale)}</span>
+                                </span>
+                              )}
+                              <span className="text-dusk-300">
+                                · {cost.expense_count === 1 ? tr('1 cobrança anterior') : `${cost.expense_count} ${tr('cobranças anteriores')}`}
+                              </span>
+                            </div>
+                            <div className="text-[11px] text-dusk-300 mt-0.5">{tr('Peça orçamento atualizado.')}</div>
+                          </div>
+                        )
                       )}
                       <div className="mt-3">
                         <Button
@@ -399,21 +421,27 @@ export default function BoardAgent() {
             </GlassCard>
           ) : null}
 
-          <GlassCard className="p-5">
-            <h2 className="font-display text-xl text-dusk-500 mb-3">{tr('Plano de ação')}</h2>
-            <div className="space-y-3">
-              {result.action_plan.map((action, idx) => (
-                <div key={`${action.step}-${idx}`} className="rounded-3xl bg-white/60 border border-white/70 p-4 grid md:grid-cols-[1fr_160px_120px] gap-3">
-                  <div>
-                    <h3 className="font-semibold text-dusk-500">{action.step}</h3>
-                    <p className="text-sm text-dusk-400 mt-1">{action.details}</p>
+          {/* Action plan only renders when the server's denylist filter
+              kept at least one item. Empty plan = nothing the platform
+              can't already do, which is the honest answer for most
+              repair cases. */}
+          {result.action_plan.length > 0 && (
+            <GlassCard className="p-5">
+              <h2 className="font-display text-xl text-dusk-500 mb-3">{tr('Próximos passos manuais')}</h2>
+              <div className="space-y-3">
+                {result.action_plan.map((action, idx) => (
+                  <div key={`${action.step}-${idx}`} className="rounded-3xl bg-white/60 border border-white/70 p-4 grid md:grid-cols-[1fr_160px_120px] gap-3">
+                    <div>
+                      <h3 className="font-semibold text-dusk-500">{action.step}</h3>
+                      <p className="text-sm text-dusk-400 mt-1">{action.details}</p>
+                    </div>
+                    <div className="text-xs text-dusk-300"><span className="font-semibold text-dusk-400">{tr('Responsável')}:</span> {action.owner}</div>
+                    <div className="text-xs text-dusk-300"><span className="font-semibold text-dusk-400">{tr('Quando')}:</span> {action.due}</div>
                   </div>
-                  <div className="text-xs text-dusk-300"><span className="font-semibold text-dusk-400">{tr('Responsável')}:</span> {action.owner}</div>
-                  <div className="text-xs text-dusk-300"><span className="font-semibold text-dusk-400">{tr('Quando')}:</span> {action.due}</div>
-                </div>
-              ))}
-            </div>
-          </GlassCard>
+                ))}
+              </div>
+            </GlassCard>
+          )}
 
           <div className="grid lg:grid-cols-2 gap-5">
             <GlassCard variant="clay-sage" className="p-5">

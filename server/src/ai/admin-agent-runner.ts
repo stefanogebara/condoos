@@ -197,13 +197,17 @@ export async function runAdminAgent(args: RunAdminAgentArgs): Promise<RunAdminAg
         if (!hit) return null;
         const centsToBrl = (n: number | null | undefined): number | null =>
           n == null ? null : Math.round(Number(n)) / 100;
+        const count = Number(hit.expense_count || 0);
         return {
-          expense_count: Number(hit.expense_count || 0),
+          expense_count: count,
           last_amount_brl: centsToBrl(hit.last_amount_cents),
           last_spent_at: hit.last_spent_at,
           avg_brl: centsToBrl(hit.avg_cents),
           min_brl: centsToBrl(hit.min_cents),
           max_brl: centsToBrl(hit.max_cents),
+          // 3 past expenses = enough for a range. 1-2 = anchor data only;
+          // the prompt + UI both downgrade language at low confidence.
+          confidence: count >= 3 ? ('high' as const) : ('low' as const),
         };
       })(),
     })),
@@ -261,15 +265,17 @@ export async function runAdminAgent(args: RunAdminAgentArgs): Promise<RunAdminAg
       if (!cost) return { ...fit, cost_history: null };
       const centsToBrl = (n: number | null | undefined): number | null =>
         n == null ? null : Math.round(Number(n)) / 100;
+      const count = Number(cost.expense_count || 0);
       return {
         ...fit,
         cost_history: {
-          expense_count: Number(cost.expense_count || 0),
+          expense_count: count,
           last_amount_brl: centsToBrl(cost.last_amount_cents),
           last_spent_at: cost.last_spent_at,
           avg_brl: centsToBrl(cost.avg_cents),
           min_brl: centsToBrl(cost.min_cents),
           max_brl: centsToBrl(cost.max_cents),
+          confidence: count >= 3 ? ('high' as const) : ('low' as const),
         },
       };
     });

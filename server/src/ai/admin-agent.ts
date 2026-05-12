@@ -1,3 +1,54 @@
+// Compress a task description into a one-line WhatsApp-style message —
+// strips formal headers, keeps the verb + symptom, ends with an open
+// question. The model is told to produce these in the prompt; the
+// fallback path needs the same shape for consistency.
+//
+// Heuristic: take the first ~120 chars of the task, drop trailing
+// punctuation, append "Pode atender hoje?" / "Can you come today?".
+// Not perfect — the admin can edit before send — but better than
+// "Olá, sou do [condo]. Precisamos avaliar: [paste-bomb]."
+// Filter action_plan items that duplicate platform-executable work.
+// The UI already provides one-click buttons for:
+//   - "Enviar mensagem" to a saved vendor (per-card on agent workbench)
+//   - "Comunicado aos moradores" (resident_update card → publish)
+//   - "Criar proposta" (proposal_draft card → push to /board/proposals)
+//   - "Dispatch" / "acionar fornecedor" via the ticket dispatch button
+// Listing those as action_plan items is noise. We keep only items that
+// describe genuine offline work the platform can't auto-execute:
+// site visits, gathering competing quotes from new vendors, calling the
+// concierge team, posting physical notices, etc.
+//
+// Detection is a keyword denylist on the combined step+details string.
+// Imperfect but cheap; the prompt already tells the model to avoid these
+// (the denylist is a backstop when the model echoes anyway).
+const PLATFORM_DUPLICATE_KEYWORDS = [
+  // Outreach to a vendor — there's a button for that.
+  /enviar\s+(mensagem|whatsapp|comunica[çc][ãa]o)\s+(para|ao)\s+/i,
+  /\baccionar\b|\bacionar\b\s+(o\s+)?fornecedor/i,
+  /contac?tar\s+(o\s+)?fornecedor/i,
+  /send\s+(whatsapp|message|email)\s+to\s+(the\s+)?vendor/i,
+  // Publishing the resident comms — resident_update covers it.
+  /(postar|publicar|enviar)\s+(o\s+)?(comunicado|aviso|notifica[çc][ãa]o)\s+(aos|para\s+os)\s+moradores/i,
+  /post\s+(the\s+)?(announcement|notice)\s+to\s+residents/i,
+  // Proposal creation — proposal_draft button covers it.
+  /criar\s+(uma\s+)?proposta\s+para\s+vota[çc][ãa]o/i,
+  /open\s+(a\s+)?proposal\s+for\s+(resident\s+)?vote/i,
+];
+
+function isOfflineAction(item: { step: string; details: string }): boolean {
+  const combined = `${item.step} ${item.details}`.toLowerCase();
+  return !PLATFORM_DUPLICATE_KEYWORDS.some((re) => re.test(combined));
+}
+
+function shortOutreach(task: string, lang: 'pt' | 'en' = 'pt'): string {
+  const trimmed = String(task || '').replace(/\s+/g, ' ').trim();
+  const summary = trimmed.length > 120 ? trimmed.slice(0, 117) + '…' : trimmed;
+  const cleaned = summary.replace(/[.!?]+$/, '');
+  return lang === 'en'
+    ? `Hi — ${cleaned}. Can you come today?`
+    : `Oi, tudo bem? ${cleaned}. Pode atender hoje?`;
+}
+
 export type AdminAgentMode = 'general' | 'repair' | 'install' | 'vendor_options' | 'policy';
 export type AdminAgentTaskType = 'repair' | 'install' | 'vendor_research' | 'policy' | 'general';
 
@@ -73,6 +124,11 @@ export interface AdminAgentNetworkFit {
     avg_brl: number | null;
     min_brl: number | null;
     max_brl: number | null;
+    // Confidence threshold: 3+ past expenses = 'high' (cite as histórico),
+    // 1-2 = 'low' (cite as valor de referência), 0 = no cost_history.
+    // Without this gate the agent treats a single past invoice as a
+    // reliable estimate, which it isn't.
+    confidence: 'high' | 'low';
   } | null;
 }
 
@@ -275,7 +331,9 @@ export function fallbackAdminAgent(input: AdminAgentInput): AdminAgentOutput {
           'Tem referências verificáveis em prédios similares.',
           'Explica dependências técnicas, normas e riscos antes da contratação.',
         ],
-        outreach_message: `Olá, sou do ${condo}. Precisamos avaliar: ${task}. Pode enviar disponibilidade para vistoria/proposta, escopo incluso, prazo, garantia, condições de pagamento, referências em condomínios e documentos técnicos necessários?`,
+        // WhatsApp-native one-liner — no headers, no template framing.
+        // The vendor reads this on their phone, not in an inbox.
+        outreach_message: shortOutreach(task, input.locale === 'en-US' ? 'en' : 'pt'),
       },
       action_plan: [
         { step: 'Conferir rede cadastrada', owner: 'Síndico', due: 'Hoje', details: 'Verificar fornecedores preferidos, contratos, garantias e último uso.' },
@@ -355,7 +413,7 @@ export function fallbackAdminAgent(input: AdminAgentInput): AdminAgentOutput {
         'Has verifiable references in similar buildings.',
         'Explains technical dependencies, compliance needs, and risks before contracting.',
       ],
-      outreach_message: `Hi, I represent ${condo}. We need to evaluate: ${task}. Please send inspection/proposal availability, included scope, timeline, warranty, payment terms, condo references, and any required technical documents.`,
+      outreach_message: shortOutreach(task, 'en'),
     },
     action_plan: [
       { step: 'Check saved vendor network', owner: 'Board admin', due: 'Today', details: 'Review preferred vendors, contracts, warranties, and last-use notes.' },
@@ -479,6 +537,7 @@ export function sanitizeAdminAgentOutput(raw: unknown, input: AdminAgentInput): 
       details: text(item.details, 320) || fallback.action_plan[idx]?.details || 'Confirm details before acting.',
     }))
     .filter((item) => item.step)
+    .filter(isOfflineAction)
     .slice(0, 8);
 
   const residentUpdate = obj(data.resident_update);
@@ -498,7 +557,11 @@ export function sanitizeAdminAgentOutput(raw: unknown, input: AdminAgentInput): 
       shortlisting_criteria: list(vendorPlan.shortlisting_criteria, fallback.vendor_search_plan.shortlisting_criteria, 8, 180),
       outreach_message: multiline(vendorPlan.outreach_message, 1_200) || fallback.vendor_search_plan.outreach_message,
     },
-    action_plan: actionPlan.length ? actionPlan : fallback.action_plan,
+    // Empty-allowed: an action_plan with nothing offline-worth-listing is
+    // honest. Don't paper over with the boilerplate fallback (which is
+    // generic "Conferir rede / Pedir laudo / Equalizar opções") if the
+    // filter stripped real items.
+    action_plan: actionPlan,
     resident_update: {
       title: text(residentUpdate.title, 120) || fallback.resident_update.title,
       body: multiline(residentUpdate.body, 1_200) || fallback.resident_update.body,

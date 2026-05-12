@@ -188,9 +188,19 @@ test('admin agent fallback uses saved service contacts and returns work-ready pl
   assert.equal(out.task_type, 'vendor_research');
   assert.equal(out.existing_network_fit[0].company_name, 'Fitness Pro');
   assert.ok(out.vendor_search_plan.search_queries.length >= 3);
-  assert.ok(out.vendor_search_plan.outreach_message.includes('Test Condo'));
+  // Outreach is now WhatsApp-native — no formal "Olá, sou do Test Condo"
+  // header. It should be short, conversational, and ask for a same-day
+  // visit. The admin can edit before sending.
+  assert.ok(out.vendor_search_plan.outreach_message.length < 200);
+  assert.match(out.vendor_search_plan.outreach_message, /hoje\?$/i);
   assert.ok(out.proposal_draft?.title);
-  assert.ok(out.action_plan.length >= 3);
+  // action_plan filter now drops platform-doable items even from
+  // fallback. The fallback list has 4 items that are all platform-doable
+  // (Conferir rede, Pedir diagnóstico, Equalizar opções, Comunicar
+  // moradores), so the post-filter list ends up shorter. The "Comunicar
+  // moradores" item gets stripped by the denylist; we still expect at
+  // least the diagnóstico + equalizar opções pair through.
+  assert.ok(out.action_plan.length >= 2);
 });
 
 test('admin agent sanitizer drops hallucinated saved vendors and repairs invalid proposal fields', () => {
@@ -1086,6 +1096,30 @@ test('SLA escalator: flips awaiting_vendor tickets past their priority window', 
 
   const second = await tickSlaEscalator();
   assert.equal(second.escalated, 0);
+});
+
+test('admin agent sanitizer drops platform-duplicate action_plan items', () => {
+  // The agent shouldn't surface "send WhatsApp to vendor" as a manual
+  // step because the platform has a button that does exactly that. The
+  // denylist filter strips these so action_plan only contains genuine
+  // offline work (or is empty).
+  const raw = {
+    action_plan: [
+      { step: 'Enviar mensagem para Otis Elevadores', owner: 'Síndico', due: 'Hoje', details: 'Acionar fornecedor preferencial via WhatsApp.' },
+      { step: 'Visitar o local com técnico para diagnóstico', owner: 'Operação', due: 'Esta semana', details: 'Levar laudo do último laudo técnico.' },
+      { step: 'Publicar comunicado aos moradores', owner: 'Síndico', due: 'Hoje', details: 'Avisar sobre intermitência do elevador.' },
+      { step: 'Obter três orçamentos competitivos', owner: 'Conselho', due: '7 dias', details: 'Confirmar escopo e garantia em cada um.' },
+      { step: 'Criar proposta para votação dos moradores', owner: 'Síndico', due: '14 dias', details: 'Após equalizar opções.' },
+    ],
+  };
+  const out = sanitizeAdminAgentOutput(raw, { task: 'elevator broke', service_contacts: [] });
+  // Exactly two items survive: the visit and the three-quotes ask.
+  assert.equal(out.action_plan.length, 2);
+  assert.ok(out.action_plan.find((a) => a.step.includes('Visitar')));
+  assert.ok(out.action_plan.find((a) => a.step.includes('três orçamentos')));
+  assert.equal(out.action_plan.find((a) => /enviar mensagem/i.test(a.step)), undefined);
+  assert.equal(out.action_plan.find((a) => /publicar comunicado/i.test(a.step)), undefined);
+  assert.equal(out.action_plan.find((a) => /criar proposta/i.test(a.step)), undefined);
 });
 
 test('admin agent sanitizer fixes UTF-8-as-Latin1 mojibake in output strings', () => {

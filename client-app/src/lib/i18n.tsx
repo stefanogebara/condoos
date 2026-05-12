@@ -1932,6 +1932,12 @@ const phrases: Copy[] = [
   c('Enviando teste…', 'Sending test…', 'Enviando prueba…', 'Envoi du test…'),
   c('Teste enfileirado — verifique seu WhatsApp.', 'Test queued — check your WhatsApp.', 'Prueba en cola — revisa tu WhatsApp.', 'Test en file — vérifiez votre WhatsApp.'),
   c('Falha ao enviar teste', 'Failed to send test', 'Error al enviar prueba', 'Échec de l\'envoi du test'),
+  // Cost-history confidence tiering + action-plan label change.
+  c('Valor de referência', 'Reference value', 'Valor de referencia', 'Valeur de référence'),
+  c('1 cobrança anterior', '1 prior expense', '1 cargo anterior', '1 dépense antérieure'),
+  c('cobranças anteriores', 'prior expenses', 'cargos anteriores', 'dépenses antérieures'),
+  c('Peça orçamento atualizado.', 'Request an updated quote.', 'Solicita una cotización actualizada.', 'Demandez un devis actualisé.'),
+  c('Próximos passos manuais', 'Manual next steps', 'Próximos pasos manuales', 'Prochaines étapes manuelles'),
 ];
 
 function c(pt: string, en: string, es: string, fr: string): Copy {
