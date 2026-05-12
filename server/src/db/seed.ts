@@ -70,8 +70,8 @@ function run() {
 
   const hash = (p: string) => bcrypt.hashSync(p, 10);
   const insertUser = db.prepare(
-    `INSERT INTO users (condominium_id, email, password_hash, first_name, last_name, role, unit_number)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO users (condominium_id, email, password_hash, first_name, last_name, role, unit_number, mobile_phone, home_phone, phone)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
   const insertUnit = db.prepare(
     `INSERT INTO units (building_id, floor, number) VALUES (?, ?, ?)`
@@ -90,17 +90,17 @@ function run() {
   }
 
   const users = [
-    { email: 'admin@condoos.dev',    pw: 'admin123',    first: 'Alex',   last: 'Silva',   role: 'board_admin', unit: 'PH-1' },
-    { email: 'porteiro@condoos.dev', pw: 'porteiro123', first: 'Seu',    last: 'João',    role: 'concierge',   unit: '' },
-    { email: 'resident@condoos.dev', pw: 'resident123', first: 'Maya',   last: 'Chen',    role: 'resident',    unit: '704' },
-    { email: 'jordan@condoos.dev',   pw: 'resident123', first: 'Jordan', last: 'Martins', role: 'resident',    unit: '612' },
-    { email: 'taylor@condoos.dev',   pw: 'resident123', first: 'Taylor', last: 'Khan',    role: 'resident',    unit: '305' },
-    { email: 'riley@condoos.dev',    pw: 'resident123', first: 'Riley',  last: 'Okafor',  role: 'resident',    unit: '208' },
-    { email: 'sam@condoos.dev',      pw: 'resident123', first: 'Sam',    last: 'Nguyen',  role: 'resident',    unit: '401' },
+    { email: 'admin@condoos.dev',    pw: 'admin123',    first: 'Alex',   last: 'Silva',   role: 'board_admin', unit: 'PH-1', mobile: '+1 305 555 0100', home: '+1 305 555 0101' },
+    { email: 'porteiro@condoos.dev', pw: 'porteiro123', first: 'Seu',    last: 'João',    role: 'concierge',   unit: '',     mobile: null, home: null },
+    { email: 'resident@condoos.dev', pw: 'resident123', first: 'Maya',   last: 'Chen',    role: 'resident',    unit: '704',  mobile: '+1 305 555 0704', home: '+1 305 555 1704' },
+    { email: 'jordan@condoos.dev',   pw: 'resident123', first: 'Jordan', last: 'Martins', role: 'resident',    unit: '612',  mobile: '+1 305 555 0612', home: null },
+    { email: 'taylor@condoos.dev',   pw: 'resident123', first: 'Taylor', last: 'Khan',    role: 'resident',    unit: '305',  mobile: '+1 305 555 0305', home: '+1 305 555 1305' },
+    { email: 'riley@condoos.dev',    pw: 'resident123', first: 'Riley',  last: 'Okafor',  role: 'resident',    unit: '208',  mobile: '+1 305 555 0208', home: null },
+    { email: 'sam@condoos.dev',      pw: 'resident123', first: 'Sam',    last: 'Nguyen',  role: 'resident',    unit: '401',  mobile: '+1 305 555 0401', home: '+1 305 555 1401' },
   ];
   const userIds: Record<string, number> = {};
   for (const u of users) {
-    const res = insertUser.run(condoId, u.email, hash(u.pw), u.first, u.last, u.role, u.unit || null);
+    const res = insertUser.run(condoId, u.email, hash(u.pw), u.first, u.last, u.role, u.unit || null, u.mobile, u.home, u.mobile);
     const uid = Number(res.lastInsertRowid);
     userIds[u.email] = uid;
 

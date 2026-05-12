@@ -20,6 +20,9 @@ interface PendingRequest {
   first_name: string;
   last_name: string;
   avatar_url: string | null;
+  mobile_phone: string | null;
+  home_phone: string | null;
+  phone: string | null;
   unit_id: number;
   unit_number: string;
   floor: number | null;
@@ -72,6 +75,13 @@ export default function Pending() {
                   {r.primary_contact === 1 && <Badge tone="sage">primary contact</Badge>}
                 </div>
                 <div className="text-sm text-dusk-300 mt-1">{r.email}</div>
+                {(r.mobile_phone || r.home_phone || r.phone) && (
+                  <div className="flex flex-wrap gap-2 mt-2 text-xs text-dusk-300">
+                    {r.mobile_phone && <span className="rounded-full bg-white/60 px-3 py-1">{t('Celular')}: {r.mobile_phone}</span>}
+                    {r.home_phone && <span className="rounded-full bg-white/60 px-3 py-1">{t('Casa')}: {r.home_phone}</span>}
+                    {!r.mobile_phone && !r.home_phone && r.phone && <span className="rounded-full bg-white/60 px-3 py-1">{t('Tel')}: {r.phone}</span>}
+                  </div>
+                )}
                 <div className="text-xs text-dusk-200 mt-1">
                   Claiming <span className="font-semibold text-dusk-400">Unit {r.unit_number}</span>
                   {r.floor !== null && ` · Floor ${r.floor}`} · {r.building_name} · requested {formatDate(r.created_at)}

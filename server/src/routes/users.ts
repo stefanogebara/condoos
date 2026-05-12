@@ -15,7 +15,7 @@ router.get('/whatsapp/status', requireAuth, (_req: AuthedRequest, res) => {
 
 router.get('/me', requireAuth, (req: AuthedRequest, res) => {
   const row = db.prepare(
-    `SELECT id, email, first_name, last_name, role, phone, whatsapp_opt_in
+    `SELECT id, email, first_name, last_name, role, phone, mobile_phone, home_phone, whatsapp_opt_in
      FROM users WHERE id = ?`
   ).get(req.user!.id);
   return ok(res, row);
@@ -23,14 +23,28 @@ router.get('/me', requireAuth, (req: AuthedRequest, res) => {
 
 // Update profile fields — phone + whatsapp_opt_in for notification preferences.
 router.patch('/me', requireAuth, (req: AuthedRequest, res) => {
-  const { phone, whatsapp_opt_in, first_name, last_name } = req.body || {};
+  const { phone, mobile_phone, home_phone, whatsapp_opt_in, first_name, last_name } = req.body || {};
   const sets: string[] = [];
   const vals: any[] = [];
+  const cleanPhone = (value: unknown) => {
+    const cleaned = typeof value === 'string' ? value.trim() : null;
+    if (cleaned && !/^\+?[\d\s\-()]{7,24}$/.test(cleaned)) return { error: true as const };
+    return { value: cleaned || null };
+  };
   if (phone !== undefined) {
-    const cleaned = typeof phone === 'string' ? phone.trim() : null;
-    // Basic E.164-ish sanity: must be digits + optional leading + and 7-18 chars
-    if (cleaned && !/^\+?[\d\s\-()]{7,24}$/.test(cleaned)) return fail(res, 'invalid_phone');
-    sets.push('phone = ?'); vals.push(cleaned || null);
+    const cleaned = cleanPhone(phone);
+    if ('error' in cleaned) return fail(res, 'invalid_phone');
+    sets.push('phone = ?'); vals.push(cleaned.value);
+  }
+  if (mobile_phone !== undefined) {
+    const cleaned = cleanPhone(mobile_phone);
+    if ('error' in cleaned) return fail(res, 'invalid_mobile_phone');
+    sets.push('mobile_phone = ?'); vals.push(cleaned.value);
+  }
+  if (home_phone !== undefined) {
+    const cleaned = cleanPhone(home_phone);
+    if ('error' in cleaned) return fail(res, 'invalid_home_phone');
+    sets.push('home_phone = ?'); vals.push(cleaned.value);
   }
   if (whatsapp_opt_in !== undefined) {
     sets.push('whatsapp_opt_in = ?'); vals.push(whatsapp_opt_in ? 1 : 0);
@@ -48,7 +62,7 @@ router.patch('/me', requireAuth, (req: AuthedRequest, res) => {
     metadata: { fields: sets.map((set) => set.split(' = ')[0]) },
   });
   const row = db.prepare(
-    `SELECT id, email, first_name, last_name, role, phone, whatsapp_opt_in FROM users WHERE id = ?`
+    `SELECT id, email, first_name, last_name, role, phone, mobile_phone, home_phone, whatsapp_opt_in FROM users WHERE id = ?`
   ).get(req.user!.id);
   return ok(res, row);
 });
@@ -56,6 +70,7 @@ router.patch('/me', requireAuth, (req: AuthedRequest, res) => {
 router.get('/residents', requireAuth, (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const includeEmail = req.user?.role === 'board_admin';
+  const includeContact = req.user?.role === 'board_admin' || req.user?.role === 'concierge';
   const rows = db.prepare(
     `SELECT
        usr.id,
@@ -64,6 +79,7 @@ router.get('/residents', requireAuth, (req: AuthedRequest, res) => {
        GROUP_CONCAT(DISTINCT un.number) AS unit_number,
        usr.role
        ${includeEmail ? ', usr.email' : ''}
+       ${includeContact ? ', usr.mobile_phone, usr.home_phone, usr.phone' : ''}
      FROM user_unit uu
      JOIN users usr ON usr.id = uu.user_id
      JOIN units un ON un.id = uu.unit_id

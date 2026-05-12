@@ -9,7 +9,17 @@ import Button from '../../components/Button';
 import { apiGet, apiPost } from '../../lib/api';
 import { t } from '../../lib/i18n';
 
-interface Resident { id: number; first_name: string; last_name: string; unit_number: string; role: string; email: string; }
+interface Resident {
+  id: number;
+  first_name: string;
+  last_name: string;
+  unit_number: string;
+  role: string;
+  email: string;
+  mobile_phone?: string | null;
+  home_phone?: string | null;
+  phone?: string | null;
+}
 interface Membership { status: string; condo_name: string; condo_id: number; }
 interface ImportError { row: number; error: string; email?: string; unit?: string; }
 interface Invite {
@@ -235,6 +245,13 @@ export default function Residents() {
             <div className="min-w-0 flex-1">
               <div className="font-semibold text-dusk-500 truncate">{r.first_name} {r.last_name}</div>
               <div className="text-xs text-dusk-200 truncate">{r.email}</div>
+              {(r.mobile_phone || r.home_phone || r.phone) && (
+                <div className="mt-2 flex flex-wrap gap-1 text-[11px] text-dusk-300">
+                  {r.mobile_phone && <span className="rounded-full bg-white/60 px-2 py-0.5">{t('Celular')}: {r.mobile_phone}</span>}
+                  {r.home_phone && <span className="rounded-full bg-white/60 px-2 py-0.5">{t('Casa')}: {r.home_phone}</span>}
+                  {!r.mobile_phone && !r.home_phone && r.phone && <span className="rounded-full bg-white/60 px-2 py-0.5">{t('Tel')}: {r.phone}</span>}
+                </div>
+              )}
               <div className="mt-2 flex items-center gap-2">
                 {r.unit_number && <Badge tone="neutral">{t('Unidade')} {r.unit_number}</Badge>}
                 {r.role === 'board_admin' && <Badge tone="sage">{t('Síndico')}</Badge>}

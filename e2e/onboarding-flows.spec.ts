@@ -286,6 +286,7 @@ test('Onboarding: join wizard claims a unit using the demo invite code', async (
   // Pick "Inquilino" — relationship buttons render label + hint sub-line, so
   // target by the visible hint rather than an exact-name role match.
   await page.locator('button', { hasText: /Alugo a unidade|I rent this unit/ }).first().click();
+  await page.getByLabel(/Celular|Mobile/i).fill('+1 305 555 0199');
 
   // Submit — demo condo has require_approval = true → membership lands in pending
   await page.getByRole('button', { name: /Pedir entrada|Entrar agora|Request to join|Join now/i }).click();

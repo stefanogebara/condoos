@@ -60,7 +60,7 @@ async function createPendingMembership(
 
   const joinRes = await request.post(`${apiURL}/onboarding/join`, {
     headers: { Authorization: `Bearer ${userSession.token}`, 'Content-Type': 'application/json' },
-    data: { code, unit_id, relationship: 'tenant' },
+    data: { code, unit_id, relationship: 'tenant', mobile_phone: '+1 305 555 0199' },
   });
   expect(joinRes.ok(), `join failed: ${joinRes.status()} ${await joinRes.text()}`).toBeTruthy();
 

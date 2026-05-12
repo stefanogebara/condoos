@@ -92,7 +92,7 @@ router.post('/login', authIpRateLimit, skipDemoCredentialLimit, asyncHandler(asy
   }
 
   const row = db.prepare(
-    `SELECT id, email, password_hash, role, condominium_id, first_name, last_name, unit_number
+    `SELECT id, email, password_hash, role, condominium_id, first_name, last_name, unit_number, mobile_phone, home_phone
      FROM users WHERE email = ?`
   ).get(parsed.data.email) as any;
 
@@ -124,7 +124,7 @@ router.post('/register', authIpRateLimit, authCredentialRateLimit, asyncHandler(
   ).run(email, pwHash, body.first_name.trim(), body.last_name.trim());
 
   const user = db.prepare(
-    `SELECT id, email, role, condominium_id, first_name, last_name, unit_number, avatar_url
+    `SELECT id, email, role, condominium_id, first_name, last_name, unit_number, avatar_url, mobile_phone, home_phone
      FROM users WHERE id = ?`
   ).get(result.lastInsertRowid) as any;
 
@@ -139,7 +139,7 @@ router.get('/me', requireAuth, (req: AuthedRequest, res) => {
 
 router.post('/refresh', requireAuth, (req: AuthedRequest, res) => {
   const row = db.prepare(
-    `SELECT id, email, role, condominium_id, first_name, last_name, unit_number, avatar_url
+    `SELECT id, email, role, condominium_id, first_name, last_name, unit_number, avatar_url, mobile_phone, home_phone
      FROM users WHERE id = ?`
   ).get(req.user!.id) as any;
   if (!row) return fail(res, 'user_not_found', 401);
@@ -180,7 +180,7 @@ router.post('/google', authIpRateLimit, authCredentialRateLimit, asyncHandler(as
 
   // Look up existing user
   let user = db.prepare(
-    `SELECT id, email, role, condominium_id, first_name, last_name, unit_number, avatar_url
+    `SELECT id, email, role, condominium_id, first_name, last_name, unit_number, avatar_url, mobile_phone, home_phone
      FROM users WHERE email = ?`
   ).get(email) as any;
 
@@ -197,7 +197,7 @@ router.post('/google', authIpRateLimit, authCredentialRateLimit, asyncHandler(as
     ).run(null, email, pwHash, first, last, info.picture || null);
 
     user = db.prepare(
-      `SELECT id, email, role, condominium_id, first_name, last_name, unit_number, avatar_url
+      `SELECT id, email, role, condominium_id, first_name, last_name, unit_number, avatar_url, mobile_phone, home_phone
        FROM users WHERE id = ?`
     ).get(result.lastInsertRowid);
   } else if (info.picture && !user.avatar_url) {
@@ -267,7 +267,7 @@ router.post('/dev-register', authIpRateLimit, authCredentialRateLimit, asyncHand
   ).run(parsed.data.email, pwHash, parsed.data.first_name, parsed.data.last_name);
 
   const row = db.prepare(
-    `SELECT id, email, role, condominium_id, first_name, last_name, unit_number
+    `SELECT id, email, role, condominium_id, first_name, last_name, unit_number, mobile_phone, home_phone
      FROM users WHERE id = ?`
   ).get(result.lastInsertRowid) as any;
 

@@ -32,6 +32,8 @@ export interface AuthUser {
   last_name: string;
   unit_number: string | null;
   avatar_url: string | null;
+  mobile_phone?: string | null;
+  home_phone?: string | null;
 }
 
 interface StoredAuthUser extends AuthUser {
@@ -83,6 +85,7 @@ export function verifyToken(token: string): TokenPayload | null {
 function loadUser(id: number): StoredAuthUser | null {
   const row = db.prepare(
     `SELECT id, email, role, condominium_id, first_name, last_name, unit_number, avatar_url,
+            mobile_phone, home_phone,
             COALESCE(token_version, 0) AS token_version
      FROM users WHERE id = ?`
   ).get(id) as StoredAuthUser | undefined;

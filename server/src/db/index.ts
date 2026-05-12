@@ -51,6 +51,8 @@ function migrateUsersRoleConcierge() {
         unit_number      TEXT,
         avatar_url       TEXT,
         phone            TEXT,
+        mobile_phone     TEXT,
+        home_phone       TEXT,
         whatsapp_opt_in  INTEGER NOT NULL DEFAULT 0,
         token_version    INTEGER NOT NULL DEFAULT 0,
         created_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -58,11 +60,11 @@ function migrateUsersRoleConcierge() {
 
       INSERT INTO users_new (
         id, condominium_id, email, password_hash, first_name, last_name,
-        role, unit_number, avatar_url, phone, whatsapp_opt_in, token_version, created_at
+        role, unit_number, avatar_url, phone, mobile_phone, home_phone, whatsapp_opt_in, token_version, created_at
       )
       SELECT
         id, condominium_id, email, password_hash, first_name, last_name,
-        role, unit_number, avatar_url, phone, whatsapp_opt_in, COALESCE(token_version, 0), created_at
+        role, unit_number, avatar_url, phone, mobile_phone, home_phone, whatsapp_opt_in, COALESCE(token_version, 0), created_at
       FROM users;
 
       DROP TABLE users;
@@ -317,6 +319,8 @@ export function initSchema() {
   `);
   // WhatsApp notifications — phone + opt-in on users
   addColumnIfMissing('users',        'phone',              `TEXT`);
+  addColumnIfMissing('users',        'mobile_phone',       `TEXT`);
+  addColumnIfMissing('users',        'home_phone',         `TEXT`);
   addColumnIfMissing('users',        'whatsapp_opt_in',    `INTEGER NOT NULL DEFAULT 0`);
   // Explicit JWT revocation. Incremented on logout / forced session reset;
   // requireAuth rejects tokens whose embedded version no longer matches.

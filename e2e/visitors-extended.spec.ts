@@ -1,5 +1,5 @@
-// Visitors extended: concierge/admin decide (approve/deny), arrived transition,
-// access-control for residents on decide endpoint.
+// Visitors extended: resident/admin decide (approve/deny), concierge records
+// arrival after approval, and access-control for non-host residents.
 import { expect, test, type APIRequestContext } from '@playwright/test';
 
 const apiURL = process.env.E2E_API_URL
@@ -72,11 +72,10 @@ test('Visitors: admin denies a pending visitor → status becomes denied', async
 });
 
 // ---------------------------------------------------------------------------
-// 3. Resident cannot decide (403)
+// 3. Host resident can decide their own pending visitor
 // ---------------------------------------------------------------------------
 
-test('Visitors: resident gets 403 trying to decide on a visitor', async ({ request }) => {
-  const admin    = await loginApi(request, 'admin@condoos.dev',    'admin123');
+test('Visitors: host resident approves their own pending visitor', async ({ request }) => {
   const resident = await loginApi(request, 'resident@condoos.dev', 'resident123');
   const resH     = { Authorization: `Bearer ${resident.token}`, 'Content-Type': 'application/json' };
 
@@ -86,10 +85,8 @@ test('Visitors: resident gets 403 trying to decide on a visitor', async ({ reque
     headers: resH,
     data: { decision: 'approved' },
   });
-  expect(decideRes.status()).toBe(403);
-
-  // keep admin token used so linter doesn't complain
-  expect(admin.user.role).toBe('board_admin');
+  expect(decideRes.ok(), `resident decide failed: ${decideRes.status()} ${await decideRes.text()}`).toBeTruthy();
+  expect((await decideRes.json()).data.status).toBe('approved');
 });
 
 // ---------------------------------------------------------------------------
@@ -135,13 +132,14 @@ test('Visitors: admin marks an approved visitor as arrived', async ({ request })
 });
 
 // ---------------------------------------------------------------------------
-// 6. Concierge can also decide and mark arrived
+// 6. Concierge cannot decide, but can record arrival after resident approval
 // ---------------------------------------------------------------------------
 
-test('Visitors: seeded porteiro can decide and mark arrived', async ({ request }) => {
+test('Visitors: seeded porteiro records approved arrivals but cannot approve them', async ({ request }) => {
   const porteiro = await loginApi(request, 'porteiro@condoos.dev', 'porteiro123');
   const resident = await loginApi(request, 'resident@condoos.dev', 'resident123');
   const porH     = { Authorization: `Bearer ${porteiro.token}`, 'Content-Type': 'application/json' };
+  const resH     = { Authorization: `Bearer ${resident.token}`, 'Content-Type': 'application/json' };
 
   const visitorId = await createPendingVisitor(request, resident.token);
 
@@ -149,8 +147,13 @@ test('Visitors: seeded porteiro can decide and mark arrived', async ({ request }
     headers: porH,
     data: { decision: 'approved' },
   });
-  expect(decideRes.ok()).toBeTruthy();
-  expect((await decideRes.json()).data.status).toBe('approved');
+  expect(decideRes.status()).toBe(403);
+
+  const hostApproval = await request.post(`${apiURL}/visitors/${visitorId}/decide`, {
+    headers: resH,
+    data: { decision: 'approved' },
+  });
+  expect(hostApproval.ok()).toBeTruthy();
 
   const arrivedRes = await request.post(`${apiURL}/visitors/${visitorId}/arrived`, { headers: porH });
   expect(arrivedRes.ok()).toBeTruthy();

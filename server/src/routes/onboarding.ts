@@ -296,6 +296,28 @@ const joinSchema = z.object({
   unit_id: z.number().int(),
   relationship: z.enum(['owner', 'tenant', 'occupant']),
   primary_contact: z.boolean().default(true),
+  mobile_phone: z.string().max(40).optional().nullable(),
+  home_phone: z.string().max(40).optional().nullable(),
+}).superRefine((body, ctx) => {
+  const hasMobile = !!body.mobile_phone?.trim();
+  const hasHome = !!body.home_phone?.trim();
+  if (!hasMobile && !hasHome) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'contact_phone_required',
+      path: ['mobile_phone'],
+    });
+  }
+  for (const key of ['mobile_phone', 'home_phone'] as const) {
+    const value = body[key]?.trim();
+    if (value && !/^\+?[\d\s\-()]{7,24}$/.test(value)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `invalid_${key}`,
+        path: [key],
+      });
+    }
+  }
 });
 
 router.post('/join', onboardingWriteRateLimit, requireAuth, asyncHandler(async (req: AuthedRequest, res) => {
@@ -303,6 +325,8 @@ router.post('/join', onboardingWriteRateLimit, requireAuth, asyncHandler(async (
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
   const u = req.user!;
   const { code, unit_id, relationship, primary_contact } = parsed.data;
+  const mobilePhone = parsed.data.mobile_phone?.trim() || null;
+  const homePhone = parsed.data.home_phone?.trim() || null;
 
   const condo = db.prepare(
     `SELECT id, require_approval FROM condominiums WHERE invite_code = ?`
@@ -331,19 +355,27 @@ router.post('/join', onboardingWriteRateLimit, requireAuth, asyncHandler(async (
     ).run(u.id, unit_id, relationship, status, primary_contact ? 1 : 0, status === 'active' ? new Date().toISOString() : null).lastInsertRowid
   );
 
-  // If auto-approved, move the user into this condo too.
-  if (status === 'active') {
-    db.prepare(
-      `UPDATE users SET condominium_id = ?, unit_number = ? WHERE id = ?`
-    ).run(condo.id, unit.number, u.id);
-  }
+  db.prepare(
+    `UPDATE users
+     SET mobile_phone = ?,
+         home_phone = ?,
+         phone = COALESCE(phone, ?)
+         ${status === 'active' ? ', condominium_id = ?, unit_number = ?' : ''}
+     WHERE id = ?`
+  ).run(
+    mobilePhone,
+    homePhone,
+    mobilePhone,
+    ...(status === 'active' ? [condo.id, unit.number] : []),
+    u.id,
+  );
 
   audit(req, {
     action: 'onboarding.join',
     target_type: 'user_unit',
     target_id: newId,
     condominium_id: condo.id,
-    metadata: { unit_id, relationship, status },
+    metadata: { unit_id, relationship, status, has_mobile_phone: !!mobilePhone, has_home_phone: !!homePhone },
   });
   return ok(res, { id: newId, status, condominium_id: condo.id });
 }));

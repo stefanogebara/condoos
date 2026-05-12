@@ -60,13 +60,12 @@ test('Visitors API: pre_approve=false keeps status=pending (legacy flow)', async
 test('Visitors API: party guest list is approved and visible to concierge', async ({ request }) => {
   const token = await residentToken(request);
   const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
-  const today = new Date(Date.now() + 60 * 60_000).toISOString();
   const created = await request.post(`${apiURL}/visitors`, {
     headers,
     data: {
       visitor_name: `E2E Party ${Date.now()}`,
       visitor_type: 'guest',
-      expected_at: today,
+      expected_at: null,
       expected_guests: 3,
       guest_list: 'Ana Souza\nBruno Lima\nCarla Ferreira',
       notes: 'Birthday list',
@@ -93,14 +92,13 @@ test('Visitors API: party guest list is approved and visible to concierge', asyn
 test('Visitors API: recurring visitor surfaces on matching weekday for concierge', async ({ request }) => {
   const token = await residentToken(request);
   const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
-  const expected = new Date(Date.now() + 60 * 60_000);
-  const weekday = expected.getDay();
+  const weekday = new Date().getDay();
   const created = await request.post(`${apiURL}/visitors`, {
     headers,
     data: {
       visitor_name: `E2E Recurring ${Date.now()}`,
       visitor_type: 'service',
-      expected_at: expected.toISOString(),
+      expected_at: null,
       recurring_days: [weekday],
       recurring_until: new Date(Date.now() + 14 * 24 * 3600 * 1000).toISOString(),
       pre_approve: true,

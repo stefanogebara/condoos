@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { ArrowLeft, ArrowRight, Clock, Key, Home, Users } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Clock, Key, Home, Users, Phone } from 'lucide-react';
 import Logo from '../../components/Logo';
 import GlassCard from '../../components/GlassCard';
 import Button from '../../components/Button';
@@ -26,6 +26,8 @@ export default function Join() {
   const [condoInfo, setCondoInfo] = useState<CondoInfo | null>(null);
   const [selectedUnitId, setSelectedUnitId] = useState<number | null>(null);
   const [relationship, setRelationship] = useState<'owner' | 'tenant' | 'occupant'>('tenant');
+  const [mobilePhone, setMobilePhone] = useState('');
+  const [homePhone, setHomePhone] = useState('');
   const [busy, setBusy] = useState(false);
 
   async function lookup() {
@@ -49,6 +51,8 @@ export default function Join() {
         unit_id: selectedUnitId,
         relationship,
         primary_contact: true,
+        mobile_phone: mobilePhone.trim() || null,
+        home_phone: homePhone.trim() || null,
       });
       track('onboarding_join_succeeded', {
         membership_status: res.status,
@@ -62,11 +66,13 @@ export default function Join() {
         setStep(3);
       }
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || t('Falha ao entrar'));
+      const code = err?.response?.data?.error;
+      toast.error(code === 'invalid_input' ? t('Adicione ao menos um telefone válido') : code || t('Falha ao entrar'));
     } finally { setBusy(false); }
   }
 
   const selectedUnit = condoInfo?.units.find((u) => u.id === selectedUnitId);
+  const hasContactPhone = !!mobilePhone.trim() || !!homePhone.trim();
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -158,9 +164,43 @@ export default function Join() {
                   ))}
                 </div>
 
+                <h2 className="font-display text-xl text-dusk-500 tracking-tight mt-8 flex items-center gap-2"><Phone className="w-5 h-5" /> {t('Contato para portaria')}</h2>
+                <p className="text-xs text-dusk-300 mt-1 mb-3">
+                  {t('Informe celular, telefone fixo ou ambos. A portaria e o administrador usam isso se precisarem confirmar uma entrada.')}
+                </p>
+                <div className="grid md:grid-cols-2 gap-3">
+                  <label className="text-xs text-dusk-300">
+                    {t('Celular')}
+                    <input
+                      className="input mt-1"
+                      inputMode="tel"
+                      autoComplete="tel"
+                      value={mobilePhone}
+                      onChange={(e) => setMobilePhone(e.target.value)}
+                      placeholder="+1 305 555 0142"
+                      maxLength={40}
+                    />
+                  </label>
+                  <label className="text-xs text-dusk-300">
+                    {t('Telefone de casa')}
+                    <input
+                      className="input mt-1"
+                      inputMode="tel"
+                      autoComplete="tel-national"
+                      value={homePhone}
+                      onChange={(e) => setHomePhone(e.target.value)}
+                      placeholder="+1 305 555 0188"
+                      maxLength={40}
+                    />
+                  </label>
+                </div>
+                {!hasContactPhone && (
+                  <div className="text-xs text-peach-600 mt-2">{t('Adicione ao menos um telefone para continuar.')}</div>
+                )}
+
                 <div className="mt-8 flex justify-between items-center">
                   <Button variant="ghost" onClick={() => { setStep(1); setCondoInfo(null); setSelectedUnitId(null); }} leftIcon={<ArrowLeft className="w-4 h-4" />}>Voltar</Button>
-                  <Button variant="primary" onClick={submit} loading={busy} rightIcon={<ArrowRight className="w-4 h-4" />} disabled={!selectedUnitId}>
+                  <Button variant="primary" onClick={submit} loading={busy} rightIcon={<ArrowRight className="w-4 h-4" />} disabled={!selectedUnitId || !hasContactPhone}>
                     {condoInfo.condo.require_approval ? 'Pedir entrada' : 'Entrar agora'}
                   </Button>
                 </div>

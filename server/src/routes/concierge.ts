@@ -4,8 +4,9 @@
 // packages waiting, and amenity reservations starting today (so the
 // guard sees the party guest list when 30 people show up at 19h).
 //
-// Mutation endpoints reuse the existing visitor.arrived + package.pickup
-// flows; the concierge gets the same RBAC as a board_admin for those.
+// Mutation endpoints let the concierge notify residents, record arrivals
+// after resident approval, and mark packages handed off. The concierge does
+// not approve/deny visitor access in-app.
 import { Router } from 'express';
 import { z } from 'zod';
 import db from '../db';
@@ -36,7 +37,8 @@ router.get('/today', requireAuth, requireConciergeOrAdmin, (req: AuthedRequest, 
     `SELECT v.id, v.visitor_name, v.visitor_type, v.expected_at, v.status, v.notes,
             v.host_id, v.created_at, v.decided_at,
             v.expected_guests, v.guest_list, v.recurring_days, v.recurring_until,
-            usr.first_name AS host_first, usr.last_name AS host_last, usr.unit_number
+            usr.first_name AS host_first, usr.last_name AS host_last, usr.unit_number,
+            usr.mobile_phone AS host_mobile_phone, usr.home_phone AS host_home_phone, usr.phone AS host_phone
      FROM visitors v
      JOIN users usr ON usr.id = v.host_id
      WHERE v.condominium_id = ?
@@ -66,7 +68,8 @@ router.get('/today', requireAuth, requireConciergeOrAdmin, (req: AuthedRequest, 
 
   const packages = db.prepare(
     `SELECT p.id, p.carrier, p.description, p.arrived_at, p.status,
-            usr.first_name, usr.last_name, usr.unit_number
+            usr.first_name, usr.last_name, usr.unit_number,
+            usr.mobile_phone, usr.home_phone, usr.phone
      FROM packages p
      JOIN users usr ON usr.id = p.recipient_id
      WHERE p.condominium_id = ?
@@ -77,7 +80,8 @@ router.get('/today', requireAuth, requireConciergeOrAdmin, (req: AuthedRequest, 
   const amenityParties = db.prepare(
     `SELECT r.id, r.starts_at, r.ends_at, r.expected_guests, r.guest_list, r.notes,
             a.name AS amenity_name, a.icon AS amenity_icon,
-            usr.first_name, usr.last_name, usr.unit_number
+            usr.first_name, usr.last_name, usr.unit_number,
+            usr.mobile_phone, usr.home_phone, usr.phone
      FROM amenity_reservations r
      JOIN amenities a ON a.id = r.amenity_id
      JOIN users usr ON usr.id = r.user_id
@@ -112,6 +116,63 @@ const notifySchema = z.object({
   target_type: z.enum(['visitor', 'package']),
   target_id: z.coerce.number().int().positive(),
   message_type: z.enum(['visitor_arrived', 'package_arrived', 'food_delivery_arrived']).default('visitor_arrived'),
+});
+
+const walkupSchema = z.object({
+  resident_id: z.coerce.number().int().positive(),
+  visitor_name: z.string().min(1).max(140),
+  visitor_type: z.enum(['guest', 'delivery', 'service', 'rideshare']).default('guest'),
+  notes: z.string().max(500).optional().nullable(),
+});
+
+router.post('/walkup', requireAuth, requireConciergeOrAdmin, async (req: AuthedRequest, res) => {
+  const parsed = walkupSchema.safeParse(req.body || {});
+  if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
+  const condoId = getActiveCondoId(req);
+  const data = parsed.data;
+
+  const resident = db.prepare(
+    `SELECT usr.id, usr.first_name, usr.last_name, usr.unit_number
+     FROM users usr
+     JOIN user_unit uu ON uu.user_id = usr.id AND uu.status = 'active'
+     JOIN units un ON un.id = uu.unit_id
+     JOIN buildings b ON b.id = un.building_id
+     WHERE usr.id = ? AND b.condominium_id = ?
+     LIMIT 1`
+  ).get(data.resident_id, condoId) as { id: number; first_name: string; last_name: string; unit_number: string | null } | undefined;
+  if (!resident) return fail(res, 'resident_not_found', 404);
+
+  const now = new Date().toISOString();
+  const row = db.prepare(
+    `INSERT INTO visitors (
+       condominium_id, host_id, visitor_name, visitor_type, expected_at, notes, status
+     ) VALUES (?, ?, ?, ?, ?, ?, 'pending')`
+  ).run(
+    condoId,
+    resident.id,
+    data.visitor_name.trim(),
+    data.visitor_type,
+    now,
+    data.notes?.trim() || null,
+  );
+  const visitorId = Number(row.lastInsertRowid);
+
+  const body = `CondoOS: ${data.visitor_name.trim()} arrived at the front desk${resident.unit_number ? ` for unit ${resident.unit_number}` : ''}. Open CondoOS to approve, or call the front desk.`;
+  const result = await notifyUsers([resident.id], body);
+  audit(req, {
+    action: 'concierge.walkup_notify',
+    target_type: 'visitor',
+    target_id: visitorId,
+    condominium_id: condoId,
+    metadata: {
+      resident_id: resident.id,
+      visitor_type: data.visitor_type,
+      attempted: result.attempted,
+      sent: result.sent,
+      skipped: result.skipped,
+    },
+  });
+  return ok(res, { id: visitorId, status: 'pending', notified_user_id: resident.id }, 201);
 });
 
 router.post('/notify', requireAuth, requireConciergeOrAdmin, async (req: AuthedRequest, res) => {

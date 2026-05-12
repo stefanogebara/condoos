@@ -10,8 +10,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import {
-  DoorOpen, Package, PartyPopper, Bell, BellOff, Check, X, RefreshCw,
-  LogOut, Clock, Users,
+  DoorOpen, Package, PartyPopper, Bell, BellOff, Check, RefreshCw,
+  LogOut, Clock, Users, PhoneCall, Send, AlertTriangle,
 } from 'lucide-react';
 import Logo from '../../components/Logo';
 import GlassCard from '../../components/GlassCard';
@@ -33,6 +33,9 @@ interface VisitorRow {
   host_first: string;
   host_last: string;
   unit_number: string | null;
+  host_mobile_phone?: string | null;
+  host_home_phone?: string | null;
+  host_phone?: string | null;
   expected_guests?: number | null;
   guest_list?: string | null;
   recurring_days?: string | null;
@@ -47,6 +50,9 @@ interface PackageRow {
   first_name: string;
   last_name: string;
   unit_number: string | null;
+  mobile_phone?: string | null;
+  home_phone?: string | null;
+  phone?: string | null;
 }
 interface PartyRow {
   id: number | string;
@@ -60,6 +66,18 @@ interface PartyRow {
   first_name: string;
   last_name: string;
   unit_number: string | null;
+  mobile_phone?: string | null;
+  home_phone?: string | null;
+  phone?: string | null;
+}
+interface ResidentRow {
+  id: number;
+  first_name: string;
+  last_name: string;
+  unit_number: string | null;
+  mobile_phone?: string | null;
+  home_phone?: string | null;
+  phone?: string | null;
 }
 interface TodayPayload {
   visitors: VisitorRow[];
@@ -80,6 +98,24 @@ function VISITOR_TYPE_LABEL(t: string): string {
   return ({ guest: 'Visita', delivery: 'Entrega', service: 'Serviço', rideshare: 'App' } as Record<string, string>)[t] || t;
 }
 
+function contactNumbers(row: {
+  mobile_phone?: string | null;
+  home_phone?: string | null;
+  phone?: string | null;
+  host_mobile_phone?: string | null;
+  host_home_phone?: string | null;
+  host_phone?: string | null;
+}) {
+  return [
+    ['Celular', row.host_mobile_phone ?? row.mobile_phone],
+    ['Casa', row.host_home_phone ?? row.home_phone],
+    ['Tel', row.host_phone ?? row.phone],
+  ].filter(([, value], idx, all) => {
+    if (!value) return false;
+    return all.findIndex(([, other]) => other === value) === idx;
+  }) as Array<[string, string]>;
+}
+
 function notify(title: string, body: string) {
   if (typeof Notification === 'undefined') return;
   if (Notification.permission !== 'granted') return;
@@ -91,7 +127,15 @@ function notify(title: string, body: string) {
 export default function ConciergeApp() {
   const { user, logout } = useAuth();
   const [data, setData] = useState<TodayPayload | null>(null);
+  const [residents, setResidents] = useState<ResidentRow[]>([]);
+  const [walkup, setWalkup] = useState({
+    resident_id: '',
+    visitor_name: '',
+    visitor_type: 'guest',
+    notes: '',
+  });
   const [loading, setLoading] = useState(true);
+  const [creatingWalkup, setCreatingWalkup] = useState(false);
   const [notifPerm, setNotifPerm] = useState<'default' | 'granted' | 'denied' | 'unsupported'>(
     typeof Notification === 'undefined' ? 'unsupported' : (Notification.permission as any)
   );
@@ -135,6 +179,7 @@ export default function ConciergeApp() {
 
   useEffect(() => {
     load();
+    apiGet<ResidentRow[]>('/users/residents').then(setResidents).catch(() => {});
     const id = setInterval(load, POLL_MS);
     return () => clearInterval(id);
   }, [load]);
@@ -160,16 +205,6 @@ export default function ConciergeApp() {
     }
   }
 
-  async function decideVisitor(v: VisitorRow, decision: 'approved' | 'denied') {
-    try {
-      await apiPost(`/visitors/${v.id}/decide`, { decision });
-      toast.success(decision === 'approved' ? `${v.visitor_name} ${t('aprovado(a)')}` : `${v.visitor_name} ${t('negado(a)')}`);
-      load();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.error || t('Falha ao decidir'));
-    }
-  }
-
   async function pickupPackage(p: PackageRow) {
     try {
       await apiPost(`/packages/${p.id}/pickup`);
@@ -186,6 +221,27 @@ export default function ConciergeApp() {
       toast.success(t('Morador avisado'));
     } catch (err: any) {
       toast.error(err?.response?.data?.error || t('Falha ao avisar'));
+    }
+  }
+
+  async function createWalkup(e: React.FormEvent) {
+    e.preventDefault();
+    if (!walkup.resident_id || !walkup.visitor_name.trim()) return;
+    setCreatingWalkup(true);
+    try {
+      await apiPost('/concierge/walkup', {
+        resident_id: Number(walkup.resident_id),
+        visitor_name: walkup.visitor_name.trim(),
+        visitor_type: walkup.visitor_type,
+        notes: walkup.notes.trim() || null,
+      });
+      toast.success(t('Morador avisado para aprovar no app'));
+      setWalkup({ resident_id: '', visitor_name: '', visitor_type: 'guest', notes: '' });
+      load();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || t('Falha ao avisar'));
+    } finally {
+      setCreatingWalkup(false);
     }
   }
 
@@ -227,6 +283,70 @@ export default function ConciergeApp() {
       </header>
 
       <main className="flex-1 px-4 py-4 max-w-2xl mx-auto w-full space-y-6">
+        <section>
+          <h2 className="font-display text-xl text-dusk-500 mb-3 flex items-center gap-2">
+            <AlertTriangle className="w-5 h-5" /> {t('Chegada sem pré-aprovação')}
+          </h2>
+          <GlassCard className="p-4">
+            <form onSubmit={createWalkup} className="space-y-3">
+              <div className="grid sm:grid-cols-2 gap-3">
+                <label className="text-xs text-dusk-300">
+                  {t('Apartamento / morador')}
+                  <select
+                    className="input mt-1"
+                    value={walkup.resident_id}
+                    onChange={(e) => setWalkup({ ...walkup, resident_id: e.target.value })}
+                    required
+                  >
+                    <option value="">{t('Selecionar')}</option>
+                    {residents.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.unit_number ? `${r.unit_number} · ` : ''}{r.first_name} {r.last_name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="text-xs text-dusk-300">
+                  {t('Tipo')}
+                  <select
+                    className="input mt-1"
+                    value={walkup.visitor_type}
+                    onChange={(e) => setWalkup({ ...walkup, visitor_type: e.target.value })}
+                  >
+                    <option value="guest">{t('Visita')}</option>
+                    <option value="delivery">{t('Entrega / comida')}</option>
+                    <option value="service">{t('Serviço')}</option>
+                    <option value="rideshare">{t('App / motorista')}</option>
+                  </select>
+                </label>
+              </div>
+              <div className="grid sm:grid-cols-2 gap-3">
+                <input
+                  className="input"
+                  placeholder={t('Nome, empresa ou app')}
+                  value={walkup.visitor_name}
+                  onChange={(e) => setWalkup({ ...walkup, visitor_name: e.target.value })}
+                  required
+                />
+                <input
+                  className="input"
+                  placeholder={t('Observação opcional')}
+                  value={walkup.notes}
+                  onChange={(e) => setWalkup({ ...walkup, notes: e.target.value })}
+                />
+              </div>
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="text-xs text-dusk-300">
+                  {t('O morador aprova no app. Se não responder, use os telefones abaixo para confirmar.')}
+                </div>
+                <Button type="submit" size="sm" variant="primary" loading={creatingWalkup} leftIcon={<Send className="w-3.5 h-3.5" />}>
+                  {t('Avisar morador')}
+                </Button>
+              </div>
+            </form>
+          </GlassCard>
+        </section>
+
         {/* Section: Visitors */}
         <section>
           <h2 className="font-display text-xl text-dusk-500 mb-3 flex items-center gap-2">
@@ -259,18 +379,27 @@ export default function ConciergeApp() {
                         {v.unit_number && <span className="font-mono">· Apto {v.unit_number}</span>}
                         {v.expected_at && <><Clock className="w-3 h-3 ml-1" /> {timeOnly(v.expected_at)}</>}
                       </div>
+                      {contactNumbers(v).length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] text-dusk-300">
+                          {contactNumbers(v).map(([label, value]) => (
+                            <span key={`${label}-${value}`} className="rounded-full bg-white/55 px-2.5 py-1 inline-flex items-center gap-1">
+                              <PhoneCall className="w-3 h-3" /> {t(label)}: {value}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                       {v.notes && <div className="text-[12px] text-dusk-300 mt-1 italic">"{v.notes}"</div>}
                       <div className="mt-3 flex gap-2 flex-wrap">
                         {v.status === 'pending' && (
                           <>
-                            <Button size="sm" variant="primary" onClick={() => decideVisitor(v, 'approved')} leftIcon={<Check className="w-3.5 h-3.5" />}>Liberar</Button>
-                            <Button size="sm" variant="ghost" onClick={() => decideVisitor(v, 'denied')} leftIcon={<X className="w-3.5 h-3.5" />}>Negar</Button>
+                            <Badge tone="warning">{t('Precisa aprovação do morador')}</Badge>
+                            <Button size="sm" variant="ghost" onClick={() => notifyResident('visitor', v.id, 'visitor_arrived')} leftIcon={<Bell className="w-3.5 h-3.5" />}>{t('Avisar morador')}</Button>
+                            <Button size="sm" variant="primary" onClick={() => markArrived(v)} leftIcon={<Check className="w-3.5 h-3.5" />}>{t('Registrar entrada por telefone')}</Button>
                           </>
                         )}
                         {v.status === 'approved' && (
-                          <Button size="sm" variant="primary" onClick={() => markArrived(v)} leftIcon={<Check className="w-3.5 h-3.5" />}>Marcar como chegou</Button>
+                          <Button size="sm" variant="primary" onClick={() => markArrived(v)} leftIcon={<Check className="w-3.5 h-3.5" />}>{t('Já pré-aprovado · registrar entrada')}</Button>
                         )}
-                        <Button size="sm" variant="ghost" onClick={() => notifyResident('visitor', v.id, 'visitor_arrived')} leftIcon={<Bell className="w-3.5 h-3.5" />}>Avisar apto</Button>
                       </div>
                       {v.guest_list && (
                         <details className="mt-2">
@@ -315,11 +444,20 @@ export default function ConciergeApp() {
                     <div className="text-xs text-dusk-300 mt-0.5">
                       {p.carrier}{p.description ? ` · ${p.description}` : ''} · chegou {formatDateTime(p.arrived_at)}
                     </div>
+                    {contactNumbers(p).length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] text-dusk-300">
+                        {contactNumbers(p).map(([label, value]) => (
+                          <span key={`${label}-${value}`} className="rounded-full bg-white/55 px-2.5 py-1 inline-flex items-center gap-1">
+                            <PhoneCall className="w-3 h-3" /> {t(label)}: {value}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <div className="flex flex-wrap gap-2 justify-end">
-                    <Button size="sm" variant="ghost" onClick={() => notifyResident('package', p.id, 'package_arrived')} leftIcon={<Bell className="w-3.5 h-3.5" />}>Avisar</Button>
-                    <Button size="sm" variant="ghost" onClick={() => notifyResident('package', p.id, 'food_delivery_arrived')} leftIcon={<Bell className="w-3.5 h-3.5" />}>Comida</Button>
-                    <Button size="sm" variant="primary" onClick={() => pickupPackage(p)} leftIcon={<Check className="w-3.5 h-3.5" />}>Retirar</Button>
+                    <Button size="sm" variant="ghost" onClick={() => notifyResident('package', p.id, 'package_arrived')} leftIcon={<Bell className="w-3.5 h-3.5" />}>{t('Avisar encomenda')}</Button>
+                    <Button size="sm" variant="ghost" onClick={() => notifyResident('package', p.id, 'food_delivery_arrived')} leftIcon={<Bell className="w-3.5 h-3.5" />}>{t('Avisar comida')}</Button>
+                    <Button size="sm" variant="primary" onClick={() => pickupPackage(p)} leftIcon={<Check className="w-3.5 h-3.5" />}>{t('Entregue ao morador')}</Button>
                   </div>
                 </GlassCard>
               ))}
@@ -352,6 +490,15 @@ export default function ConciergeApp() {
                         {' '}{party.first_name} {party.last_name}
                         {party.unit_number && <span className="font-mono"> · Apto {party.unit_number}</span>}
                       </div>
+                      {contactNumbers(party).length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] text-dusk-300">
+                          {contactNumbers(party).map(([label, value]) => (
+                            <span key={`${label}-${value}`} className="rounded-full bg-white/55 px-2.5 py-1 inline-flex items-center gap-1">
+                              <PhoneCall className="w-3 h-3" /> {t(label)}: {value}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                       {party.notes && <div className="text-[12px] text-dusk-300 mt-1 italic">"{party.notes}"</div>}
                       {party.guest_list && (
                         <details className="mt-2">

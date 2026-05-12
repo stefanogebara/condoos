@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
-import { CalendarDays, DoorOpen, Plus, Clock, History as HistoryIcon, PartyPopper, Repeat2 } from 'lucide-react';
+import { CalendarDays, DoorOpen, Plus, Clock, History as HistoryIcon, PartyPopper, Repeat2, Check, X } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 import GlassCard from '../../components/GlassCard';
 import EmptyState from '../../components/EmptyState';
@@ -192,6 +192,16 @@ export default function Visitors() {
     } catch (err: any) {
       toast.error(err?.response?.data?.error || t('Falha ao registrar'));
     } finally { setSaving(false); }
+  }
+
+  async function decideVisitor(v: Visitor, decision: 'approved' | 'denied') {
+    try {
+      await apiPost(`/visitors/${v.id}/decide`, { decision });
+      toast.success(decision === 'approved' ? t('Entrada autorizada') : t('Entrada recusada'));
+      load();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || t('Falha ao decidir'));
+    }
   }
 
   const expectedDate = form.expected_at ? new Date(form.expected_at) : null;
@@ -469,6 +479,20 @@ export default function Visitors() {
                 </div>
               )}
               {v.notes && <div className="text-sm text-dusk-200 mt-1 italic">"{v.notes}"</div>}
+              {v.status === 'pending' && (
+                <div className="mt-3 rounded-2xl bg-peach-100/50 border border-peach-200 p-3">
+                  <div className="text-xs font-semibold text-dusk-500">{t('A portaria está esperando sua aprovação.')}</div>
+                  <div className="text-[11px] text-dusk-300 mt-0.5">{t('Autorize no app ou, se preferir, confirme por telefone com a portaria.')}</div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Button size="sm" variant="primary" onClick={() => decideVisitor(v, 'approved')} leftIcon={<Check className="w-3.5 h-3.5" />}>
+                      {t('Autorizar entrada')}
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => decideVisitor(v, 'denied')} leftIcon={<X className="w-3.5 h-3.5" />}>
+                      {t('Recusar')}
+                    </Button>
+                  </div>
+                </div>
+              )}
               {v.guest_list && (
                 <details className="mt-2">
                   <summary className="text-xs text-dusk-400 underline decoration-dotted underline-offset-4 cursor-pointer">

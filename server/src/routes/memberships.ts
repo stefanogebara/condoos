@@ -25,6 +25,7 @@ router.get('/pending', requireAuth, requireRole('board_admin'), (req: AuthedRequ
   const rows = db.prepare(
     `SELECT uu.id, uu.relationship, uu.primary_contact, uu.created_at,
             usr.id AS user_id, usr.email, usr.first_name, usr.last_name, usr.avatar_url,
+            usr.mobile_phone, usr.home_phone, usr.phone,
             un.id AS unit_id, un.number AS unit_number, un.floor,
             b.name AS building_name
      FROM user_unit uu

@@ -39,6 +39,8 @@ export interface User {
   condominium_id: number | null;
   unit_number: string | null;
   avatar_url: string | null;
+  mobile_phone?: string | null;
+  home_phone?: string | null;
 }
 
 interface AuthCtx {

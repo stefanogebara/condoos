@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import db from '../db';
-import { requireAuth, requireRole, AuthedRequest } from '../lib/auth';
+import { requireAuth, AuthedRequest } from '../lib/auth';
 import { ok, fail } from '../lib/respond';
 import { audit } from '../lib/audit';
 
@@ -54,8 +54,8 @@ router.post('/', requireAuth, (req: AuthedRequest, res) => {
 
   // Pre-approval (#9 in the QA checklist): when the resident books a future
   // visit, the host is the one approving — so we set status='approved'
-  // immediately and stamp decided_at. Porteiros / board admins still get the
-  // /:id/decide endpoint for ad-hoc walk-ups that arrive without warning.
+  // immediately and stamp decided_at. Ad-hoc walk-ups stay pending until the
+  // resident (or an admin) approves; the concierge only notifies/calls.
   const status = pre_approve === true || isRecurring || cleanGuestList ? 'approved' : 'pending';
   const decidedAt = status === 'approved' ? new Date().toISOString() : null;
 
@@ -90,13 +90,17 @@ router.post('/', requireAuth, (req: AuthedRequest, res) => {
   return ok(res, { id: row.lastInsertRowid, status });
 });
 
-router.post('/:id/decide', requireAuth, requireRole('board_admin', 'concierge'), (req: AuthedRequest, res) => {
+router.post('/:id/decide', requireAuth, (req: AuthedRequest, res) => {
   const u = req.user!;
   const id = Number(req.params.id);
   const decision = req.body?.decision;
   if (!['approved', 'denied'].includes(decision)) return fail(res, 'invalid_decision');
-  const v = db.prepare(`SELECT id FROM visitors WHERE id=? AND condominium_id=?`).get(id, u.condominium_id);
+  const v = db.prepare(`SELECT id, host_id, condominium_id FROM visitors WHERE id=? AND condominium_id=?`).get(id, u.condominium_id) as
+    | { id: number; host_id: number; condominium_id: number }
+    | undefined;
   if (!v) return fail(res, 'not_found', 404);
+  const canDecide = u.role === 'board_admin' || v.host_id === u.id;
+  if (!canDecide) return fail(res, 'forbidden', 403);
   db.prepare(`UPDATE visitors SET status=?, decided_at=CURRENT_TIMESTAMP WHERE id=?`).run(decision, id);
   audit(req, {
     action: 'visitor.decide',
