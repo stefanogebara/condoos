@@ -1847,6 +1847,28 @@ const phrases: Copy[] = [
   c('sem fornecedor (n)', 'no vendor', 'sin proveedor', 'aucun prestataire'),
   c('sem resposta do fornecedor', 'no vendor reply', 'sin respuesta del proveedor', 'aucune réponse du prestataire'),
   c('sem resposta do fornecedor (n)', 'no vendor reply', 'sin respuesta del proveedor', 'aucune réponse du prestataire'),
+  // Agent workbench overhaul — replaces the broken search-queries panel
+  // and the standalone "Mensagem para fornecedores" with per-vendor send
+  // buttons backed by POST /api/service-contacts/:id/outreach.
+  c('Copiloto operacional para consertos, instalações e decisões — usa a sua rede de fornecedores cadastrada para sugerir e enviar o próximo passo.', 'Operations copilot for repairs, installs, and decisions — uses your saved vendor network to suggest and send the next step.', 'Copiloto operativo para reparaciones, instalaciones y decisiones — usa tu red de proveedores guardada para sugerir y enviar el siguiente paso.', 'Copilote opérationnel pour réparations, installations et décisions — utilise votre réseau de prestataires enregistré pour suggérer et envoyer la prochaine étape.'),
+  c('Usa a rede de serviços, áreas comuns e propostas do condomínio para sugerir o próximo passo — e te dá um botão para enviar a mensagem ao fornecedor certo direto pelo WhatsApp.', 'Uses the building\'s saved services, amenities, and proposals to suggest a next step — and gives you a button to send the message to the right vendor by WhatsApp.', 'Usa los servicios guardados, espacios comunes y propuestas para sugerir el próximo paso — y te da un botón para enviar el mensaje al proveedor correcto por WhatsApp.', 'Utilise les services enregistrés, espaces communs et propositions pour suggérer la prochaine étape — et vous donne un bouton pour envoyer le message au bon prestataire par WhatsApp.'),
+  c('Sem pesquisa ao vivo na web, sem inventar fornecedores ou preços. Trabalha com a sua rede cadastrada.', 'No live web research, no inventing vendors or prices. Works with your saved network.', 'Sin búsqueda en vivo en la web, sin inventar proveedores ni precios. Trabaja con tu red guardada.', 'Pas de recherche web en direct, pas d\'invention de prestataires ou de prix. Travaille avec votre réseau enregistré.'),
+  c('Sua rede cadastrada', 'Your saved network', 'Tu red guardada', 'Votre réseau enregistré'),
+  c('Copiar mensagem genérica', 'Copy generic message', 'Copiar mensaje genérico', 'Copier le message générique'),
+  c('Enviar mensagem', 'Send message', 'Enviar mensaje', 'Envoyer le message'),
+  c('Sem contato no cadastro', 'No contact details saved', 'Sin contacto guardado', 'Aucun contact enregistré'),
+  c('Nenhum fornecedor da sua rede combina com essa categoria.', 'No vendor in your network matches this category.', 'Ningún proveedor de tu red coincide con esta categoría.', 'Aucun prestataire de votre réseau ne correspond à cette catégorie.'),
+  c('Adicione um em Operação para que o agente possa acioná-lo automaticamente em chamados futuros.', 'Add one in Operations so the agent can dispatch them automatically on future tickets.', 'Añade uno en Operación para que el agente pueda contactarlo automáticamente en futuros tickets.', 'Ajoutez-en un dans Opérations pour que l\'agent puisse le contacter automatiquement sur les futurs tickets.'),
+  c('Ir para Operação', 'Go to Operations', 'Ir a Operación', 'Aller à Opérations'),
+  c('Recomendação', 'Recommendation', 'Recomendación', 'Recommandation'),
+  c('Enviar para', 'Send to', 'Enviar a', 'Envoyer à'),
+  c('Você pode editar antes de enviar.', 'You can edit before sending.', 'Puedes editar antes de enviar.', 'Vous pouvez modifier avant d\'envoyer.'),
+  c('não cadastrado', 'not saved', 'no guardado', 'non enregistré'),
+  c('Escreva uma mensagem curta e direta. Ex: "Olá Ricardo, elevador A parando entre andares. Pode vir hoje?"', 'Write a short, direct message. E.g. "Hi Ricardo, elevator A is stopping between floors. Can you come today?"', 'Escribe un mensaje corto y directo. Ej: "Hola Ricardo, el ascensor A se detiene entre pisos. ¿Puedes venir hoy?"', 'Écrivez un message court et direct. Ex : "Bonjour Ricardo, l\'ascenseur A s\'arrête entre les étages. Peux-tu venir aujourd\'hui ?"'),
+  c('Enviar agora', 'Send now', 'Enviar ahora', 'Envoyer maintenant'),
+  c('Mensagem enviada', 'Message sent', 'Mensaje enviado', 'Message envoyé'),
+  c('Falha ao enviar mensagem', 'Failed to send message', 'Error al enviar el mensaje', 'Échec de l\'envoi du message'),
+  c('Mensagem vazia', 'Empty message', 'Mensaje vacío', 'Message vide'),
 ];
 
 function c(pt: string, en: string, es: string, fr: string): Copy {

@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import db from '../db';
 import { requireAuth, requireRole, getActiveCondoId, AuthedRequest } from '../lib/auth';
 import { ok, fail } from '../lib/respond';
@@ -6,8 +7,14 @@ import { audit } from '../lib/audit';
 import { normalizeServiceContact, serviceContactSchema } from '../lib/service-contacts';
 import { ticketCategoriesForVendor } from '../lib/category-aliases';
 import { dispatchAgentInBackground } from './tickets';
+import { processWhatsAppOutbox } from '../lib/whatsapp';
 
 const router = Router();
+
+const outreachSchema = z.object({
+  message: z.string().min(1).max(4_000),
+  channel: z.enum(['whatsapp', 'email']).optional(),
+});
 
 // When a new vendor lands (or an existing one's category changes), look up
 // every ticket in this condo that was stuck on remediation_status =
@@ -209,6 +216,80 @@ router.patch('/:id', requireAuth, requireRole('board_admin'), (req: AuthedReques
     },
   });
   return ok(res, { id, rewired_ticket_ids: rewired.rewiredIds });
+});
+
+// Send a one-off outreach message to a saved vendor without going through
+// the ticket-dispatch flow. Used by the admin AI agent workbench when the
+// síndico has a non-ticket question (research, scheduling, general inquiry)
+// and just wants to reach a known vendor with a pre-drafted message. The
+// auto-dispatch path on tickets has its own /dispatch endpoint that also
+// records a ticket_dispatch row; this one is intentionally lightweight —
+// no ticket context, just an outbox row + audit entry + an immediate
+// processWhatsAppOutbox tick so the message actually leaves.
+router.post('/:id/outreach', requireAuth, requireRole('board_admin'), async (req: AuthedRequest, res) => {
+  const parsed = outreachSchema.safeParse(req.body);
+  if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
+  const condoId = getActiveCondoId(req);
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) return fail(res, 'invalid_id', 400);
+
+  const vendor = db.prepare(
+    `SELECT id, company_name, phone, whatsapp, email FROM service_contacts
+     WHERE id = ? AND condominium_id = ? AND active = 1`
+  ).get(id, condoId) as { id: number; company_name: string; phone: string | null; whatsapp: string | null; email: string | null } | undefined;
+  if (!vendor) return fail(res, 'not_found', 404);
+
+  // Channel resolution: explicit > whatsapp if vendor has it > email > 400.
+  // The agent's outreach_message is generic, so WhatsApp wins for
+  // immediacy when available.
+  const channel = parsed.data.channel
+    || (vendor.whatsapp ? 'whatsapp' : vendor.email ? 'email' : null);
+  if (!channel) return fail(res, 'no_reachable_channel', 400);
+  if (channel === 'whatsapp' && !vendor.whatsapp) return fail(res, 'vendor_has_no_whatsapp', 400);
+  if (channel === 'email' && !vendor.email) return fail(res, 'vendor_has_no_email', 400);
+
+  const message = parsed.data.message.slice(0, 4_000);
+  const provider = channel === 'whatsapp'
+    ? (process.env.WHATSAPP_PROVIDER || 'twilio')
+    : (process.env.EMAIL_PROVIDER || 'resend');
+
+  const result = channel === 'whatsapp'
+    ? db.prepare(
+        `INSERT INTO notification_outbox (channel, provider, phone, body, status, next_attempt_at)
+         VALUES ('whatsapp', ?, ?, ?, 'pending', CURRENT_TIMESTAMP)`
+      ).run(provider, vendor.whatsapp, message)
+    : db.prepare(
+        `INSERT INTO notification_outbox (channel, provider, email, body, status, next_attempt_at)
+         VALUES ('email', ?, ?, ?, 'pending', CURRENT_TIMESTAMP)`
+      ).run(provider, vendor.email, message);
+  const outboxId = Number(result.lastInsertRowid);
+
+  // Stamp last_used_at so future agent runs rank this vendor higher in the
+  // "recently engaged" tiebreak. Same write the ticket /dispatch path does.
+  db.prepare(`UPDATE service_contacts SET last_used_at = CURRENT_TIMESTAMP WHERE id = ?`).run(vendor.id);
+
+  audit(req, {
+    action: 'service_contact.outreach',
+    target_type: 'service_contact',
+    target_id: vendor.id,
+    condominium_id: condoId,
+    metadata: { channel, outbox_id: outboxId, message_preview: message.slice(0, 160) },
+  });
+
+  // Fire-and-forget delivery so the HTTP response doesn't block on Twilio /
+  // Resend round-trips. processWhatsAppOutbox handles both channels despite
+  // the name (covers email through the same outbox table).
+  if (channel === 'whatsapp') {
+    void processWhatsAppOutbox({ ids: [outboxId] }).catch((err) =>
+      console.warn('[service-contact.outreach] delivery failed:', err?.message || err)
+    );
+  }
+
+  return ok(res, {
+    outbox_id: outboxId,
+    channel,
+    vendor: { id: vendor.id, company_name: vendor.company_name },
+  }, 201);
 });
 
 router.delete('/:id', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {

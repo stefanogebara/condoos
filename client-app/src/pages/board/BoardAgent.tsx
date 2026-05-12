@@ -1,15 +1,19 @@
 import React, { useState } from 'react';
 import toast from 'react-hot-toast';
-import { AlertTriangle, Bot, CheckCircle2, ClipboardList, Copy, ExternalLink, Search, Send, Sparkles } from 'lucide-react';
+import { AlertTriangle, Bot, CheckCircle2, ClipboardList, Copy, MessageCircle, Send, Sparkles, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '../../components/PageHeader';
 import GlassCard from '../../components/GlassCard';
 import Button from '../../components/Button';
 import Badge from '../../components/Badge';
-import { apiPost } from '../../lib/api';
+import { apiGet, apiPost } from '../../lib/api';
 import { t, useLocale } from '../../lib/i18n';
 
-type Mode = 'general' | 'repair' | 'install' | 'vendor_options' | 'policy';
+// 'vendor_options' mode dropped — the platform doesn't actually do live
+// vendor research (no public web access, no vendor catalog beyond saved
+// contacts). Keeping it in the dropdown was selling capability the prompt
+// is explicitly forbidden from delivering ("do not invent vendors").
+type Mode = 'general' | 'repair' | 'install' | 'policy';
 
 interface AgentOption {
   title: string;
@@ -45,9 +49,16 @@ const MODES: Array<{ value: Mode; label: string }> = [
   { value: 'general', label: 'Geral' },
   { value: 'repair', label: 'Conserto' },
   { value: 'install', label: 'Instalação' },
-  { value: 'vendor_options', label: 'Fornecedores / concorrentes' },
   { value: 'policy', label: 'Regra / política' },
 ];
+
+interface ServiceContactLite {
+  id: number;
+  company_name: string;
+  category: string;
+  whatsapp: string | null;
+  email: string | null;
+}
 
 const EXAMPLES = [
   'Comparar fornecedores para manutenção da esteira da academia',
@@ -55,10 +66,6 @@ const EXAMPLES = [
   'Planejar conserto urgente do portão da garagem',
   'Avaliar concorrentes para controle de acesso',
 ];
-
-function searchUrl(query: string) {
-  return `https://www.google.com/search?q=${encodeURIComponent(query)}`;
-}
 
 function formatEstimatedCost(value: number, locale: string) {
   return new Intl.NumberFormat(locale, {
@@ -80,6 +87,12 @@ export default function BoardAgent() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AgentResult | null>(null);
   const [creatingProposal, setCreatingProposal] = useState(false);
+  // Vendor directory is loaded once a plan exists so we can resolve the
+  // model's `existing_network_fit[i].company_name` back to a real service
+  // contact id for the "Enviar via WhatsApp" button. The full vendor list
+  // is cheap (<10KB typical) and avoids per-card resolution roundtrips.
+  const [vendors, setVendors] = useState<ServiceContactLite[]>([]);
+  const [outreachTarget, setOutreachTarget] = useState<{ vendor: ServiceContactLite; initialMessage: string } | null>(null);
 
   async function copyText(value: string, label = 'Copiado') {
     try {
@@ -107,6 +120,10 @@ export default function BoardAgent() {
         locale,
       });
       setResult(out);
+      // Pull vendor list in parallel so the network-fit cards can resolve
+      // company_name → id without forcing the user to wait. Failure here is
+      // non-fatal: cards still render, just without the send button.
+      apiGet<ServiceContactLite[]>('/service-contacts').then(setVendors).catch(() => setVendors([]));
       toast.success(tr('Plano gerado'));
     } catch (err: any) {
       toast.error(err?.response?.data?.error || tr('Falha ao gerar plano'));
@@ -139,7 +156,7 @@ export default function BoardAgent() {
     <>
       <PageHeader
         title={tr('Agente IA')}
-        subtitle={tr('Peça ajuda para consertos, instalações, fornecedores, concorrentes e próximos passos operacionais.')}
+        subtitle={tr('Copiloto operacional para consertos, instalações e decisões — usa a sua rede de fornecedores cadastrada para sugerir e enviar o próximo passo.')}
       />
 
       <GlassCard variant="clay-sage" className="p-5 mb-5 overflow-hidden relative">
@@ -151,10 +168,10 @@ export default function BoardAgent() {
           <div>
             <h2 className="font-display text-2xl text-dusk-500">{tr('Workbench operacional')}</h2>
             <p className="text-sm text-dusk-400 mt-1 max-w-3xl">
-              {tr('O agente usa a rede de serviços, áreas comuns, sugestões e propostas do condomínio para montar opções, perguntas para fornecedores, plano de ação, comunicado e rascunho de proposta.')}
+              {tr('Usa a rede de serviços, áreas comuns e propostas do condomínio para sugerir o próximo passo — e te dá um botão para enviar a mensagem ao fornecedor certo direto pelo WhatsApp.')}
             </p>
             <p className="text-xs text-dusk-300 mt-3">
-              {tr('Ele não compra, contrata nem promete pesquisa ao vivo: entrega o plano e os atalhos para você executar com controle.')}
+              {tr('Sem pesquisa ao vivo na web, sem inventar fornecedores ou preços. Trabalha com a sua rede cadastrada.')}
             </p>
           </div>
         </div>
@@ -234,76 +251,110 @@ export default function BoardAgent() {
             </div>
           </GlassCard>
 
-          {result.existing_network_fit.length > 0 ? (
-            <GlassCard className="p-5">
-              <h2 className="font-display text-xl text-dusk-500 mb-3">{tr('Rede cadastrada')}</h2>
+          {/* Hero: the only block in the result panel with a write action.
+              Each existing-network-fit card lets the admin send the agent's
+              outreach_message to that exact saved vendor via WhatsApp in
+              one click. Without this, the workbench is a glorified notes
+              app — with it, the agent's plan becomes a real outbound
+              message. When `existing_network_fit` is empty, render an
+              honest empty state pointing to /board/services so the admin
+              can add the missing vendor (vendor-add auto-rewires blocked
+              tickets, so this isn't a dead-end). */}
+          <GlassCard className="p-5">
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <h2 className="font-display text-xl text-dusk-500">{tr('Sua rede cadastrada')}</h2>
+              {result.vendor_search_plan?.outreach_message && (
+                <Button type="button" variant="ghost" size="sm" onClick={() => copyText(result.vendor_search_plan.outreach_message)} leftIcon={<Copy className="w-4 h-4" />}>
+                  {tr('Copiar mensagem genérica')}
+                </Button>
+              )}
+            </div>
+            {result.existing_network_fit.length > 0 ? (
               <div className="grid md:grid-cols-2 gap-3">
-                {result.existing_network_fit.map((fit) => (
-                  <div key={fit.company_name} className="rounded-3xl bg-white/60 border border-white/70 p-4">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="font-semibold text-dusk-500">{fit.company_name}</h3>
-                      <Badge tone="neutral">{fit.category}</Badge>
+                {result.existing_network_fit.map((fit) => {
+                  const vendor = vendors.find((v) => v.company_name === fit.company_name);
+                  const canSend = !!vendor?.whatsapp || !!vendor?.email;
+                  return (
+                    <div key={fit.company_name} className="rounded-3xl bg-white/60 border border-white/70 p-4">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="font-semibold text-dusk-500">{fit.company_name}</h3>
+                        <Badge tone="neutral">{fit.category}</Badge>
+                      </div>
+                      <p className="text-sm text-dusk-400 mt-2">{fit.reason}</p>
+                      <p className="text-xs text-dusk-300 mt-2">{fit.contact_method}</p>
+                      <div className="mt-3">
+                        <Button
+                          type="button"
+                          variant="primary"
+                          size="sm"
+                          disabled={!canSend}
+                          onClick={() => vendor && setOutreachTarget({ vendor, initialMessage: result.vendor_search_plan?.outreach_message || '' })}
+                          leftIcon={<MessageCircle className="w-4 h-4" />}
+                        >
+                          {canSend ? tr('Enviar mensagem') : tr('Sem contato no cadastro')}
+                        </Button>
+                      </div>
                     </div>
-                    <p className="text-sm text-dusk-400 mt-2">{fit.reason}</p>
-                    <p className="text-xs text-dusk-300 mt-2">{fit.contact_method}</p>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="rounded-3xl bg-white/40 border border-white/60 p-4 text-sm text-dusk-400">
+                <p>{tr('Nenhum fornecedor da sua rede combina com essa categoria.')}</p>
+                <p className="text-xs text-dusk-300 mt-1">
+                  {tr('Adicione um em Operação para que o agente possa acioná-lo automaticamente em chamados futuros.')}
+                </p>
+                <Button type="button" variant="ghost" size="sm" className="mt-3" onClick={() => navigate('/board/services')}>
+                  {tr('Ir para Operação')}
+                </Button>
+              </div>
+            )}
+          </GlassCard>
+
+          {/* Options: collapse to a single "Recommendation" card when the
+              model only returned one. The pros/cons/timeline grid makes
+              sense for comparison, not for a single item. */}
+          {result.options.length >= 2 ? (
+            <GlassCard className="p-5">
+              <h2 className="font-display text-xl text-dusk-500 mb-3">{tr('Opções')}</h2>
+              <div className="grid md:grid-cols-2 gap-4">
+                {result.options.map((option) => (
+                  <div key={option.title} className="rounded-[2rem] bg-white/60 border border-white/70 p-5">
+                    <h3 className="font-display text-xl text-dusk-500">{option.title}</h3>
+                    <p className="text-sm text-dusk-400 mt-1">{option.fit}</p>
+                    <div className="grid sm:grid-cols-2 gap-3 mt-4">
+                      <MiniList icon={<CheckCircle2 className="w-4 h-4" />} title={tr('Prós')} items={option.pros} />
+                      <MiniList icon={<AlertTriangle className="w-4 h-4" />} title={tr('Contras')} items={option.cons} />
+                    </div>
+                    <div className="mt-4 flex flex-wrap gap-2 text-xs text-dusk-300">
+                      <span className="rounded-full bg-cream-50/80 px-3 py-1">{tr('Custo')}: {option.estimated_cost_range}</span>
+                      <span className="rounded-full bg-cream-50/80 px-3 py-1">{tr('Prazo')}: {option.timeline}</span>
+                    </div>
+                    <div className="grid sm:grid-cols-2 gap-3 mt-4">
+                      <MiniList title={tr('Perguntas para fornecedor')} items={option.questions_for_vendor} />
+                      <MiniList title={tr('Critérios')} items={option.evaluation_criteria} />
+                    </div>
                   </div>
                 ))}
+              </div>
+            </GlassCard>
+          ) : result.options.length === 1 ? (
+            <GlassCard className="p-5">
+              <h2 className="font-display text-xl text-dusk-500 mb-3">{tr('Recomendação')}</h2>
+              <div className="rounded-[2rem] bg-white/60 border border-white/70 p-5">
+                <h3 className="font-display text-xl text-dusk-500">{result.options[0].title}</h3>
+                <p className="text-sm text-dusk-400 mt-1">{result.options[0].fit}</p>
+                <div className="mt-4 flex flex-wrap gap-2 text-xs text-dusk-300">
+                  <span className="rounded-full bg-cream-50/80 px-3 py-1">{tr('Custo')}: {result.options[0].estimated_cost_range}</span>
+                  <span className="rounded-full bg-cream-50/80 px-3 py-1">{tr('Prazo')}: {result.options[0].timeline}</span>
+                </div>
+                <div className="grid sm:grid-cols-2 gap-3 mt-4">
+                  <MiniList title={tr('Perguntas para fornecedor')} items={result.options[0].questions_for_vendor} />
+                  <MiniList title={tr('Critérios')} items={result.options[0].evaluation_criteria} />
+                </div>
               </div>
             </GlassCard>
           ) : null}
-
-          <GlassCard className="p-5">
-            <h2 className="font-display text-xl text-dusk-500 mb-3">{tr('Opções')}</h2>
-            <div className="grid md:grid-cols-2 gap-4">
-              {result.options.map((option) => (
-                <div key={option.title} className="rounded-[2rem] bg-white/60 border border-white/70 p-5">
-                  <h3 className="font-display text-xl text-dusk-500">{option.title}</h3>
-                  <p className="text-sm text-dusk-400 mt-1">{option.fit}</p>
-                  <div className="grid sm:grid-cols-2 gap-3 mt-4">
-                    <MiniList icon={<CheckCircle2 className="w-4 h-4" />} title={tr('Prós')} items={option.pros} />
-                    <MiniList icon={<AlertTriangle className="w-4 h-4" />} title={tr('Contras')} items={option.cons} />
-                  </div>
-                  <div className="mt-4 flex flex-wrap gap-2 text-xs text-dusk-300">
-                    <span className="rounded-full bg-cream-50/80 px-3 py-1">{tr('Custo')}: {option.estimated_cost_range}</span>
-                    <span className="rounded-full bg-cream-50/80 px-3 py-1">{tr('Prazo')}: {option.timeline}</span>
-                  </div>
-                  <div className="grid sm:grid-cols-2 gap-3 mt-4">
-                    <MiniList title={tr('Perguntas para fornecedor')} items={option.questions_for_vendor} />
-                    <MiniList title={tr('Critérios')} items={option.evaluation_criteria} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </GlassCard>
-
-          <div className="grid lg:grid-cols-2 gap-5">
-            <GlassCard className="p-5">
-              <h2 className="font-display text-xl text-dusk-500">{tr('Plano de pesquisa')}</h2>
-              <h3 className="text-xs uppercase tracking-[0.18em] text-dusk-300 mt-4">{tr('Buscas prontas')}</h3>
-              <div className="mt-2 space-y-2">
-                {result.vendor_search_plan.search_queries.map((query) => (
-                  <a key={query} href={searchUrl(query)} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between gap-3 rounded-2xl bg-white/60 border border-white/70 p-3 text-sm text-dusk-400 hover:text-dusk-500">
-                    <span className="inline-flex items-center gap-2 min-w-0"><Search className="w-4 h-4 shrink-0" /> <span className="truncate">{query}</span></span>
-                    <ExternalLink className="w-4 h-4 shrink-0" />
-                  </a>
-                ))}
-              </div>
-              <h3 className="text-xs uppercase tracking-[0.18em] text-dusk-300 mt-4">{tr('Critérios de seleção')}</h3>
-              <MiniList items={result.vendor_search_plan.shortlisting_criteria} />
-            </GlassCard>
-
-            <GlassCard className="p-5">
-              <div className="flex items-center justify-between gap-3">
-                <h2 className="font-display text-xl text-dusk-500">{tr('Mensagem para fornecedores')}</h2>
-                <Button type="button" variant="ghost" size="sm" onClick={() => copyText(result.vendor_search_plan.outreach_message)} leftIcon={<Copy className="w-4 h-4" />}>
-                  {tr('Copiar mensagem')}
-                </Button>
-              </div>
-              <div className="mt-3 rounded-3xl bg-white/60 border border-white/70 p-4 text-sm text-dusk-400 whitespace-pre-line">
-                {result.vendor_search_plan.outreach_message}
-              </div>
-            </GlassCard>
-          </div>
 
           <GlassCard className="p-5">
             <h2 className="font-display text-xl text-dusk-500 mb-3">{tr('Plano de ação')}</h2>
@@ -333,7 +384,13 @@ export default function BoardAgent() {
               <p className="text-sm text-dusk-400 mt-2 whitespace-pre-line">{result.resident_update.body}</p>
             </GlassCard>
 
-            {result.proposal_draft ? (
+            {/* Proposal draft is gated by mode: 'repair' is operational
+                triage (no resident vote required), 'general' is too vague.
+                Only show the "Criar proposta" path when the request is
+                explicitly about an install or a policy change — those are
+                the contexts where a residents-vote makes sense.  Avoids
+                the "vote on whether to fix the elevator" anti-pattern. */}
+            {result.proposal_draft && (mode === 'install' || mode === 'policy') ? (
               <GlassCard variant="clay-peach" className="p-5">
                 <div className="flex items-center justify-between gap-3">
                   <h2 className="font-display text-xl text-dusk-500">{tr('Proposta pronta')}</h2>
@@ -363,7 +420,109 @@ export default function BoardAgent() {
           </div>
         </div>
       )}
+
+      {outreachTarget && (
+        <OutreachModal
+          target={outreachTarget}
+          onClose={() => setOutreachTarget(null)}
+          onSent={() => setOutreachTarget(null)}
+          tr={tr}
+        />
+      )}
     </>
+  );
+}
+
+// Send the agent's outreach_message to a specific saved vendor. Editable
+// before send because the model-generated message is generic and often
+// reads like a template bot; the admin should be able to tighten it in 10
+// seconds before pressing send. Uses POST /api/service-contacts/:id/outreach
+// which queues a notification_outbox row and ticks the worker immediately.
+function OutreachModal({ target, onClose, onSent, tr }: {
+  target: { vendor: ServiceContactLite; initialMessage: string };
+  onClose: () => void;
+  onSent: () => void;
+  tr: (k: string) => string;
+}) {
+  const [message, setMessage] = useState(target.initialMessage);
+  const [channel, setChannel] = useState<'whatsapp' | 'email'>(target.vendor.whatsapp ? 'whatsapp' : 'email');
+  const [sending, setSending] = useState(false);
+
+  React.useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [onClose]);
+
+  async function send() {
+    if (!message.trim()) {
+      toast.error(tr('Mensagem vazia'));
+      return;
+    }
+    setSending(true);
+    try {
+      await apiPost(`/service-contacts/${target.vendor.id}/outreach`, {
+        message: message.trim(),
+        channel,
+      });
+      toast.success(tr('Mensagem enviada'));
+      onSent();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || tr('Falha ao enviar mensagem'));
+    } finally {
+      setSending(false);
+    }
+  }
+
+  const canWhatsApp = !!target.vendor.whatsapp;
+  const canEmail = !!target.vendor.email;
+
+  return (
+    <div className="fixed inset-0 bg-dusk-500/30 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <GlassCard className="p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div>
+            <h2 className="font-display text-xl text-dusk-500">{tr('Enviar para')} {target.vendor.company_name}</h2>
+            <p className="text-xs text-dusk-300 mt-1">{tr('Você pode editar antes de enviar.')}</p>
+          </div>
+          <button onClick={onClose} aria-label={tr('Fechar')} className="text-dusk-300 hover:text-dusk-500"><X className="w-4 h-4" /></button>
+        </div>
+
+        <div className="flex gap-2 mb-3">
+          <button
+            type="button"
+            onClick={() => setChannel('whatsapp')}
+            disabled={!canWhatsApp}
+            className={`text-xs rounded-full px-3 py-1.5 border ${channel === 'whatsapp' ? 'bg-sage-300/60 border-sage-500/60 text-dusk-500' : 'bg-white/60 border-white/70 text-dusk-400'} ${!canWhatsApp ? 'opacity-50 cursor-not-allowed' : ''}`}
+          >
+            WhatsApp {canWhatsApp ? '' : `(${tr('não cadastrado')})`}
+          </button>
+          <button
+            type="button"
+            onClick={() => setChannel('email')}
+            disabled={!canEmail}
+            className={`text-xs rounded-full px-3 py-1.5 border ${channel === 'email' ? 'bg-sage-300/60 border-sage-500/60 text-dusk-500' : 'bg-white/60 border-white/70 text-dusk-400'} ${!canEmail ? 'opacity-50 cursor-not-allowed' : ''}`}
+          >
+            Email {canEmail ? '' : `(${tr('não cadastrado')})`}
+          </button>
+        </div>
+
+        <textarea
+          className="input min-h-[160px]"
+          value={message}
+          maxLength={4_000}
+          onChange={(e) => setMessage(e.target.value)}
+          placeholder={tr('Escreva uma mensagem curta e direta. Ex: "Olá Ricardo, elevador A parando entre andares. Pode vir hoje?"')}
+        />
+
+        <div className="flex justify-end gap-2 mt-4">
+          <Button type="button" variant="ghost" onClick={onClose}>{tr('Cancelar')}</Button>
+          <Button type="button" variant="primary" loading={sending} onClick={send} leftIcon={<Send className="w-4 h-4" />}>
+            {tr('Enviar agora')}
+          </Button>
+        </div>
+      </GlassCard>
+    </div>
   );
 }
 
