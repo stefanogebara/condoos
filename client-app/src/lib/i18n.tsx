@@ -1884,6 +1884,21 @@ const phrases: Copy[] = [
   c('Sem resposta do fornecedor', 'No vendor reply', 'Sin respuesta del proveedor', 'Aucune réponse du prestataire'),
   c('Resolvido', 'Resolved', 'Resuelto', 'Résolu'),
   c('Fornecedor respondeu', 'Vendor responded', 'Proveedor respondió', 'Prestataire a répondu'),
+  // Outreach modal — honest delivery state + provider info.
+  c('De:', 'From:', 'De:', 'De :'),
+  c('Sessão WhatsApp', 'WhatsApp session', 'Sesión WhatsApp', 'Session WhatsApp'),
+  c('Atenção: WhatsApp não está conectado', 'Heads up: WhatsApp is not connected', 'Atención: WhatsApp no está conectado', 'Attention : WhatsApp n\'est pas connecté'),
+  c('verifique a sessão', 'check the session', 'verifica la sesión', 'vérifiez la session'),
+  c('Esse número parece ser do dado de demonstração. A mensagem vai ser enfileirada mas não chega a um WhatsApp real. Atualize o cadastro do fornecedor com um número de teste antes de enviar.', 'This number looks like demo data. The message will queue but won\'t reach a real WhatsApp. Update the vendor record with a test number before sending.', 'Este número parece de datos de demostración. El mensaje se pondrá en cola pero no llegará a un WhatsApp real. Actualiza el contacto con un número de prueba antes de enviar.', 'Ce numéro ressemble à des données de démonstration. Le message sera mis en file mais n\'atteindra pas un vrai WhatsApp. Mettez à jour le contact avec un numéro de test avant d\'envoyer.'),
+  c('Enfileirada para envio', 'Queued for sending', 'En cola para envío', 'En file pour envoi'),
+  c('Enviando…', 'Sending…', 'Enviando…', 'Envoi…'),
+  c('Mensagem entregue ao provedor', 'Delivered to provider', 'Entregado al proveedor', 'Remis au prestataire'),
+  c('Falha na entrega', 'Delivery failed', 'Error en la entrega', 'Échec de la livraison'),
+  c('Mensagem ignorada', 'Message skipped', 'Mensaje omitido', 'Message ignoré'),
+  c('Destino:', 'To:', 'Destino:', 'Destination :'),
+  c('Erro:', 'Error:', 'Error:', 'Erreur :'),
+  c('O provedor aceitou. Veja sua sessão de WhatsApp para confirmar entrega real.', 'Provider accepted. Check your WhatsApp session to confirm real delivery.', 'El proveedor aceptó. Revisa tu sesión de WhatsApp para confirmar la entrega real.', 'Le prestataire a accepté. Consultez votre session WhatsApp pour confirmer la livraison réelle.'),
+  c('Fechar', 'Close', 'Cerrar', 'Fermer'),
 ];
 
 function c(pt: string, en: string, es: string, fr: string): Copy {

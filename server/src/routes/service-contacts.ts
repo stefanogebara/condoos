@@ -7,7 +7,7 @@ import { audit } from '../lib/audit';
 import { normalizeServiceContact, serviceContactSchema } from '../lib/service-contacts';
 import { ticketCategoriesForVendor } from '../lib/category-aliases';
 import { dispatchAgentInBackground } from './tickets';
-import { processWhatsAppOutbox } from '../lib/whatsapp';
+import { processWhatsAppOutbox, getWhatsAppHealth } from '../lib/whatsapp';
 
 const router = Router();
 
@@ -64,6 +64,49 @@ function rewireBlockedTickets(
   }
   return { rewiredIds: ids };
 }
+
+// WhatsApp delivery health — live-session check (cached 60s). Surfaces
+// which phone is doing the sending and whether the WAHA/Twilio session is
+// actually reachable, so the admin doesn't trust a fake "Mensagem enviada"
+// toast when the provider can't actually deliver. Cached so the UI can
+// poll cheaply (every 30-60s) from a header pill.
+router.get('/whatsapp/health', requireAuth, requireRole('board_admin'), async (_req: AuthedRequest, res) => {
+  const health = await getWhatsAppHealth();
+  return ok(res, health);
+});
+
+// Outbox row state — for polling a single send after firing it from the
+// outreach modal. Returns the same fields the worker writes; UI polls
+// every 2s after send to evolve "queued → sent / failed" honestly instead
+// of fake-success on HTTP 201. Admin-scoped to its own condo's outbox
+// rows (we don't expose other condos' rows).
+router.get('/outbox/:id', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+  const condoId = getActiveCondoId(req);
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) return fail(res, 'invalid_id', 400);
+  // Outbox rows don't have a condominium_id column directly, so scope
+  // via the service contact / user_id they were created for. We allow
+  // any board_admin in the condo to read the status of any outbox row
+  // whose recipient phone matches one of their active service_contacts
+  // (this is the only path the admin's outreach modal creates rows).
+  const row = db.prepare(
+    `SELECT o.id, o.channel, o.provider, o.phone, o.status, o.sent_at,
+            o.last_error, o.attempts, o.created_at
+     FROM notification_outbox o
+     WHERE o.id = ?
+       AND (
+         o.user_id IS NULL  -- outreach rows have no user; ticket-dispatch ones do
+         OR EXISTS (
+           SELECT 1 FROM user_unit uu
+           JOIN units u ON u.id = uu.unit_id
+           JOIN buildings b ON b.id = u.building_id
+           WHERE uu.user_id = o.user_id AND b.condominium_id = ?
+         )
+       )`
+  ).get(id, condoId) as any;
+  if (!row) return fail(res, 'not_found', 404);
+  return ok(res, row);
+});
 
 router.get('/', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);

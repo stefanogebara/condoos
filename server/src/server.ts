@@ -10,6 +10,7 @@ import morgan from 'morgan';
 import { requireAuth, requireActiveMembership } from './lib/auth';
 import { startVoteCloser } from './lib/vote-closer';
 import { startSlaEscalator } from './lib/sla-escalator';
+import { getWhatsAppHealth, getWhatsAppStatus } from './lib/whatsapp';
 import { captureException, initSentry } from './lib/sentry';
 import authRoutes from './routes/auth';
 import packagesRoutes from './routes/packages';
@@ -182,5 +183,21 @@ app.listen(PORT, () => {
     console.log('[finance] scheduled invoice generator started (6h interval)');
     console.log('[notification-outbox] retry loop started (60s interval)');
     console.log('[sla-escalator] started (5min interval)');
+    // Boot-time WhatsApp health probe. Fire-and-forget — we want the
+    // server up regardless, but admins should see a clear log line if
+    // the provider isn't reachable so they don't wonder why messages
+    // queue forever in prod.
+    const cfg = getWhatsAppStatus();
+    if (!cfg.configured) {
+      console.warn('[whatsapp] not configured — outbox rows will queue and skip');
+    } else {
+      void getWhatsAppHealth(true).then((h) => {
+        if (h.reachable) {
+          console.log(`[whatsapp] ${cfg.provider} reachable — sending from ${h.me_phone || cfg.from || 'unknown'} (${h.me_name || h.session_status || 'ready'})`);
+        } else {
+          console.warn(`[whatsapp] ${cfg.provider} NOT REACHABLE: ${h.error || 'unknown error'}. Outreach sends will fail until the session is restored.`);
+        }
+      }).catch((err) => console.warn('[whatsapp] health probe failed:', err?.message || err));
+    }
   }
 });

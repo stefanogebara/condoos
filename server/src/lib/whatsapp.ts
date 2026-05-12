@@ -70,6 +70,101 @@ export function getWhatsAppStatus() {
   };
 }
 
+// Live-session health check — hits the provider's API to verify the
+// session is actually connected (not just "credentials present"). Cached
+// for 60s so the UI can poll cheaply. Surface this in the board UI so
+// admins know whether an "Enviar mensagem" click will land or queue
+// indefinitely. Twilio doesn't have a session concept — its check is just
+// "credentials valid" via an account-fetch.
+interface WhatsAppHealth {
+  configured: boolean;
+  provider: WhatsAppProvider;
+  reachable: boolean;
+  session_status: string | null;
+  me_phone: string | null;
+  me_name: string | null;
+  checked_at: string;
+  error: string | null;
+}
+
+let healthCache: { value: WhatsAppHealth; expires_at: number } | null = null;
+
+export async function getWhatsAppHealth(force = false): Promise<WhatsAppHealth> {
+  if (!force && healthCache && healthCache.expires_at > Date.now()) return healthCache.value;
+  const provider = configuredProvider();
+  const base: WhatsAppHealth = {
+    configured: provider !== 'none',
+    provider,
+    reachable: false,
+    session_status: null,
+    me_phone: null,
+    me_name: null,
+    checked_at: new Date().toISOString(),
+    error: null,
+  };
+
+  if (provider === 'none') {
+    base.error = 'no_provider_configured';
+    healthCache = { value: base, expires_at: Date.now() + 60_000 };
+    return base;
+  }
+
+  try {
+    if (provider === 'waha') {
+      const url = env('WAHA_URL');
+      const session = env('WAHA_SESSION') || 'default';
+      const key = env('WAHA_API_KEY') || '';
+      if (!url) {
+        base.error = 'waha_url_missing';
+      } else {
+        const r = await fetch(`${url.replace(/\/$/, '')}/sessions/${session}`, {
+          headers: key ? { 'X-Api-Key': key } : {},
+          // Quick check — if WAHA is down, fail in 5s not 30.
+          signal: AbortSignal.timeout(5_000),
+        });
+        if (r.ok) {
+          const j: any = await r.json();
+          base.reachable = true;
+          base.session_status = j?.status || null;
+          // Mask the middle of the phone number — same convention as `from`.
+          const fullPhone: string | undefined = j?.me?.id?.split?.('@')?.[0];
+          base.me_phone = fullPhone && fullPhone.length >= 7
+            ? `+${fullPhone.slice(0, 4)}…${fullPhone.slice(-3)}`
+            : (fullPhone ? `+${fullPhone}` : null);
+          base.me_name = j?.me?.pushName || null;
+        } else {
+          base.error = `waha_${r.status}`;
+        }
+      }
+    } else if (provider === 'twilio') {
+      const sid = env('TWILIO_ACCOUNT_SID');
+      const token = env('TWILIO_AUTH_TOKEN');
+      if (!sid || !token) {
+        base.error = 'twilio_creds_missing';
+      } else {
+        const auth = Buffer.from(`${sid}:${token}`).toString('base64');
+        const r = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}.json`, {
+          headers: { Authorization: `Basic ${auth}` },
+          signal: AbortSignal.timeout(5_000),
+        });
+        if (r.ok) {
+          const j: any = await r.json();
+          base.reachable = true;
+          base.session_status = j?.status || 'active';
+          base.me_phone = env('TWILIO_WHATSAPP_FROM') || null;
+        } else {
+          base.error = `twilio_${r.status}`;
+        }
+      }
+    }
+  } catch (err) {
+    base.error = (err as Error)?.name === 'TimeoutError' ? 'timeout' : (err as Error)?.message || 'unknown';
+  }
+
+  healthCache = { value: base, expires_at: Date.now() + 60_000 };
+  return base;
+}
+
 export interface SendResult {
   ok: boolean;
   skipped?: 'not_configured' | 'invalid_to';

@@ -110,6 +110,14 @@ export default function BoardAgent() {
   // is cheap (<10KB typical) and avoids per-card resolution roundtrips.
   const [vendors, setVendors] = useState<ServiceContactLite[]>([]);
   const [outreachTarget, setOutreachTarget] = useState<{ vendor: ServiceContactLite; initialMessage: string } | null>(null);
+  const [waHealth, setWaHealth] = useState<WhatsAppHealth | null>(null);
+
+  // Fetch WhatsApp health alongside the page load — admin sees the sending
+  // phone right inside the outreach modal, plus the modal can warn if the
+  // session is offline. Cached server-side for 60s so this is cheap.
+  React.useEffect(() => {
+    apiGet<WhatsAppHealth>('/service-contacts/whatsapp/health').then(setWaHealth).catch(() => setWaHealth(null));
+  }, []);
 
   async function copyText(value: string, label = 'Copiado') {
     try {
@@ -462,32 +470,68 @@ export default function BoardAgent() {
           onClose={() => setOutreachTarget(null)}
           onSent={() => setOutreachTarget(null)}
           tr={tr}
+          health={waHealth}
         />
       )}
     </>
   );
 }
 
+interface OutboxStatus {
+  id: number;
+  channel: string;
+  provider: string;
+  phone: string | null;
+  status: 'pending' | 'sent' | 'failed' | 'skipped';
+  sent_at: string | null;
+  last_error: string | null;
+  attempts: number;
+}
+
+interface WhatsAppHealth {
+  configured: boolean;
+  provider: string;
+  reachable: boolean;
+  session_status: string | null;
+  me_phone: string | null;
+  me_name: string | null;
+  checked_at: string;
+  error: string | null;
+}
+
 // Send the agent's outreach_message to a specific saved vendor. Editable
 // before send because the model-generated message is generic and often
 // reads like a template bot; the admin should be able to tighten it in 10
-// seconds before pressing send. Uses POST /api/service-contacts/:id/outreach
-// which queues a notification_outbox row and ticks the worker immediately.
-function OutreachModal({ target, onClose, onSent, tr }: {
+// seconds before pressing send.
+//
+// After the send, the modal stays open and polls the outbox row every 2s
+// for up to 60s so the admin sees actual delivery progress: queued → sent
+// → (or failed with the provider's error). This replaces the previous
+// fake-success toast that always said "Mensagem enviada" even when the
+// provider couldn't reach the destination.
+function OutreachModal({ target, onClose, onSent, tr, health }: {
   target: { vendor: ServiceContactLite; initialMessage: string };
   onClose: () => void;
   onSent: () => void;
   tr: (k: string) => string;
+  health: WhatsAppHealth | null;
 }) {
   const [message, setMessage] = useState(target.initialMessage);
   const [channel, setChannel] = useState<'whatsapp' | 'email'>(target.vendor.whatsapp ? 'whatsapp' : 'email');
   const [sending, setSending] = useState(false);
+  const [outbox, setOutbox] = useState<OutboxStatus | null>(null);
+  // Polling timer reference so we can clear on unmount / channel terminal.
+  const pollRef = React.useRef<number | null>(null);
 
   React.useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [onClose]);
+
+  React.useEffect(() => {
+    return () => { if (pollRef.current) window.clearInterval(pollRef.current); };
+  }, []);
 
   async function send() {
     if (!message.trim()) {
@@ -496,12 +540,33 @@ function OutreachModal({ target, onClose, onSent, tr }: {
     }
     setSending(true);
     try {
-      await apiPost(`/service-contacts/${target.vendor.id}/outreach`, {
-        message: message.trim(),
-        channel,
-      });
-      toast.success(tr('Mensagem enviada'));
-      onSent();
+      const res = await apiPost<{ outbox_id: number; channel: string; vendor: { id: number; company_name: string } }>(
+        `/service-contacts/${target.vendor.id}/outreach`,
+        { message: message.trim(), channel }
+      );
+      toast.success(tr('Enfileirada para envio'));
+      // Begin polling. Stop at sent/failed/skipped or after 60s (30 polls).
+      let polls = 0;
+      const tick = async () => {
+        polls += 1;
+        try {
+          const status = await apiGet<OutboxStatus>(`/service-contacts/outbox/${res.outbox_id}`);
+          setOutbox(status);
+          if (status.status === 'sent' || status.status === 'failed' || status.status === 'skipped' || polls >= 30) {
+            if (pollRef.current) window.clearInterval(pollRef.current);
+            pollRef.current = null;
+            if (status.status === 'sent') {
+              setTimeout(onSent, 1_500);  // give the admin a beat to see "Enviada"
+            }
+          }
+        } catch {
+          // Polling errors are non-fatal — just stop and let the admin close.
+          if (pollRef.current) window.clearInterval(pollRef.current);
+          pollRef.current = null;
+        }
+      };
+      pollRef.current = window.setInterval(tick, 2_000);
+      tick();  // immediate first read
     } catch (err: any) {
       toast.error(err?.response?.data?.error || tr('Falha ao enviar mensagem'));
     } finally {
@@ -511,6 +576,11 @@ function OutreachModal({ target, onClose, onSent, tr }: {
 
   const canWhatsApp = !!target.vendor.whatsapp;
   const canEmail = !!target.vendor.email;
+  // Seed-pattern detection — the demo seed uses +5511955551XXX. If the
+  // admin tries to send to one of those, warn them: the message will
+  // queue and "succeed" but won't reach a real WhatsApp user.
+  const phoneToSend = channel === 'whatsapp' ? target.vendor.whatsapp : target.vendor.email;
+  const looksLikeSeedNumber = !!(phoneToSend && /^\+?5511955551\d{3}$/.test(phoneToSend.replace(/\D/g, '').replace(/^/, '+')));
 
   return (
     <div className="fixed inset-0 bg-dusk-500/30 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
@@ -519,6 +589,19 @@ function OutreachModal({ target, onClose, onSent, tr }: {
           <div>
             <h2 className="font-display text-xl text-dusk-500">{tr('Enviar para')} {target.vendor.company_name}</h2>
             <p className="text-xs text-dusk-300 mt-1">{tr('Você pode editar antes de enviar.')}</p>
+            {/* From-line — admin needs to know which phone is sending. WAHA
+                sessions are bound to a real WhatsApp account, so the
+                receiver sees that name. */}
+            {health?.reachable && health.me_phone && (
+              <p className="text-xs text-dusk-300 mt-1">
+                {tr('De:')} <span className="font-medium text-dusk-400">{health.me_name || tr('Sessão WhatsApp')}</span> {health.me_phone}
+              </p>
+            )}
+            {health && !health.reachable && (
+              <p className="text-xs text-peach-700 mt-1">
+                {tr('Atenção: WhatsApp não está conectado')} ({health.error || tr('verifique a sessão')})
+              </p>
+            )}
           </div>
           <button onClick={onClose} aria-label={tr('Fechar')} className="text-dusk-300 hover:text-dusk-500"><X className="w-4 h-4" /></button>
         </div>
@@ -527,34 +610,71 @@ function OutreachModal({ target, onClose, onSent, tr }: {
           <button
             type="button"
             onClick={() => setChannel('whatsapp')}
-            disabled={!canWhatsApp}
-            className={`text-xs rounded-full px-3 py-1.5 border ${channel === 'whatsapp' ? 'bg-sage-300/60 border-sage-500/60 text-dusk-500' : 'bg-white/60 border-white/70 text-dusk-400'} ${!canWhatsApp ? 'opacity-50 cursor-not-allowed' : ''}`}
+            disabled={!canWhatsApp || !!outbox}
+            className={`text-xs rounded-full px-3 py-1.5 border ${channel === 'whatsapp' ? 'bg-sage-300/60 border-sage-500/60 text-dusk-500' : 'bg-white/60 border-white/70 text-dusk-400'} ${(!canWhatsApp || !!outbox) ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
             WhatsApp {canWhatsApp ? '' : `(${tr('não cadastrado')})`}
           </button>
           <button
             type="button"
             onClick={() => setChannel('email')}
-            disabled={!canEmail}
-            className={`text-xs rounded-full px-3 py-1.5 border ${channel === 'email' ? 'bg-sage-300/60 border-sage-500/60 text-dusk-500' : 'bg-white/60 border-white/70 text-dusk-400'} ${!canEmail ? 'opacity-50 cursor-not-allowed' : ''}`}
+            disabled={!canEmail || !!outbox}
+            className={`text-xs rounded-full px-3 py-1.5 border ${channel === 'email' ? 'bg-sage-300/60 border-sage-500/60 text-dusk-500' : 'bg-white/60 border-white/70 text-dusk-400'} ${(!canEmail || !!outbox) ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
             Email {canEmail ? '' : `(${tr('não cadastrado')})`}
           </button>
         </div>
 
+        {looksLikeSeedNumber && !outbox && (
+          <div className="mb-3 rounded-2xl bg-peach-100/50 border border-peach-300/50 p-2.5 text-xs text-dusk-500">
+            {tr('Esse número parece ser do dado de demonstração. A mensagem vai ser enfileirada mas não chega a um WhatsApp real. Atualize o cadastro do fornecedor com um número de teste antes de enviar.')}
+          </div>
+        )}
+
         <textarea
           className="input min-h-[160px]"
           value={message}
           maxLength={4_000}
+          disabled={!!outbox}
           onChange={(e) => setMessage(e.target.value)}
           placeholder={tr('Escreva uma mensagem curta e direta. Ex: "Olá Ricardo, elevador A parando entre andares. Pode vir hoje?"')}
         />
 
+        {/* Live delivery state after send. Replaces fake-success toast with
+            real provider feedback. Pending = WAHA accepted; sent = phone
+            on the other side got it (or WAHA queued it for delivery);
+            failed = real error from the provider, shown verbatim. */}
+        {outbox && (
+          <div className={`mt-3 rounded-2xl p-3 text-sm ${
+            outbox.status === 'sent' ? 'bg-sage-100/60 border border-sage-300/60 text-dusk-500' :
+            outbox.status === 'failed' || outbox.status === 'skipped' ? 'bg-peach-100/60 border border-peach-300/60 text-dusk-500' :
+            'bg-white/60 border border-white/70 text-dusk-400'
+          }`}>
+            <div className="font-semibold">
+              {outbox.status === 'pending' && <>{tr('Enviando…')} ({outbox.provider})</>}
+              {outbox.status === 'sent' && <>{tr('Mensagem entregue ao provedor')} ({outbox.provider})</>}
+              {outbox.status === 'failed' && <>{tr('Falha na entrega')}</>}
+              {outbox.status === 'skipped' && <>{tr('Mensagem ignorada')}</>}
+            </div>
+            {outbox.phone && <div className="text-xs mt-1">{tr('Destino:')} {outbox.phone}</div>}
+            {outbox.last_error && <div className="text-xs mt-1 text-peach-700">{tr('Erro:')} {outbox.last_error}</div>}
+            {outbox.status === 'sent' && (
+              <div className="text-xs mt-1 text-dusk-300">
+                {tr('O provedor aceitou. Veja sua sessão de WhatsApp para confirmar entrega real.')}
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="flex justify-end gap-2 mt-4">
-          <Button type="button" variant="ghost" onClick={onClose}>{tr('Cancelar')}</Button>
-          <Button type="button" variant="primary" loading={sending} onClick={send} leftIcon={<Send className="w-4 h-4" />}>
-            {tr('Enviar agora')}
+          <Button type="button" variant="ghost" onClick={onClose}>
+            {outbox ? tr('Fechar') : tr('Cancelar')}
           </Button>
+          {!outbox && (
+            <Button type="button" variant="primary" loading={sending} onClick={send} leftIcon={<Send className="w-4 h-4" />}>
+              {tr('Enviar agora')}
+            </Button>
+          )}
         </div>
       </GlassCard>
     </div>
