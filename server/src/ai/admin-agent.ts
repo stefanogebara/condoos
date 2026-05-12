@@ -22,11 +22,13 @@
 // Imperfect but cheap; the prompt already tells the model to avoid these
 // (the denylist is a backstop when the model echoes anyway).
 const PLATFORM_DUPLICATE_KEYWORDS = [
-  // Outreach to a vendor — there's a button for that.
-  /enviar\s+(mensagem|whatsapp|comunica[çc][ãa]o)\s+(para|ao)\s+/i,
-  /\baccionar\b|\bacionar\b\s+(o\s+)?fornecedor/i,
+  // Outreach to a vendor — there's a button for that. Bounded .{0,30}
+  // tolerates an adjective slipping in ("enviar mensagem TÉCNICA para X")
+  // without becoming a runaway match.
+  /enviar\s+(mensagem|whatsapp|comunica[çc][ãa]o).{0,30}\s+(para|ao)\s+/i,
+  /\bacionar\b\s+(o\s+)?fornecedor/i,
   /contac?tar\s+(o\s+)?fornecedor/i,
-  /send\s+(whatsapp|message|email)\s+to\s+(the\s+)?vendor/i,
+  /send\s+(whatsapp|message|email).{0,30}\s+to\s+(the\s+)?(vendor|technician|contractor)/i,
   // Publishing the resident comms — resident_update covers it.
   // Broader than the literal "postar comunicado": catches "comunicar
   // condôminos", "avisar moradores", "informar residentes" too — every
