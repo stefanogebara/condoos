@@ -2053,6 +2053,15 @@ const phrases: Copy[] = [
   c('Falha ao cancelar', 'Failed to cancel', 'Error al cancelar', 'Échec de l\'annulation'),
   c('Cancelado:', 'Cancelled:', 'Cancelado:', 'Annulé :'),
   c('admin_cancelled', 'manually cancelled by admin', 'cancelado manualmente por el administrador', 'annulé manuellement par l\'administrateur'),
+  // ReAct thinking-trace pane (roadmap item 4). Tool names are
+  // translated to friendly phrases so the trace reads as steps the
+  // admin recognises, not server-internal endpoints.
+  c('Como o agente pesquisou', 'How the agent researched', 'Cómo el agente investigó', "Comment l'agent a recherché"),
+  c('search_past_tickets', 'searched past tickets', 'buscó tickets anteriores', 'a cherché les anciens tickets'),
+  c('get_vendor_history', 'pulled vendor history', 'consultó el historial del proveedor', "a consulté l'historique du prestataire"),
+  c('list_vendors', 'listed saved vendors', 'listó proveedores guardados', 'a listé les prestataires enregistrés'),
+  c('get_open_similar_tickets', 'checked pattern', 'verificó patrón', 'a vérifié le motif'),
+  c('submit_final_answer', 'composed final plan', 'compuso el plan final', 'a composé le plan final'),
 ];
 
 function c(pt: string, en: string, es: string, fr: string): Copy {

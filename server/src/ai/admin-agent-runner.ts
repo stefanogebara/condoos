@@ -7,8 +7,8 @@
 // auth + rate-limit + audit shell.
 
 import db from '../db';
-import { chat, parseJsonLoose } from './openrouter';
-import { ADMIN_AGENT_SYS } from './prompts';
+import { chat, chatWithTools, parseJsonLoose } from './openrouter';
+import { ADMIN_AGENT_SYS, ADMIN_AGENT_REACT_SYS } from './prompts';
 import {
   fallbackAdminAgent,
   normalizeAdminAgentMode,
@@ -16,9 +16,39 @@ import {
   type AdminAgentInput,
   type AdminAgentMode,
 } from './admin-agent';
+import { ADMIN_AGENT_TOOLS, buildToolHandler } from './admin-agent-tools';
 
 function clip(value: unknown, max: number): string {
   return String(value || '').slice(0, max);
+}
+
+// Compress a tool output into a short human-readable phrase for the
+// thinking-trace UI. We never echo raw JSON to the client trace — that
+// would leak server-internal fields (ids, timestamps) the admin doesn't
+// need and the trace pane shouldn't have to parse.
+function summariseToolOutput(toolName: string, output: any): string {
+  if (!output || typeof output !== 'object') return '';
+  if (toolName === 'search_past_tickets') {
+    const n = Array.isArray(output.matches) ? output.matches.length : 0;
+    if (n === 0) return 'sem chamados anteriores parecidos';
+    const first = output.matches[0];
+    return `${n} chamado(s) parecido(s) — mais recente: "${String(first?.title || '').slice(0, 60)}"`;
+  }
+  if (toolName === 'get_vendor_history') {
+    const ds = output.dispatch_stats || {};
+    const es = output.expense_stats || {};
+    return `${output.vendor?.company_name || '?'}: ${ds.responded || 0}/${ds.total || 0} respondidos, ${es.count || 0} despesas (${es.confidence || '—'})`;
+  }
+  if (toolName === 'list_vendors') {
+    return `${Array.isArray(output.vendors) ? output.vendors.length : 0} fornecedor(es) na rede`;
+  }
+  if (toolName === 'get_open_similar_tickets') {
+    return `${output.open_count || 0} chamados abertos em ${output.window_days || 30} dias${output.is_pattern ? ' (padrão detectado)' : ''}`;
+  }
+  if (toolName === 'submit_final_answer') {
+    return 'plano final enviado';
+  }
+  return '';
 }
 
 // === Helpers for building memory ===
@@ -432,22 +462,77 @@ export async function runAdminAgent(args: RunAdminAgentArgs): Promise<RunAdminAg
 
   let usedFallback = false;
   let raw: any;
-  try {
-    const text = await chat(
-      [
-        { role: 'system', content: ADMIN_AGENT_SYS },
-        { role: 'user', content: JSON.stringify(context) },
-      ],
-      { jsonMode: true, maxTokens: 2_000 }
-    );
-    raw = parseJsonLoose<any>(text);
-    if (!raw) {
+  let toolTrace: Array<{ name: string; input: any; output: any }> = [];
+  // ReAct path is opt-in via env flag while we validate quality. The
+  // existing single-shot path stays as a stable fallback and the
+  // verified-everywhere default. When AGENT_USE_REACT='1', the model
+  // gets a smaller initial context + tool access and decides what data
+  // it needs. Multi-step (2-4 LLM calls per agent run) trades latency
+  // for precision on long-tail questions.
+  const useReact = process.env.AGENT_USE_REACT === '1';
+
+  if (useReact) {
+    try {
+      const handler = buildToolHandler({ condoId: args.condoId });
+      // Minimal initial context for ReAct — the model can fetch the rest
+      // via tools. We keep condominium + request + saved vendor list
+      // because those are universally relevant; building_memory + cost
+      // history are pulled on demand via search_past_tickets +
+      // get_vendor_history.
+      const reactContext = {
+        generated_at: context.generated_at,
+        request: context.request,
+        condominium: context.condominium,
+        prior_turns: context.prior_turns,
+        tool_limitations: context.tool_limitations,
+      };
+      const result = await chatWithTools(
+        [
+          { role: 'system', content: ADMIN_AGENT_REACT_SYS },
+          { role: 'user', content: JSON.stringify(reactContext) },
+        ],
+        ADMIN_AGENT_TOOLS,
+        handler,
+        { maxTokens: 2_000, maxIterations: 6 }
+      );
+      toolTrace = result.toolCalls;
+      // The model is expected to terminate by calling submit_final_answer
+      // with the full plan in the input. Pull it from the most recent
+      // tool call; if missing, fall back to parsing text. If both fail,
+      // degrade to the deterministic fallback.
+      const finalCall = result.toolCalls.slice().reverse().find((c) => c.name === 'submit_final_answer');
+      if (finalCall?.input?.plan) {
+        raw = finalCall.input.plan;
+      } else if (result.text) {
+        raw = parseJsonLoose<any>(result.text) || null;
+      }
+      if (!raw) {
+        raw = fallbackAdminAgent(adminInput);
+        usedFallback = true;
+      }
+    } catch (err) {
+      console.warn('[agent-react] failed, falling back to single-shot:', (err as Error)?.message || err);
       raw = fallbackAdminAgent(adminInput);
       usedFallback = true;
     }
-  } catch {
-    raw = fallbackAdminAgent(adminInput);
-    usedFallback = true;
+  } else {
+    try {
+      const text = await chat(
+        [
+          { role: 'system', content: ADMIN_AGENT_SYS },
+          { role: 'user', content: JSON.stringify(context) },
+        ],
+        { jsonMode: true, maxTokens: 2_000 }
+      );
+      raw = parseJsonLoose<any>(text);
+      if (!raw) {
+        raw = fallbackAdminAgent(adminInput);
+        usedFallback = true;
+      }
+    } catch {
+      raw = fallbackAdminAgent(adminInput);
+      usedFallback = true;
+    }
   }
 
   const plan = sanitizeAdminAgentOutput(raw, adminInput);
@@ -486,6 +571,18 @@ export async function runAdminAgent(args: RunAdminAgentArgs): Promise<RunAdminAg
     plan.building_memory = buildingMemory;
   } else {
     plan.building_memory = null;
+  }
+
+  // Surface the ReAct tool trace so the UI can render a "thinking" view
+  // ("checked past elevator tickets... pulled Otis history..."). Only
+  // present on the ReAct path; the single-shot path returns []. Cheap
+  // to include — even a 5-tool trace is a few KB.
+  if (toolTrace.length > 0) {
+    plan.agent_trace = toolTrace.map((t) => ({
+      tool: t.name,
+      input_keys: Object.keys(t.input || {}),
+      output_summary: summariseToolOutput(t.name, t.output),
+    }));
   }
 
   // Persist the turn to agent_turns when we have a thread + admin. The

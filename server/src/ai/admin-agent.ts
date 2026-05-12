@@ -173,6 +173,15 @@ export interface AdminAgentOutput {
     is_outside_business_hours: boolean;
     local_hour: number;
   } | null;
+  // ReAct tool-use trace (only present when AGENT_USE_REACT=1). Lets the
+  // UI render "checked past tickets... pulled Otis history..." style
+  // thinking pane. Each entry is a one-line summary, not raw JSON, so
+  // the trace pane doesn't have to parse server-internal shapes.
+  agent_trace?: Array<{
+    tool: string;
+    input_keys: string[];
+    output_summary: string;
+  }>;
   _fallback?: boolean;
 }
 

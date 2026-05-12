@@ -72,6 +72,153 @@ export async function chat(messages: AIMessage[], opts: AIOpts = {}): Promise<st
   return String(content);
 }
 
+// ReAct tool-use loop. OpenRouter speaks OpenAI's tool-calling protocol
+// regardless of which model backs the request (Anthropic, DeepSeek, etc.),
+// so we use that wire format here.
+//
+// Caller supplies:
+//   - tools: schema descriptions the model sees
+//   - toolHandler: (name, input) => arbitrary JSON, run server-side
+//
+// The loop:
+//   1. Send messages + tools.
+//   2. If response is plain text, return it.
+//   3. If response contains tool_calls, run each via toolHandler,
+//      append both the assistant's tool_calls message AND the tool
+//      results to the conversation, then call the model again.
+//   4. Cap at maxIterations to prevent runaway loops on misbehaving
+//      models. Default 6 — enough for any reasonable agent task,
+//      cheap enough that a stuck loop costs $0.10 not $10.
+//
+// Falls back to throwing on errors so callers can degrade to the
+// existing single-shot path.
+
+export interface AIToolSchema {
+  type: 'function';
+  function: {
+    name: string;
+    description: string;
+    parameters: Record<string, unknown>;
+  };
+}
+
+export type AIToolHandler = (name: string, input: any) => Promise<any>;
+
+export interface ChatWithToolsResult {
+  text: string;
+  toolCalls: Array<{ name: string; input: any; output: any }>;
+  iterations: number;
+}
+
+export async function chatWithTools(
+  initialMessages: AIMessage[],
+  tools: AIToolSchema[],
+  toolHandler: AIToolHandler,
+  opts: AIOpts & { maxIterations?: number } = {},
+): Promise<ChatWithToolsResult> {
+  if (!API_KEY) {
+    console.warn('[ai] OPENROUTER_API_KEY not set - tool-use disabled');
+    throw new Error('NO_API_KEY');
+  }
+  const model = opts.model ?? (opts.tier === 'cheap' ? CHEAP_MODEL : MODEL);
+  const maxIterations = opts.maxIterations ?? 6;
+  const toolCalls: ChatWithToolsResult['toolCalls'] = [];
+  // Conversation grows each iteration — clone the initial messages so
+  // callers don't see their array mutated, then append assistant + tool
+  // responses as we go.
+  const messages: any[] = initialMessages.map((m) => ({ role: m.role, content: m.content }));
+
+  for (let iter = 0; iter < maxIterations; iter++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    let res;
+    try {
+      res = await fetch(URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${API_KEY}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://condoos.dev',
+          'X-Title': 'CondoOS',
+        },
+        body: JSON.stringify({
+          model,
+          messages,
+          max_tokens: opts.maxTokens ?? 2_000,
+          temperature: opts.temperature ?? 0.3,
+          tools,
+          tool_choice: 'auto',
+        }),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    if (!res.ok) {
+      const txt = await res.text();
+      console.error('[ai] OpenRouter tool-use error', res.status, txt.slice(0, 300));
+      throw new Error(`OpenRouter ${res.status}`);
+    }
+    const data: any = await res.json();
+    const choice = data?.choices?.[0];
+    if (!choice) throw new Error('OpenRouter empty response');
+
+    const message = choice.message || {};
+    const finishReason = choice.finish_reason;
+
+    // If the model didn't request tools, we're done — return its text.
+    const calls = Array.isArray(message.tool_calls) ? message.tool_calls : [];
+    if (calls.length === 0 || finishReason === 'stop') {
+      return { text: String(message.content || ''), toolCalls, iterations: iter + 1 };
+    }
+
+    // Echo the assistant turn back into the conversation (required by
+    // the protocol — the next request must include the tool_calls the
+    // model just made so the tool_result rows it sends next have
+    // matching ids).
+    messages.push({
+      role: 'assistant',
+      content: message.content || null,
+      tool_calls: calls,
+    });
+
+    // Run each tool. We do these sequentially because most of our
+    // handlers are cheap synchronous DB reads — Promise.all here would
+    // burn a connection pool slot per call for negligible wall-time gain.
+    for (const call of calls) {
+      const name = call.function?.name || '';
+      let input: any = {};
+      try {
+        input = call.function?.arguments ? JSON.parse(call.function.arguments) : {};
+      } catch {
+        input = { _parse_error: 'invalid_json_arguments' };
+      }
+      let output: any;
+      try {
+        output = await toolHandler(name, input);
+      } catch (err) {
+        output = { error: (err as Error)?.message || 'tool_handler_failed' };
+      }
+      toolCalls.push({ name, input, output });
+      messages.push({
+        role: 'tool',
+        tool_call_id: call.id,
+        content: JSON.stringify(output),
+      });
+    }
+  }
+
+  // Out of iterations — return whatever assistant text we have plus a
+  // marker so the caller knows the loop didn't converge cleanly.
+  const last = messages[messages.length - 1];
+  return {
+    text: typeof last?.content === 'string' ? last.content : '',
+    toolCalls,
+    iterations: maxIterations,
+  };
+}
+
 /**
  * Escapes literal control characters (\n, \r, \t) that appear inside JSON
  * string literals. Claude (and other models) sometimes emits raw newlines

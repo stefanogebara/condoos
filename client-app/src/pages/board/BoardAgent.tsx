@@ -61,6 +61,12 @@ interface BuildingMemory {
   local_hour: number;
 }
 
+interface AgentTraceStep {
+  tool: string;
+  input_keys: string[];
+  output_summary: string;
+}
+
 interface AgentResult {
   summary: string;
   task_type: string;
@@ -69,6 +75,7 @@ interface AgentResult {
   existing_network_fit: NetworkFit[];
   options: AgentOption[];
   building_memory?: BuildingMemory | null;
+  agent_trace?: AgentTraceStep[];
   vendor_search_plan: {
     search_queries: string[];
     shortlisting_criteria: string[];
@@ -490,6 +497,32 @@ export default function BoardAgent() {
               {latestTurn.user_task}
             </div>
           )}
+          {/* Tool-use trace — only renders on ReAct path. Shows what the
+              agent looked up before answering. Builds trust ("it actually
+              checked the past tickets, didn't just make this up") and
+              doubles as a debugging surface when output looks off. */}
+          {result.agent_trace && result.agent_trace.length > 0 && (
+            <details className="rounded-3xl bg-white/60 border border-white/70 px-4 py-3 text-sm">
+              <summary className="cursor-pointer text-dusk-400 inline-flex items-center gap-2">
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>{tr('Como o agente pesquisou')} ({result.agent_trace.length})</span>
+              </summary>
+              <ol className="mt-3 space-y-1.5 text-xs text-dusk-400">
+                {result.agent_trace.map((step, idx) => (
+                  <li key={idx} className="flex items-start gap-2">
+                    <span className="font-semibold text-sage-700 shrink-0">{idx + 1}.</span>
+                    <div className="min-w-0">
+                      <div className="font-medium text-dusk-500">{tr(step.tool)}</div>
+                      {step.output_summary && (
+                        <div className="text-dusk-300 mt-0.5">{step.output_summary}</div>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </details>
+          )}
+
           <GlassCard variant="clay" className="p-5">
             <div className="flex items-start justify-between gap-3">
               <div>
