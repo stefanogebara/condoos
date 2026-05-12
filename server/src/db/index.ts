@@ -332,6 +332,16 @@ export function initSchema() {
   addColumnIfMissing('amenity_reservations', 'cancelled_at',    `TEXT`);
   addColumnIfMissing('amenity_reservations', 'cancelled_by_user_id', `INTEGER REFERENCES users(id) ON DELETE SET NULL`);
   addColumnIfMissing('amenity_reservations', 'cancel_reason',   `TEXT`);
+  // Visitor parties + recurring access. These are additive so old visitor rows
+  // remain valid; party requests are regular guest visits with a names list.
+  addColumnIfMissing('visitors', 'expected_guests', `INTEGER NOT NULL DEFAULT 0`);
+  addColumnIfMissing('visitors', 'guest_list',      `TEXT`);
+  addColumnIfMissing('visitors', 'recurring_days',  `TEXT`);
+  addColumnIfMissing('visitors', 'recurring_until', `TEXT`);
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_visitors_condo_expected
+      ON visitors(condominium_id, expected_at, status);
+  `);
   // Admin-configurable amenity reservation slots. Capacity is treated as the
   // max number of people in a slot; legacy rows without guests count as 1.
   addColumnIfMissing('amenities', 'slot_minutes',        `INTEGER NOT NULL DEFAULT 60`);

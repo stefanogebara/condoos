@@ -69,3 +69,28 @@ test('Concierge API: porteiro can mark a pending visitor approved', async ({ req
   expect(decide.ok(), `decide failed: ${decide.status()} ${await decide.text()}`).toBeTruthy();
   expect((await decide.json()).data.status).toBe('approved');
 });
+
+test('Concierge API: porteiro can notify resident about an arriving visitor', async ({ request }) => {
+  const resident = await login(request, 'resident@condoos.dev', 'resident123');
+  const residentHeaders = { Authorization: `Bearer ${resident.token}`, 'Content-Type': 'application/json' };
+  const created = await request.post(`${apiURL}/visitors`, {
+    headers: residentHeaders,
+    data: {
+      visitor_name: `E2E Notify ${Date.now()}`,
+      visitor_type: 'guest',
+      expected_at: new Date(Date.now() + 60 * 60_000).toISOString(),
+      pre_approve: true,
+    },
+  });
+  expect(created.ok(), `create visitor failed: ${created.status()} ${await created.text()}`).toBeTruthy();
+  const visitorId = (await created.json()).data.id;
+
+  const concierge = await login(request, 'porteiro@condoos.dev', 'porteiro123');
+  const notify = await request.post(`${apiURL}/concierge/notify`, {
+    headers: { Authorization: `Bearer ${concierge.token}`, 'Content-Type': 'application/json' },
+    data: { target_type: 'visitor', target_id: visitorId, message_type: 'visitor_arrived' },
+  });
+  expect(notify.ok(), `notify failed: ${notify.status()} ${await notify.text()}`).toBeTruthy();
+  const body = (await notify.json()).data;
+  expect(body.notified_user_id).toBe(resident.user.id);
+});

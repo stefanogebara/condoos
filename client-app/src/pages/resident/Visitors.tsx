@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
-import { DoorOpen, Plus, Clock, History as HistoryIcon } from 'lucide-react';
+import { CalendarDays, DoorOpen, Plus, Clock, History as HistoryIcon, PartyPopper, Repeat2 } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 import GlassCard from '../../components/GlassCard';
 import EmptyState from '../../components/EmptyState';
@@ -17,6 +17,10 @@ interface Visitor {
   expected_at: string | null;
   notes: string | null;
   created_at: string;
+  expected_guests?: number | null;
+  guest_list?: string | null;
+  recurring_days?: string | null;
+  recurring_until?: string | null;
 }
 
 const STATUS_LABEL: Record<Visitor['status'], string> = {
@@ -51,6 +55,7 @@ function isInHistory(v: Visitor, now: number, cutoffMs: number): boolean {
 }
 
 type Tab = 'upcoming' | 'history';
+type FormMode = 'single' | 'party';
 
 function nextDefaultExpectedAt(): string {
   // Default to "in 1 hour", rounded to the nearest 15 minutes — matches what
@@ -65,11 +70,17 @@ export default function Visitors() {
   const [rows, setRows] = useState<Visitor[]>([]);
   const [tab, setTab] = useState<Tab>('upcoming');
   const [form, setForm] = useState({
+    mode: 'single' as FormMode,
     visitor_name: '',
     visitor_type: 'guest',
     expected_at: nextDefaultExpectedAt(),
     notes: '',
     pre_approve: true,
+    expected_guests: '0',
+    guest_list: '',
+    recurring: false,
+    recurring_days: [] as number[],
+    recurring_until: '',
   });
   const [saving, setSaving] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -93,6 +104,59 @@ export default function Visitors() {
   }, [rows]);
 
   const list = tab === 'upcoming' ? upcoming : history;
+  const reusableVisitors = useMemo(() => {
+    const seen = new Set<string>();
+    return rows
+      .filter((v) => !v.guest_list)
+      .sort((a, b) => new Date(b.expected_at || b.created_at).getTime() - new Date(a.expected_at || a.created_at).getTime())
+      .filter((v) => {
+        const key = `${v.visitor_name.toLowerCase()}|${v.visitor_type}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .slice(0, 8);
+  }, [rows]);
+
+  function resetForm(next?: Partial<typeof form>) {
+    setForm({
+      mode: 'single',
+      visitor_name: '',
+      visitor_type: 'guest',
+      expected_at: nextDefaultExpectedAt(),
+      notes: '',
+      pre_approve: true,
+      expected_guests: '0',
+      guest_list: '',
+      recurring: false,
+      recurring_days: [],
+      recurring_until: '',
+      ...next,
+    });
+  }
+
+  function reuseVisitor(v: Visitor) {
+    resetForm({
+      mode: 'single',
+      visitor_name: v.visitor_name,
+      visitor_type: v.visitor_type,
+      notes: v.notes || '',
+      expected_at: nextDefaultExpectedAt(),
+      pre_approve: true,
+    });
+    setShowForm(true);
+    setTab('upcoming');
+  }
+
+  function toggleRecurringDay(day: number) {
+    setForm((current) => {
+      const exists = current.recurring_days.includes(day);
+      const recurring_days = exists
+        ? current.recurring_days.filter((d) => d !== day)
+        : [...current.recurring_days, day].sort((a, b) => a - b);
+      return { ...current, recurring_days };
+    });
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -100,31 +164,33 @@ export default function Visitors() {
     setSaving(true);
     try {
       const isFuture = form.expected_at && new Date(form.expected_at).getTime() > Date.now();
-      const preApprove = form.pre_approve && !!isFuture;
+      const isParty = form.mode === 'party';
+      const preApprove = (form.pre_approve && !!isFuture) || isParty || form.recurring;
+      const guestNames = form.guest_list.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
       await apiPost<{ status: string }>('/visitors', {
         visitor_name: form.visitor_name.trim(),
-        visitor_type: form.visitor_type,
+        visitor_type: isParty ? 'guest' : form.visitor_type,
         expected_at: form.expected_at ? new Date(form.expected_at).toISOString() : null,
         notes: form.notes.trim() || null,
         pre_approve: preApprove,
+        expected_guests: isParty ? Math.max(guestNames.length, parseInt(form.expected_guests, 10) || 0) : 0,
+        guest_list: isParty ? guestNames.join('\n') : null,
+        recurring_days: form.recurring ? form.recurring_days : [],
+        recurring_until: form.recurring && form.recurring_until ? new Date(`${form.recurring_until}T23:59:00`).toISOString() : null,
       });
       toast.success(
-        preApprove
-          ? 'Visita pré-aprovada — a portaria já tem a liberação'
-          : 'Solicitação enviada à portaria',
+        isParty
+          ? t('Festa registrada — a portaria recebeu a lista')
+          : preApprove
+          ? t('Visita pré-aprovada — a portaria já tem a liberação')
+          : t('Solicitação enviada à portaria'),
       );
-      setForm({
-        visitor_name: '',
-        visitor_type: 'guest',
-        expected_at: nextDefaultExpectedAt(),
-        notes: '',
-        pre_approve: true,
-      });
+      resetForm();
       setShowForm(false);
       setTab('upcoming');
       load();
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Falha ao registrar');
+      toast.error(err?.response?.data?.error || t('Falha ao registrar'));
     } finally { setSaving(false); }
   }
 
@@ -146,25 +212,53 @@ export default function Visitors() {
       {showForm && (
         <GlassCard className="p-6 mb-8 animate-fade-up">
           <form onSubmit={submit} className="grid md:grid-cols-2 gap-3">
+            <div className="md:col-span-2 inline-flex rounded-full bg-white/60 border border-white/70 p-1 w-fit">
+              {([
+                ['single', t('Visitante')],
+                ['party', t('Festa')],
+              ] as Array<[FormMode, string]>).map(([mode, label]) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setForm({ ...form, mode, visitor_name: mode === 'party' && !form.visitor_name ? t('Festa / evento') : form.visitor_name })}
+                  className={`px-4 py-2 rounded-full text-sm font-semibold transition ${form.mode === mode ? 'bg-dusk-400 text-cream-50' : 'text-dusk-300 hover:text-dusk-500'}`}
+                >
+                  {mode === 'party' ? <PartyPopper className="inline w-4 h-4 mr-1" /> : <DoorOpen className="inline w-4 h-4 mr-1" />}
+                  {label}
+                </button>
+              ))}
+            </div>
             <input
               className="input"
-              placeholder="Nome do visitante"
+              placeholder={form.mode === 'party' ? t('Nome da festa ou evento') : t('Nome do visitante')}
               required
               value={form.visitor_name}
               onChange={(e) => setForm({ ...form, visitor_name: e.target.value })}
             />
-            <select
-              className="input"
-              value={form.visitor_type}
-              onChange={(e) => setForm({ ...form, visitor_type: e.target.value })}
-            >
-              <option value="guest">Visita</option>
-              <option value="delivery">Entrega</option>
-              <option value="service">Serviço</option>
-              <option value="rideshare">Aplicativo</option>
-            </select>
+            {form.mode === 'single' ? (
+              <select
+                className="input"
+                value={form.visitor_type}
+                onChange={(e) => setForm({ ...form, visitor_type: e.target.value })}
+              >
+                <option value="guest">Visita</option>
+                <option value="delivery">Entrega</option>
+                <option value="service">Serviço</option>
+                <option value="rideshare">Aplicativo</option>
+              </select>
+            ) : (
+              <input
+                className="input"
+                type="number"
+                min={0}
+                max={500}
+                placeholder={t('Quantidade de convidados')}
+                value={form.expected_guests}
+                onChange={(e) => setForm({ ...form, expected_guests: e.target.value })}
+              />
+            )}
             <label className="block text-xs text-dusk-300 font-medium md:col-span-1">
-              Quando chega
+              {form.mode === 'party' ? t('Quando começa') : t('Quando chega')}
               <input
                 className="input mt-1"
                 type="datetime-local"
@@ -177,35 +271,110 @@ export default function Visitors() {
             </label>
             <input
               className="input"
-              placeholder="Observações (opcional)"
+              placeholder={t('Observações (opcional)')}
               value={form.notes}
               onChange={(e) => setForm({ ...form, notes: e.target.value })}
             />
-            <label className="md:col-span-2 flex items-start gap-3 p-3 rounded-2xl bg-white/45 border border-white/60 cursor-pointer hover:bg-white/70 transition">
-              <input
-                type="checkbox"
-                className="mt-1"
-                checked={form.pre_approve && !!isFutureExpected}
-                disabled={!isFutureExpected}
-                onChange={(e) => setForm({ ...form, pre_approve: e.target.checked })}
-              />
-              <div>
-                <div className="text-sm font-semibold text-dusk-500">
-                  Pré-aprovar a entrada
+            {form.mode === 'party' && (
+              <label className="md:col-span-2 block text-xs text-dusk-300">
+                {t('Lista de participantes (um nome por linha)')}
+                <textarea
+                  className="input mt-1 min-h-[130px] font-mono text-[13px]"
+                  placeholder={'Ana Souza\nBruno Lima\nCarla Ferreira'}
+                  value={form.guest_list}
+                  onChange={(e) => setForm({ ...form, guest_list: e.target.value })}
+                  maxLength={4000}
+                />
+                <span className="text-[11px] text-dusk-200 mt-1 block">{t('A portaria vê esta lista e libera por nome.')}</span>
+              </label>
+            )}
+            {form.mode === 'single' && (
+              <>
+                <label className="md:col-span-2 flex items-start gap-3 p-3 rounded-2xl bg-white/45 border border-white/60 cursor-pointer hover:bg-white/70 transition">
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    checked={form.pre_approve && !!isFutureExpected}
+                    disabled={!isFutureExpected}
+                    onChange={(e) => setForm({ ...form, pre_approve: e.target.checked })}
+                  />
+                  <div>
+                    <div className="text-sm font-semibold text-dusk-500">
+                      {t('Pré-aprovar entrada')}
+                    </div>
+                    <div className="text-xs text-dusk-300 mt-0.5">
+                      {isFutureExpected
+                        ? t('Quando chegar, a portaria já tem liberação — sem precisar te ligar.')
+                        : t('Disponível só para visitas marcadas para o futuro.')}
+                    </div>
+                  </div>
+                </label>
+                <div className="md:col-span-2 p-3 rounded-2xl bg-white/45 border border-white/60">
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="mt-1"
+                      checked={form.recurring}
+                      onChange={(e) => setForm({ ...form, recurring: e.target.checked })}
+                    />
+                    <div>
+                      <div className="text-sm font-semibold text-dusk-500 flex items-center gap-2"><Repeat2 className="w-4 h-4" /> {t('Visitante recorrente')}</div>
+                      <div className="text-xs text-dusk-300 mt-0.5">{t('Permite entrada em dias específicos, usando a hora marcada acima.')}</div>
+                    </div>
+                  </label>
+                  {form.recurring && (
+                    <div className="mt-3 grid md:grid-cols-[1fr_180px] gap-3">
+                      <div className="flex flex-wrap gap-2">
+                        {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'].map((label, day) => (
+                          <button
+                            key={label}
+                            type="button"
+                            onClick={() => toggleRecurringDay(day)}
+                            className={`px-3 py-2 rounded-full text-xs font-semibold transition ${form.recurring_days.includes(day) ? 'bg-sage-200 text-sage-800' : 'bg-white/60 text-dusk-300 hover:bg-white/80'}`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                      <label className="text-xs text-dusk-300">
+                        {t('Até')}
+                        <input className="input mt-1" type="date" value={form.recurring_until} onChange={(e) => setForm({ ...form, recurring_until: e.target.value })} />
+                      </label>
+                    </div>
+                  )}
                 </div>
-                <div className="text-xs text-dusk-300 mt-0.5">
-                  {isFutureExpected
-                    ? 'Quando o visitante chegar, a portaria já tem liberação — sem precisar te ligar.'
-                    : 'Disponível só para visitas marcadas para o futuro.'}
-                </div>
-              </div>
-            </label>
+              </>
+            )}
             <div className="md:col-span-2 flex justify-end">
               <Button type="submit" variant="primary" loading={saving}>
-                {form.pre_approve && isFutureExpected ? 'Pré-aprovar visita' : 'Enviar solicitação'}
+                {form.mode === 'party'
+                  ? t('Registrar festa')
+                  : form.recurring
+                    ? t('Salvar visitante recorrente')
+                    : form.pre_approve && isFutureExpected ? t('Pré-aprovar visita') : t('Enviar solicitação')}
               </Button>
             </div>
           </form>
+        </GlassCard>
+      )}
+
+      {showForm && reusableVisitors.length > 0 && (
+        <GlassCard className="p-5 mb-8">
+          <div className="flex items-center gap-2 mb-3 text-sm font-semibold text-dusk-500">
+            <HistoryIcon className="w-4 h-4" /> {t('Visitantes anteriores')}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {reusableVisitors.map((v) => (
+              <button
+                key={`${v.visitor_name}-${v.visitor_type}-${v.id}`}
+                type="button"
+                onClick={() => reuseVisitor(v)}
+                className="px-3 py-2 rounded-full bg-white/60 border border-white/70 text-sm text-dusk-400 hover:bg-white/80"
+              >
+                {v.visitor_name}
+              </button>
+            ))}
+          </div>
         </GlassCard>
       )}
 
@@ -291,6 +460,8 @@ export default function Visitors() {
                   : 'neutral'
                 }>{STATUS_LABEL[v.status] || v.status}</Badge>
                 <Badge tone="neutral">{t(TYPE_LABEL[v.visitor_type] || v.visitor_type)}</Badge>
+                {v.guest_list && <Badge tone="peach"><PartyPopper className="w-3 h-3" /> {t('Festa')}</Badge>}
+                {v.recurring_days && <Badge tone="sage"><Repeat2 className="w-3 h-3" /> {t('recorrente')}</Badge>}
               </div>
               {v.expected_at && (
                 <div className="text-sm text-dusk-300 mt-1">
@@ -298,6 +469,26 @@ export default function Visitors() {
                 </div>
               )}
               {v.notes && <div className="text-sm text-dusk-200 mt-1 italic">"{v.notes}"</div>}
+              {v.guest_list && (
+                <details className="mt-2">
+                  <summary className="text-xs text-dusk-400 underline decoration-dotted underline-offset-4 cursor-pointer">
+                    {t('Lista de participantes')} ({v.guest_list.split('\n').filter(Boolean).length})
+                  </summary>
+                  <pre className="mt-2 p-2 rounded-xl bg-white/50 text-xs text-dusk-400 whitespace-pre-wrap font-sans">{v.guest_list}</pre>
+                </details>
+              )}
+              {v.recurring_days && (
+                <div className="text-xs text-dusk-300 mt-2 flex items-center gap-1">
+                  <CalendarDays className="w-3 h-3" />
+                  {v.recurring_days.split(',').map((d) => ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'][Number(d)]).filter(Boolean).join(', ')}
+                  {v.recurring_until ? ` · ${t('Até').toLowerCase()} ${formatDateTime(v.recurring_until).split(',')[0]}` : ''}
+                </div>
+              )}
+              {tab === 'history' && !v.guest_list && (
+                <Button size="sm" variant="ghost" className="mt-3" onClick={() => reuseVisitor(v)}>
+                  {t('Usar de novo')}
+                </Button>
+              )}
             </div>
           </GlassCard>
         ))}

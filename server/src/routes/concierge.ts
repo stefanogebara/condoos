@@ -12,6 +12,7 @@ import db from '../db';
 import { requireAuth, requireRole, getActiveCondoId, AuthedRequest } from '../lib/auth';
 import { ok, fail } from '../lib/respond';
 import { audit } from '../lib/audit';
+import { notifyUsers } from '../lib/whatsapp';
 
 const router = Router();
 
@@ -30,9 +31,11 @@ router.get('/today', requireAuth, requireConciergeOrAdmin, (req: AuthedRequest, 
   const startISO = startOfDay.toISOString();
   const endISO = endOfDay.toISOString();
 
-  const visitors = db.prepare(
+  const weekday = startOfDay.getDay();
+  const visitorRows = db.prepare(
     `SELECT v.id, v.visitor_name, v.visitor_type, v.expected_at, v.status, v.notes,
             v.host_id, v.created_at, v.decided_at,
+            v.expected_guests, v.guest_list, v.recurring_days, v.recurring_until,
             usr.first_name AS host_first, usr.last_name AS host_last, usr.unit_number
      FROM visitors v
      JOIN users usr ON usr.id = v.host_id
@@ -41,12 +44,25 @@ router.get('/today', requireAuth, requireConciergeOrAdmin, (req: AuthedRequest, 
        AND (
          v.expected_at IS NULL
          OR (v.expected_at >= ? AND v.expected_at < ?)
+         OR v.recurring_days IS NOT NULL
        )
      ORDER BY
        CASE v.status WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END,
        v.expected_at ASC,
        v.created_at ASC`
-  ).all(condoId, startISO, endISO);
+  ).all(condoId, startISO, endISO) as any[];
+
+  const visitors = visitorRows.filter((v) => {
+    if (!v.recurring_days) return true;
+    const days = String(v.recurring_days).split(',').map((d) => Number(d)).filter((d) => Number.isInteger(d));
+    if (!days.includes(weekday)) return false;
+    if (v.recurring_until) {
+      const until = new Date(v.recurring_until);
+      until.setHours(23, 59, 59, 999);
+      if (until < startOfDay) return false;
+    }
+    return true;
+  });
 
   const packages = db.prepare(
     `SELECT p.id, p.carrier, p.description, p.arrived_at, p.status,
@@ -58,7 +74,7 @@ router.get('/today', requireAuth, requireConciergeOrAdmin, (req: AuthedRequest, 
      ORDER BY p.arrived_at ASC`
   ).all(condoId);
 
-  const parties = db.prepare(
+  const amenityParties = db.prepare(
     `SELECT r.id, r.starts_at, r.ends_at, r.expected_guests, r.guest_list, r.notes,
             a.name AS amenity_name, a.icon AS amenity_icon,
             usr.first_name, usr.last_name, usr.unit_number
@@ -72,7 +88,72 @@ router.get('/today', requireAuth, requireConciergeOrAdmin, (req: AuthedRequest, 
      ORDER BY r.starts_at ASC`
   ).all(condoId, startISO, endISO);
 
-  return ok(res, { visitors, packages, parties, today: startISO });
+  const visitorParties = visitors
+    .filter((v) => v.guest_list || Number(v.expected_guests || 0) > 0)
+    .map((v) => ({
+      id: `visitor-${v.id}`,
+      source: 'visitor',
+      starts_at: v.expected_at,
+      ends_at: null,
+      expected_guests: v.expected_guests,
+      guest_list: v.guest_list,
+      notes: v.notes,
+      amenity_name: v.visitor_name,
+      amenity_icon: 'PartyPopper',
+      first_name: v.host_first,
+      last_name: v.host_last,
+      unit_number: v.unit_number,
+    }));
+
+  return ok(res, { visitors, packages, parties: [...amenityParties, ...visitorParties], today: startISO });
+});
+
+const notifySchema = z.object({
+  target_type: z.enum(['visitor', 'package']),
+  target_id: z.coerce.number().int().positive(),
+  message_type: z.enum(['visitor_arrived', 'package_arrived', 'food_delivery_arrived']).default('visitor_arrived'),
+});
+
+router.post('/notify', requireAuth, requireConciergeOrAdmin, async (req: AuthedRequest, res) => {
+  const parsed = notifySchema.safeParse(req.body || {});
+  if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
+  const condoId = getActiveCondoId(req);
+  const { target_type, target_id, message_type } = parsed.data;
+
+  let userId: number | null = null;
+  let body = '';
+  if (target_type === 'visitor') {
+    const row = db.prepare(
+      `SELECT v.visitor_name, usr.id AS user_id, usr.unit_number
+       FROM visitors v
+       JOIN users usr ON usr.id = v.host_id
+       WHERE v.id = ? AND v.condominium_id = ?`
+    ).get(target_id, condoId) as { visitor_name: string; user_id: number; unit_number: string | null } | undefined;
+    if (!row) return fail(res, 'not_found', 404);
+    userId = row.user_id;
+    body = `CondoOS: ${row.visitor_name} arrived at the front desk${row.unit_number ? ` for unit ${row.unit_number}` : ''}.`;
+  } else {
+    const row = db.prepare(
+      `SELECT p.carrier, p.description, usr.id AS user_id, usr.unit_number
+       FROM packages p
+       JOIN users usr ON usr.id = p.recipient_id
+       WHERE p.id = ? AND p.condominium_id = ?`
+    ).get(target_id, condoId) as { carrier: string; description: string | null; user_id: number; unit_number: string | null } | undefined;
+    if (!row) return fail(res, 'not_found', 404);
+    userId = row.user_id;
+    const label = message_type === 'food_delivery_arrived' ? 'food delivery' : `${row.carrier} package`;
+    body = `CondoOS: your ${label} has arrived at the front desk${row.unit_number ? ` for unit ${row.unit_number}` : ''}.`;
+  }
+
+  const result = await notifyUsers([userId], body);
+  audit(req, {
+    action: 'concierge.notify_resident',
+    target_type,
+    target_id,
+    condominium_id: condoId,
+    metadata: { message_type, notified_user_id: userId, attempted: result.attempted, sent: result.sent, skipped: result.skipped },
+  });
+  return ok(res, { notified_user_id: userId, message_type });
 });
 
 // Concierge invites a new concierge user (admin-only — concierges shouldn't

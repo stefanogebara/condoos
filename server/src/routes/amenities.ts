@@ -89,6 +89,25 @@ function queueWhatsAppReminder(userId: number, startsAt: Date, body: string) {
   ).run(userId, row?.phone || null, body, canSend ? 'pending' : 'skipped', canSend ? null : 'missing_phone_or_opt_in', nextAttemptAt);
 }
 
+function weeklyBookingWindow(now = new Date()) {
+  const openAt = new Date(now);
+  openAt.setHours(12, 0, 0, 0);
+  openAt.setDate(openAt.getDate() - openAt.getDay());
+  if (now < openAt) openAt.setDate(openAt.getDate() - 7);
+  const weekStart = new Date(openAt);
+  weekStart.setHours(0, 0, 0, 0);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekEnd.getDate() + 7);
+  const nextOpenAt = new Date(openAt);
+  nextOpenAt.setDate(nextOpenAt.getDate() + 7);
+  return { openAt, weekStart, weekEnd, nextOpenAt };
+}
+
+function withinOpenReservationWeek(starts: Date) {
+  const { weekStart, weekEnd } = weeklyBookingWindow();
+  return starts >= weekStart && starts < weekEnd;
+}
+
 router.get('/', requireAuth, (req: AuthedRequest, res) => {
   const includeInactive = req.user!.role === 'board_admin' && req.query.include_inactive === '1';
   const rows = db.prepare(
@@ -197,10 +216,16 @@ router.get('/:id/slots', requireAuth, (req: AuthedRequest, res) => {
   if (Number.isNaN(dayStart.getTime())) return fail(res, 'invalid_date', 400);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const maxDay = new Date(today);
-  maxDay.setDate(maxDay.getDate() + amenity.booking_window_days);
-  if (dayStart < today || dayStart > maxDay) {
-    return ok(res, { amenity_id: id, date, slots: [] });
+  const { openAt, weekStart, weekEnd, nextOpenAt } = weeklyBookingWindow();
+  if (dayStart < today || dayStart < weekStart || dayStart >= weekEnd) {
+    return ok(res, {
+      amenity_id: id,
+      date,
+      booking_opens_at: openAt.toISOString(),
+      booking_closes_at: weekEnd.toISOString(),
+      next_booking_opens_at: nextOpenAt.toISOString(),
+      slots: [],
+    });
   }
 
   const dayEnd = new Date(dayStart);
@@ -235,7 +260,14 @@ router.get('/:id/slots', requireAuth, (req: AuthedRequest, res) => {
     });
   }
 
-  return ok(res, { amenity_id: id, date, slots });
+  return ok(res, {
+    amenity_id: id,
+    date,
+    booking_opens_at: openAt.toISOString(),
+    booking_closes_at: weekEnd.toISOString(),
+    next_booking_opens_at: nextOpenAt.toISOString(),
+    slots,
+  });
 });
 
 router.post('/reservations', requireAuth, (req: AuthedRequest, res) => {
@@ -248,6 +280,7 @@ router.post('/reservations', requireAuth, (req: AuthedRequest, res) => {
     return fail(res, 'invalid_time', 400);
   }
   if (ends <= starts) return fail(res, 'ends_must_be_after_starts', 400);
+  if (!withinOpenReservationWeek(starts)) return fail(res, 'outside_booking_window', 400);
 
   // Amenity must belong to the user's condo.
   const amenity = db.prepare(

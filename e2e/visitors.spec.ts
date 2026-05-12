@@ -56,3 +56,69 @@ test('Visitors API: pre_approve=false keeps status=pending (legacy flow)', async
   const body = (await created.json()).data;
   expect(body.status).toBe('pending');
 });
+
+test('Visitors API: party guest list is approved and visible to concierge', async ({ request }) => {
+  const token = await residentToken(request);
+  const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+  const today = new Date(Date.now() + 60 * 60_000).toISOString();
+  const created = await request.post(`${apiURL}/visitors`, {
+    headers,
+    data: {
+      visitor_name: `E2E Party ${Date.now()}`,
+      visitor_type: 'guest',
+      expected_at: today,
+      expected_guests: 3,
+      guest_list: 'Ana Souza\nBruno Lima\nCarla Ferreira',
+      notes: 'Birthday list',
+      pre_approve: true,
+    },
+  });
+  expect(created.ok(), `party create failed: ${created.status()} ${await created.text()}`).toBeTruthy();
+  const party = (await created.json()).data;
+  expect(party.status).toBe('approved');
+
+  const conciergeLogin = await request.post(`${apiURL}/auth/login`, {
+    data: { email: 'porteiro@condoos.dev', password: 'porteiro123' },
+  });
+  expect(conciergeLogin.ok()).toBeTruthy();
+  const conciergeToken = (await conciergeLogin.json()).data.token;
+  const todayRes = await request.get(`${apiURL}/concierge/today`, {
+    headers: { Authorization: `Bearer ${conciergeToken}` },
+  });
+  expect(todayRes.ok()).toBeTruthy();
+  const todayBody = (await todayRes.json()).data;
+  expect(todayBody.parties.some((p: any) => String(p.id) === `visitor-${party.id}` && p.guest_list.includes('Ana Souza'))).toBe(true);
+});
+
+test('Visitors API: recurring visitor surfaces on matching weekday for concierge', async ({ request }) => {
+  const token = await residentToken(request);
+  const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+  const expected = new Date(Date.now() + 60 * 60_000);
+  const weekday = expected.getDay();
+  const created = await request.post(`${apiURL}/visitors`, {
+    headers,
+    data: {
+      visitor_name: `E2E Recurring ${Date.now()}`,
+      visitor_type: 'service',
+      expected_at: expected.toISOString(),
+      recurring_days: [weekday],
+      recurring_until: new Date(Date.now() + 14 * 24 * 3600 * 1000).toISOString(),
+      pre_approve: true,
+    },
+  });
+  expect(created.ok(), `recurring create failed: ${created.status()} ${await created.text()}`).toBeTruthy();
+  const body = (await created.json()).data;
+  expect(body.status).toBe('approved');
+
+  const conciergeLogin = await request.post(`${apiURL}/auth/login`, {
+    data: { email: 'porteiro@condoos.dev', password: 'porteiro123' },
+  });
+  expect(conciergeLogin.ok()).toBeTruthy();
+  const conciergeToken = (await conciergeLogin.json()).data.token;
+  const todayRes = await request.get(`${apiURL}/concierge/today`, {
+    headers: { Authorization: `Bearer ${conciergeToken}` },
+  });
+  expect(todayRes.ok()).toBeTruthy();
+  const todayBody = (await todayRes.json()).data;
+  expect(todayBody.visitors.some((v: any) => v.id === body.id && v.recurring_days === String(weekday))).toBe(true);
+});

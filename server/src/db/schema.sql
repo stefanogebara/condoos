@@ -49,6 +49,10 @@ CREATE TABLE IF NOT EXISTS visitors (
   expected_at      TEXT,
   status           TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','denied','arrived','completed')),
   notes            TEXT,
+  expected_guests  INTEGER NOT NULL DEFAULT 0,
+  guest_list       TEXT,
+  recurring_days   TEXT,
+  recurring_until  TEXT,
   created_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   decided_at       TEXT
 );

@@ -17,6 +17,10 @@ const createVisitorSchema = z.object({
   expected_at: z.string().datetime().or(z.string().regex(/^\d{4}-\d{2}-\d{2}/)).optional().nullable(),
   notes: z.string().max(500).optional().nullable(),
   pre_approve: z.boolean().optional(),
+  expected_guests: z.coerce.number().int().min(0).max(500).optional().default(0),
+  guest_list: z.string().max(4000).optional().nullable(),
+  recurring_days: z.array(z.coerce.number().int().min(0).max(6)).max(7).optional().default([]),
+  recurring_until: z.string().datetime().or(z.string().regex(/^\d{4}-\d{2}-\d{2}/)).optional().nullable(),
 });
 
 router.get('/', requireAuth, (req: AuthedRequest, res) => {
@@ -38,30 +42,50 @@ router.post('/', requireAuth, (req: AuthedRequest, res) => {
   const u = req.user!;
   const parsed = createVisitorSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
-  const { visitor_name, visitor_type, expected_at, notes, pre_approve } = parsed.data;
+  const {
+    visitor_name, visitor_type, expected_at, notes, pre_approve,
+    expected_guests, guest_list, recurring_days, recurring_until,
+  } = parsed.data;
+  const cleanGuestList = guest_list
+    ? guest_list.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).join('\n').slice(0, 4000)
+    : null;
+  const cleanRecurringDays = Array.from(new Set(recurring_days || [])).sort((a, b) => a - b);
+  const isRecurring = cleanRecurringDays.length > 0;
 
   // Pre-approval (#9 in the QA checklist): when the resident books a future
   // visit, the host is the one approving — so we set status='approved'
   // immediately and stamp decided_at. Porteiros / board admins still get the
   // /:id/decide endpoint for ad-hoc walk-ups that arrive without warning.
-  const status = pre_approve === true ? 'approved' : 'pending';
-  const decidedAt = pre_approve === true ? new Date().toISOString() : null;
+  const status = pre_approve === true || isRecurring || cleanGuestList ? 'approved' : 'pending';
+  const decidedAt = status === 'approved' ? new Date().toISOString() : null;
 
   const row = db.prepare(
-    `INSERT INTO visitors (condominium_id, host_id, visitor_name, visitor_type, expected_at, notes, status, decided_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO visitors (
+       condominium_id, host_id, visitor_name, visitor_type, expected_at, notes,
+       status, decided_at, expected_guests, guest_list, recurring_days, recurring_until
+     )
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     u.condominium_id, u.id,
     visitor_name, visitor_type,
     expected_at || null, notes || null,
     status, decidedAt,
+    expected_guests, cleanGuestList,
+    isRecurring ? cleanRecurringDays.join(',') : null,
+    recurring_until || null,
   );
   audit(req, {
     action: 'visitor.create',
     target_type: 'visitor',
     target_id: Number(row.lastInsertRowid),
     condominium_id: u.condominium_id,
-    metadata: { visitor_type, pre_approve: pre_approve === true },
+    metadata: {
+      visitor_type,
+      pre_approve: pre_approve === true,
+      expected_guests,
+      has_guest_list: !!cleanGuestList,
+      recurring_days: cleanRecurringDays,
+    },
   });
   return ok(res, { id: row.lastInsertRowid, status });
 });

@@ -1,13 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import toast from 'react-hot-toast';
-import { MessageCircle, Save, User } from 'lucide-react';
+import { User } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 import GlassCard from '../../components/GlassCard';
-import Button from '../../components/Button';
-import Badge from '../../components/Badge';
-import { apiGet, apiPatch } from '../../lib/api';
-import { track } from '../../lib/analytics';
-import { t } from '../../lib/i18n';
+import { apiGet } from '../../lib/api';
 
 interface Me {
   id: number;
@@ -21,30 +16,12 @@ interface Me {
 
 export default function Settings() {
   const [me, setMe] = useState<Me | null>(null);
-  const [form, setForm] = useState({ phone: '', whatsapp_opt_in: false });
-  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     apiGet<Me>('/users/me').then((m) => {
       setMe(m);
-      setForm({ phone: m.phone || '', whatsapp_opt_in: !!m.whatsapp_opt_in });
     }).catch(() => {});
   }, []);
-
-  async function save() {
-    setSaving(true);
-    try {
-      const updated = await apiPatch<Me>('/users/me', {
-        phone: form.phone || null,
-        whatsapp_opt_in: form.whatsapp_opt_in,
-      });
-      track('whatsapp_optin_set', { opt_in: form.whatsapp_opt_in, has_phone: Boolean(form.phone) });
-      setMe(updated);
-      toast.success(t('Preferências salvas'));
-    } catch (err: any) {
-      toast.error(err?.response?.data?.error || t('Não foi possível salvar'));
-    } finally { setSaving(false); }
-  }
 
   if (!me) return null;
 
@@ -66,45 +43,6 @@ export default function Settings() {
         </div>
       </GlassCard>
 
-      <GlassCard className="p-6">
-        <h3 className="font-display text-lg text-dusk-500 mb-1 flex items-center gap-2"><MessageCircle className="w-5 h-5" /> Notificações no WhatsApp</h3>
-        <p className="text-sm text-dusk-400 mb-4">
-          Receba avisos no WhatsApp: convocação de assembleia, abertura de votação, chegada de encomenda.
-        </p>
-        <div className="grid md:grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs text-dusk-300 uppercase tracking-wider">Número com DDD</label>
-            <input
-              className="input mt-1"
-              type="tel"
-              placeholder="+55 11 99999-0000"
-              value={form.phone}
-              onChange={(e) => setForm({ ...form, phone: e.target.value })}
-            />
-          </div>
-          <div className="flex items-end">
-            <label className="flex items-center gap-2 text-sm text-dusk-500 cursor-pointer">
-              <input
-                type="checkbox"
-                className="w-4 h-4 rounded border-dusk-200"
-                checked={form.whatsapp_opt_in}
-                onChange={(e) => setForm({ ...form, whatsapp_opt_in: e.target.checked })}
-              />
-              Autorizar notificações pelo WhatsApp
-            </label>
-          </div>
-        </div>
-        <div className="flex items-center justify-between mt-4">
-          <div>
-            {me.whatsapp_opt_in && me.phone
-              ? <Badge tone="sage">Ativo · {me.phone}</Badge>
-              : <Badge tone="neutral">Desativado</Badge>}
-          </div>
-          <Button variant="primary" size="sm" onClick={save} loading={saving} leftIcon={<Save className="w-4 h-4" />}>
-            Salvar
-          </Button>
-        </div>
-      </GlassCard>
     </>
   );
 }

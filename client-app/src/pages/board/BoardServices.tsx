@@ -238,14 +238,14 @@ function ServiceContactRow({ contact, onChanged }: { contact: ServiceContact; on
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="font-display text-xl text-dusk-500">{contact.company_name}</h3>
+            <h3 className="font-display text-xl text-dusk-500">{tr(contact.company_name)}</h3>
             <Badge tone="neutral">{categoryLabel(contact.category, locale)}</Badge>
             {contact.preferred ? <Badge tone="sage"><Star className="w-3 h-3" /> {tr('preferido')}</Badge> : null}
             {contact.emergency_available ? <Badge tone="warning"><AlertTriangle className="w-3 h-3" /> {tr('emergência')}</Badge> : null}
             {!contact.active ? <Badge tone="neutral">{tr('inativo')}</Badge> : null}
           </div>
           {contact.contact_name && <p className="text-sm text-dusk-400 mt-1">{contact.contact_name}</p>}
-          {contact.service_scope && <p className="text-sm text-dusk-300 mt-2">{contact.service_scope}</p>}
+          {contact.service_scope && <p className="text-sm text-dusk-300 mt-2">{tr(contact.service_scope)}</p>}
           <div className="mt-3 flex flex-wrap gap-2 text-xs text-dusk-300">
             {contact.phone && <span className="rounded-full bg-white/60 px-3 py-1">{tr('Tel:')} {contact.phone}</span>}
             {contact.whatsapp && <span className="rounded-full bg-white/60 px-3 py-1">WhatsApp: {contact.whatsapp}</span>}
@@ -254,7 +254,7 @@ function ServiceContactRow({ contact, onChanged }: { contact: ServiceContact; on
             {contact.contract_url && <a className="inline-flex items-center gap-1 rounded-full bg-white/60 px-3 py-1 hover:text-dusk-500" href={contact.contract_url} target="_blank" rel="noopener noreferrer"><ExternalLink className="w-3 h-3" /> {tr('contrato')}</a>}
             {contact.last_used_at && <span className="rounded-full bg-white/60 px-3 py-1">{tr('último uso:')} {formatDate(contact.last_used_at)}</span>}
           </div>
-          {contact.notes && <div className="mt-3 text-xs text-dusk-300 bg-white/50 rounded-2xl p-3">{contact.notes}</div>}
+          {contact.notes && <div className="mt-3 text-xs text-dusk-300 bg-white/50 rounded-2xl p-3">{tr(contact.notes)}</div>}
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => setEditing(true)} className="p-2 text-dusk-300 hover:text-dusk-500" title={tr('Editar contato')} aria-label={`${tr('Editar contato')} ${contact.company_name}`}>

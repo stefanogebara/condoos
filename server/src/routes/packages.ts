@@ -30,7 +30,7 @@ router.post('/:id/pickup', requireAuth, (req: AuthedRequest, res) => {
     `SELECT * FROM packages WHERE id = ? AND condominium_id = ?`
   ).get(id, u.condominium_id) as any;
   if (!pkg) return fail(res, 'not_found', 404);
-  if (u.role !== 'board_admin' && pkg.recipient_id !== u.id) return fail(res, 'forbidden', 403);
+  if (!['board_admin', 'concierge'].includes(u.role) && pkg.recipient_id !== u.id) return fail(res, 'forbidden', 403);
   if (pkg.status === 'picked_up') return fail(res, 'already_picked_up', 409);
   db.prepare(`UPDATE packages SET status='picked_up', picked_up_at=CURRENT_TIMESTAMP WHERE id=?`).run(id);
   audit(req, {

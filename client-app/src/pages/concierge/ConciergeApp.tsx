@@ -33,6 +33,10 @@ interface VisitorRow {
   host_first: string;
   host_last: string;
   unit_number: string | null;
+  expected_guests?: number | null;
+  guest_list?: string | null;
+  recurring_days?: string | null;
+  recurring_until?: string | null;
 }
 interface PackageRow {
   id: number;
@@ -45,9 +49,9 @@ interface PackageRow {
   unit_number: string | null;
 }
 interface PartyRow {
-  id: number;
-  starts_at: string;
-  ends_at: string;
+  id: number | string;
+  starts_at: string | null;
+  ends_at: string | null;
   expected_guests: number | null;
   guest_list: string | null;
   notes: string | null;
@@ -176,6 +180,15 @@ export default function ConciergeApp() {
     }
   }
 
+  async function notifyResident(target_type: 'visitor' | 'package', target_id: number, message_type: 'visitor_arrived' | 'package_arrived' | 'food_delivery_arrived') {
+    try {
+      await apiPost('/concierge/notify', { target_type, target_id, message_type });
+      toast.success(t('Morador avisado'));
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || t('Falha ao avisar'));
+    }
+  }
+
   const totals = useMemo(() => ({
     visitors: data?.visitors.filter((v) => v.status !== 'completed' && v.status !== 'arrived').length || 0,
     packages: data?.packages.length || 0,
@@ -257,7 +270,18 @@ export default function ConciergeApp() {
                         {v.status === 'approved' && (
                           <Button size="sm" variant="primary" onClick={() => markArrived(v)} leftIcon={<Check className="w-3.5 h-3.5" />}>Marcar como chegou</Button>
                         )}
+                        <Button size="sm" variant="ghost" onClick={() => notifyResident('visitor', v.id, 'visitor_arrived')} leftIcon={<Bell className="w-3.5 h-3.5" />}>Avisar apto</Button>
                       </div>
+                      {v.guest_list && (
+                        <details className="mt-2">
+                          <summary className="text-xs text-dusk-400 underline decoration-dotted underline-offset-4 cursor-pointer">
+                            Lista da festa ({v.guest_list.split('\n').filter(Boolean).length})
+                          </summary>
+                          <pre className="text-xs text-dusk-400 mt-2 whitespace-pre-wrap font-sans bg-white/40 rounded-xl p-2">
+                            {v.guest_list}
+                          </pre>
+                        </details>
+                      )}
                     </div>
                   </div>
                 </GlassCard>
@@ -292,7 +316,11 @@ export default function ConciergeApp() {
                       {p.carrier}{p.description ? ` · ${p.description}` : ''} · chegou {formatDateTime(p.arrived_at)}
                     </div>
                   </div>
-                  <Button size="sm" variant="primary" onClick={() => pickupPackage(p)} leftIcon={<Check className="w-3.5 h-3.5" />}>Retirar</Button>
+                  <div className="flex flex-wrap gap-2 justify-end">
+                    <Button size="sm" variant="ghost" onClick={() => notifyResident('package', p.id, 'package_arrived')} leftIcon={<Bell className="w-3.5 h-3.5" />}>Avisar</Button>
+                    <Button size="sm" variant="ghost" onClick={() => notifyResident('package', p.id, 'food_delivery_arrived')} leftIcon={<Bell className="w-3.5 h-3.5" />}>Comida</Button>
+                    <Button size="sm" variant="primary" onClick={() => pickupPackage(p)} leftIcon={<Check className="w-3.5 h-3.5" />}>Retirar</Button>
+                  </div>
                 </GlassCard>
               ))}
             </div>
@@ -320,7 +348,7 @@ export default function ConciergeApp() {
                         )}
                       </div>
                       <div className="text-xs text-dusk-300 mt-1">
-                        {timeOnly(party.starts_at)}–{timeOnly(party.ends_at)} ·
+                        {timeOnly(party.starts_at)}{party.ends_at ? `–${timeOnly(party.ends_at)}` : ''} ·
                         {' '}{party.first_name} {party.last_name}
                         {party.unit_number && <span className="font-mono"> · Apto {party.unit_number}</span>}
                       </div>

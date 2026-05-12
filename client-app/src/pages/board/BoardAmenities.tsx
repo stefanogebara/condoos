@@ -88,7 +88,7 @@ function normalize(form: AmenityForm) {
     open_hour: clamp(Math.trunc(form.open_hour || 0), 0, 23),
     close_hour: clamp(Math.trunc(form.close_hour || 1), 1, 24),
     slot_minutes: slot,
-    booking_window_days: clamp(Math.trunc(form.booking_window_days || 14), 1, 365),
+    booking_window_days: 7,
     admin_notes: form.admin_notes?.trim() || '',
   };
 }
@@ -188,7 +188,7 @@ export default function BoardAmenities() {
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div>
             <h2 className="font-display text-xl text-dusk-500">Adicionar por modelo</h2>
-            <p className="text-sm text-dusk-300 mt-1">Comece com um padrão e ajuste capacidade, horários e duração dos slots.</p>
+            <p className="text-sm text-dusk-300 mt-1">{t('Comece com um padrão e ajuste capacidade, horários de funcionamento e duração dos slots.')}</p>
           </div>
           <Badge tone="sage">capacidade = pessoas por slot</Badge>
         </div>
@@ -542,11 +542,9 @@ function AmenityEditor({
           Fecha às
           <input type="number" min={1} max={24} className="input mt-1" value={form.close_hour} onChange={(e) => setForm({ ...form, close_hour: parseInt(e.target.value) || 1 })} />
         </label>
-        <label className="block text-xs text-dusk-300 font-medium">
-          Reservar com antecedência
-          <input type="number" min={1} max={365} className="input mt-1" value={form.booking_window_days} onChange={(e) => setForm({ ...form, booking_window_days: parseInt(e.target.value) || 14 })} />
-          <span className="text-[11px] text-dusk-200 mt-1 block">Número de dias que aparecem para os moradores.</span>
-        </label>
+        <div className="rounded-2xl bg-white/60 border border-white/70 p-4 text-sm text-dusk-300">
+          {t('As reservas abrem todo domingo ao meio-dia para a semana em curso. O administrador controla apenas horários, duração e capacidade.')}
+        </div>
         <label className="block text-xs text-dusk-300 font-medium">
           Status
           <select className="input mt-1" value={form.active === false ? '0' : '1'} onChange={(e) => setForm({ ...form, active: e.target.value === '1' })}>

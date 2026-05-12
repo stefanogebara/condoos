@@ -51,8 +51,28 @@ function friendlyBookingError(code: string | undefined): string {
     ends_must_be_after_starts: 'End time must be after start time.',
     outside_open_hours: 'Booking must stay within the amenity open hours.',
     amenity_conflict: 'That time conflicts with an existing reservation.',
+    outside_booking_window: 'Reservations open Sunday at midday for the current week only.',
   };
   return errors[code || ''] || 'Booking failed';
+}
+
+function currentBookingWeek() {
+  const now = new Date();
+  const openAt = new Date(now);
+  openAt.setHours(12, 0, 0, 0);
+  openAt.setDate(openAt.getDate() - openAt.getDay());
+  if (now < openAt) openAt.setDate(openAt.getDate() - 7);
+  const start = new Date(openAt);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 6);
+  const nextOpen = new Date(openAt);
+  nextOpen.setDate(nextOpen.getDate() + 7);
+  return {
+    min: start.toISOString().slice(0, 10),
+    max: end.toISOString().slice(0, 10),
+    nextOpen,
+  };
 }
 
 export default function Amenities() {
@@ -72,6 +92,7 @@ export default function Amenities() {
   const [loading, setLoading]           = useState(true);
   const [loadError, setLoadError]       = useState(false);
   const [reservationView, setReservationView] = useState<'mine' | 'building'>('mine');
+  const bookingWeek = currentBookingWeek();
 
   const load = () => {
     setLoadError(false);
@@ -106,7 +127,8 @@ export default function Amenities() {
     setPartySize('1');
     setGuestList('');
     setPartyNotes('');
-    setBookingDate(new Date().toISOString().slice(0, 10));
+    const todayKey = new Date().toISOString().slice(0, 10);
+    setBookingDate(todayKey < bookingWeek.min || todayKey > bookingWeek.max ? bookingWeek.min : todayKey);
   }
 
   async function book(e: React.FormEvent) {
@@ -171,6 +193,9 @@ export default function Amenities() {
           <div>
             <h2 id="available-amenities" className="font-display text-xl text-dusk-500">{tr('Reservar área comum')}</h2>
             <p className="text-sm text-dusk-300 mt-1">{tr('Escolha um espaço e um horário disponível.')}</p>
+            <p className="text-xs text-dusk-200 mt-1">
+              {tr('As reservas abrem todo domingo ao meio-dia e valem apenas para a semana em curso.')}
+            </p>
           </div>
           {selected && (
             <Badge tone="sage">
@@ -262,7 +287,8 @@ export default function Amenities() {
                   className="input mt-1"
                   data-testid="amenity-date"
                   value={bookingDate}
-                  min={new Date().toISOString().slice(0, 10)}
+                  min={bookingWeek.min}
+                  max={bookingWeek.max}
                   onChange={(e) => setBookingDate(e.target.value)}
                   required
                 />
