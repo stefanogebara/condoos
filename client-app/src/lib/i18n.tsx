@@ -2044,6 +2044,15 @@ const phrases: Copy[] = [
   c('Arquivar essa conversa?', 'Archive this conversation?', '¿Archivar esta conversación?', 'Archiver cette conversation ?'),
   c('Falha ao arquivar', 'Failed to archive', 'Error al archivar', 'Échec de l\'archivage'),
   c('Arquivar', 'Archive', 'Archivar', 'Archiver'),
+  // Veto window UI on auto-dispatched scheduled sends.
+  c('Envio agendado pela IA em', 'AI send scheduled in', 'Envío programado por la IA en', 'Envoi programmé par l\'IA dans'),
+  c('— você pode cancelar antes.', '— you can cancel before then.', '— puedes cancelar antes.', '— vous pouvez annuler avant.'),
+  c('Cancelar envio', 'Cancel send', 'Cancelar envío', 'Annuler l\'envoi'),
+  c('Cancelando…', 'Cancelling…', 'Cancelando…', 'Annulation…'),
+  c('Envio cancelado', 'Send cancelled', 'Envío cancelado', 'Envoi annulé'),
+  c('Falha ao cancelar', 'Failed to cancel', 'Error al cancelar', 'Échec de l\'annulation'),
+  c('Cancelado:', 'Cancelled:', 'Cancelado:', 'Annulé :'),
+  c('admin_cancelled', 'manually cancelled by admin', 'cancelado manualmente por el administrador', 'annulé manuellement par l\'administrateur'),
 ];
 
 function c(pt: string, en: string, es: string, fr: string): Copy {

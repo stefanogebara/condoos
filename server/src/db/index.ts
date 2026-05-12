@@ -417,6 +417,21 @@ export function initSchema() {
     )
   `).run();
   db.prepare(`CREATE INDEX IF NOT EXISTS idx_ticket_dispatches_ticket ON ticket_dispatches(ticket_id, created_at)`).run();
+  // Roadmap item 3 — veto window on auto-dispatch. When the agent
+  // auto-fires a vendor outreach on a verified ticket, we don't send
+  // immediately: notification_outbox.next_attempt_at gets set to +5min,
+  // and ticket_dispatches.scheduled_send_after tracks the same time so
+  // the UI can show a countdown + cancel button. Admin presses cancel:
+  // ticket_dispatch.status='cancelled', outbox row flipped to status
+  // ='skipped' with reason='admin_cancelled' before the worker fires.
+  // Urgent + safety-critical tickets skip the window entirely (send_after
+  // set to NULL so the worker picks it up on the next tick).
+  addColumnIfMissing('ticket_dispatches', 'scheduled_send_after', `TEXT`);
+  addColumnIfMissing('ticket_dispatches', 'cancellation_reason',  `TEXT`);
+  addColumnIfMissing('ticket_dispatches', 'cancelled_by_user_id', `INTEGER REFERENCES users(id)`);
+  addColumnIfMissing('ticket_dispatches', 'cancelled_at',         `TEXT`);
+  db.prepare(`CREATE INDEX IF NOT EXISTS idx_ticket_dispatches_scheduled
+    ON ticket_dispatches(scheduled_send_after) WHERE scheduled_send_after IS NOT NULL`).run();
 
   // Roadmap item 2 — conversational thread. The agent workbench was
   // single-shot: every query was a fresh agent call with no memory of

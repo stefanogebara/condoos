@@ -75,6 +75,21 @@ const resolveSchema = z.object({
 // updates the ticket row when it lands. Failures are escalated into the same
 // admin-attention state used for missing vendors, so no verified ticket sits
 // silently without a plan.
+// How long to wait before sending an auto-dispatched message. The admin
+// gets a "scheduled in 5 min — cancel" banner. Urgent + safety-critical
+// tickets skip this entirely (send_after = null, worker fires on next
+// tick) because every minute matters for elevator entrapment / gas leak /
+// fire alarm scenarios.
+const AUTO_DISPATCH_VETO_SECONDS = 300;
+
+const SAFETY_CRITICAL_SET = new Set([
+  'elevator', 'fire_safety', 'gas', 'gas_leak', 'water', 'water_damage', 'security',
+]);
+
+function shouldSkipVetoWindow(priority: string, category: string): boolean {
+  return priority === 'urgent' && SAFETY_CRITICAL_SET.has(category);
+}
+
 export function dispatchAgentInBackground(ticketId: number, condoId: number, locale: string | undefined): void {
   void (async () => {
     try {
@@ -115,6 +130,75 @@ export function dispatchAgentInBackground(ticketId: number, condoId: number, loc
              updated_at = CURRENT_TIMESTAMP
          WHERE id = ?`
       ).run(JSON.stringify(result.plan), blocked ? 1 : 0, blocked ? 1 : 0, ticketId);
+
+      // === Auto-dispatch with veto window ===
+      // Gating conditions (ALL must hold) so we don't auto-send the wrong
+      // thing the wrong way to the wrong vendor. The bar is intentionally
+      // high — when in doubt, leave it as 'agent_dispatched' and let the
+      // admin click the existing dispatch button.
+      //
+      //   1. Plan named a vendor in our network (existing_network_fit[0]).
+      //   2. That vendor has a whatsapp number we can actually reach.
+      //   3. Vendor's category matches (or is alias-compatible with) the
+      //      ticket's category — guards against the model picking the
+      //      wrong saved vendor.
+      //   4. Not blocked from the categoryMatch check above.
+      //   5. No existing dispatch on this ticket yet — re-runs of the
+      //      agent (vendor-add auto-rewire) shouldn't double-dispatch.
+      if (blocked) return;
+      const topFit = result.plan?.existing_network_fit?.[0];
+      if (!topFit?.company_name) return;
+      const vendor = db.prepare(
+        `SELECT id, company_name, category, whatsapp, email, contact_name
+         FROM service_contacts
+         WHERE condominium_id = ? AND active = 1 AND company_name = ?`
+      ).get(condoId, topFit.company_name) as
+        | { id: number; company_name: string; category: string; whatsapp: string | null; email: string | null; contact_name: string | null }
+        | undefined;
+      if (!vendor || !vendor.whatsapp) return;
+
+      const existingDispatch = db.prepare(
+        `SELECT id FROM ticket_dispatches WHERE ticket_id = ? AND status NOT IN ('cancelled','failed') LIMIT 1`
+      ).get(ticketId);
+      if (existingDispatch) return;
+
+      // Pick the outreach message: prefer the model's WhatsApp-native
+      // one-liner (the new prompt enforces this shape); fall back to a
+      // short default if it's missing or unusually long.
+      const rawOutreach = String(result.plan?.vendor_search_plan?.outreach_message || '').trim();
+      const message = (rawOutreach && rawOutreach.length <= 600 ? rawOutreach :
+        `Oi, ${vendor.contact_name || ''}! ${ticket.title}. Pode atender hoje?`).slice(0, 4_000);
+
+      const skipVeto = shouldSkipVetoWindow(ticket.priority, ticket.category);
+      const sendAfter = skipVeto
+        ? null  // worker fires immediately on next tick
+        : new Date(Date.now() + AUTO_DISPATCH_VETO_SECONDS * 1000).toISOString().replace('T', ' ').slice(0, 19);
+
+      const provider = process.env.WHATSAPP_PROVIDER || 'twilio';
+      // Outbox row — when sendAfter is set, the worker only picks this up
+      // once next_attempt_at <= now, giving the veto window time to elapse.
+      const outbox = db.prepare(
+        `INSERT INTO notification_outbox (channel, provider, phone, body, status, next_attempt_at)
+         VALUES ('whatsapp', ?, ?, ?, 'pending', ?)`
+      ).run(provider, vendor.whatsapp, message, sendAfter || new Date().toISOString().replace('T', ' ').slice(0, 19));
+      const outboxId = Number(outbox.lastInsertRowid);
+
+      const dispatch = db.prepare(
+        `INSERT INTO ticket_dispatches
+           (ticket_id, service_contact_id, channel, outbox_id, message_body, status, scheduled_send_after)
+         VALUES (?, ?, 'whatsapp', ?, ?, 'queued', ?)`
+      ).run(ticketId, vendor.id, outboxId, message, sendAfter);
+      const dispatchId = Number(dispatch.lastInsertRowid);
+
+      db.prepare(
+        `UPDATE tickets
+         SET remediation_status = 'awaiting_vendor', updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?`
+      ).run(ticketId);
+      // Stamp last_used_at so the next agent run weights this vendor higher.
+      db.prepare(`UPDATE service_contacts SET last_used_at = CURRENT_TIMESTAMP WHERE id = ?`).run(vendor.id);
+
+      console.log(`[tickets:${ticketId}] auto-dispatched to ${vendor.company_name} ${skipVeto ? '(no veto — urgent safety)' : `(veto window ${AUTO_DISPATCH_VETO_SECONDS}s)`}, dispatch #${dispatchId}`);
     } catch (err) {
       markTicketAgentFailed(ticketId);
       console.warn(`[tickets:${ticketId}] background agent failed:`, (err as Error)?.message || err);
@@ -617,6 +701,79 @@ router.post('/:id/resolve', requireAuth, requireRole('board_admin'), (req: Authe
   return ok(res, { id, resolved_at: new Date().toISOString(), announcement_id: txResult.announcementId });
 });
 
+// Cancel a scheduled dispatch before its veto window elapses. Closes the
+// auto-dispatch loop honestly: admin sees the "will send in 5min — cancel"
+// banner, clicks cancel, both the dispatch row AND the outbox row flip
+// to cancelled/skipped before the worker tries to send. After the window
+// elapses, the outbox row is locked from cancellation (it's either being
+// sent or already sent — calling cancel returns window_elapsed).
+router.post('/:id/dispatches/:dispatchId/cancel', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+  const condoId = getActiveCondoId(req);
+  const id = Number(req.params.id);
+  const dispatchId = Number(req.params.dispatchId);
+  const ticket = getScopedTicket(id, condoId);
+  if (!ticket) return fail(res, 'not_found', 404);
+
+  const dispatch = db.prepare(
+    `SELECT id, ticket_id, status, scheduled_send_after, outbox_id
+     FROM ticket_dispatches WHERE id = ? AND ticket_id = ?`
+  ).get(dispatchId, id) as
+    | { id: number; ticket_id: number; status: string; scheduled_send_after: string | null; outbox_id: number | null }
+    | undefined;
+  if (!dispatch) return fail(res, 'dispatch_not_found', 404);
+  // Only scheduled dispatches can be cancelled, and only while their
+  // window is still in the future. A dispatch that already 'sent' or
+  // landed in 'responded' is past the point of no return.
+  if (dispatch.status !== 'queued') return fail(res, 'not_cancellable', 409);
+  if (!dispatch.scheduled_send_after) return fail(res, 'no_veto_window', 409);
+  const sendAfterMs = Date.parse((dispatch.scheduled_send_after || '').replace(' ', 'T') + 'Z');
+  if (!Number.isFinite(sendAfterMs) || sendAfterMs <= Date.now()) {
+    return fail(res, 'window_elapsed', 409);
+  }
+
+  const reason = String(req.body?.reason || 'admin_cancelled').slice(0, 120);
+
+  // Atomic flip on both rows so the worker can never race in and send
+  // mid-cancel. The outbox row goes to 'skipped' (not 'cancelled') so
+  // it matches the existing status vocabulary for "didn't send because
+  // we chose not to."
+  const tx = db.transaction(() => {
+    db.prepare(
+      `UPDATE ticket_dispatches
+       SET status = 'cancelled',
+           cancellation_reason = ?,
+           cancelled_by_user_id = ?,
+           cancelled_at = CURRENT_TIMESTAMP
+       WHERE id = ? AND status = 'queued'`
+    ).run(reason, req.user!.id, dispatchId);
+    if (dispatch.outbox_id) {
+      db.prepare(
+        `UPDATE notification_outbox
+         SET status = 'skipped', last_error = 'admin_cancelled'
+         WHERE id = ? AND status = 'pending'`
+      ).run(dispatch.outbox_id);
+    }
+    // Move the ticket back to agent_dispatched so the admin gets the
+    // existing "plan ready" state back. They can re-dispatch manually
+    // with the existing button.
+    db.prepare(
+      `UPDATE tickets
+       SET remediation_status = 'agent_dispatched', updated_at = CURRENT_TIMESTAMP
+       WHERE id = ? AND remediation_status = 'awaiting_vendor'`
+    ).run(id);
+  });
+  tx();
+
+  audit(req, {
+    action: 'ticket.dispatch_cancelled',
+    target_type: 'ticket_dispatch',
+    target_id: dispatchId,
+    condominium_id: condoId,
+    metadata: { ticket_id: id, reason },
+  });
+  return ok(res, { id: dispatchId, status: 'cancelled' });
+});
+
 // Admin records that the vendor replied — closes the awaiting_vendor loop
 // and flips the ticket to vendor_engaged. A short summary captures what
 // the vendor said so the next admin action has context.
@@ -755,6 +912,7 @@ router.get('/:id', requireAuth, (req: AuthedRequest, res) => {
   // but harmless on private ones — empty array.
   const dispatchRows = db.prepare(
     `SELECT d.id, d.channel, d.status, d.message_body, d.created_at, d.responded_at, d.response_summary,
+            d.scheduled_send_after, d.cancellation_reason,
             sc.company_name AS vendor_name, sc.contact_name AS vendor_contact, sc.category AS vendor_category,
             o.status AS outbox_status, o.sent_at AS outbox_sent_at, o.last_error AS outbox_error
      FROM ticket_dispatches d

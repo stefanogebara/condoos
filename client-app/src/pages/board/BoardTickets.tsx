@@ -51,6 +51,11 @@ interface Dispatch {
   outbox_status: string | null;
   outbox_sent_at: string | null;
   outbox_error: string | null;
+  // Veto window — set when the agent auto-dispatched on a verified ticket.
+  // Until this timestamp passes, the dispatch can be cancelled. After,
+  // the worker picks it up.
+  scheduled_send_after: string | null;
+  cancellation_reason?: string | null;
 }
 
 interface ResponseTarget {
@@ -737,6 +742,17 @@ function AdminCard({
                         <strong className="text-dusk-500">{tr('Resposta:')}</strong> {d.response_summary}
                       </div>
                     )}
+                    {/* Veto window: when the dispatch is scheduled and
+                        send_after is still in the future, show the
+                        countdown + cancel. Cancellable only during this
+                        window. */}
+                    {d.status === 'queued' && d.scheduled_send_after && (
+                      <ScheduledDispatchVeto
+                        dispatch={d}
+                        ticketId={ticket.id}
+                        tr={tr}
+                      />
+                    )}
                     {d.status === 'queued' || d.status === 'sent' ? (
                       <div className="mt-2">
                         <Button size="sm" variant="ghost"
@@ -746,6 +762,11 @@ function AdminCard({
                         </Button>
                       </div>
                     ) : null}
+                    {d.status === 'cancelled' && d.cancellation_reason && (
+                      <div className="mt-2 text-[11px] text-dusk-300 italic">
+                        {tr('Cancelado:')} {tr(d.cancellation_reason)}
+                      </div>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -931,6 +952,63 @@ function useEscape(onClose: () => void) {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
+}
+
+// Veto window UI for auto-dispatched scheduled sends. Live countdown so
+// the admin sees exactly how much time they have, big cancel button that
+// hits the cancel endpoint. After the window elapses (or the worker fires
+// first), the row falls back to the normal "sent" rendering.
+function ScheduledDispatchVeto({ dispatch, ticketId, tr }: {
+  dispatch: Dispatch;
+  ticketId: number;
+  tr: (k: string) => string;
+}) {
+  const [now, setNow] = useState<number>(Date.now());
+  const [cancelling, setCancelling] = useState(false);
+
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  // scheduled_send_after is stored as 'YYYY-MM-DD HH:MM:SS' in UTC (SQLite
+  // CURRENT_TIMESTAMP convention). Parse with the Z suffix so JS treats
+  // it as UTC, not local time.
+  const sendAfterMs = Date.parse((dispatch.scheduled_send_after || '').replace(' ', 'T') + 'Z');
+  const remainingSec = Math.max(0, Math.floor((sendAfterMs - now) / 1000));
+  if (!Number.isFinite(sendAfterMs) || remainingSec === 0) return null;
+
+  async function cancel() {
+    if (cancelling) return;
+    setCancelling(true);
+    try {
+      await apiPost(`/tickets/${ticketId}/dispatches/${dispatch.id}/cancel`, {});
+      toast.success(tr('Envio cancelado'));
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || tr('Falha ao cancelar'));
+    } finally {
+      setCancelling(false);
+    }
+  }
+
+  const minutes = Math.floor(remainingSec / 60);
+  const seconds = remainingSec % 60;
+  return (
+    <div className="mt-2 rounded-2xl bg-peach-100/50 border border-peach-300/50 p-2.5">
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-xs text-dusk-500">
+          <span className="font-semibold">{tr('Envio agendado pela IA em')}{' '}
+            <span className="tabular-nums">{minutes}:{String(seconds).padStart(2, '0')}</span>
+          </span>
+          <span className="text-dusk-300 ml-2">{tr('— você pode cancelar antes.')}</span>
+        </div>
+        <Button size="sm" variant="ghost" disabled={cancelling} onClick={cancel}
+                leftIcon={<X className="w-3 h-3" />}>
+          {cancelling ? tr('Cancelando…') : tr('Cancelar envio')}
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 function VendorResponseModal({
