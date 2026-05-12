@@ -288,6 +288,27 @@ function ServiceContactEditor({
   const tr = (key: string) => t(key, locale);
   const [form, setForm] = useState<ServiceContactForm>(initial);
   const [saving, setSaving] = useState(false);
+  // Track which phone we're currently testing so the button can disable
+  // itself (prevents double-fires while the previous tick is in flight).
+  const [testingPhone, setTestingPhone] = useState<string | null>(null);
+
+  // Fire a test WhatsApp to whatever the admin typed into the WhatsApp
+  // field. Useful before saving the vendor — confirms the number format
+  // is right AND that the WAHA session can actually deliver.  No
+  // polling here on purpose: the toast says "sent to queue", and the
+  // global WhatsAppHealthPill in the sidebar already tells the admin
+  // whether the session is live.
+  async function sendTest(phone: string) {
+    setTestingPhone(phone);
+    try {
+      await apiPost('/service-contacts/test-whatsapp', { phone });
+      toast.success(tr('Teste enfileirado — verifique seu WhatsApp.'), { duration: 6_000 });
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || tr('Falha ao enviar teste'));
+    } finally {
+      setTestingPhone(null);
+    }
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -359,7 +380,21 @@ function ServiceContactEditor({
           <input className="input mt-1" value={form.phone || ''} onChange={(e) => setForm({ ...form, phone: e.target.value })} maxLength={40} />
         </label>
         <label className="block text-xs text-dusk-300 font-medium">
-          {tr('WhatsApp')}
+          <div className="flex items-center justify-between gap-2">
+            <span>{tr('WhatsApp')}</span>
+            {/* Test button — only shown when the field has a plausible
+                phone (8+ digits) so we don't fire half-typed numbers. */}
+            {form.whatsapp && form.whatsapp.replace(/\D/g, '').length >= 8 && (
+              <button
+                type="button"
+                className="text-[11px] font-semibold text-sage-700 hover:text-sage-500 inline-flex items-center gap-1"
+                onClick={() => sendTest(form.whatsapp || '')}
+                disabled={testingPhone === form.whatsapp}
+              >
+                {testingPhone === form.whatsapp ? tr('Enviando teste…') : tr('Enviar teste')}
+              </button>
+            )}
+          </div>
           <input className="input mt-1" value={form.whatsapp || ''} onChange={(e) => setForm({ ...form, whatsapp: e.target.value })} maxLength={40} />
         </label>
         <label className="block text-xs text-dusk-300 font-medium">

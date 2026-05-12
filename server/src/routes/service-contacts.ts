@@ -16,6 +16,16 @@ const outreachSchema = z.object({
   channel: z.enum(['whatsapp', 'email']).optional(),
 });
 
+// Test-WhatsApp — the admin types a phone in the vendor form and clicks
+// "Enviar teste" to verify (a) the WAHA session is live, (b) they have
+// the right phone format, (c) the recipient is reachable, all without
+// committing the contact yet. The message body is capped short and fixed
+// to a recognisable test pattern so accidental clicks don't spam vendors.
+const testWhatsAppSchema = z.object({
+  phone: z.string().min(6).max(40),
+  message: z.string().min(1).max(400).optional(),
+});
+
 // When a new vendor lands (or an existing one's category changes), look up
 // every ticket in this condo that was stuck on remediation_status =
 // 'blocked_needs_admin' / blocked_reason = 'no_vendor_in_category' and whose
@@ -73,6 +83,48 @@ function rewireBlockedTickets(
 router.get('/whatsapp/health', requireAuth, requireRole('board_admin'), async (_req: AuthedRequest, res) => {
   const health = await getWhatsAppHealth();
   return ok(res, health);
+});
+
+// Test-message — send a tiny "this is a test" WhatsApp to an arbitrary
+// phone so the admin can verify their WAHA session works AND that the
+// number they're about to save is correctly formatted, BEFORE creating
+// the vendor record. Body is fixed (override only allowed for translation)
+// to prevent the endpoint becoming a generic "send WhatsApp to anyone"
+// utility — that's a spam vector. Same outbox + immediate worker tick as
+// real outreach; returns outbox_id for status polling.
+router.post('/test-whatsapp', requireAuth, requireRole('board_admin'), async (req: AuthedRequest, res) => {
+  const parsed = testWhatsAppSchema.safeParse(req.body);
+  if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
+  const condoId = getActiveCondoId(req);
+
+  // Normalise phone — strip non-digits, prepend + so providers parse it.
+  const digits = parsed.data.phone.replace(/\D/g, '');
+  if (digits.length < 8 || digits.length > 16) return fail(res, 'invalid_phone', 400);
+  const phone = `+${digits}`;
+
+  const message = (parsed.data.message || 'Mensagem de teste do CondoOS. Se você recebeu isto, a conexão WhatsApp está funcionando.').slice(0, 400);
+  const provider = process.env.WHATSAPP_PROVIDER || 'twilio';
+
+  const result = db.prepare(
+    `INSERT INTO notification_outbox (channel, provider, phone, body, status, next_attempt_at)
+     VALUES ('whatsapp', ?, ?, ?, 'pending', CURRENT_TIMESTAMP)`
+  ).run(provider, phone, message);
+  const outboxId = Number(result.lastInsertRowid);
+
+  audit(req, {
+    action: 'whatsapp.test',
+    target_type: 'notification_outbox',
+    target_id: outboxId,
+    condominium_id: condoId,
+    metadata: { phone, message_preview: message.slice(0, 80) },
+  });
+
+  // Kick the worker right away so the admin sees a response fast.
+  void processWhatsAppOutbox({ ids: [outboxId] }).catch((err) =>
+    console.warn('[whatsapp.test] delivery failed:', err?.message || err)
+  );
+
+  return ok(res, { outbox_id: outboxId, phone, provider }, 201);
 });
 
 // Outbox row state — for polling a single send after firing it from the

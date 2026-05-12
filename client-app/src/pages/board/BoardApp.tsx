@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AlertTriangle, Bot, Home, Inbox, Vote, Calendar, Megaphone, Users, UserCheck, Gavel, Building2, Wallet, Waves, Wrench } from 'lucide-react';
 import Sidebar, { NavItem } from '../../components/Sidebar';
+import WhatsAppHealthPill from '../../components/WhatsAppHealthPill';
 import BoardOverview from './BoardOverview';
 import Suggestions from './Suggestions';
 import BoardProposals from './BoardProposals';
@@ -76,7 +77,7 @@ export default function BoardApp() {
 
   return (
     <div className="min-h-screen lg:flex">
-      <Sidebar items={nav} title="Síndico" />
+      <Sidebar items={nav} title="Síndico" headerSlot={<WhatsAppHealthPill />} />
       <main className="w-full min-w-0 flex-1 px-4 sm:px-6 lg:px-10 py-8 max-w-6xl animate-fade-up">
         <Routes>
           <Route index                   element={<BoardOverview />} />

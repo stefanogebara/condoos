@@ -18,9 +18,15 @@ interface Props {
   items: NavItem[];
   title: string;
   subtitle?: string;
+  // Optional content rendered between the user profile card and the nav
+  // list. BoardApp uses this to inject a live WhatsApp connectivity pill
+  // so the admin sees session status across every board page without a
+  // sub-route. Kept generic (ReactNode) so future surfaces — billing
+  // status, integration health, anything — can use the same slot.
+  headerSlot?: React.ReactNode;
 }
 
-export default function Sidebar({ items, title, subtitle }: Props) {
+export default function Sidebar({ items, title, subtitle, headerSlot }: Props) {
   const { user, logout } = useAuth();
   const { locale } = useLocale();
   const tr = (key: string) => t(key, locale);
@@ -71,6 +77,8 @@ export default function Sidebar({ items, title, subtitle }: Props) {
         </div>
         <div className="mt-3 chip">{tr(title)}</div>
       </div>
+
+      {headerSlot}
 
       <nav className="flex-1 overflow-y-auto space-y-1 pr-1">
         {items.map((it) => (

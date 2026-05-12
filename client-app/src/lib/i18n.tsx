@@ -1899,6 +1899,15 @@ const phrases: Copy[] = [
   c('Erro:', 'Error:', 'Error:', 'Erreur :'),
   c('O provedor aceitou. Veja sua sessão de WhatsApp para confirmar entrega real.', 'Provider accepted. Check your WhatsApp session to confirm real delivery.', 'El proveedor aceptó. Revisa tu sesión de WhatsApp para confirmar la entrega real.', 'Le prestataire a accepté. Consultez votre session WhatsApp pour confirmer la livraison réelle.'),
   c('Fechar', 'Close', 'Cerrar', 'Fermer'),
+  // Sidebar WhatsApp health pill (j) + vendor form test button (k).
+  c('Verificando WhatsApp…', 'Checking WhatsApp…', 'Verificando WhatsApp…', 'Vérification WhatsApp…'),
+  c('Não configurado', 'Not configured', 'No configurado', 'Non configuré'),
+  c('desconectado', 'disconnected', 'desconectado', 'déconnecté'),
+  c('conectado', 'connected', 'conectado', 'connecté'),
+  c('Enviar teste', 'Send test', 'Enviar prueba', 'Envoyer un test'),
+  c('Enviando teste…', 'Sending test…', 'Enviando prueba…', 'Envoi du test…'),
+  c('Teste enfileirado — verifique seu WhatsApp.', 'Test queued — check your WhatsApp.', 'Prueba en cola — revisa tu WhatsApp.', 'Test en file — vérifiez votre WhatsApp.'),
+  c('Falha ao enviar teste', 'Failed to send test', 'Error al enviar prueba', 'Échec de l\'envoi du test'),
 ];
 
 function c(pt: string, en: string, es: string, fr: string): Copy {
