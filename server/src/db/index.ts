@@ -433,6 +433,36 @@ export function initSchema() {
   db.prepare(`CREATE INDEX IF NOT EXISTS idx_ticket_dispatches_scheduled
     ON ticket_dispatches(scheduled_send_after) WHERE scheduled_send_after IS NOT NULL`).run();
 
+  // Phase 2 operations — once a vendor responds, the admin needs a real
+  // work order: scheduled visit, estimate, invoice/photo evidence, and
+  // completion note. Keep this one-to-one with a ticket for now so the UI
+  // stays simple; dispatches still preserve every vendor contact attempt.
+  db.prepare(`
+    CREATE TABLE IF NOT EXISTS ticket_work_orders (
+      id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+      ticket_id               INTEGER NOT NULL UNIQUE REFERENCES tickets(id) ON DELETE CASCADE,
+      service_contact_id      INTEGER REFERENCES service_contacts(id) ON DELETE SET NULL,
+      title                   TEXT NOT NULL,
+      scope                   TEXT,
+      status                  TEXT NOT NULL DEFAULT 'scheduled'
+        CHECK(status IN ('draft','scheduled','in_progress','completed','cancelled')),
+      estimated_amount_cents  INTEGER,
+      approved_amount_cents   INTEGER,
+      scheduled_for           TEXT,
+      started_at              TEXT,
+      completed_at            TEXT,
+      invoice_url             TEXT,
+      photo_url               TEXT,
+      completion_note         TEXT,
+      created_by_user_id      INTEGER REFERENCES users(id),
+      updated_by_user_id      INTEGER REFERENCES users(id),
+      created_at              TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at              TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `).run();
+  db.prepare(`CREATE INDEX IF NOT EXISTS idx_ticket_work_orders_ticket ON ticket_work_orders(ticket_id, status)`).run();
+  db.prepare(`CREATE INDEX IF NOT EXISTS idx_ticket_work_orders_vendor ON ticket_work_orders(service_contact_id, status)`).run();
+
   // Roadmap item 2 — conversational thread. The agent workbench was
   // single-shot: every query was a fresh agent call with no memory of
   // what the admin asked five minutes ago. These tables let the runner

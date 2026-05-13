@@ -157,7 +157,7 @@ Success criteria:
 - Do not build deep accounting from scratch before payments, export, and a basic ledger are proven.
 - Do not make the resident app feel like admin software. Residents need five-second actions.
 
-## Current Execution Slice
+## Completed Slice: Phase 1 Trust And Daily Use
 
 The first implementation slice focuses on Phase 1:
 
@@ -167,3 +167,13 @@ The first implementation slice focuses on Phase 1:
 - Add admin command-center attention feed.
 - Add guard search and faster front-desk filtering.
 - Run build and targeted language checks.
+
+## Current Execution Slice: Phase 2 Work Orders
+
+The next implementation slice turns verified issues into operational work orders:
+
+- Add a ticket work-order record tied to the existing vendor network.
+- Let admins schedule the repair, record scope, estimate, approved amount, invoice URL, photo URL, and completion note.
+- Show work-order status and evidence on the admin ticket page.
+- Show residents a clear work-order timeline so they know whether the issue is scheduled, in progress, or completed.
+- Keep the existing AI/vendor dispatch flow intact and layer this after vendor response.

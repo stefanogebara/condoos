@@ -280,6 +280,77 @@ test('Tickets: admin records vendor response through the modal', async ({ reques
   expect(dispatch.response_summary).toBe(responseSummary);
 });
 
+test('Tickets: admin creates and completes a work order', async ({ request, page }) => {
+  const admin = await loginApi(request, 'admin@condoos.dev', 'admin123');
+  const admH = { Authorization: `Bearer ${admin.token}`, 'Content-Type': 'application/json' };
+  const tag = Date.now();
+  const title = `E2E Work Order ${tag}`;
+
+  const contactRes = await request.post(`${apiURL}/service-contacts`, {
+    headers: admH,
+    data: {
+      category: 'general_maintenance',
+      company_name: `E2E Work Vendor ${tag}`,
+      phone: '+55 11 5000-0000',
+      preferred: true,
+    },
+  });
+  expect(contactRes.status()).toBe(201);
+  const contactId: number = (await contactRes.json()).data.id;
+
+  const createRes = await request.post(`${apiURL}/tickets`, {
+    headers: admH,
+    data: {
+      title,
+      description: 'Ticket prepared for work-order lifecycle coverage.',
+      category: 'general_maintenance',
+      priority: 'normal',
+    },
+  });
+  expect(createRes.status()).toBe(201);
+  const ticketId: number = (await createRes.json()).data.id;
+
+  const workOrderRes = await request.post(`${apiURL}/tickets/${ticketId}/work-order`, {
+    headers: admH,
+    data: {
+      service_contact_id: contactId,
+      title: `Repair order ${tag}`,
+      scope: 'Inspect, quote, repair, and upload invoice evidence.',
+      status: 'scheduled',
+      scheduled_for: '2026-05-14 09:30',
+      estimated_amount_cents: 125000,
+      invoice_url: 'https://example.com/invoice.pdf',
+      photo_url: 'https://example.com/photo.jpg',
+    },
+  });
+  expect(workOrderRes.status()).toBe(201);
+  const workOrder = (await workOrderRes.json()).data;
+  expect(workOrder.status).toBe('scheduled');
+  expect(workOrder.vendor_name).toContain(`E2E Work Vendor ${tag}`);
+
+  await installSession(page, admin);
+  await page.goto('/board/tickets', { waitUntil: 'domcontentloaded' });
+  await page.getByText(title).click();
+  await expect(page.getByText(/Ordem de serviço|Work order|Orden de trabajo/i)).toBeVisible();
+  await expect(page.getByText(`Repair order ${tag}`)).toBeVisible();
+
+  const completeRes = await request.patch(`${apiURL}/tickets/${ticketId}/work-order/${workOrder.id}`, {
+    headers: admH,
+    data: {
+      status: 'completed',
+      approved_amount_cents: 119900,
+      completion_note: 'Completed and tested with the building staff.',
+    },
+  });
+  expect(completeRes.ok()).toBeTruthy();
+
+  const detail = (await (await request.get(`${apiURL}/tickets/${ticketId}`, { headers: admH })).json()).data;
+  expect(detail.remediation_status).toBe('resolved');
+  expect(detail.status).toBe('resolved');
+  expect(detail.work_order.status).toBe('completed');
+  expect(detail.work_order.completed_at).toBeTruthy();
+});
+
 // ---------------------------------------------------------------------------
 // 5. Authorization: resident cannot patch status
 // ---------------------------------------------------------------------------

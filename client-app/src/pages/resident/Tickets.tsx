@@ -3,14 +3,16 @@
 // confirms → admin dispatches AI agent (Phase 2 will auto-dispatch).
 import React, { useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
-import { AlertTriangle, Bot, Check, CheckCircle2, Megaphone, MessageCircle, Plus, Send, ShieldAlert, Sparkles, ThumbsDown, ThumbsUp, Users, X } from 'lucide-react';
+import { AlertTriangle, Bot, CalendarClock, Check, CheckCircle2, ClipboardCheck, FileText, Image as ImageIcon, Megaphone, MessageCircle, Plus, Send, ShieldAlert, Sparkles, ThumbsDown, ThumbsUp, Users, X } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 import GlassCard from '../../components/GlassCard';
 import Button from '../../components/Button';
 import Badge from '../../components/Badge';
 import { apiGet, apiPost } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
-import { formatDateTime, formatRelativeTime, t } from '../../lib/i18n';
+import { formatCurrency, formatDateTime, formatRelativeTime, t } from '../../lib/i18n';
+
+type WorkOrderStatus = 'draft' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
 
 interface Ticket {
   id: number;
@@ -32,6 +34,11 @@ interface Ticket {
   agent_run_at: string | null;
   resolved_at: string | null;
   blocked_reason: string | null;
+  work_order_id: number | null;
+  work_order_status: WorkOrderStatus | null;
+  work_order_scheduled_for: string | null;
+  work_order_estimated_amount_cents: number | null;
+  work_order_vendor_name: string | null;
   created_at: string;
 }
 
@@ -56,7 +63,26 @@ interface ResidentDispatch {
 interface TicketDetail extends Ticket {
   verifications: Verification[];
   dispatches?: ResidentDispatch[];
+  work_order: WorkOrder | null;
   my_vote: 'confirm' | 'deny' | null;
+}
+
+interface WorkOrder {
+  id: number;
+  title: string;
+  scope: string | null;
+  status: WorkOrderStatus;
+  estimated_amount_cents: number | null;
+  approved_amount_cents: number | null;
+  scheduled_for: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  invoice_url: string | null;
+  photo_url: string | null;
+  completion_note: string | null;
+  vendor_name: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 const CATEGORIES = [
@@ -77,6 +103,14 @@ const PRIORITY_TONE: Record<Ticket['priority'], 'sage' | 'peach' | 'neutral' | '
 
 const PRIORITY_LABEL: Record<Ticket['priority'], string> = {
   low: 'baixa', normal: 'normal', high: 'alta', urgent: 'urgente',
+};
+
+const WORK_ORDER_STATUS_LABEL: Record<WorkOrderStatus, string> = {
+  draft: 'rascunho',
+  scheduled: 'agendada',
+  in_progress: 'em execução',
+  completed: 'concluída',
+  cancelled: 'cancelada',
 };
 
 function priorityLabel(priority: Ticket['priority']) {
@@ -241,6 +275,11 @@ function TicketCard({
               {ticket.remediation_status === 'agent_dispatched' && <Badge tone="peach">{t('IA acionada')}</Badge>}
               {ticket.remediation_status === 'awaiting_vendor' && <Badge tone="peach">{t('aguardando fornecedor')}</Badge>}
               {ticket.remediation_status === 'vendor_engaged' && <Badge tone="sage">{t('fornecedor respondeu')}</Badge>}
+              {(detail?.work_order?.status || ticket.work_order_status) && (
+                <Badge tone={(detail?.work_order?.status || ticket.work_order_status) === 'completed' ? 'sage' : 'peach'}>
+                  <ClipboardCheck className="w-3 h-3" /> {t(WORK_ORDER_STATUS_LABEL[(detail?.work_order?.status || ticket.work_order_status)!])}
+                </Badge>
+              )}
               {ticket.remediation_status === 'blocked_needs_admin' && <Badge tone="dark">{t('síndico vai resolver')}</Badge>}
               {ticket.remediation_status === 'resolved' && <Badge tone="sage"><CheckCircle2 className="w-3 h-3" /> {t('resolvido')}</Badge>}
             </div>
@@ -305,6 +344,8 @@ function TicketCard({
           )}
 
           {detail && <TicketTimeline ticket={ticket} detail={detail} />}
+
+          {detail?.work_order && <ResidentWorkOrderSummary workOrder={detail.work_order} />}
 
           {detail && detail.verifications.length > 0 && (
             <div>
@@ -408,6 +449,44 @@ function TicketTimeline({ ticket, detail }: { ticket: Ticket; detail: TicketDeta
     }
   }
 
+  if (detail.work_order) {
+    events.push({
+      key: `work-order-${detail.work_order.id}`,
+      at: detail.work_order.created_at,
+      icon: <ClipboardCheck className="w-3.5 h-3.5 text-peach-500" />,
+      text: <>{t('Ordem de serviço aberta')}</>,
+    });
+    if (detail.work_order.scheduled_for) {
+      events.push({
+        key: `work-order-scheduled-${detail.work_order.id}`,
+        at: detail.work_order.scheduled_for,
+        icon: <CalendarClock className="w-3.5 h-3.5 text-dusk-300" />,
+        text: (
+          <>
+            {t('Visita técnica agendada')}
+            {detail.work_order.vendor_name ? <> · {detail.work_order.vendor_name}</> : null}
+          </>
+        ),
+      });
+    }
+    if (detail.work_order.started_at) {
+      events.push({
+        key: `work-order-started-${detail.work_order.id}`,
+        at: detail.work_order.started_at,
+        icon: <WrenchTimelineIcon />,
+        text: <>{t('Reparo em execução')}</>,
+      });
+    }
+    if (detail.work_order.completed_at) {
+      events.push({
+        key: `work-order-completed-${detail.work_order.id}`,
+        at: detail.work_order.completed_at,
+        icon: <CheckCircle2 className="w-3.5 h-3.5 text-sage-700" />,
+        text: <>{t('Ordem de serviço concluída')}</>,
+      });
+    }
+  }
+
   if (ticket.blocked_reason && ticket.remediation_status === 'blocked_needs_admin') {
     // Differentiate the two scenarios so the resident knows whether the
     // admin needs to add a contact (no_vendor_in_category) vs chase one
@@ -458,6 +537,54 @@ function TicketTimeline({ ticket, detail }: { ticket: Ticket; detail: TicketDeta
         ))}
       </ol>
     </div>
+  );
+}
+
+function WrenchTimelineIcon() {
+  return <ClipboardCheck className="w-3.5 h-3.5 text-sage-700" />;
+}
+
+function ResidentWorkOrderSummary({ workOrder }: { workOrder: WorkOrder }) {
+  const amount = workOrder.approved_amount_cents ?? workOrder.estimated_amount_cents;
+  return (
+    <GlassCard variant="clay" className="p-4 border border-sage-300/40 bg-sage-100/35">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <div className="text-xs uppercase tracking-wider text-sage-900 mb-1 flex items-center gap-1.5">
+            <ClipboardCheck className="w-3.5 h-3.5" /> {t('Ordem de serviço')}
+          </div>
+          <div className="font-semibold text-dusk-500">{workOrder.title}</div>
+          <div className="flex flex-wrap gap-2 mt-2 text-xs text-dusk-300">
+            <Badge tone={workOrder.status === 'completed' ? 'sage' : workOrder.status === 'cancelled' ? 'dark' : 'peach'}>
+              {t(WORK_ORDER_STATUS_LABEL[workOrder.status])}
+            </Badge>
+            {workOrder.vendor_name && <span>{workOrder.vendor_name}</span>}
+            {workOrder.scheduled_for && <span>{t('Agendado para')} {formatDateTime(workOrder.scheduled_for)}</span>}
+            {amount != null && <span>{formatCurrency(amount / 100)}</span>}
+          </div>
+        </div>
+        <div className="flex gap-2">
+          {workOrder.invoice_url && (
+            <a href={workOrder.invoice_url} target="_blank" rel="noopener noreferrer"
+               className="inline-flex items-center gap-1 rounded-2xl border border-white/70 bg-white/55 px-3 py-2 text-xs font-medium text-dusk-400 hover:bg-white/80">
+              <FileText className="w-3.5 h-3.5" /> {t('Nota fiscal')}
+            </a>
+          )}
+          {workOrder.photo_url && (
+            <a href={workOrder.photo_url} target="_blank" rel="noopener noreferrer"
+               className="inline-flex items-center gap-1 rounded-2xl border border-white/70 bg-white/55 px-3 py-2 text-xs font-medium text-dusk-400 hover:bg-white/80">
+              <ImageIcon className="w-3.5 h-3.5" /> {t('Foto')}
+            </a>
+          )}
+        </div>
+      </div>
+      {workOrder.scope && <p className="text-sm text-dusk-400 mt-3 whitespace-pre-line">{workOrder.scope}</p>}
+      {workOrder.completion_note && (
+        <div className="mt-3 pt-3 border-t border-white/50 text-sm text-dusk-400">
+          <strong className="text-dusk-500">{t('Conclusão:')}</strong> {workOrder.completion_note}
+        </div>
+      )}
+    </GlassCard>
   );
 }
 

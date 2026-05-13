@@ -534,6 +534,33 @@ CREATE TABLE IF NOT EXISTS ticket_attachments (
   created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS ticket_work_orders (
+  id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+  ticket_id               INTEGER NOT NULL UNIQUE REFERENCES tickets(id) ON DELETE CASCADE,
+  service_contact_id      INTEGER REFERENCES service_contacts(id) ON DELETE SET NULL,
+  title                   TEXT NOT NULL,
+  scope                   TEXT,
+  status                  TEXT NOT NULL DEFAULT 'scheduled'
+    CHECK(status IN ('draft','scheduled','in_progress','completed','cancelled')),
+  estimated_amount_cents  INTEGER,
+  approved_amount_cents   INTEGER,
+  scheduled_for           TEXT,
+  started_at              TEXT,
+  completed_at            TEXT,
+  invoice_url             TEXT,
+  photo_url               TEXT,
+  completion_note         TEXT,
+  created_by_user_id      INTEGER REFERENCES users(id),
+  updated_by_user_id      INTEGER REFERENCES users(id),
+  created_at              TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at              TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_ticket_work_orders_ticket
+  ON ticket_work_orders(ticket_id, status);
+CREATE INDEX IF NOT EXISTS idx_ticket_work_orders_vendor
+  ON ticket_work_orders(service_contact_id, status);
+
 -- Original indexes
 CREATE INDEX IF NOT EXISTS idx_packages_recipient ON packages(recipient_id, status);
 CREATE INDEX IF NOT EXISTS idx_visitors_host ON visitors(host_id, status);

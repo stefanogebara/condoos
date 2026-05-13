@@ -4,13 +4,15 @@
 // Phase 2 will auto-fire on threshold; Phase 1 keeps the human in the loop.
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
-import { AlertTriangle, Bot, CheckCircle2, Check, Edit3, Loader2, Mail, MessageCircle, Phone, Send, ShieldAlert, ThumbsUp, Wrench, X } from 'lucide-react';
+import { AlertTriangle, Bot, CalendarClock, CheckCircle2, Check, ClipboardCheck, Edit3, FileText, Image as ImageIcon, Loader2, Mail, MessageCircle, Phone, Send, ShieldAlert, ThumbsUp, Wrench, X } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 import GlassCard from '../../components/GlassCard';
 import Button from '../../components/Button';
 import Badge from '../../components/Badge';
 import { apiGet, apiPost } from '../../lib/api';
-import { formatDateTime, formatRelativeTime, t as translate, useLocale } from '../../lib/i18n';
+import { formatCurrency, formatDateTime, formatRelativeTime, t as translate, useLocale } from '../../lib/i18n';
+
+type WorkOrderStatus = 'draft' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
 
 interface Ticket {
   id: number;
@@ -34,6 +36,11 @@ interface Ticket {
   // load the full TicketDetail. nullable on every ticket not currently
   // in remediation_status='blocked_needs_admin'.
   blocked_reason: string | null;
+  work_order_id: number | null;
+  work_order_status: WorkOrderStatus | null;
+  work_order_scheduled_for: string | null;
+  work_order_estimated_amount_cents: number | null;
+  work_order_vendor_name: string | null;
   created_at: string;
 }
 
@@ -69,6 +76,7 @@ interface TicketDetail extends Ticket {
   agent_plan: AgentPlan | null;
   verifications: Array<{ id: number; vote: string; comment: string | null; first_name: string; last_name: string; unit_number: string | null }>;
   dispatches: Dispatch[];
+  work_order: WorkOrder | null;
 }
 
 interface ServiceContact {
@@ -97,6 +105,41 @@ interface AgentPlan {
   vendor_search_plan?: { outreach_message?: string; search_queries?: string[] };
 }
 
+interface WorkOrder {
+  id: number;
+  ticket_id: number;
+  service_contact_id: number | null;
+  title: string;
+  scope: string | null;
+  status: WorkOrderStatus;
+  estimated_amount_cents: number | null;
+  approved_amount_cents: number | null;
+  scheduled_for: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  invoice_url: string | null;
+  photo_url: string | null;
+  completion_note: string | null;
+  vendor_name: string | null;
+  vendor_category: string | null;
+  vendor_contact: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+type WorkOrderPayload = {
+  service_contact_id?: number | null;
+  title?: string;
+  scope?: string | null;
+  status?: WorkOrderStatus;
+  estimated_amount_cents?: number | null;
+  approved_amount_cents?: number | null;
+  scheduled_for?: string | null;
+  invoice_url?: string | null;
+  photo_url?: string | null;
+  completion_note?: string | null;
+};
+
 const PRIORITY_TONE: Record<Ticket['priority'], 'sage' | 'peach' | 'neutral' | 'dark'> = {
   low: 'neutral', normal: 'sage', high: 'peach', urgent: 'dark',
 };
@@ -118,6 +161,14 @@ const CHANNEL_LABEL: Record<string, string> = {
 };
 const PRIORITY_PT_LABEL: Record<Ticket['priority'], string> = {
   low: 'baixa', normal: 'normal', high: 'alta', urgent: 'urgente',
+};
+
+const WORK_ORDER_STATUS_LABEL: Record<WorkOrderStatus, string> = {
+  draft: 'rascunho',
+  scheduled: 'agendada',
+  in_progress: 'em execução',
+  completed: 'concluída',
+  cancelled: 'cancelada',
 };
 
 // UX-H-NEW-2 — historical drift: the ticket form uses `maintenance` while
@@ -205,14 +256,16 @@ export default function BoardTickets() {
   const [respondingId, setRespondingId] = useState<number | null>(null);
   const [pickerTicketId, setPickerTicketId] = useState<number | null>(null);
   const [resolveTicketId, setResolveTicketId] = useState<number | null>(null);
+  const [workOrderTicketId, setWorkOrderTicketId] = useState<number | null>(null);
   const [responseTarget, setResponseTarget] = useState<ResponseTarget | null>(null);
   const [vendors, setVendors] = useState<ServiceContact[]>([]);
+  const [workOrderSavingId, setWorkOrderSavingId] = useState<number | null>(null);
   const seenTicketIds = useRef<Set<number> | null>(null);
 
   useEffect(() => {
-    if (pickerTicketId == null) return;
+    if (pickerTicketId == null && workOrderTicketId == null) return;
     apiGet<ServiceContact[]>('/service-contacts').then(setVendors).catch(() => setVendors([]));
-  }, [pickerTicketId]);
+  }, [pickerTicketId, workOrderTicketId]);
 
   const load = useCallback((notify = false) => {
     apiGet<Ticket[]>('/tickets').then((next) => {
@@ -327,9 +380,29 @@ export default function BoardTickets() {
     }
   }
 
+  async function saveWorkOrder(ticketId: number, payload: WorkOrderPayload) {
+    setWorkOrderSavingId(ticketId);
+    try {
+      await apiPost<WorkOrder>(`/tickets/${ticketId}/work-order`, payload);
+      toast.success(tr('Ordem de serviço salva'));
+      apiGet<TicketDetail>(`/tickets/${ticketId}`).then(setDetail).catch(() => {});
+      load();
+      setWorkOrderTicketId(null);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || tr('Falha ao salvar ordem de serviço'));
+    } finally {
+      setWorkOrderSavingId(null);
+    }
+  }
+
   const needsAttention = rows.filter((r) => r.verification_threshold > 0 && r.remediation_status === 'open');
   const verified = rows.filter((r) => r.remediation_status === 'verified' || r.remediation_status === 'agent_dispatched');
-  const inProgress = rows.filter((r) => r.remediation_status === 'awaiting_vendor' || r.remediation_status === 'vendor_engaged');
+  const inProgress = rows.filter((r) => (
+    r.remediation_status === 'awaiting_vendor'
+    || r.remediation_status === 'vendor_engaged'
+    || r.remediation_status === 'work_ordered'
+    || r.remediation_status === 'work_in_progress'
+  ));
   const escalated = rows.filter((r) => r.remediation_status === 'blocked_needs_admin');
   // Inbox sort — within the "Precisa do síndico" section, prioritise by
   // urgency (priority weight) then by oldest-first within each tier. Urgent
@@ -364,32 +437,32 @@ export default function BoardTickets() {
       <Section title={tr('Precisa do síndico')} tickets={escalatedSorted} openId={openId} setOpenId={setOpenId}
                detail={detail} runningId={runningId} verifyingId={verifyingId} dispatchingId={dispatchingId}
                onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={openVendorResponse}
-               onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} />
+               onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} onOpenWorkOrder={setWorkOrderTicketId} />
 
       <Section title={tr('Aguardando verificação')} tickets={needsAttention} openId={openId} setOpenId={setOpenId}
                detail={detail} runningId={runningId} verifyingId={verifyingId} dispatchingId={dispatchingId}
                onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={openVendorResponse}
-               onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} />
+               onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} onOpenWorkOrder={setWorkOrderTicketId} />
 
       <Section title={tr('Verificados — pronto para acionar a IA')} tickets={verified} openId={openId} setOpenId={setOpenId}
                detail={detail} runningId={runningId} verifyingId={verifyingId} dispatchingId={dispatchingId}
                onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={openVendorResponse}
-               onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} />
+               onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} onOpenWorkOrder={setWorkOrderTicketId} />
 
       <Section title={tr('Em andamento — fornecedor acionado')} tickets={inProgress} openId={openId} setOpenId={setOpenId}
                detail={detail} runningId={runningId} verifyingId={verifyingId} dispatchingId={dispatchingId}
                onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={openVendorResponse}
-               onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} />
+               onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} onOpenWorkOrder={setWorkOrderTicketId} />
 
       <Section title={tr('Chamados privados')} tickets={privateOpen} openId={openId} setOpenId={setOpenId}
                detail={detail} runningId={runningId} verifyingId={verifyingId} dispatchingId={dispatchingId}
                onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={openVendorResponse}
-               onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} />
+               onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} onOpenWorkOrder={setWorkOrderTicketId} />
 
       <Section title={tr('Resolvidos')} tickets={resolvedTickets} openId={openId} setOpenId={setOpenId}
                detail={detail} runningId={runningId} verifyingId={verifyingId} dispatchingId={dispatchingId}
                onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={openVendorResponse}
-               onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} />
+               onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} onOpenWorkOrder={setWorkOrderTicketId} />
 
       {pickerTicketId != null && detail && (
         <VendorPickerModal
@@ -406,6 +479,15 @@ export default function BoardTickets() {
           resolving={resolvingId === resolveTicketId}
           onClose={() => setResolveTicketId(null)}
           onSubmit={(resolution, announce) => resolve(resolveTicketId, resolution, announce)} />
+      )}
+
+      {workOrderTicketId != null && detail && detail.id === workOrderTicketId && (
+        <WorkOrderModal
+          ticket={detail}
+          vendors={vendors}
+          saving={workOrderSavingId === workOrderTicketId}
+          onClose={() => setWorkOrderTicketId(null)}
+          onSubmit={(payload) => saveWorkOrder(workOrderTicketId, payload)} />
       )}
 
       {responseTarget && (
@@ -469,7 +551,7 @@ function NeedsAttentionBanner({ total, noVendor, noResponse }: { total: number; 
 
 function Section({
   title, tickets, openId, setOpenId, detail, runningId, verifyingId, dispatchingId,
-  onRunAgent, onVerify, onDispatch, onMarkResponded, onOpenPicker, onOpenResolve,
+  onRunAgent, onVerify, onDispatch, onMarkResponded, onOpenPicker, onOpenResolve, onOpenWorkOrder,
 }: {
   title: string;
   tickets: Ticket[];
@@ -485,6 +567,7 @@ function Section({
   onMarkResponded: (ticketId: number, dispatchRow: Dispatch) => void;
   onOpenPicker: (id: number) => void;
   onOpenResolve: (id: number) => void;
+  onOpenWorkOrder: (id: number) => void;
 }) {
   if (tickets.length === 0) return null;
   return (
@@ -508,7 +591,8 @@ function Section({
                      onDispatch={(opts) => onDispatch(tk.id, opts)}
                      onMarkResponded={(dispatchRow) => onMarkResponded(tk.id, dispatchRow)}
                      onOpenPicker={() => onOpenPicker(tk.id)}
-                     onOpenResolve={() => onOpenResolve(tk.id)} />
+                     onOpenResolve={() => onOpenResolve(tk.id)}
+                     onOpenWorkOrder={() => onOpenWorkOrder(tk.id)} />
         ))}
       </div>
     </>
@@ -517,7 +601,7 @@ function Section({
 
 function AdminCard({
   ticket, expanded, detail, onToggle, running, verifying, dispatching,
-  onRunAgent, onVerify, onDispatch, onMarkResponded, onOpenPicker, onOpenResolve,
+  onRunAgent, onVerify, onDispatch, onMarkResponded, onOpenPicker, onOpenResolve, onOpenWorkOrder,
 }: {
   ticket: Ticket;
   expanded: boolean;
@@ -532,6 +616,7 @@ function AdminCard({
   onMarkResponded: (dispatchRow: Dispatch) => void;
   onOpenPicker: () => void;
   onOpenResolve: () => void;
+  onOpenWorkOrder: () => void;
 }) {
   const tr = useTicketTranslator();
   const isCommunity = ticket.verification_threshold > 0;
@@ -540,6 +625,8 @@ function AdminCard({
   const isBlocked = ticket.remediation_status === 'blocked_needs_admin';
   const isAwaitingVendor = ticket.remediation_status === 'awaiting_vendor';
   const vendorEngaged = ticket.remediation_status === 'vendor_engaged';
+  const hasWorkOrder = !!ticket.work_order_id || !!detail?.work_order;
+  const workOrderStatus = detail?.work_order?.status || ticket.work_order_status;
   // UX-H-NEW-1 — `hasPlan` stays true after resolve (the agent_plan column
   // never gets cleared), so the action buttons used to keep rendering on
   // closed tickets and no `resolvido` badge ever appeared. Treat resolved as
@@ -560,6 +647,11 @@ function AdminCard({
               {hasPlan && <Badge tone="peach"><Bot className="w-3 h-3" /> {tr('plano da IA')}</Badge>}
               {isAwaitingVendor && <Badge tone="peach"><Send className="w-3 h-3" /> {tr('aguardando fornecedor')}</Badge>}
               {vendorEngaged && <Badge tone="sage"><MessageCircle className="w-3 h-3" /> {tr('fornecedor respondeu')}</Badge>}
+              {workOrderStatus && (
+                <Badge tone={workOrderStatus === 'completed' ? 'sage' : workOrderStatus === 'cancelled' ? 'dark' : 'peach'}>
+                  <ClipboardCheck className="w-3 h-3" /> {tr(WORK_ORDER_STATUS_LABEL[workOrderStatus])}
+                </Badge>
+              )}
               {isBlocked && <Badge tone="dark"><ShieldAlert className="w-3 h-3" /> {tr('precisa do síndico')}</Badge>}
               {/* Inline reason chip — admin gets the "why blocked" before
                   expanding. The full label is rendered in the expanded
@@ -653,8 +745,17 @@ function AdminCard({
                   </Button>
                 </>
               )}
+              {(hasPlan || isAwaitingVendor || vendorEngaged || hasWorkOrder || isBlocked) && (
+                <Button size="sm" variant={hasWorkOrder ? 'ghost' : 'primary'}
+                        leftIcon={<ClipboardCheck className="w-3.5 h-3.5" />}
+                        onClick={onOpenWorkOrder}>
+                  {hasWorkOrder ? tr('Atualizar ordem') : tr('Criar ordem de serviço')}
+                </Button>
+              )}
               {(ticket.remediation_status === 'awaiting_vendor'
                 || ticket.remediation_status === 'vendor_engaged'
+                || ticket.remediation_status === 'work_ordered'
+                || ticket.remediation_status === 'work_in_progress'
                 || ticket.remediation_status === 'agent_dispatched'
                 || ticket.remediation_status === 'blocked_needs_admin') && (
                 <Button size="sm" variant="ghost"
@@ -713,6 +814,10 @@ function AdminCard({
                 </div>
               )}
             </GlassCard>
+          )}
+
+          {detail?.work_order && (
+            <WorkOrderPanel workOrder={detail.work_order} />
           )}
 
           {detail?.dispatches && detail.dispatches.length > 0 && (
@@ -775,6 +880,226 @@ function AdminCard({
         </div>
       )}
     </GlassCard>
+  );
+}
+
+function amountInput(cents: number | null | undefined): string {
+  if (cents == null) return '';
+  const value = cents / 100;
+  return Number.isInteger(value) ? String(value) : value.toFixed(2);
+}
+
+function amountToCents(value: string): number | null {
+  const cleaned = value.replace(/[^\d.,]/g, '').replace(',', '.');
+  if (!cleaned) return null;
+  const parsed = Number(cleaned);
+  if (!Number.isFinite(parsed) || parsed < 0) return null;
+  return Math.round(parsed * 100);
+}
+
+function toDateTimeInput(value: string | null | undefined): string {
+  if (!value) return '';
+  return value.slice(0, 16).replace(' ', 'T');
+}
+
+function fromDateTimeInput(value: string): string | null {
+  return value ? value.replace('T', ' ') : null;
+}
+
+function WorkOrderPanel({ workOrder }: { workOrder: WorkOrder }) {
+  const tr = useTicketTranslator();
+  const amount = workOrder.approved_amount_cents ?? workOrder.estimated_amount_cents;
+  return (
+    <GlassCard variant="clay" className="p-4 border border-sage-300/40 bg-sage-100/35">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <div className="text-xs uppercase tracking-wider text-sage-900 mb-1 flex items-center gap-1.5">
+            <ClipboardCheck className="w-3.5 h-3.5" /> {tr('Ordem de serviço')}
+          </div>
+          <div className="font-semibold text-dusk-500">{workOrder.title}</div>
+          <div className="flex flex-wrap gap-2 mt-2 text-xs text-dusk-300">
+            <Badge tone={workOrder.status === 'completed' ? 'sage' : workOrder.status === 'cancelled' ? 'dark' : 'peach'}>
+              {tr(WORK_ORDER_STATUS_LABEL[workOrder.status])}
+            </Badge>
+            {workOrder.vendor_name && <span>{workOrder.vendor_name}</span>}
+            {workOrder.scheduled_for && (
+              <span className="inline-flex items-center gap-1">
+                <CalendarClock className="w-3 h-3" /> {formatDateTime(workOrder.scheduled_for)}
+              </span>
+            )}
+            {amount != null && <span>{formatCurrency(amount / 100)}</span>}
+          </div>
+        </div>
+        <div className="flex gap-2">
+          {workOrder.invoice_url && (
+            <a href={workOrder.invoice_url} target="_blank" rel="noopener noreferrer"
+               className="inline-flex items-center gap-1 rounded-2xl border border-white/70 bg-white/55 px-3 py-2 text-xs font-medium text-dusk-400 hover:bg-white/80">
+              <FileText className="w-3.5 h-3.5" /> {tr('Nota fiscal')}
+            </a>
+          )}
+          {workOrder.photo_url && (
+            <a href={workOrder.photo_url} target="_blank" rel="noopener noreferrer"
+               className="inline-flex items-center gap-1 rounded-2xl border border-white/70 bg-white/55 px-3 py-2 text-xs font-medium text-dusk-400 hover:bg-white/80">
+              <ImageIcon className="w-3.5 h-3.5" /> {tr('Foto')}
+            </a>
+          )}
+        </div>
+      </div>
+      {workOrder.scope && <p className="text-sm text-dusk-400 mt-3 whitespace-pre-line">{workOrder.scope}</p>}
+      {workOrder.completion_note && (
+        <div className="mt-3 pt-3 border-t border-white/50 text-sm text-dusk-400">
+          <strong className="text-dusk-500">{tr('Conclusão:')}</strong> {workOrder.completion_note}
+        </div>
+      )}
+    </GlassCard>
+  );
+}
+
+function WorkOrderModal({
+  ticket, vendors, saving, onClose, onSubmit,
+}: {
+  ticket: TicketDetail;
+  vendors: ServiceContact[];
+  saving: boolean;
+  onClose: () => void;
+  onSubmit: (payload: WorkOrderPayload) => void;
+}) {
+  useEscape(onClose);
+  const tr = useTicketTranslator();
+  const workOrder = ticket.work_order;
+  const suggestedVendor = workOrder?.service_contact_id
+    || vendors.find((v) => categoryMatches(ticket.category, v.category))?.id
+    || vendors.find((v) => v.preferred === 1)?.id
+    || null;
+  const [vendorId, setVendorId] = useState<string>(suggestedVendor ? String(suggestedVendor) : '');
+  const [title, setTitle] = useState(workOrder?.title || tr('Ordem de serviço: {title}').replace('{title}', ticket.title));
+  const [scope, setScope] = useState(workOrder?.scope || ticket.description || '');
+  const [status, setStatus] = useState<WorkOrderStatus>(workOrder?.status || 'scheduled');
+  const [scheduledFor, setScheduledFor] = useState(toDateTimeInput(workOrder?.scheduled_for));
+  const [estimated, setEstimated] = useState(amountInput(workOrder?.estimated_amount_cents));
+  const [approved, setApproved] = useState(amountInput(workOrder?.approved_amount_cents));
+  const [invoiceUrl, setInvoiceUrl] = useState(workOrder?.invoice_url || '');
+  const [photoUrl, setPhotoUrl] = useState(workOrder?.photo_url || '');
+  const [completionNote, setCompletionNote] = useState(workOrder?.completion_note || '');
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!title.trim()) return;
+    onSubmit({
+      service_contact_id: vendorId ? Number(vendorId) : null,
+      title: title.trim(),
+      scope: scope.trim() || null,
+      status,
+      estimated_amount_cents: amountToCents(estimated),
+      approved_amount_cents: amountToCents(approved),
+      scheduled_for: fromDateTimeInput(scheduledFor),
+      invoice_url: invoiceUrl.trim() || null,
+      photo_url: photoUrl.trim() || null,
+      completion_note: completionNote.trim() || null,
+    });
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-dusk-500/40 backdrop-blur-sm">
+      <GlassCard className="w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-start justify-between mb-3">
+          <div>
+            <h3 className="font-display text-xl text-dusk-500">{tr('Ordem de serviço')}</h3>
+            <p className="text-xs text-dusk-300 mt-1">{ticket.title}</p>
+          </div>
+          <button onClick={onClose} className="w-9 h-9 rounded-2xl bg-white/50 hover:bg-white/80 flex items-center justify-center text-dusk-400">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <form onSubmit={submit} className="space-y-3">
+          <div className="grid md:grid-cols-2 gap-3">
+            <label className="block text-xs text-dusk-300 font-medium">
+              {tr('Status')}
+              <select className="input mt-1" value={status} onChange={(e) => setStatus(e.target.value as WorkOrderStatus)}>
+                {(['draft', 'scheduled', 'in_progress', 'completed', 'cancelled'] as WorkOrderStatus[]).map((s) => (
+                  <option key={s} value={s}>{tr(WORK_ORDER_STATUS_LABEL[s])}</option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-xs text-dusk-300 font-medium">
+              {tr('Fornecedor')}
+              <select className="input mt-1" value={vendorId} onChange={(e) => setVendorId(e.target.value)}>
+                <option value="">{tr('Sem fornecedor vinculado')}</option>
+                {vendors.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.company_name} ({tr(vendorCategoryLabel(v.category))})
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <label className="block text-xs text-dusk-300 font-medium">
+            {tr('Título da ordem')}
+            <input className="input mt-1" value={title} maxLength={160}
+                   onChange={(e) => setTitle(e.target.value)} required />
+          </label>
+
+          <label className="block text-xs text-dusk-300 font-medium">
+            {tr('Escopo do trabalho')}
+            <textarea className="input mt-1 min-h-[110px]" value={scope} maxLength={4000}
+                      onChange={(e) => setScope(e.target.value)} />
+          </label>
+
+          <div className="grid md:grid-cols-3 gap-3">
+            <label className="block text-xs text-dusk-300 font-medium">
+              {tr('Agendado para')}
+              <input className="input mt-1" type="datetime-local" value={scheduledFor}
+                     onChange={(e) => setScheduledFor(e.target.value)} />
+            </label>
+            <label className="block text-xs text-dusk-300 font-medium">
+              {tr('Estimativa')}
+              <input className="input mt-1" inputMode="decimal" value={estimated}
+                     placeholder="1200"
+                     onChange={(e) => setEstimated(e.target.value)} />
+            </label>
+            <label className="block text-xs text-dusk-300 font-medium">
+              {tr('Valor aprovado')}
+              <input className="input mt-1" inputMode="decimal" value={approved}
+                     placeholder="1200"
+                     onChange={(e) => setApproved(e.target.value)} />
+            </label>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-3">
+            <label className="block text-xs text-dusk-300 font-medium">
+              {tr('URL da nota fiscal')}
+              <input className="input mt-1" type="url" value={invoiceUrl}
+                     placeholder="https://..."
+                     onChange={(e) => setInvoiceUrl(e.target.value)} />
+            </label>
+            <label className="block text-xs text-dusk-300 font-medium">
+              {tr('URL da foto')}
+              <input className="input mt-1" type="url" value={photoUrl}
+                     placeholder="https://..."
+                     onChange={(e) => setPhotoUrl(e.target.value)} />
+            </label>
+          </div>
+
+          <label className="block text-xs text-dusk-300 font-medium">
+            {tr('Nota de conclusão')}
+            <textarea className="input mt-1 min-h-[90px]" value={completionNote} maxLength={2000}
+                      placeholder={tr('Ex: Reparo concluído, testado com o zelador e funcionando normalmente.')}
+                      onChange={(e) => setCompletionNote(e.target.value)} />
+          </label>
+
+          <div className="flex gap-2 justify-end pt-2">
+            <Button type="button" variant="ghost" onClick={onClose}>{tr('Cancelar')}</Button>
+            <Button type="submit" variant="primary" loading={saving}
+                    disabled={!title.trim()}
+                    leftIcon={<ClipboardCheck className="w-4 h-4" />}>
+              {tr('Salvar ordem')}
+            </Button>
+          </div>
+        </form>
+      </GlassCard>
+    </div>
   );
 }
 
@@ -1127,4 +1452,3 @@ function ResolveModal({
     </div>
   );
 }
-

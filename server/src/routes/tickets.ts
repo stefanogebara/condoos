@@ -69,6 +69,31 @@ const resolveSchema = z.object({
   announce: z.boolean().optional(),
 });
 
+const workOrderStatusSchema = z.enum(['draft', 'scheduled', 'in_progress', 'completed', 'cancelled']);
+
+const nullableHttpsUrlSchema = z.preprocess(
+  (value) => (value === '' ? null : value),
+  z.string().url().max(1_000).refine(
+    (u) => u.startsWith('https://'),
+    { message: 'must_be_https_url' },
+  ).nullable().optional(),
+);
+
+const workOrderCreateSchema = z.object({
+  service_contact_id: z.number().int().positive().nullable().optional(),
+  title: z.string().min(1).max(160).optional(),
+  scope: z.string().max(4_000).nullable().optional(),
+  status: workOrderStatusSchema.optional().default('scheduled'),
+  estimated_amount_cents: z.number().int().min(0).max(1_000_000_000).nullable().optional(),
+  approved_amount_cents: z.number().int().min(0).max(1_000_000_000).nullable().optional(),
+  scheduled_for: z.string().max(80).nullable().optional(),
+  invoice_url: nullableHttpsUrlSchema,
+  photo_url: nullableHttpsUrlSchema,
+  completion_note: z.string().max(2_000).nullable().optional(),
+});
+
+const workOrderUpdateSchema = workOrderCreateSchema.partial();
+
 // Phase 2 — fire-and-forget agent invocation triggered the moment a ticket
 // flips to remediation_status='verified'. We can't block the verify HTTP
 // response on a 5-15s LLM call, so the agent runs in the background and
@@ -246,6 +271,64 @@ function getScopedTicket(id: number, condoId: number) {
   ).get(id, condoId) as any;
 }
 
+function getTicketWorkOrder(ticketId: number) {
+  return db.prepare(
+    `SELECT wo.*,
+            sc.company_name AS vendor_name,
+            sc.category AS vendor_category,
+            sc.contact_name AS vendor_contact
+     FROM ticket_work_orders wo
+     LEFT JOIN service_contacts sc ON sc.id = wo.service_contact_id
+     WHERE wo.ticket_id = ?`
+  ).get(ticketId) as any;
+}
+
+function ensureVendorInCondo(serviceContactId: number | null | undefined, condoId: number): boolean {
+  if (!serviceContactId) return true;
+  return !!db.prepare(
+    `SELECT 1 FROM service_contacts WHERE id = ? AND condominium_id = ? AND active = 1`
+  ).get(serviceContactId, condoId);
+}
+
+function blankToNull(value: string | null | undefined): string | null {
+  if (value == null) return null;
+  const trimmed = String(value).trim();
+  return trimmed || null;
+}
+
+function sqlNow(): string {
+  return new Date().toISOString().replace('T', ' ').slice(0, 19);
+}
+
+function syncTicketFromWorkOrder(ticketId: number, status: z.infer<typeof workOrderStatusSchema>) {
+  if (status === 'completed') {
+    db.prepare(
+      `UPDATE tickets
+       SET status = 'resolved',
+           remediation_status = 'resolved',
+           resolved_at = COALESCE(resolved_at, CURRENT_TIMESTAMP),
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`
+    ).run(ticketId);
+    return;
+  }
+  const next = status === 'in_progress'
+    ? { status: 'in_progress', remediation: 'work_in_progress' }
+    : status === 'scheduled'
+      ? { status: 'waiting', remediation: 'work_ordered' }
+      : status === 'draft'
+        ? { status: 'waiting', remediation: 'vendor_engaged' }
+        : null;
+  if (!next) return;
+  db.prepare(
+    `UPDATE tickets
+     SET status = ?,
+         remediation_status = CASE WHEN remediation_status = 'resolved' THEN remediation_status ELSE ? END,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = ?`
+  ).run(next.status, next.remediation, ticketId);
+}
+
 function canSeeTicket(req: AuthedRequest, ticket: any): boolean {
   if (req.user!.role === 'board_admin') return true;
   if (ticket.reporter_id === req.user!.id) return true;
@@ -336,13 +419,20 @@ router.get('/', requireAuth, (req: AuthedRequest, res) => {
   const rows = db.prepare(
     `SELECT t.*, u.number AS unit_number, r.first_name AS reporter_first, r.last_name AS reporter_last,
             ru.number AS reporter_unit_number,
-            a.first_name AS assignee_first, a.last_name AS assignee_last
+            a.first_name AS assignee_first, a.last_name AS assignee_last,
+            wo.id AS work_order_id,
+            wo.status AS work_order_status,
+            wo.scheduled_for AS work_order_scheduled_for,
+            wo.estimated_amount_cents AS work_order_estimated_amount_cents,
+            wosc.company_name AS work_order_vendor_name
      FROM tickets t
      LEFT JOIN units u ON u.id = t.unit_id
      JOIN users r ON r.id = t.reporter_id
      LEFT JOIN user_unit ruu ON ruu.user_id = r.id AND ruu.status = 'active' AND ruu.primary_contact = 1
      LEFT JOIN units ru ON ru.id = ruu.unit_id
      LEFT JOIN users a ON a.id = t.assigned_to_user_id
+     LEFT JOIN ticket_work_orders wo ON wo.ticket_id = t.id
+     LEFT JOIN service_contacts wosc ON wosc.id = wo.service_contact_id
      WHERE ${clauses.join(' AND ')}
      ORDER BY
        CASE t.priority WHEN 'urgent' THEN 1 WHEN 'high' THEN 2 WHEN 'normal' THEN 3 ELSE 4 END,
@@ -852,6 +942,138 @@ router.post('/:id/run-agent', requireAuth, requireRole('board_admin'), asyncHand
   return ok(res, { id, plan: result.plan, fallback: result.fallback });
 }));
 
+router.post('/:id/work-order', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+  const parsed = workOrderCreateSchema.safeParse(req.body);
+  if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
+  const condoId = getActiveCondoId(req);
+  const id = Number(req.params.id);
+  const ticket = getScopedTicket(id, condoId);
+  if (!ticket) return fail(res, 'not_found', 404);
+  if (!ensureVendorInCondo(parsed.data.service_contact_id, condoId)) {
+    return fail(res, 'vendor_not_in_condo', 400);
+  }
+
+  const existing = db.prepare(`SELECT id FROM ticket_work_orders WHERE ticket_id = ?`).get(id) as { id: number } | undefined;
+  if (existing) {
+    const body = parsed.data;
+    const sets: string[] = [];
+    const vals: any[] = [];
+    const has = (key: keyof typeof body) => Object.prototype.hasOwnProperty.call(body, key);
+    if (has('service_contact_id')) { sets.push('service_contact_id = ?'); vals.push(body.service_contact_id || null); }
+    if (has('title') && body.title) { sets.push('title = ?'); vals.push(body.title.trim()); }
+    if (has('scope')) { sets.push('scope = ?'); vals.push(blankToNull(body.scope)); }
+    if (has('status') && body.status) {
+      sets.push('status = ?'); vals.push(body.status);
+      if (body.status === 'in_progress') sets.push('started_at = COALESCE(started_at, CURRENT_TIMESTAMP)');
+      if (body.status === 'completed') sets.push('completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP)');
+    }
+    if (has('estimated_amount_cents')) { sets.push('estimated_amount_cents = ?'); vals.push(body.estimated_amount_cents ?? null); }
+    if (has('approved_amount_cents')) { sets.push('approved_amount_cents = ?'); vals.push(body.approved_amount_cents ?? null); }
+    if (has('scheduled_for')) { sets.push('scheduled_for = ?'); vals.push(blankToNull(body.scheduled_for)); }
+    if (has('invoice_url')) { sets.push('invoice_url = ?'); vals.push(blankToNull(body.invoice_url)); }
+    if (has('photo_url')) { sets.push('photo_url = ?'); vals.push(blankToNull(body.photo_url)); }
+    if (has('completion_note')) { sets.push('completion_note = ?'); vals.push(blankToNull(body.completion_note)); }
+    sets.push('updated_by_user_id = ?', 'updated_at = CURRENT_TIMESTAMP');
+    vals.push(req.user!.id, existing.id);
+    db.prepare(`UPDATE ticket_work_orders SET ${sets.join(', ')} WHERE id = ?`).run(...vals);
+    if (body.status) syncTicketFromWorkOrder(id, body.status);
+    audit(req, {
+      action: 'ticket.work_order_update',
+      target_type: 'ticket_work_order',
+      target_id: existing.id,
+      condominium_id: condoId,
+      metadata: { ticket_id: id, status: body.status || null },
+    });
+    return ok(res, getTicketWorkOrder(id));
+  }
+
+  const body = parsed.data;
+  const now = sqlNow();
+  const status = body.status || 'scheduled';
+  const result = db.prepare(
+    `INSERT INTO ticket_work_orders (
+       ticket_id, service_contact_id, title, scope, status,
+       estimated_amount_cents, approved_amount_cents, scheduled_for,
+       started_at, completed_at, invoice_url, photo_url, completion_note,
+       created_by_user_id, updated_by_user_id
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    id,
+    body.service_contact_id || null,
+    (body.title?.trim() || `Ordem de serviço: ${ticket.title}`).slice(0, 160),
+    blankToNull(body.scope),
+    status,
+    body.estimated_amount_cents ?? null,
+    body.approved_amount_cents ?? null,
+    blankToNull(body.scheduled_for),
+    status === 'in_progress' ? now : null,
+    status === 'completed' ? now : null,
+    blankToNull(body.invoice_url),
+    blankToNull(body.photo_url),
+    blankToNull(body.completion_note),
+    req.user!.id,
+    req.user!.id,
+  );
+  syncTicketFromWorkOrder(id, status);
+  audit(req, {
+    action: 'ticket.work_order_create',
+    target_type: 'ticket_work_order',
+    target_id: Number(result.lastInsertRowid),
+    condominium_id: condoId,
+    metadata: { ticket_id: id, service_contact_id: body.service_contact_id || null, status },
+  });
+  return ok(res, getTicketWorkOrder(id), 201);
+});
+
+router.patch('/:id/work-order/:workOrderId', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+  const parsed = workOrderUpdateSchema.safeParse(req.body);
+  if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
+  const condoId = getActiveCondoId(req);
+  const id = Number(req.params.id);
+  const workOrderId = Number(req.params.workOrderId);
+  const ticket = getScopedTicket(id, condoId);
+  if (!ticket) return fail(res, 'not_found', 404);
+  if (!ensureVendorInCondo(parsed.data.service_contact_id, condoId)) {
+    return fail(res, 'vendor_not_in_condo', 400);
+  }
+  const existing = db.prepare(
+    `SELECT id FROM ticket_work_orders WHERE id = ? AND ticket_id = ?`
+  ).get(workOrderId, id) as { id: number } | undefined;
+  if (!existing) return fail(res, 'work_order_not_found', 404);
+
+  const body = parsed.data;
+  const sets: string[] = [];
+  const vals: any[] = [];
+  const has = (key: keyof typeof body) => Object.prototype.hasOwnProperty.call(body, key);
+  if (has('service_contact_id')) { sets.push('service_contact_id = ?'); vals.push(body.service_contact_id || null); }
+  if (has('title') && body.title) { sets.push('title = ?'); vals.push(body.title.trim()); }
+  if (has('scope')) { sets.push('scope = ?'); vals.push(blankToNull(body.scope)); }
+  if (has('status') && body.status) {
+    sets.push('status = ?'); vals.push(body.status);
+    if (body.status === 'in_progress') sets.push('started_at = COALESCE(started_at, CURRENT_TIMESTAMP)');
+    if (body.status === 'completed') sets.push('completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP)');
+  }
+  if (has('estimated_amount_cents')) { sets.push('estimated_amount_cents = ?'); vals.push(body.estimated_amount_cents ?? null); }
+  if (has('approved_amount_cents')) { sets.push('approved_amount_cents = ?'); vals.push(body.approved_amount_cents ?? null); }
+  if (has('scheduled_for')) { sets.push('scheduled_for = ?'); vals.push(blankToNull(body.scheduled_for)); }
+  if (has('invoice_url')) { sets.push('invoice_url = ?'); vals.push(blankToNull(body.invoice_url)); }
+  if (has('photo_url')) { sets.push('photo_url = ?'); vals.push(blankToNull(body.photo_url)); }
+  if (has('completion_note')) { sets.push('completion_note = ?'); vals.push(blankToNull(body.completion_note)); }
+  if (sets.length === 0) return fail(res, 'nothing_to_update', 400);
+  sets.push('updated_by_user_id = ?', 'updated_at = CURRENT_TIMESTAMP');
+  vals.push(req.user!.id, workOrderId);
+  db.prepare(`UPDATE ticket_work_orders SET ${sets.join(', ')} WHERE id = ?`).run(...vals);
+  if (body.status) syncTicketFromWorkOrder(id, body.status);
+  audit(req, {
+    action: 'ticket.work_order_update',
+    target_type: 'ticket_work_order',
+    target_id: workOrderId,
+    condominium_id: condoId,
+    metadata: { ticket_id: id, status: body.status || null },
+  });
+  return ok(res, getTicketWorkOrder(id));
+});
+
 router.get('/:id', requireAuth, (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const id = Number(req.params.id);
@@ -936,6 +1158,7 @@ router.get('/:id', requireAuth, (req: AuthedRequest, res) => {
         responded_at: d.responded_at,
         vendor_name: d.vendor_name,
       }));
+  const workOrder = getTicketWorkOrder(id);
   return ok(res, {
     ...ticket,
     agent_plan,
@@ -943,6 +1166,7 @@ router.get('/:id', requireAuth, (req: AuthedRequest, res) => {
     attachments,
     verifications,
     dispatches,
+    work_order: workOrder || null,
     my_vote: myVoteRow?.vote || null,
   });
 });
