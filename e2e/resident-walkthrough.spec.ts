@@ -54,6 +54,8 @@ test('resident: overview greets by name + shows full sidebar', async ({ page, re
   await expect(menu.getByText(/Resident|Morador/i).first()).toBeVisible();
   // Greet by name (Maya is the seeded resident)
   await expect(page.getByRole('heading', { name: /Good (morning|afternoon|evening), Maya|Bom dia, Maya|Boa tarde, Maya|Boa noite, Maya/i }).first()).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Today in your unit|Hoje na sua unidade|Hoy en tu unidad|Aujourd’hui dans votre lot/i })).toBeVisible();
+  await expect(page.getByText(/Fast actions|Ações rápidas|Acciones rápidas|Actions rapides/i)).toBeVisible();
   // All 10 nav items in sidebar
   const links = [
     /^(Overview|Início)$/i,
@@ -238,16 +240,15 @@ test('resident: suggest page exposes textarea + submit CTA', async ({ page, requ
 });
 
 // ---------------------------------------------------------------------------
-// /app/settings — profile + WhatsApp opt-in
+// /app/settings — profile summary
 // ---------------------------------------------------------------------------
 
-test('resident: settings page has profile + WhatsApp section + Save', async ({ page, request }) => {
+test('resident: settings page has profile summary', async ({ page, request }) => {
   await residentLogin(page, request);
   await page.goto('/app/settings');
   await expect(page.getByRole('heading', { level: 1, name: /Settings|Preferênc/i })).toBeVisible();
-  await expect(page.locator('input[type="tel"]')).toBeVisible();
-  await expect(page.locator('input[type="checkbox"]')).toBeVisible();
-  await expect(page.getByRole('button', { name: /Save|Salvar/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Profile|Perfil/i })).toBeVisible();
+  await expect(page.getByText(/resident@condoos\.dev/i)).toBeVisible();
 });
 
 // ---------------------------------------------------------------------------

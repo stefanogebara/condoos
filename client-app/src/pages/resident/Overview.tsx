@@ -347,7 +347,7 @@ function StatCard({ icon: Icon, color, label, value, to }: { icon: any; color: '
 function SectionHeader({ title, link }: { title: string; link: string }) {
   return (
     <div className="flex items-center justify-between">
-      <h2 className="font-display text-xl text-dusk-500">{title}</h2>
+      <h2 className="font-display text-xl text-dusk-500">{t(title)}</h2>
       <Link to={link} className="text-xs text-dusk-300 hover:text-dusk-500 inline-flex items-center gap-1">
         {t('Ver tudo')} <ArrowRight className="w-3 h-3" />
       </Link>
