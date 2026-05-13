@@ -64,14 +64,14 @@ interface Proposal {
 function formatWindow(opens_at: string | null, closes_at: string | null): { label: string; tone: 'live' | 'pre' | 'over' } {
   const now = Date.now();
   if (opens_at && now < new Date(opens_at).getTime()) {
-    return { label: `Opens in ${humanDelta(new Date(opens_at).getTime() - now)}`, tone: 'pre' };
+    return { label: `${t('Opens in')} ${humanDelta(new Date(opens_at).getTime() - now)}`, tone: 'pre' };
   }
   if (closes_at) {
     const delta = new Date(closes_at).getTime() - now;
-    if (delta <= 0) return { label: 'Voting closed', tone: 'over' };
-    return { label: `Closes in ${humanDelta(delta)}`, tone: 'live' };
+    if (delta <= 0) return { label: t('Voting closed'), tone: 'over' };
+    return { label: `${t('Closes in')} ${humanDelta(delta)}`, tone: 'live' };
   }
-  return { label: 'Open', tone: 'live' };
+  return { label: t('Open'), tone: 'live' };
 }
 
 function humanDelta(ms: number): string {

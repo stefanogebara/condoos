@@ -3,6 +3,7 @@ import { User } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 import GlassCard from '../../components/GlassCard';
 import { apiGet } from '../../lib/api';
+import { t } from '../../lib/i18n';
 
 interface Me {
   id: number;
@@ -27,17 +28,17 @@ export default function Settings() {
 
   return (
     <>
-      <PageHeader title="Preferências" subtitle="Perfil e notificações" />
+      <PageHeader title={t('Preferências')} subtitle={t('Perfil e notificações')} />
 
       <GlassCard variant="clay" className="p-6 mb-6">
-        <h3 className="font-display text-lg text-dusk-500 mb-3 flex items-center gap-2"><User className="w-5 h-5" /> Perfil</h3>
+        <h3 className="font-display text-lg text-dusk-500 mb-3 flex items-center gap-2"><User className="w-5 h-5" /> {t('Perfil')}</h3>
         <div className="grid md:grid-cols-2 gap-3 text-sm">
           <div>
-            <label className="text-xs text-dusk-300 uppercase tracking-wider">Nome</label>
+            <label className="text-xs text-dusk-300 uppercase tracking-wider">{t('Nome')}</label>
             <div className="text-dusk-500 mt-1">{me.first_name} {me.last_name}</div>
           </div>
           <div>
-            <label className="text-xs text-dusk-300 uppercase tracking-wider">Email</label>
+            <label className="text-xs text-dusk-300 uppercase tracking-wider">{t('Email')}</label>
             <div className="text-dusk-500 mt-1">{me.email}</div>
           </div>
         </div>

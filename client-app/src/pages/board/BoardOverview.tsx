@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Inbox, Vote, Calendar, Users, ArrowRight, Bot, CheckCircle2, MessageCircle, Send, ShieldAlert, Sparkles } from 'lucide-react';
+import { Inbox, Vote, Calendar, Users, ArrowRight, Bot, CheckCircle2, MessageCircle, Send, ShieldAlert, Sparkles, AlertTriangle, UserPlus } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 import GlassCard from '../../components/GlassCard';
 import Badge from '../../components/Badge';
@@ -11,6 +11,8 @@ import { formatRelativeTime, t as translate } from '../../lib/i18n';
 interface Proposal { id: number; title: string; status: string; votes: { yes: number; no: number; abstain: number; total: number }; }
 interface Suggestion { id: number; body: string; status: string; }
 interface Meeting { id: number; title: string; scheduled_for: string; status: string; }
+interface PendingResident { id: number; first_name: string; last_name: string; unit_number: string | null; }
+interface TicketSummary { needs_admin: number; blocked_no_vendor: number; blocked_no_response: number; verified_ready: number; awaiting_verification: number; }
 
 interface AutoAction {
   id: number;
@@ -65,6 +67,8 @@ export default function BoardOverview() {
   const [condoName, setCondoName] = useState<string>('');
   const [loadError, setLoadError] = useState<string | null>(null);
   const [autoActions, setAutoActions] = useState<AutoAction[]>([]);
+  const [pendingResidents, setPendingResidents] = useState<PendingResident[]>([]);
+  const [ticketSummary, setTicketSummary] = useState<TicketSummary | null>(null);
   const tr = (k: string) => translate(k);
 
   useEffect(() => {
@@ -75,6 +79,8 @@ export default function BoardOverview() {
       apiGet<Meeting[]>('/meetings').then(setMeetings),
       apiGet<any[]>('/users/residents').then(setResidents),
       apiGet<AutoAction[]>('/tickets/recent-auto-actions').then(setAutoActions),
+      apiGet<PendingResident[]>('/memberships/pending').then(setPendingResidents),
+      apiGet<TicketSummary>('/tickets/summary').then(setTicketSummary),
       apiGet<Array<{ status: string; condo_name: string }>>('/onboarding/me').then((rows) => {
         const active = rows.find((r) => r.status === 'active');
         if (active) setCondoName(active.condo_name);
@@ -83,7 +89,7 @@ export default function BoardOverview() {
     Promise.allSettled(loads).then((results) => {
       if (!alive) return;
       setLoadError(results.some((r) => r.status === 'rejected')
-        ? 'Alguns dados do painel não puderam ser carregados. Atualize ou entre novamente se persistir.'
+        ? tr('Alguns dados do painel não puderam ser carregados. Atualize ou entre novamente se persistir.')
         : null);
     });
     return () => { alive = false; };
@@ -92,23 +98,128 @@ export default function BoardOverview() {
   const openSuggestions = suggestions.filter((s) => s.status === 'open');
   const openProposals = proposals.filter((p) => p.status === 'voting' || p.status === 'discussion');
   const upcoming = meetings.filter((m) => new Date(m.scheduled_for) > new Date() && m.status !== 'completed');
+  const urgentTicketCount = Number(ticketSummary?.needs_admin || 0) + Number(ticketSummary?.verified_ready || 0);
 
   const STATUS_LABEL: Record<string, string> = {
     voting: 'em votação', discussion: 'em discussão', approved: 'aprovada',
     rejected: 'reprovada', completed: 'concluída', inconclusive: 'inconclusiva',
   };
 
+  const attentionItems = useMemo(() => {
+    const items: Array<{
+      key: string;
+      icon: any;
+      tone: 'sage' | 'peach' | 'warning';
+      title: string;
+      detail: string;
+      to: string;
+    }> = [];
+    if (pendingResidents.length > 0) {
+      const first = pendingResidents[0];
+      items.push({
+        key: 'pending-residents',
+        icon: UserPlus,
+        tone: 'warning',
+        title: pendingResidents.length === 1 ? tr('1 resident waiting for approval') : `${pendingResidents.length} ${tr('residents waiting for approval')}`,
+        detail: `${first.first_name} ${first.last_name}${first.unit_number ? ` · ${tr('Unidade')} ${first.unit_number}` : ''}`,
+        to: '/board/pending',
+      });
+    }
+    if (urgentTicketCount > 0) {
+      items.push({
+        key: 'tickets',
+        icon: AlertTriangle,
+        tone: 'warning',
+        title: urgentTicketCount === 1 ? tr('1 ticket needs attention') : `${urgentTicketCount} ${tr('tickets need attention')}`,
+        detail: tr('Verified, blocked, or waiting for admin action.'),
+        to: '/board/tickets',
+      });
+    }
+    if (openSuggestions.length > 0) {
+      items.push({
+        key: 'suggestions',
+        icon: Inbox,
+        tone: 'peach',
+        title: openSuggestions.length === 1 ? tr('1 resident suggestion') : `${openSuggestions.length} ${tr('resident suggestions')}`,
+        detail: tr('Cluster, promote, or dismiss before they pile up.'),
+        to: '/board/suggestions',
+      });
+    }
+    if (openProposals.length > 0) {
+      items.push({
+        key: 'proposals',
+        icon: Vote,
+        tone: 'sage',
+        title: openProposals.length === 1 ? tr('1 active proposal') : `${openProposals.length} ${tr('active proposals')}`,
+        detail: tr('Keep budgets, analysis, quorum, and voting windows moving.'),
+        to: '/board/proposals',
+      });
+    }
+    if (upcoming.length > 0) {
+      items.push({
+        key: 'meetings',
+        icon: Calendar,
+        tone: 'sage',
+        title: upcoming.length === 1 ? tr('1 upcoming meeting') : `${upcoming.length} ${tr('upcoming meetings')}`,
+        detail: tr('Prepare agenda, notes, decisions, and resident updates.'),
+        to: '/board/meetings',
+      });
+    }
+    if (items.length === 0) {
+      items.push({
+        key: 'clear',
+        icon: CheckCircle2,
+        tone: 'sage',
+        title: tr('Nothing urgent right now'),
+        detail: tr('Your building has no admin blockers in the command center.'),
+        to: '/board',
+      });
+    }
+    return items;
+  }, [openProposals.length, openSuggestions.length, pendingResidents, tr, upcoming.length, urgentTicketCount]);
+
   return (
     <>
       <PageHeader
-        title={<>Bem-vindo de volta, {user?.first_name}.</>}
-        subtitle={condoName ? <>Tudo que precisa da sua atenção no {condoName}.</> : 'Tudo que precisa da sua atenção.'}
+        title={<>{tr('Bem-vindo de volta')}, {user?.first_name}.</>}
+        subtitle={condoName ? <>{tr('Tudo que precisa da sua atenção no')} {condoName}.</> : tr('Tudo que precisa da sua atenção.')}
       />
       {loadError && (
         <GlassCard variant="clay-peach" className="p-4 mb-6 text-sm text-dusk-500">
           {loadError}
         </GlassCard>
       )}
+
+      <GlassCard variant="clay-sage" className="p-5 mb-8">
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <div>
+            <h2 className="font-display text-xl text-dusk-500">{tr('Command center')}</h2>
+            <p className="text-sm text-dusk-300 mt-1">{tr('Start with what needs a decision, approval, or follow-up today.')}</p>
+          </div>
+          <Badge tone={attentionItems[0]?.key === 'clear' ? 'sage' : 'peach'}>
+            {attentionItems[0]?.key === 'clear' ? tr('All clear') : `${attentionItems.length} ${tr('items')}`}
+          </Badge>
+        </div>
+        <div className="grid md:grid-cols-2 gap-3">
+          {attentionItems.map((item) => {
+            const Icon = item.icon;
+            return (
+              <Link key={item.key} to={item.to} className="rounded-2xl bg-white/60 border border-white/70 p-4 hover:bg-white/80 transition flex items-center gap-3">
+                <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${
+                  item.tone === 'sage' ? 'bg-sage-200 text-sage-700' : item.tone === 'warning' ? 'bg-peach-100 text-peach-600' : 'bg-peach-100 text-peach-500'
+                }`}>
+                  <Icon className="w-5 h-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="font-semibold text-dusk-500 truncate">{item.title}</div>
+                  <div className="text-xs text-dusk-300 mt-0.5 line-clamp-1">{item.detail}</div>
+                </div>
+                <ArrowRight className="w-4 h-4 text-dusk-300 shrink-0" />
+              </Link>
+            );
+          })}
+        </div>
+      </GlassCard>
 
       <div className="grid md:grid-cols-4 gap-4 mb-8">
         <Stat icon={Inbox}    color="peach" label="Sugestões novas"    value={openSuggestions.length} to="/board/suggestions" />
@@ -152,39 +263,39 @@ export default function BoardOverview() {
 
       <div className="grid lg:grid-cols-2 gap-6">
         <GlassCard variant="clay-peach" className="p-7">
-          <Badge tone="dark" className="mb-3"><Sparkles className="w-3 h-3" /> Caixa de IA</Badge>
+          <Badge tone="dark" className="mb-3"><Sparkles className="w-3 h-3" /> {tr('Caixa de IA')}</Badge>
           <h2 className="font-display text-2xl text-dusk-500 leading-tight">
             {openSuggestions.length === 1
-              ? '1 sugestão de morador esperando'
-              : <>{openSuggestions.length} sugestões de moradores esperando</>}
+              ? tr('1 sugestão de morador esperando')
+              : <>{openSuggestions.length} {tr('sugestões de moradores esperando')}</>}
           </h2>
-          <p className="text-sm text-dusk-300 mt-2">Agrupe, transforme em proposta ou descarte. Um clique cada.</p>
+          <p className="text-sm text-dusk-300 mt-2">{tr('Agrupe, transforme em proposta ou descarte. Um clique cada.')}</p>
           <Link to="/board/suggestions" className="mt-5 inline-flex items-center gap-1 font-semibold text-dusk-500">
-            Abrir caixa <ArrowRight className="w-4 h-4" />
+            {tr('Abrir caixa')} <ArrowRight className="w-4 h-4" />
           </Link>
         </GlassCard>
 
         <GlassCard variant="clay-sage" className="p-7">
-          <Badge tone="dark" className="mb-3">Reunião pronta?</Badge>
-          <h2 className="font-display text-2xl text-dusk-500 leading-tight">Cole as anotações. Receba o resumo, tarefas e o comunicado pros moradores.</h2>
+          <Badge tone="dark" className="mb-3">{tr('Reunião pronta?')}</Badge>
+          <h2 className="font-display text-2xl text-dusk-500 leading-tight">{tr('Cole as anotações. Receba o resumo, tarefas e o comunicado pros moradores.')}</h2>
           <Link to="/board/meetings" className="mt-5 inline-flex items-center gap-1 font-semibold text-dusk-500">
-            Ver reuniões <ArrowRight className="w-4 h-4" />
+            {tr('Ver reuniões')} <ArrowRight className="w-4 h-4" />
           </Link>
         </GlassCard>
       </div>
 
-      <h2 className="font-display text-xl text-dusk-500 mt-10 mb-4">Propostas ativas</h2>
+      <h2 className="font-display text-xl text-dusk-500 mt-10 mb-4">{tr('Propostas ativas')}</h2>
       <div className="grid md:grid-cols-2 gap-4">
         {openProposals.map((p) => (
           <Link key={p.id} to={`/board/proposals/${p.id}`}>
             <GlassCard variant="clay" hover className="p-5">
-              <Badge tone={p.status === 'voting' ? 'peach' : 'sage'}>{STATUS_LABEL[p.status] || p.status}</Badge>
-              <h3 className="font-semibold text-dusk-500 mt-2">{p.title}</h3>
+              <Badge tone={p.status === 'voting' ? 'peach' : 'sage'}>{tr(STATUS_LABEL[p.status] || p.status)}</Badge>
+              <h3 className="font-semibold text-dusk-500 mt-2">{tr(p.title)}</h3>
               {p.status === 'voting' && (
                 <div className="mt-3 flex items-center justify-between text-xs">
-                  <span className="text-sage-700 font-semibold">{p.votes.yes} sim</span>
-                  <span className="text-peach-500 font-semibold">{p.votes.no} não</span>
-                  <span className="text-dusk-200">{p.votes.abstain} abst.</span>
+                  <span className="text-sage-700 font-semibold">{p.votes.yes} {tr('sim')}</span>
+                  <span className="text-peach-500 font-semibold">{p.votes.no} {tr('não')}</span>
+                  <span className="text-dusk-200">{p.votes.abstain} {tr('abst.')}</span>
                 </div>
               )}
             </GlassCard>
@@ -206,7 +317,7 @@ function Stat({ icon: Icon, color, label, value, to }: any) {
           <ArrowRight className="w-4 h-4 text-dusk-200" />
         </div>
         <div className="mt-4 font-display text-3xl text-dusk-500">{value}</div>
-        <div className="text-xs text-dusk-300 mt-0.5">{label}</div>
+        <div className="text-xs text-dusk-300 mt-0.5">{translate(label)}</div>
       </GlassCard>
     </Link>
   );

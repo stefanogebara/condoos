@@ -162,15 +162,15 @@ export default function BoardAmenities() {
   return (
     <>
       <PageHeader
-        title="Áreas comuns"
-        subtitle={loading ? 'Carregando…' : `${activeCount} ativas · ${amenities.length} cadastradas para reserva`}
+        title={t('Áreas comuns')}
+        subtitle={loading ? t('Carregando…') : `${activeCount} ${t('ativas')} · ${amenities.length} ${t('cadastradas para reserva')}`}
         actions={
           <Button
             variant={showNew ? 'ghost' : 'primary'}
             onClick={() => setShowNew((x) => !x)}
             leftIcon={showNew ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
           >
-            {showNew ? 'Cancelar' : 'Nova área'}
+            {showNew ? t('Cancelar') : t('Nova área')}
           </Button>
         }
       />
@@ -187,10 +187,10 @@ export default function BoardAmenities() {
       <GlassCard className="p-5 mb-5">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div>
-            <h2 className="font-display text-xl text-dusk-500">Adicionar por modelo</h2>
+            <h2 className="font-display text-xl text-dusk-500">{t('Adicionar por modelo')}</h2>
             <p className="text-sm text-dusk-300 mt-1">{t('Comece com um padrão e ajuste capacidade, horários de funcionamento e duração dos slots.')}</p>
           </div>
-          <Badge tone="sage">capacidade = pessoas por slot</Badge>
+          <Badge tone="sage">{t('capacidade = pessoas por slot')}</Badge>
         </div>
         <div className="mt-4 grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
           {PRESETS.map((preset) => {
@@ -203,9 +203,9 @@ export default function BoardAmenities() {
                 className="p-3 rounded-2xl bg-white/60 border border-white/70 text-left hover:bg-white/80 transition"
               >
                 <div className="flex items-center gap-2 text-dusk-500 font-semibold">
-                  <Icon className="w-4 h-4" /> {preset.name}
+                  <Icon className="w-4 h-4" /> {t(preset.name)}
                 </div>
-                <div className="text-xs text-dusk-300 mt-1">{preset.capacity} pessoas · {preset.slot_minutes} min</div>
+                <div className="text-xs text-dusk-300 mt-1">{preset.capacity} {t('pessoas')} · {preset.slot_minutes} min</div>
               </button>
             );
           })}
@@ -249,7 +249,7 @@ export default function BoardAmenities() {
 
       {!loading && amenities.length === 0 && (
         <GlassCard className="p-6 text-sm text-dusk-300 text-center">
-          Nenhuma área comum cadastrada ainda. Crie a primeira para liberar reservas aos moradores.
+          {t('Nenhuma área comum cadastrada ainda. Crie a primeira para liberar reservas aos moradores.')}
         </GlassCard>
       )}
     </>
@@ -282,7 +282,7 @@ function ReservationRow({ reservation, onChanged }: { reservation: Reservation; 
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-semibold text-dusk-500">{reservation.amenity_name}</span>
+          <span className="font-semibold text-dusk-500">{t(reservation.amenity_name)}</span>
           <Badge tone="peach"><Users className="w-3 h-3" /> {people} {t('pessoas')}</Badge>
         </div>
         <div className="text-xs text-dusk-300 mt-1">
@@ -352,7 +352,7 @@ function ReservationWeekCalendar({
                 ) : dayReservations.map((r) => (
                   <div key={r.id} className="rounded-xl bg-cream-50/80 border border-white/80 p-2">
                     <div className="text-xs font-semibold text-dusk-500">{timeRange(r.starts_at, r.ends_at)}</div>
-                    <div className="text-xs text-dusk-300 truncate">{r.amenity_name}</div>
+                    <div className="text-xs text-dusk-300 truncate">{t(r.amenity_name)}</div>
                     <div className="text-[11px] text-dusk-200 truncate">{r.first_name} {r.last_name}</div>
                   </div>
                 ))}
@@ -370,7 +370,7 @@ function AmenityRow({ amenity, onChanged }: { amenity: Amenity; onChanged: () =>
   const Icon = ICONS[amenity.icon] || Trophy;
 
   async function deactivate() {
-    if (!confirm(`Desativar reservas para "${amenity.name}"? Reservas antigas ficam no histórico.`)) return;
+    if (!confirm(`${t('Desativar reservas para')} "${amenity.name}"? ${t('Reservas antigas ficam no histórico.')}`)) return;
     try {
       await apiDelete(`/amenities/${amenity.id}`);
       toast.success(t('Área desativada'));
@@ -411,22 +411,22 @@ function AmenityRow({ amenity, onChanged }: { amenity: Amenity; onChanged: () =>
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="font-display text-xl text-dusk-500">{amenity.name}</h3>
-            <Badge tone={amenity.active ? 'sage' : 'neutral'}>{amenity.active ? 'ativa' : 'inativa'}</Badge>
+            <h3 className="font-display text-xl text-dusk-500">{t(amenity.name)}</h3>
+            <Badge tone={amenity.active ? 'sage' : 'neutral'}>{amenity.active ? t('ativa') : t('inativa')}</Badge>
           </div>
-          <p className="text-sm text-dusk-300 mt-1">{amenity.description || 'Sem descrição.'}</p>
+          <p className="text-sm text-dusk-300 mt-1">{amenity.description ? t(amenity.description) : t('Sem descrição.')}</p>
           <div className="mt-3 flex flex-wrap gap-2 text-xs text-dusk-300">
-            <span className="inline-flex items-center gap-1 rounded-full bg-white/60 px-3 py-1"><Users className="w-3 h-3" /> {amenity.capacity} pessoas</span>
+            <span className="inline-flex items-center gap-1 rounded-full bg-white/60 px-3 py-1"><Users className="w-3 h-3" /> {amenity.capacity} {t('pessoas')}</span>
             <span className="inline-flex items-center gap-1 rounded-full bg-white/60 px-3 py-1"><Clock className="w-3 h-3" /> {amenity.open_hour}h-{amenity.close_hour}h · {amenity.slot_minutes} min</span>
-            <span className="inline-flex items-center gap-1 rounded-full bg-white/60 px-3 py-1">{amenity.booking_window_days} dias de antecedência</span>
+            <span className="inline-flex items-center gap-1 rounded-full bg-white/60 px-3 py-1">{amenity.booking_window_days} {t('dias de antecedência')}</span>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => setEditing(true)} className="p-2 text-dusk-300 hover:text-dusk-500" title="Editar área" aria-label={`Editar ${amenity.name}`}>
+          <button onClick={() => setEditing(true)} className="p-2 text-dusk-300 hover:text-dusk-500" title={t('Editar área')} aria-label={`${t('Editar área')} ${amenity.name}`}>
             <Pencil className="w-4 h-4" />
           </button>
           {amenity.active ? (
-            <button onClick={deactivate} className="p-2 text-dusk-300 hover:text-peach-600" title="Desativar área" aria-label={`Desativar ${amenity.name}`}>
+            <button onClick={deactivate} className="p-2 text-dusk-300 hover:text-peach-600" title={t('Desativar área')} aria-label={`${t('Desativar área')} ${amenity.name}`}>
               <Trash2 className="w-4 h-4" />
             </button>
           ) : null}
@@ -492,19 +492,19 @@ function AmenityEditor({
   return (
     <GlassCard className="p-5 mb-5 animate-fade-up">
       <div className="flex items-center justify-between gap-3 mb-4">
-        <h2 className="font-display text-xl text-dusk-500">{mode === 'create' ? 'Nova área comum' : 'Editar área comum'}</h2>
-        <button onClick={onCancel} className="text-dusk-300 hover:text-dusk-500" aria-label="Cancelar">
+        <h2 className="font-display text-xl text-dusk-500">{mode === 'create' ? t('Nova área comum') : t('Editar área comum')}</h2>
+        <button onClick={onCancel} className="text-dusk-300 hover:text-dusk-500" aria-label={t('Cancelar')}>
           <X className="w-4 h-4" />
         </button>
       </div>
 
       <form onSubmit={submit} className="grid md:grid-cols-2 gap-3">
         <label className="block text-xs text-dusk-300 font-medium">
-          Nome
+          {t('Nome')}
           <input className="input mt-1" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} maxLength={80} required />
         </label>
         <label className="block text-xs text-dusk-300 font-medium">
-          Tipo visual
+          {t('Tipo visual')}
           <div className="mt-1 grid grid-cols-5 gap-1">
             {ICON_OPTIONS.map(({ icon, label, Icon }) => (
               <button
@@ -512,8 +512,8 @@ function AmenityEditor({
                 type="button"
                 onClick={() => setForm({ ...form, icon })}
                 className={`h-11 rounded-2xl border flex items-center justify-center transition ${form.icon === icon ? 'bg-sage-100 border-sage-300 text-sage-700' : 'bg-white/60 border-white/70 text-dusk-300 hover:bg-white/80'}`}
-                title={label}
-                aria-label={label}
+                title={t(label)}
+                aria-label={t(label)}
               >
                 <Icon className="w-5 h-5" />
               </button>
@@ -521,25 +521,25 @@ function AmenityEditor({
           </div>
         </label>
         <label className="block text-xs text-dusk-300 font-medium md:col-span-2">
-          Descrição
+          {t('Descrição')}
           <input className="input mt-1" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} maxLength={280} />
         </label>
         <label className="block text-xs text-dusk-300 font-medium">
-          Pessoas por slot
+          {t('Pessoas por slot')}
           <input type="number" min={1} max={500} className="input mt-1" value={form.capacity} onChange={(e) => setForm({ ...form, capacity: parseInt(e.target.value) || 1 })} />
         </label>
         <label className="block text-xs text-dusk-300 font-medium">
-          Duração do slot
+          {t('Duração do slot')}
           <select className="input mt-1" value={form.slot_minutes} onChange={(e) => setForm({ ...form, slot_minutes: parseInt(e.target.value) })}>
-            {[30, 45, 60, 90, 120, 180, 240].map((m) => <option key={m} value={m}>{m} minutos</option>)}
+            {[30, 45, 60, 90, 120, 180, 240].map((m) => <option key={m} value={m}>{m} {t('minutos')}</option>)}
           </select>
         </label>
         <label className="block text-xs text-dusk-300 font-medium">
-          Abre às
+          {t('Abre às')}
           <input type="number" min={0} max={23} className="input mt-1" value={form.open_hour} onChange={(e) => setForm({ ...form, open_hour: parseInt(e.target.value) || 0 })} />
         </label>
         <label className="block text-xs text-dusk-300 font-medium">
-          Fecha às
+          {t('Fecha às')}
           <input type="number" min={1} max={24} className="input mt-1" value={form.close_hour} onChange={(e) => setForm({ ...form, close_hour: parseInt(e.target.value) || 1 })} />
         </label>
         <div className="rounded-2xl bg-white/60 border border-white/70 p-4 text-sm text-dusk-300">
@@ -548,18 +548,18 @@ function AmenityEditor({
         <label className="block text-xs text-dusk-300 font-medium">
           Status
           <select className="input mt-1" value={form.active === false ? '0' : '1'} onChange={(e) => setForm({ ...form, active: e.target.value === '1' })}>
-            <option value="1">Ativa para reservas</option>
-            <option value="0">Inativa</option>
+            <option value="1">{t('Ativa para reservas')}</option>
+            <option value="0">{t('Inativa')}</option>
           </select>
         </label>
         <label className="block text-xs text-dusk-300 font-medium md:col-span-2">
-          Observações internas
+          {t('Observações internas')}
           <textarea className="input mt-1 min-h-[84px]" value={form.admin_notes || ''} onChange={(e) => setForm({ ...form, admin_notes: e.target.value })} maxLength={600} />
         </label>
         <SlotPreview form={form} />
         <div className="md:col-span-2 flex justify-end gap-2">
-          <Button type="button" variant="ghost" onClick={onCancel}>Cancelar</Button>
-          <Button type="submit" variant="primary" loading={saving} leftIcon={<Save className="w-4 h-4" />}>Salvar</Button>
+          <Button type="button" variant="ghost" onClick={onCancel}>{t('Cancelar')}</Button>
+          <Button type="submit" variant="primary" loading={saving} leftIcon={<Save className="w-4 h-4" />}>{t('Salvar')}</Button>
         </div>
       </form>
     </GlassCard>

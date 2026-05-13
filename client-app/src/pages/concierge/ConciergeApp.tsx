@@ -11,7 +11,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import toast from 'react-hot-toast';
 import {
   DoorOpen, Package, PartyPopper, Bell, BellOff, Check, RefreshCw,
-  LogOut, Clock, Users, PhoneCall, Send, AlertTriangle,
+  LogOut, Clock, Users, PhoneCall, Send, AlertTriangle, Search, X,
 } from 'lucide-react';
 import Logo from '../../components/Logo';
 import GlassCard from '../../components/GlassCard';
@@ -94,8 +94,8 @@ function timeOnly(iso: string | null): string {
   return d.toLocaleTimeString(currentIntlLocale(), { hour: '2-digit', minute: '2-digit' });
 }
 
-function VISITOR_TYPE_LABEL(t: string): string {
-  return ({ guest: 'Visita', delivery: 'Entrega', service: 'Serviço', rideshare: 'App' } as Record<string, string>)[t] || t;
+function visitorTypeLabel(value: string): string {
+  return t(({ guest: 'Visita', delivery: 'Entrega', service: 'Serviço', rideshare: 'App' } as Record<string, string>)[value] || value);
 }
 
 function contactNumbers(row: {
@@ -128,6 +128,7 @@ export default function ConciergeApp() {
   const { user, logout } = useAuth();
   const [data, setData] = useState<TodayPayload | null>(null);
   const [residents, setResidents] = useState<ResidentRow[]>([]);
+  const [search, setSearch] = useState('');
   const [walkup, setWalkup] = useState({
     resident_id: '',
     visitor_name: '',
@@ -152,16 +153,16 @@ export default function ConciergeApp() {
         for (const v of next.visitors) {
           if (!seenVisitors.current.has(v.id) && v.status !== 'arrived' && v.status !== 'completed') {
             notify(
-              `Novo visitante — ${v.visitor_name}`,
-              `${VISITOR_TYPE_LABEL(v.visitor_type)} para ${v.host_first} (${v.unit_number || 's/n'})`
+              `${t('Novo visitante')} - ${v.visitor_name}`,
+              `${visitorTypeLabel(v.visitor_type)} ${t('para')} ${v.host_first} (${v.unit_number || t('s/n')})`
             );
           }
         }
         for (const p of next.packages) {
           if (!seenPackages.current.has(p.id)) {
             notify(
-              `Nova encomenda — ${p.carrier}`,
-              `Para ${p.first_name} ${p.last_name} (${p.unit_number || 's/n'})`
+              `${t('Nova encomenda')} - ${p.carrier}`,
+              `${t('Para')} ${p.first_name} ${p.last_name} (${p.unit_number || t('s/n')})`
             );
           }
         }
@@ -251,38 +252,93 @@ export default function ConciergeApp() {
     parties: data?.parties.length || 0,
   }), [data]);
 
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const hay = (...values: Array<string | number | null | undefined>) => values
+      .filter((value) => value !== null && value !== undefined)
+      .join(' ')
+      .toLowerCase();
+    if (!q || !data) return {
+      visitors: data?.visitors || [],
+      packages: data?.packages || [],
+      parties: data?.parties || [],
+    };
+    return {
+      visitors: data.visitors.filter((v) => hay(
+        v.visitor_name, v.visitor_type, v.host_first, v.host_last, v.unit_number,
+        v.notes, v.guest_list, v.host_mobile_phone, v.host_home_phone, v.host_phone,
+      ).includes(q)),
+      packages: data.packages.filter((p) => hay(
+        p.carrier, p.description, p.first_name, p.last_name, p.unit_number,
+        p.mobile_phone, p.home_phone, p.phone,
+      ).includes(q)),
+      parties: data.parties.filter((party) => hay(
+        party.amenity_name, party.first_name, party.last_name, party.unit_number,
+        party.guest_list, party.notes, party.mobile_phone, party.home_phone, party.phone,
+      ).includes(q)),
+    };
+  }, [data, search]);
+
   return (
     <div className="min-h-screen flex flex-col">
       <header className="sticky top-0 z-20 bg-cream-50/80 backdrop-blur-xl border-b border-white/40 px-4 py-3 flex items-center gap-3">
         <Logo size={22} />
         <div className="flex-1 min-w-0">
-          <div className="text-sm font-semibold text-dusk-500 truncate">{user?.first_name} · Portaria</div>
+          <div className="text-sm font-semibold text-dusk-500 truncate">{user?.first_name} · {t('Portaria')}</div>
           <div className="text-[11px] text-dusk-300">{new Date().toLocaleDateString(currentIntlLocale(), { weekday: 'long', day: 'numeric', month: 'long' })}</div>
         </div>
-        <button onClick={() => load()} title="Atualizar" aria-label="Atualizar" className="p-2 rounded-full hover:bg-white/60 text-dusk-400">
+        <button onClick={() => load()} title={t('Atualizar')} aria-label={t('Atualizar')} className="p-2 rounded-full hover:bg-white/60 text-dusk-400">
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
         </button>
         {notifPerm === 'default' && (
-          <button onClick={requestNotifications} title="Ativar notificações" className="p-2 rounded-full bg-sage-100 hover:bg-sage-200 text-sage-700">
+          <button onClick={requestNotifications} title={t('Ativar notificações')} className="p-2 rounded-full bg-sage-100 hover:bg-sage-200 text-sage-700">
             <Bell className="w-4 h-4" />
           </button>
         )}
         {notifPerm === 'denied' && (
-          <span title="Notificações bloqueadas" className="p-2 rounded-full text-peach-500">
+          <span title={t('Notificações bloqueadas')} className="p-2 rounded-full text-peach-500">
             <BellOff className="w-4 h-4" />
           </span>
         )}
         {notifPerm === 'granted' && (
-          <span title="Notificações ativadas" className="p-2 rounded-full text-sage-700">
+          <span title={t('Notificações ativadas')} className="p-2 rounded-full text-sage-700">
             <Bell className="w-4 h-4" />
           </span>
         )}
-        <button onClick={() => { logout(); }} title="Sair" aria-label="Sair" className="p-2 rounded-full hover:bg-white/60 text-dusk-400">
+        <button onClick={() => { logout(); }} title={t('Sair')} aria-label={t('Sair')} className="p-2 rounded-full hover:bg-white/60 text-dusk-400">
           <LogOut className="w-4 h-4" />
         </button>
       </header>
 
       <main className="flex-1 px-4 py-4 max-w-2xl mx-auto w-full space-y-6">
+        <GlassCard className="p-3 sticky top-[65px] z-10">
+          <label className="relative block">
+            <Search className="w-5 h-5 text-dusk-300 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              className="input pl-10 pr-10 text-lg"
+              placeholder={t('Search unit, resident, visitor, package, or party')}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              aria-label={t('Search front desk queue')}
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-dusk-300 hover:text-dusk-500"
+                aria-label={t('Clear search')}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            )}
+          </label>
+          {search && (
+            <div className="text-xs text-dusk-300 mt-2 px-1">
+              {filtered.visitors.length + filtered.packages.length + filtered.parties.length} {t('matching front desk items')}
+            </div>
+          )}
+        </GlassCard>
+
         <section>
           <h2 className="font-display text-xl text-dusk-500 mb-3 flex items-center gap-2">
             <AlertTriangle className="w-5 h-5" /> {t('Chegada sem pré-aprovação')}
@@ -350,16 +406,16 @@ export default function ConciergeApp() {
         {/* Section: Visitors */}
         <section>
           <h2 className="font-display text-xl text-dusk-500 mb-3 flex items-center gap-2">
-            <DoorOpen className="w-5 h-5" /> Visitantes hoje
+            <DoorOpen className="w-5 h-5" /> {t('Visitantes hoje')}
             {totals.visitors > 0 && <Badge tone="peach">{totals.visitors}</Badge>}
           </h2>
-          {(!data || data.visitors.length === 0) ? (
+          {(!data || filtered.visitors.length === 0) ? (
             <GlassCard className="p-5 text-sm text-dusk-300 text-center">
-              {loading ? 'Carregando…' : 'Nenhum visitante esperado hoje.'}
+              {loading ? t('Carregando…') : search ? t('No matching arrivals.') : t('Nenhum visitante esperado hoje.')}
             </GlassCard>
           ) : (
             <div className="space-y-2">
-              {data.visitors.map((v) => (
+              {filtered.visitors.map((v) => (
                 <GlassCard key={v.id} variant="clay" className="p-4">
                   <div className="flex items-start gap-3">
                     <div className="w-10 h-10 rounded-2xl bg-sage-200 text-sage-700 flex items-center justify-center shrink-0">
@@ -369,14 +425,14 @@ export default function ConciergeApp() {
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-dusk-500 truncate">{v.visitor_name}</span>
                         <Badge tone={v.status === 'approved' ? 'sage' : v.status === 'pending' ? 'warning' : 'neutral'}>
-                          {v.status === 'approved' ? 'liberado' : v.status === 'pending' ? 'aguardando' : v.status}
+                          {v.status === 'approved' ? t('liberado') : v.status === 'pending' ? t('aguardando') : t(v.status)}
                         </Badge>
-                        <Badge tone="neutral">{VISITOR_TYPE_LABEL(v.visitor_type)}</Badge>
+                        <Badge tone="neutral">{visitorTypeLabel(v.visitor_type)}</Badge>
                       </div>
                       <div className="text-xs text-dusk-300 mt-1 flex items-center gap-1.5 flex-wrap">
                         <Users className="w-3 h-3" />
                         {v.host_first} {v.host_last}
-                        {v.unit_number && <span className="font-mono">· Apto {v.unit_number}</span>}
+                        {v.unit_number && <span className="font-mono">· {t('Apto')} {v.unit_number}</span>}
                         {v.expected_at && <><Clock className="w-3 h-3 ml-1" /> {timeOnly(v.expected_at)}</>}
                       </div>
                       {contactNumbers(v).length > 0 && (
@@ -404,7 +460,7 @@ export default function ConciergeApp() {
                       {v.guest_list && (
                         <details className="mt-2">
                           <summary className="text-xs text-dusk-400 underline decoration-dotted underline-offset-4 cursor-pointer">
-                            Lista da festa ({v.guest_list.split('\n').filter(Boolean).length})
+                            {t('Lista da festa')} ({v.guest_list.split('\n').filter(Boolean).length})
                           </summary>
                           <pre className="text-xs text-dusk-400 mt-2 whitespace-pre-wrap font-sans bg-white/40 rounded-xl p-2">
                             {v.guest_list}
@@ -422,16 +478,16 @@ export default function ConciergeApp() {
         {/* Section: Packages */}
         <section>
           <h2 className="font-display text-xl text-dusk-500 mb-3 flex items-center gap-2">
-            <Package className="w-5 h-5" /> Encomendas pendentes
+            <Package className="w-5 h-5" /> {t('Encomendas pendentes')}
             {totals.packages > 0 && <Badge tone="peach">{totals.packages}</Badge>}
           </h2>
-          {(!data || data.packages.length === 0) ? (
+          {(!data || filtered.packages.length === 0) ? (
             <GlassCard className="p-5 text-sm text-dusk-300 text-center">
-              Nenhuma encomenda aguardando retirada.
+              {search ? t('No matching arrivals.') : t('Nenhuma encomenda aguardando retirada.')}
             </GlassCard>
           ) : (
             <div className="space-y-2">
-              {data.packages.map((p) => (
+              {filtered.packages.map((p) => (
                 <GlassCard key={p.id} variant="clay" className="p-4 flex items-center gap-3">
                   <div className="w-10 h-10 rounded-2xl bg-peach-100 text-peach-500 flex items-center justify-center shrink-0">
                     <Package className="w-5 h-5" />
@@ -439,10 +495,10 @@ export default function ConciergeApp() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-semibold text-dusk-500 truncate">{p.first_name} {p.last_name}</span>
-                      {p.unit_number && <Badge tone="neutral">Apto {p.unit_number}</Badge>}
+                      {p.unit_number && <Badge tone="neutral">{t('Apto')} {p.unit_number}</Badge>}
                     </div>
                     <div className="text-xs text-dusk-300 mt-0.5">
-                      {p.carrier}{p.description ? ` · ${p.description}` : ''} · chegou {formatDateTime(p.arrived_at)}
+                      {p.carrier}{p.description ? ` · ${p.description}` : ''} · {t('chegou')} {formatDateTime(p.arrived_at)}
                     </div>
                     {contactNumbers(p).length > 0 && (
                       <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] text-dusk-300">
@@ -466,13 +522,13 @@ export default function ConciergeApp() {
         </section>
 
         {/* Section: Parties / events */}
-        {data && data.parties.length > 0 && (
+        {data && filtered.parties.length > 0 && (
           <section>
             <h2 className="font-display text-xl text-dusk-500 mb-3 flex items-center gap-2">
-              <PartyPopper className="w-5 h-5" /> Eventos hoje
+              <PartyPopper className="w-5 h-5" /> {t('Eventos hoje')}
             </h2>
             <div className="space-y-3">
-              {data.parties.map((party) => (
+              {filtered.parties.map((party) => (
                 <GlassCard key={party.id} variant="clay-peach" className="p-4">
                   <div className="flex items-start gap-3">
                     <div className="w-10 h-10 rounded-2xl bg-peach-100 text-peach-500 flex items-center justify-center shrink-0">
@@ -482,13 +538,13 @@ export default function ConciergeApp() {
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-dusk-500">{party.amenity_name}</span>
                         {(party.expected_guests || 0) > 0 && (
-                          <Badge tone="peach">{party.expected_guests} convidados</Badge>
+                          <Badge tone="peach">{party.expected_guests} {t('convidados')}</Badge>
                         )}
                       </div>
                       <div className="text-xs text-dusk-300 mt-1">
                         {timeOnly(party.starts_at)}{party.ends_at ? `–${timeOnly(party.ends_at)}` : ''} ·
                         {' '}{party.first_name} {party.last_name}
-                        {party.unit_number && <span className="font-mono"> · Apto {party.unit_number}</span>}
+                        {party.unit_number && <span className="font-mono"> · {t('Apto')} {party.unit_number}</span>}
                       </div>
                       {contactNumbers(party).length > 0 && (
                         <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] text-dusk-300">
@@ -503,7 +559,7 @@ export default function ConciergeApp() {
                       {party.guest_list && (
                         <details className="mt-2">
                           <summary className="text-xs text-dusk-400 underline decoration-dotted underline-offset-4 cursor-pointer">
-                            Lista de convidados ({party.guest_list.split('\n').filter(Boolean).length})
+                            {t('Lista de convidados')} ({party.guest_list.split('\n').filter(Boolean).length})
                           </summary>
                           <pre className="text-xs text-dusk-400 mt-2 whitespace-pre-wrap font-sans bg-white/40 rounded-xl p-2">
                             {party.guest_list}
@@ -519,7 +575,7 @@ export default function ConciergeApp() {
         )}
 
         <footer className="text-center text-[11px] text-dusk-200 pt-6 pb-10">
-          Atualiza a cada {POLL_MS / 1000}s automaticamente
+          {t('Atualiza a cada')} {POLL_MS / 1000}s {t('automaticamente')}
         </footer>
       </main>
     </div>
