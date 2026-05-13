@@ -286,6 +286,8 @@ export function initSchema() {
       ON expenses(condominium_id, spent_at);
     CREATE INDEX IF NOT EXISTS idx_expenses_condo_category
       ON expenses(condominium_id, category, spent_at);
+    CREATE INDEX IF NOT EXISTS idx_expenses_condo_vendor_spent
+      ON expenses(condominium_id, vendor, spent_at);
   `);
   // Operational service network — admin-maintained directory of known vendors,
   // installers, maintenance providers, emergency contacts, and contracts.
@@ -417,6 +419,8 @@ export function initSchema() {
     )
   `).run();
   db.prepare(`CREATE INDEX IF NOT EXISTS idx_ticket_dispatches_ticket ON ticket_dispatches(ticket_id, created_at)`).run();
+  db.prepare(`CREATE INDEX IF NOT EXISTS idx_ticket_dispatches_service_contact
+    ON ticket_dispatches(service_contact_id, channel, status, created_at)`).run();
   // Roadmap item 3 — veto window on auto-dispatch. When the agent
   // auto-fires a vendor outreach on a verified ticket, we don't send
   // immediately: notification_outbox.next_attempt_at gets set to +5min,

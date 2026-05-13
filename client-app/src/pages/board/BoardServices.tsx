@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
-import { AlertTriangle, ExternalLink, Mail, Pencil, Plus, Save, Star, Trash2, Wrench, X } from 'lucide-react';
+import { AlertTriangle, BarChart3, Clock3, ExternalLink, Mail, Pencil, Plus, ReceiptText, Save, Star, Trash2, Wrench, X } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 import GlassCard from '../../components/GlassCard';
 import Badge from '../../components/Badge';
 import Button from '../../components/Button';
 import { apiDelete, apiGet, apiPatch, apiPost } from '../../lib/api';
-import { formatDate, t, type AppLocale, useLocale } from '../../lib/i18n';
+import { formatCurrency, formatDate, t, type AppLocale, useLocale } from '../../lib/i18n';
 
 interface ServiceContact {
   id: number;
@@ -26,9 +26,41 @@ interface ServiceContact {
   active: number;
   last_used_at: string | null;
   created_at: string;
+  dispatches_total: number;
+  dispatches_responded: number;
+  avg_response_seconds: number | null;
+  last_response_at_dispatch: string | null;
+  work_orders_total: number;
+  work_orders_completed: number;
+  work_orders_open: number;
+  work_orders_cancelled: number;
+  last_work_order_at: string | null;
+  work_order_value_cents: number;
+  expense_count: number;
+  expense_total_cents: number;
+  expense_average_cents: number | null;
+  expense_currency: string | null;
+  last_expense_at: string | null;
 }
 
-type ServiceContactForm = Omit<ServiceContact, 'id' | 'created_at' | 'emergency_available' | 'preferred' | 'active'> & {
+type ScorecardField =
+  | 'dispatches_total'
+  | 'dispatches_responded'
+  | 'avg_response_seconds'
+  | 'last_response_at_dispatch'
+  | 'work_orders_total'
+  | 'work_orders_completed'
+  | 'work_orders_open'
+  | 'work_orders_cancelled'
+  | 'last_work_order_at'
+  | 'work_order_value_cents'
+  | 'expense_count'
+  | 'expense_total_cents'
+  | 'expense_average_cents'
+  | 'expense_currency'
+  | 'last_expense_at';
+
+type ServiceContactForm = Omit<ServiceContact, 'id' | 'created_at' | 'emergency_available' | 'preferred' | 'active' | ScorecardField> & {
   emergency_available: boolean;
   preferred: boolean;
   active: boolean;
@@ -108,6 +140,21 @@ function hasReachableDetail(form: ServiceContactForm) {
     .some((value) => String(value || '').trim().length > 0);
 }
 
+function responseRate(contact: Pick<ServiceContact, 'dispatches_total' | 'dispatches_responded'>) {
+  if (!contact.dispatches_total) return null;
+  return Math.round((contact.dispatches_responded / contact.dispatches_total) * 100);
+}
+
+function formatDuration(seconds: number | null, tr: (key: string) => string) {
+  if (!seconds || seconds <= 0) return tr('sem dado');
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes} ${tr(minutes === 1 ? 'minuto' : 'minutos')}`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 48) return `${hours} ${tr(hours === 1 ? 'hora' : 'horas')}`;
+  const days = Math.round(hours / 24);
+  return `${days} ${tr(days === 1 ? 'dia' : 'dias')}`;
+}
+
 export default function BoardServices() {
   const { locale } = useLocale();
   const tr = (key: string) => t(key, locale);
@@ -128,6 +175,15 @@ export default function BoardServices() {
 
   const activeCount = contacts.filter((c) => c.active).length;
   const emergencyCount = contacts.filter((c) => c.active && c.emergency_available).length;
+  const vendorsWithDispatches = contacts.filter((c) => c.dispatches_total > 0);
+  const responseRateAverage = vendorsWithDispatches.length
+    ? Math.round(
+        vendorsWithDispatches.reduce((sum, c) => sum + (responseRate(c) || 0), 0) / vendorsWithDispatches.length
+      )
+    : null;
+  const openWorkOrders = contacts.reduce((sum, c) => sum + Number(c.work_orders_open || 0), 0);
+  const trackedSpendCents = contacts.reduce((sum, c) => sum + Number(c.expense_total_cents || 0), 0);
+  const trackedCurrency = contacts.find((c) => c.expense_currency)?.expense_currency || 'BRL';
   const subtitle = loading
     ? tr('Carregando…')
     : `${activeCount} ${tr(activeCount === 1 ? 'contato ativo' : 'contatos ativos')} · ${emergencyCount} ${tr(emergencyCount === 1 ? 'atende emergência' : 'atendem emergência')}`;
@@ -162,6 +218,39 @@ export default function BoardServices() {
         </div>
       </GlassCard>
 
+      {!loading && contacts.length > 0 && (
+        <GlassCard className="p-5 mb-5">
+          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-5">
+            <div className="max-w-2xl">
+              <div className="flex items-center gap-2 text-dusk-500">
+                <BarChart3 className="w-5 h-5 text-sage-600" />
+                <h2 className="font-display text-xl">{tr('Inteligência de fornecedores')}</h2>
+              </div>
+              <p className="text-sm text-dusk-300 mt-1">
+                {tr('Scorecards baseados em respostas, ordens de serviço e despesas já registradas.')}
+              </p>
+            </div>
+            <div className="grid sm:grid-cols-3 gap-x-8 gap-y-4 text-sm">
+              <SummaryMetric
+                label={tr('Taxa média de resposta')}
+                value={responseRateAverage == null ? tr('sem histórico') : `${responseRateAverage}%`}
+                detail={`${vendorsWithDispatches.length} ${tr(vendorsWithDispatches.length === 1 ? 'fornecedor medido' : 'fornecedores medidos')}`}
+              />
+              <SummaryMetric
+                label={tr('Ordens abertas')}
+                value={String(openWorkOrders)}
+                detail={tr('em andamento ou agendadas')}
+              />
+              <SummaryMetric
+                label={tr('Gasto rastreado')}
+                value={formatCurrency(trackedSpendCents / 100, trackedCurrency)}
+                detail={tr('ligado a fornecedores')}
+              />
+            </div>
+          </div>
+        </GlassCard>
+      )}
+
       {showNew && (
         <ServiceContactEditor
           mode="create"
@@ -183,6 +272,16 @@ export default function BoardServices() {
         </GlassCard>
       )}
     </>
+  );
+}
+
+function SummaryMetric({ label, value, detail }: { label: string; value: string; detail: string }) {
+  return (
+    <div className="min-w-[160px]">
+      <div className="text-[11px] uppercase tracking-[0.18em] text-dusk-300">{label}</div>
+      <div className="font-display text-2xl text-dusk-500 mt-1">{value}</div>
+      <div className="text-xs text-dusk-300 mt-0.5">{detail}</div>
+    </div>
   );
 }
 
@@ -231,7 +330,7 @@ function ServiceContactRow({ contact, onChanged }: { contact: ServiceContact; on
   }
 
   return (
-    <GlassCard className={`p-5 ${contact.active ? '' : 'opacity-60'}`}>
+    <GlassCard className={`p-5 ${contact.active ? '' : 'opacity-60'}`} data-testid={`service-contact-${contact.id}`}>
       <div className="flex items-start gap-4">
         <div className="w-11 h-11 rounded-2xl bg-white/70 border border-white/80 text-dusk-400 flex items-center justify-center shrink-0">
           <Wrench className="w-5 h-5" />
@@ -255,6 +354,7 @@ function ServiceContactRow({ contact, onChanged }: { contact: ServiceContact; on
             {contact.last_used_at && <span className="rounded-full bg-white/60 px-3 py-1">{tr('último uso:')} {formatDate(contact.last_used_at)}</span>}
           </div>
           {contact.notes && <div className="mt-3 text-xs text-dusk-300 bg-white/50 rounded-2xl p-3">{tr(contact.notes)}</div>}
+          <VendorScorecard contact={contact} />
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => setEditing(true)} className="p-2 text-dusk-300 hover:text-dusk-500" title={tr('Editar contato')} aria-label={`${tr('Editar contato')} ${contact.company_name}`}>
@@ -268,6 +368,82 @@ function ServiceContactRow({ contact, onChanged }: { contact: ServiceContact; on
         </div>
       </div>
     </GlassCard>
+  );
+}
+
+function VendorScorecard({ contact }: { contact: ServiceContact }) {
+  const { locale } = useLocale();
+  const tr = (key: string) => t(key, locale);
+  const rate = responseRate(contact);
+  const hasHistory = contact.dispatches_total > 0
+    || contact.work_orders_total > 0
+    || contact.expense_count > 0;
+
+  return (
+    <div className="mt-4 pt-4 border-t border-white/60">
+      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-dusk-300">
+        <BarChart3 className="w-4 h-4" />
+        {tr('Scorecard')}
+      </div>
+      {hasHistory ? (
+        <div className="mt-3 grid md:grid-cols-3 gap-x-6 gap-y-3 text-sm">
+          <ScoreItem
+            icon={<Clock3 className="w-4 h-4" />}
+            label={tr('Resposta')}
+            value={rate == null ? tr('sem dado') : `${rate}%`}
+            detail={`${contact.dispatches_responded}/${contact.dispatches_total} ${tr('respondidas')} · ${formatDuration(contact.avg_response_seconds, tr)} ${tr('média')}`}
+          />
+          <ScoreItem
+            icon={<Wrench className="w-4 h-4" />}
+            label={tr('Ordens')}
+            value={`${contact.work_orders_completed}/${contact.work_orders_total}`}
+            detail={`${contact.work_orders_open} ${tr('abertas')} · ${contact.work_orders_cancelled} ${tr('canceladas')}`}
+          />
+          <ScoreItem
+            icon={<ReceiptText className="w-4 h-4" />}
+            label={tr('Gasto')}
+            value={formatCurrency((contact.expense_total_cents || 0) / 100, contact.expense_currency || 'BRL')}
+            detail={contact.expense_count > 0
+              ? `${contact.expense_count} ${tr(contact.expense_count === 1 ? 'recibo' : 'recibos')} · ${tr('média')} ${formatCurrency((contact.expense_average_cents || 0) / 100, contact.expense_currency || 'BRL')}`
+              : tr('sem recibos')}
+          />
+        </div>
+      ) : (
+        <div className="mt-2 text-sm text-dusk-300">
+          {tr('Sem histórico ainda. Quando houver respostas, ordens ou gastos, eles aparecerão aqui.')}
+        </div>
+      )}
+      {(contact.last_response_at_dispatch || contact.last_work_order_at || contact.last_expense_at) && (
+        <div className="mt-3 flex flex-wrap gap-2 text-xs text-dusk-300">
+          {contact.last_response_at_dispatch && <span>{tr('última resposta:')} {formatDate(contact.last_response_at_dispatch)}</span>}
+          {contact.last_work_order_at && <span>{tr('última ordem:')} {formatDate(contact.last_work_order_at)}</span>}
+          {contact.last_expense_at && <span>{tr('último gasto:')} {formatDate(contact.last_expense_at)}</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ScoreItem({
+  icon,
+  label,
+  value,
+  detail,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  detail: string;
+}) {
+  return (
+    <div className="flex items-start gap-2 min-w-0">
+      <div className="mt-0.5 text-sage-700 shrink-0">{icon}</div>
+      <div className="min-w-0">
+        <div className="text-xs text-dusk-300">{label}</div>
+        <div className="font-display text-lg text-dusk-500 leading-tight">{value}</div>
+        <div className="text-xs text-dusk-300 break-words">{detail}</div>
+      </div>
+    </div>
   );
 }
 

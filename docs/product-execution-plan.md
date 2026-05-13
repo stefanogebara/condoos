@@ -187,11 +187,20 @@ The second implementation wave made the operating core more buyer-ready:
 - Turned verified tickets into work orders with vendor assignment, schedule, estimates, approved cost, invoice/photo links, completion notes, and resident-visible status.
 - Added a document vault for rules, minutes, contracts, insurance, warranties, receipts, vendor docs, and resident-visible notices.
 
-## Current Execution Slice: Building Memory
+## Completed Slice: Building Memory
 
-The next slice starts the moat without adding fragile automation:
+The moat work started without adding fragile automation:
 
-- Add a role-aware search index over tickets, work orders, expenses, proposals, announcements, documents, meetings, and vendor contacts.
-- Give admins one Building Memory page to answer “when did this happen, who handled it, what did it cost, and where is the proof?”
-- Keep resident privacy boundaries intact: board-only documents and service-contact details stay admin-only.
-- Use the existing data model first; deeper AI answers can sit on top once the search surface is trusted.
+- Added a role-aware search index over tickets, work orders, expenses, proposals, announcements, documents, meetings, and vendor contacts.
+- Gave admins one Building Memory page to answer “when did this happen, who handled it, what did it cost, and where is the proof?”
+- Kept resident privacy boundaries intact: board-only documents and service-contact details stay admin-only.
+- Used the existing data model first; deeper AI answers can sit on top once the search surface is trusted.
+
+## Current Execution Slice: Vendor Intelligence
+
+This slice makes the saved service network feel operational instead of static:
+
+- Add vendor scorecards to the Operations page using real dispatch, work-order, and expense history.
+- Show response rate, average response time, completed/open work orders, tracked spend, and latest operational activity.
+- Keep aggregation scoped by condominium so management-company data does not leak across buildings.
+- Add indexes and tests around the vendor scorecard query so it can later feed AI recommendations and portfolio reporting.

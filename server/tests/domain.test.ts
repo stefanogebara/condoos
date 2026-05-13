@@ -26,6 +26,7 @@ import { generateInvoices, generateScheduledInvoices, recordPayment } from '../s
 import { requireAuth, revokeUserTokens, signToken } from '../src/lib/auth';
 import { canAssignTicketToUser, markTicketAgentFailed } from '../src/lib/tickets';
 import { normalizeServiceContact, serviceContactSchema } from '../src/lib/service-contacts';
+import { listServiceContactsWithScorecards } from '../src/lib/vendor-scorecards';
 import { searchBuildingMemory } from '../src/lib/memory';
 
 function resetDb() {
@@ -286,6 +287,87 @@ test('service contact normalization trims fields and expands date-only usage', (
   assert.equal(normalized.phone, '+55 11 90000-0001');
   assert.equal(normalized.service_scope, 'Instalação da academia');
   assert.equal(normalized.last_used_at, '2026-05-01T00:00:00.000Z');
+});
+
+test('service contact scorecards aggregate vendor operations without cross-condo leakage', () => {
+  resetDb();
+  const { condoId } = createCondoFixture();
+  const adminId = createUser('score-admin@example.com', 'board_admin');
+  const residentId = createUser('score-resident@example.com');
+  db.prepare(`UPDATE users SET condominium_id = ? WHERE id IN (?, ?)`).run(condoId, adminId, residentId);
+
+  const vendorId = Number(db.prepare(
+    `INSERT INTO service_contacts (
+      condominium_id, category, company_name, phone, email, active, preferred
+    ) VALUES (?, 'elevator', 'Scorecard Elevator', '+1 555 2000', 'ops@scorecard.test', 1, 1)`
+  ).run(condoId).lastInsertRowid);
+
+  const ticketId = Number(db.prepare(
+    `INSERT INTO tickets (
+      condominium_id, reporter_id, title, description, category, priority, verification_threshold, remediation_status
+    ) VALUES (?, ?, 'Elevator stopped', 'Elevator A stopped at level 3.', 'elevator', 'high', 1, 'awaiting_vendor')`
+  ).run(condoId, residentId).lastInsertRowid);
+
+  db.prepare(
+    `INSERT INTO ticket_dispatches (
+      ticket_id, service_contact_id, channel, message_body, status, created_at, responded_at, dispatched_by_user_id
+    ) VALUES (?, ?, 'whatsapp', 'Can you inspect today?', 'responded', '2026-05-01 10:00:00', '2026-05-01 12:00:00', ?)`
+  ).run(ticketId, vendorId, adminId);
+  db.prepare(
+    `INSERT INTO ticket_dispatches (
+      ticket_id, service_contact_id, channel, message_body, status, created_at, dispatched_by_user_id
+    ) VALUES (?, ?, 'email', 'Please send quote.', 'sent', '2026-05-02 09:00:00', ?)`
+  ).run(ticketId, vendorId, adminId);
+  db.prepare(
+    `INSERT INTO ticket_work_orders (
+      ticket_id, service_contact_id, title, status, approved_amount_cents, completed_at
+    ) VALUES (?, ?, 'Elevator repair', 'completed', 125000, '2026-05-03 16:00:00')`
+  ).run(ticketId, vendorId);
+  db.prepare(
+    `INSERT INTO expenses (
+      condominium_id, amount_cents, currency, category, vendor, description, spent_at, created_by_user_id
+    ) VALUES (?, 80000, 'USD', 'maintenance', 'Scorecard Elevator LLC', 'Elevator emergency visit', '2026-05-04', ?)`
+  ).run(condoId, adminId);
+
+  const otherCondoId = Number(db.prepare(
+    `INSERT INTO condominiums (name, address, invite_code) VALUES ('Other Condo', '2 Main', 'TEST02')`
+  ).run().lastInsertRowid);
+  const otherResidentId = createUser('other-score-resident@example.com');
+  db.prepare(`UPDATE users SET condominium_id = ? WHERE id = ?`).run(otherCondoId, otherResidentId);
+  const otherVendorId = Number(db.prepare(
+    `INSERT INTO service_contacts (
+      condominium_id, category, company_name, phone, active, preferred
+    ) VALUES (?, 'elevator', 'Scorecard Elevator', '+1 555 9999', 1, 1)`
+  ).run(otherCondoId).lastInsertRowid);
+  const otherTicketId = Number(db.prepare(
+    `INSERT INTO tickets (
+      condominium_id, reporter_id, title, description, category, priority, verification_threshold, remediation_status
+    ) VALUES (?, ?, 'Other elevator', 'Must not leak.', 'elevator', 'normal', 1, 'awaiting_vendor')`
+  ).run(otherCondoId, otherResidentId).lastInsertRowid);
+  db.prepare(
+    `INSERT INTO ticket_dispatches (
+      ticket_id, service_contact_id, channel, message_body, status, created_at, responded_at, dispatched_by_user_id
+    ) VALUES (?, ?, 'whatsapp', 'Other condo', 'responded', '2026-05-01 09:00:00', '2026-05-01 09:05:00', ?)`
+  ).run(otherTicketId, otherVendorId, adminId);
+  db.prepare(
+    `INSERT INTO expenses (
+      condominium_id, amount_cents, currency, category, vendor, description, spent_at, created_by_user_id
+    ) VALUES (?, 999999, 'USD', 'maintenance', 'Scorecard Elevator LLC', 'Other condo invoice', '2026-05-05', ?)`
+  ).run(otherCondoId, adminId);
+
+  const rows = listServiceContactsWithScorecards(condoId, true);
+  const scorecard = rows.find((row) => row.id === vendorId);
+  assert.ok(scorecard);
+  assert.equal(scorecard.dispatches_total, 2);
+  assert.equal(scorecard.dispatches_responded, 1);
+  assert.equal(scorecard.avg_response_seconds, 7200);
+  assert.equal(scorecard.work_orders_total, 1);
+  assert.equal(scorecard.work_orders_completed, 1);
+  assert.equal(scorecard.work_orders_open, 0);
+  assert.equal(scorecard.work_order_value_cents, 125000);
+  assert.equal(scorecard.expense_count, 1);
+  assert.equal(scorecard.expense_total_cents, 80000);
+  assert.equal(scorecard.expense_currency, 'USD');
 });
 
 test('building memory searches operational records without leaking admin-only sources to residents', () => {
