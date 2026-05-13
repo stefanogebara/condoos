@@ -72,6 +72,69 @@ export async function chat(messages: AIMessage[], opts: AIOpts = {}): Promise<st
   return String(content);
 }
 
+// Vision call — single-turn, single-image. OpenRouter follows OpenAI's
+// content-array convention: text + image_url parts in one user message.
+// Anthropic models accept https URLs directly (the provider fetches the
+// bytes); same for Gemini. We use the same MODEL constant as the
+// quality tier so vision quality matches general agent quality.
+export interface VisionImage {
+  url: string;
+  detail?: 'low' | 'high';
+}
+
+export async function chatWithImage(
+  systemPrompt: string,
+  userPrompt: string,
+  images: VisionImage[],
+  opts: AIOpts = {},
+): Promise<string> {
+  if (!API_KEY) {
+    console.warn('[ai] OPENROUTER_API_KEY not set - vision disabled');
+    throw new Error('NO_API_KEY');
+  }
+  const model = opts.model ?? (opts.tier === 'cheap' ? CHEAP_MODEL : MODEL);
+  const content: any[] = [{ type: 'text', text: userPrompt }];
+  for (const img of images) {
+    content.push({ type: 'image_url', image_url: { url: img.url, detail: img.detail || 'low' } });
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  let res;
+  try {
+    res = await fetch(URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${API_KEY}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://condoos.dev',
+        'X-Title': 'CondoOS',
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content },
+        ],
+        max_tokens: opts.maxTokens ?? 600,
+        temperature: opts.temperature ?? 0.2,
+        ...(opts.jsonMode ? { response_format: { type: 'json_object' } } : {}),
+      }),
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+  if (!res.ok) {
+    const txt = await res.text();
+    console.error('[ai] OpenRouter vision error', res.status, txt.slice(0, 300));
+    throw new Error(`OpenRouter ${res.status}`);
+  }
+  const data: any = await res.json();
+  const text = data?.choices?.[0]?.message?.content;
+  if (!text) throw new Error('OpenRouter empty vision response');
+  return String(text);
+}
+
 // ReAct tool-use loop. OpenRouter speaks OpenAI's tool-calling protocol
 // regardless of which model backs the request (Anthropic, DeepSeek, etc.),
 // so we use that wire format here.

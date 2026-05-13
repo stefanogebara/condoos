@@ -186,6 +186,15 @@ export interface AdminAgentOutput {
     is_outside_business_hours: boolean;
     local_hour: number;
   } | null;
+  // Vision analysis of resident-uploaded attachments (roadmap item 6).
+  // Populated when the runner had a ticketId. Each entry is a per-image
+  // caption + structured signal tags. UI renders them as small cards
+  // next to the recommendation so the admin sees what the agent saw.
+  attachment_analysis?: Array<{
+    id: number;
+    description: string;
+    signals: string[];
+  }>;
   // ReAct tool-use trace (only present when AGENT_USE_REACT=1). Lets the
   // UI render "checked past tickets... pulled Otis history..." style
   // thinking pane. Each entry is a one-line summary, not raw JSON, so

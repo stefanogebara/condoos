@@ -17,6 +17,7 @@ import {
   type AdminAgentMode,
 } from './admin-agent';
 import { ADMIN_AGENT_TOOLS, buildToolHandler } from './admin-agent-tools';
+import { analyzeTicketAttachments } from './attachment-vision';
 
 function clip(value: unknown, max: number): string {
   return String(value || '').slice(0, max);
@@ -127,6 +128,12 @@ export interface RunAdminAgentArgs {
   // the new turn back into agent_turns after the model returns.
   threadId?: number;
   adminUserId?: number;
+  // Vision support (roadmap item 6). When ticketId is supplied, the
+  // runner analyzes every image attachment on that ticket (cached) and
+  // passes the resulting descriptions + signals into the prompt
+  // context. The workbench path doesn't have a ticket, so this stays
+  // optional; only auto-dispatch + /run-agent fill it.
+  ticketId?: number;
 }
 
 export interface RunAdminAgentResult {
@@ -337,6 +344,18 @@ export async function runAdminAgent(args: RunAdminAgentArgs): Promise<RunAdminAg
     is_outside_business_hours: isOutsideBusinessHours,
   };
 
+  // Vision step — analyze every image attached to this ticket (cached
+  // per-attachment so re-runs are free). Skipped when no ticketId
+  // (workbench path) or when the ticket has no attachments. The
+  // analysis cost is ~$0.001-0.005 per image with the low-detail
+  // setting; cached forever after first call.
+  const attachmentAnalysis = args.ticketId
+    ? await analyzeTicketAttachments(args.ticketId, args.locale || 'pt-BR').catch((err) => {
+        console.warn('[agent] attachment vision failed:', (err as Error)?.message || err);
+        return [];
+      })
+    : [];
+
   const adminInput: AdminAgentInput = {
     task: args.task,
     mode,
@@ -431,6 +450,11 @@ export async function runAdminAgent(args: RunAdminAgentArgs): Promise<RunAdminAg
       created_at: s.created_at,
     })),
     building_memory: buildingMemory,
+    // Vision analysis of resident-uploaded attachments. Each entry is
+    // (description, signals[]) — the model can branch on signals like
+    // "leak_active" without having to interpret prose. Empty array when
+    // there's no ticket context or no images.
+    attachment_analysis: attachmentAnalysis,
     // Prior turns in the same thread, oldest first. Capped at 5 so the
     // prompt doesn't grow unbounded on long conversations. Each turn is
     // a tight (user_task, agent_summary, recommended_next_step) tuple —
@@ -484,6 +508,10 @@ export async function runAdminAgent(args: RunAdminAgentArgs): Promise<RunAdminAg
         request: context.request,
         condominium: context.condominium,
         prior_turns: context.prior_turns,
+        // Vision is preloaded (not a tool) because each resident photo is
+        // already analyzed + cached server-side; making the model fetch
+        // it would just round-trip the same JSON.
+        attachment_analysis: context.attachment_analysis,
         tool_limitations: context.tool_limitations,
       };
       const result = await chatWithTools(
@@ -571,6 +599,12 @@ export async function runAdminAgent(args: RunAdminAgentArgs): Promise<RunAdminAg
     plan.building_memory = buildingMemory;
   } else {
     plan.building_memory = null;
+  }
+
+  // Attach vision results so the UI doesn't have to fetch attachments
+  // separately. Empty array stays out of the response payload.
+  if (attachmentAnalysis.length > 0) {
+    plan.attachment_analysis = attachmentAnalysis;
   }
 
   // Surface the ReAct tool trace so the UI can render a "thinking" view

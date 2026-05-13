@@ -128,6 +128,7 @@ export function dispatchAgentInBackground(ticketId: number, condoId: number, loc
         locale: locale || '',
         task: `${ticket.title}\n\n${ticket.description}`,
         mode: ticket.priority === 'urgent' ? 'repair' : 'general',
+        ticketId,
       });
 
       // If the model can't find any matching vendor in the condo's saved
@@ -956,6 +957,7 @@ router.post('/:id/run-agent', requireAuth, requireRole('board_admin'), asyncHand
     locale: localeRaw,
     task: `${ticket.title}\n\n${ticket.description}`,
     mode: ticket.priority === 'urgent' ? 'repair' : 'general',
+    ticketId: id,
   });
 
   db.prepare(

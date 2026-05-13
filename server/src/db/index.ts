@@ -436,6 +436,21 @@ export function initSchema() {
   addColumnIfMissing('ticket_dispatches', 'cancelled_at',         `TEXT`);
   db.prepare(`CREATE INDEX IF NOT EXISTS idx_ticket_dispatches_scheduled
     ON ticket_dispatches(scheduled_send_after) WHERE scheduled_send_after IS NOT NULL`).run();
+  // Roadmap item 6 — image / document understanding. When residents
+  // upload a photo of a leak, the model can SEE it instead of asking
+  // for a written description. Same for vendor PDF quotes and contract
+  // scans. Analysis is cached per-attachment so repeat agent runs on
+  // the same ticket don't re-pay for vision tokens.
+  //   ai_description       — short factual caption ("Vazamento sob a pia
+  //                           da cozinha, gota visível no sifão")
+  //   ai_signals           — structured tags the prompt can branch on
+  //                           ("water_damage, urgency_low, no_visible_mold")
+  //   ai_analyzed_at       — timestamp; null means "never analyzed"
+  //   ai_analysis_error    — last error code if analysis failed
+  addColumnIfMissing('ticket_attachments', 'ai_description',    `TEXT`);
+  addColumnIfMissing('ticket_attachments', 'ai_signals',        `TEXT`);
+  addColumnIfMissing('ticket_attachments', 'ai_analyzed_at',    `TEXT`);
+  addColumnIfMissing('ticket_attachments', 'ai_analysis_error', `TEXT`);
 
   // Phase 2 operations — once a vendor responds, the admin needs a real
   // work order: scheduled visit, estimate, invoice/photo evidence, and

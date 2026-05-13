@@ -76,6 +76,15 @@ interface AgentResult {
   options: AgentOption[];
   building_memory?: BuildingMemory | null;
   agent_trace?: AgentTraceStep[];
+  // Vision analysis (roadmap item 6). Present when the runner ran with
+  // a ticketId and the ticket had image attachments. Each entry is what
+  // the model SAW, surfaced separately from the recommendation so the
+  // admin can sanity-check the visual evidence.
+  attachment_analysis?: Array<{
+    id: number;
+    description: string;
+    signals: string[];
+  }>;
   // Confidence calibration — sanitiser fills this on every response.
   // tier drives the chip colour; reasoning is the disclosure body.
   confidence?: {
@@ -559,6 +568,10 @@ export default function BoardAgent() {
               nothing when memory is empty (new buildings, no patterns,
               business hours) — empty silence is honest. */}
           {result.building_memory && <BuildingMemorySection memory={result.building_memory} locale={locale} tr={tr} />}
+
+          {result.attachment_analysis && result.attachment_analysis.length > 0 && (
+            <VisualEvidenceSection items={result.attachment_analysis} tr={tr} />
+          )}
 
           {/* Hero: the only block in the result panel with a write action.
               Each existing-network-fit card lets the admin send the agent's
@@ -1109,6 +1122,49 @@ function ConfidenceChip({ confidence, tr }: {
         </div>
       )}
     </div>
+  );
+}
+
+// Visual evidence section — what the agent actually SAW. We show this
+// even when the model didn't cite the photos in its summary, because
+// the admin should always see what the vision pipeline produced. Tags
+// are colour-coded — urgency_high gets the peach treatment so the
+// admin's eye lands on it first.
+function VisualEvidenceSection({ items, tr }: {
+  items: Array<{ id: number; description: string; signals: string[] }>;
+  tr: (k: string) => string;
+}) {
+  const tagTone = (tag: string): 'sage' | 'peach' | 'neutral' => {
+    if (tag === 'urgency_high') return 'peach';
+    if (/^(leak_active|water_visible|exposed_wiring|electrical_burn|mold_visible|broken_)/.test(tag)) return 'peach';
+    if (tag === 'urgency_low' || tag === 'no_visible_problem') return 'sage';
+    if (/^(photo_|is_)/.test(tag)) return 'neutral';
+    return 'neutral';
+  };
+  return (
+    <GlassCard variant="clay" className="p-5">
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <h2 className="font-display text-xl text-dusk-500 flex items-center gap-2">
+          <Sparkles className="w-4 h-4" />
+          {tr('O que a IA viu nas fotos')}
+        </h2>
+        <Badge tone="neutral">{items.length}</Badge>
+      </div>
+      <div className="space-y-3">
+        {items.map((item) => (
+          <div key={item.id} className="rounded-2xl bg-white/60 border border-white/70 p-3">
+            <p className="text-sm text-dusk-500">{item.description}</p>
+            {item.signals.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {item.signals.map((s) => (
+                  <Badge key={s} tone={tagTone(s)}>{tr(s)}</Badge>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </GlassCard>
   );
 }
 

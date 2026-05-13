@@ -1424,6 +1424,65 @@ test('admin agent sanitizer fixes UTF-8-as-Latin1 mojibake in output strings', (
   assert.equal(clean.summary, 'All good here.');
 });
 
+test('attachment vision: cached entries return without re-calling the model', async () => {
+  resetDb();
+  const { condoId, unit101 } = createCondoFixture();
+  const r = createUser('r@x.com');
+  db.prepare(
+    `INSERT INTO user_unit (user_id, unit_id, relationship, status, primary_contact, voting_weight)
+     VALUES (?, ?, 'owner', 'active', 1, 1.0)`
+  ).run(r, unit101);
+
+  // Seed a ticket + one attachment with a fake cached analysis. The
+  // analyzer must NOT call the model for an already-analyzed row.
+  const ticketId = Number(db.prepare(
+    `INSERT INTO tickets (condominium_id, reporter_id, title, description, category, priority, status, remediation_status, verification_threshold)
+     VALUES (?, ?, 'Vazamento', 'agua na pia', 'plumbing', 'normal', 'open', 'open', 0)`
+  ).run(condoId, r).lastInsertRowid);
+  db.prepare(
+    `INSERT INTO ticket_attachments (ticket_id, uploaded_by_user_id, url, filename, content_type,
+                                     ai_description, ai_signals, ai_analyzed_at)
+     VALUES (?, ?, 'https://example.com/leak.jpg', 'leak.jpg', 'image/jpeg', ?, ?, CURRENT_TIMESTAMP)`
+  ).run(ticketId, r, 'Vazamento visível sob a pia.', JSON.stringify(['water_visible', 'leak_active', 'urgency_high']));
+
+  const { analyzeTicketAttachments, getCachedAttachmentAnalysis } = await import('../src/ai/attachment-vision');
+  const out = await analyzeTicketAttachments(ticketId, 'pt-BR');
+  assert.equal(out.length, 1);
+  assert.equal(out[0].description, 'Vazamento visível sob a pia.');
+  assert.deepEqual(out[0].signals, ['water_visible', 'leak_active', 'urgency_high']);
+
+  const cached = getCachedAttachmentAnalysis(ticketId);
+  assert.equal(cached.length, 1);
+  assert.equal(cached[0].signals[0], 'water_visible');
+});
+
+test('attachment vision: non-image content_type is cached as unsupported, never reanalyzed', async () => {
+  resetDb();
+  const { condoId, unit101 } = createCondoFixture();
+  const r = createUser('r2@x.com');
+  db.prepare(
+    `INSERT INTO user_unit (user_id, unit_id, relationship, status, primary_contact, voting_weight)
+     VALUES (?, ?, 'owner', 'active', 1, 1.0)`
+  ).run(r, unit101);
+  const ticketId = Number(db.prepare(
+    `INSERT INTO tickets (condominium_id, reporter_id, title, description, category, priority, status, remediation_status, verification_threshold)
+     VALUES (?, ?, 't', 'd', 'plumbing', 'normal', 'open', 'open', 0)`
+  ).run(condoId, r).lastInsertRowid);
+  const attachmentId = Number(db.prepare(
+    `INSERT INTO ticket_attachments (ticket_id, uploaded_by_user_id, url, filename, content_type)
+     VALUES (?, ?, 'https://example.com/quote.pdf', 'quote.pdf', 'application/pdf')`
+  ).run(ticketId, r).lastInsertRowid);
+
+  const { analyzeAttachment } = await import('../src/ai/attachment-vision');
+  const first = await analyzeAttachment(attachmentId);
+  assert.equal(first, null);
+  const row = db.prepare(
+    `SELECT ai_analyzed_at, ai_analysis_error FROM ticket_attachments WHERE id = ?`
+  ).get(attachmentId) as { ai_analyzed_at: string; ai_analysis_error: string };
+  assert.ok(row.ai_analyzed_at);
+  assert.equal(row.ai_analysis_error, 'unsupported_content_type');
+});
+
 test('admin agent sanitizer derives confidence tier and clamps fallback ceiling', () => {
   const input = { task: 't', service_contacts: [{ company_name: 'Otis', category: 'elevator' }] };
 
