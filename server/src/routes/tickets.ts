@@ -6,6 +6,7 @@ import { ok, fail, asyncHandler } from '../lib/respond';
 import { audit } from '../lib/audit';
 import { canAssignTicketToUser, markTicketAgentFailed } from '../lib/tickets';
 import { categoryMatches } from '../lib/category-aliases';
+import { buildVendorPortalUrl } from '../lib/vendor-tokens';
 import { evaluateAgentAutoDispatch, isSafetyCriticalUrgent } from '../lib/agent-auto-dispatch';
 import { runAdminAgent } from '../ai/admin-agent-runner';
 import { notifyUsers } from '../lib/whatsapp';
@@ -208,13 +209,35 @@ export function dispatchAgentInBackground(ticketId: number, condoId: number, loc
       // one-liner (the new prompt enforces this shape); fall back to a
       // short default if it's missing or unusually long.
       const rawOutreach = String(result.plan?.vendor_search_plan?.outreach_message || '').trim();
-      const message = (rawOutreach && rawOutreach.length <= 600 ? rawOutreach :
-        `Oi, ${vendor.contact_name || ''}! ${ticket.title}. Pode atender hoje?`).slice(0, 4_000);
+      const baseMessage = (rawOutreach && rawOutreach.length <= 600 ? rawOutreach :
+        `Oi, ${vendor.contact_name || ''}! ${ticket.title}. Pode atender hoje?`).slice(0, 3_500);
 
       const skipVeto = shouldSkipVetoWindow(ticket.priority, ticket.category);
       const sendAfter = skipVeto
         ? null  // worker fires immediately on next tick
         : new Date(Date.now() + AUTO_DISPATCH_VETO_SECONDS * 1000).toISOString().replace('T', ' ').slice(0, 19);
+
+      // Create the dispatch row FIRST so we have an id to sign the
+      // vendor portal token against. message_body is the base text;
+      // we update it with the appended link once the token is built.
+      const dispatch = db.prepare(
+        `INSERT INTO ticket_dispatches
+           (ticket_id, service_contact_id, channel, outbox_id, message_body, status, scheduled_send_after)
+         VALUES (?, ?, 'whatsapp', NULL, ?, 'queued', ?)`
+      ).run(ticketId, vendor.id, baseMessage, sendAfter);
+      const dispatchId = Number(dispatch.lastInsertRowid);
+
+      // Build the magic-link URL + the final message body the vendor
+      // will receive. The link lets them respond directly via a tiny
+      // server-rendered form (no admin transcription needed). Falls
+      // back to base message if token signing fails for some reason.
+      let finalMessage = baseMessage;
+      try {
+        const portalUrl = buildVendorPortalUrl(dispatchId);
+        finalMessage = `${baseMessage}\n\nResponder: ${portalUrl}`.slice(0, 4_000);
+      } catch (err) {
+        console.warn(`[tickets:${ticketId}] vendor link sign failed:`, (err as Error)?.message || err);
+      }
 
       const provider = process.env.WHATSAPP_PROVIDER || 'twilio';
       // Outbox row — when sendAfter is set, the worker only picks this up
@@ -222,15 +245,13 @@ export function dispatchAgentInBackground(ticketId: number, condoId: number, loc
       const outbox = db.prepare(
         `INSERT INTO notification_outbox (channel, provider, phone, body, status, next_attempt_at)
          VALUES ('whatsapp', ?, ?, ?, 'pending', ?)`
-      ).run(provider, vendor.whatsapp, message, sendAfter || new Date().toISOString().replace('T', ' ').slice(0, 19));
+      ).run(provider, vendor.whatsapp, finalMessage, sendAfter || new Date().toISOString().replace('T', ' ').slice(0, 19));
       const outboxId = Number(outbox.lastInsertRowid);
 
-      const dispatch = db.prepare(
-        `INSERT INTO ticket_dispatches
-           (ticket_id, service_contact_id, channel, outbox_id, message_body, status, scheduled_send_after)
-         VALUES (?, ?, 'whatsapp', ?, ?, 'queued', ?)`
-      ).run(ticketId, vendor.id, outboxId, message, sendAfter);
-      const dispatchId = Number(dispatch.lastInsertRowid);
+      // Backfill dispatch with the outbox link + the final message body.
+      db.prepare(
+        `UPDATE ticket_dispatches SET outbox_id = ?, message_body = ? WHERE id = ?`
+      ).run(outboxId, finalMessage, dispatchId);
 
       db.prepare(
         `UPDATE tickets

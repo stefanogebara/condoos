@@ -7,7 +7,8 @@
   "installCommand": "echo 'skip root install'",
   "rewrites": [
     { "source": "/api/:path*", "destination": "https://condoos-api.fly.dev/api/:path*" },
-    { "source": "/((?!static|images|favicon|manifest|robots|asset-manifest|_next).*)",
+    { "source": "/v/:path*", "destination": "https://condoos-api.fly.dev/api/v/:path*" },
+    { "source": "/((?!static|images|favicon|manifest|robots|asset-manifest|_next|v/).*)",
       "destination": "/index.html" }
   ],
   "headers": [

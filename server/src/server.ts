@@ -36,6 +36,7 @@ import documentsRoutes from './routes/documents';
 import memoryRoutes from './routes/memory';
 import reportsRoutes from './routes/reports';
 import webhooksRoutes from './routes/webhooks';
+import vendorPortalRoutes from './routes/vendor-portal';
 import serviceContactsRoutes from './routes/service-contacts';
 import { processWhatsAppOutbox } from './lib/whatsapp';
 import { startScheduledInvoiceGenerator } from './lib/finance';
@@ -85,6 +86,9 @@ app.use((_req, res, next) => {
   next();
 });
 app.use(express.json({ limit: '2mb' }));
+// Vendor portal posts a form (no JSON) so we need urlencoded parsing
+// on that route. Tight limit — vendors are filling a 4-field form.
+app.use('/api/v', express.urlencoded({ extended: false, limit: '32kb' }));
 // Audit M4 — body-parser surfaces JSON syntax errors with the raw V8
 // message ("Expected property name or '}' in JSON at position 1"), which
 // breaks the {error: <stable_code>} contract every other endpoint follows.
@@ -132,6 +136,9 @@ app.use('/api/me', meRoutes);
 // Inbound webhooks — public endpoints (no requireAuth). Each handler
 // verifies its provider's signature / shared secret before mutating state.
 app.use('/api/webhooks', webhooksRoutes);
+// Vendor self-service portal — public (no requireAuth). HMAC token in
+// the URL gates each request to a single dispatch.
+app.use('/api/v', vendorPortalRoutes);
 
 // All real data routes require an active user_unit membership.
 const scoped = [requireAuth, requireActiveMembership];

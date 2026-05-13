@@ -286,6 +286,36 @@ test('admin agent web research returns cited fallback URLs when provider is not 
   }
 });
 
+test('vendor portal tokens: sign + verify, expired rejection, tampered rejection', async () => {
+  const { signDispatchToken, verifyDispatchToken } = await import('../src/lib/vendor-tokens');
+
+  // Happy path — fresh token verifies clean.
+  const token = signDispatchToken(123);
+  const ok = verifyDispatchToken(123, token);
+  assert.equal(ok.ok, true);
+
+  // Wrong dispatch id rejected (signature won't match).
+  const wrong = verifyDispatchToken(124, token);
+  assert.equal(wrong.ok, false);
+  assert.equal(wrong.error, 'invalid');
+
+  // Truncated signature rejected.
+  const truncated = token.slice(0, -4);
+  const tampered = verifyDispatchToken(123, truncated);
+  assert.equal(tampered.ok, false);
+
+  // Malformed input rejected with a stable error code.
+  assert.equal(verifyDispatchToken(123, '').error, 'malformed');
+  assert.equal(verifyDispatchToken(123, 'noseparator').error, 'malformed');
+  assert.equal(verifyDispatchToken(123, 'abc.def').error, 'malformed'); // non-numeric expires
+
+  // Expired token rejected.
+  const expired = signDispatchToken(99, -3600); // signed 1h ago, ttl already in the past
+  const exp = verifyDispatchToken(99, expired);
+  assert.equal(exp.ok, false);
+  assert.equal(exp.error, 'expired');
+});
+
 test('admin agent sanitizer surfaces follow-up suggestions when network_fit is empty', () => {
   // Audit follow-up: when the agent hits a data wall (no vendor in
   // category, cost uncited), the sanitiser populates clickable rescue
