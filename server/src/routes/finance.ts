@@ -85,6 +85,109 @@ router.post('/schedules', requireAuth, requireRole('board_admin'), (req: AuthedR
   return ok(res, { id }, 201);
 });
 
+router.get('/receivables', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+  const condoId = getActiveCondoId(req);
+  const today = new Date().toISOString();
+
+  const unitRows = db.prepare(
+    `SELECT u.id AS unit_id,
+            u.number AS unit_number,
+            b.name AS building_name,
+            GROUP_CONCAT(DISTINCT TRIM(users.first_name || ' ' || users.last_name)) AS resident_names
+     FROM units u
+     JOIN buildings b ON b.id = u.building_id
+     LEFT JOIN user_unit uu ON uu.unit_id = u.id AND uu.status = 'active'
+     LEFT JOIN users ON users.id = uu.user_id
+     WHERE b.condominium_id = ?
+     GROUP BY u.id
+     ORDER BY b.name, CASE WHEN u.floor IS NULL THEN 9999 ELSE u.floor END, u.number`
+  ).all(condoId) as Array<{
+    unit_id: number;
+    unit_number: string;
+    building_name: string;
+    resident_names: string | null;
+  }>;
+
+  const invoiceRows = db.prepare(
+    `SELECT i.*,
+            u.number AS unit_number,
+            b.name AS building_name,
+            ds.name AS schedule_name,
+            COALESCE(SUM(p.amount_cents), 0) AS paid_cents,
+            GROUP_CONCAT(DISTINCT TRIM(users.first_name || ' ' || users.last_name)) AS resident_names
+     FROM invoices i
+     JOIN units u ON u.id = i.unit_id
+     JOIN buildings b ON b.id = u.building_id
+     LEFT JOIN dues_schedules ds ON ds.id = i.schedule_id
+     LEFT JOIN payments p ON p.invoice_id = i.id
+     LEFT JOIN user_unit uu ON uu.unit_id = u.id AND uu.status = 'active'
+     LEFT JOIN users ON users.id = uu.user_id
+     WHERE i.condominium_id = ?
+     GROUP BY i.id
+     ORDER BY i.due_date ASC, b.name, u.number`
+  ).all(condoId) as Array<any>;
+
+  const units = unitRows.map((row) => ({
+    ...row,
+    resident_names: row.resident_names || '',
+    open_cents: 0,
+    overdue_cents: 0,
+    open_invoice_count: 0,
+    overdue_invoice_count: 0,
+    oldest_due_date: null as string | null,
+  }));
+  const byUnit = new Map(units.map((u) => [u.unit_id, u]));
+
+  const invoices = invoiceRows.map((invoice) => {
+    const paid = Number(invoice.paid_cents || 0);
+    const remaining = Math.max(0, Number(invoice.amount_cents || 0) - paid);
+    const isOpen = invoice.status !== 'void' && remaining > 0;
+    const isOverdue = isOpen && new Date(invoice.due_date).getTime() < new Date(today).getTime();
+    const unit = byUnit.get(invoice.unit_id);
+    if (unit && isOpen) {
+      unit.open_cents += remaining;
+      unit.open_invoice_count += 1;
+      if (!unit.oldest_due_date || invoice.due_date < unit.oldest_due_date) unit.oldest_due_date = invoice.due_date;
+      if (isOverdue) {
+        unit.overdue_cents += remaining;
+        unit.overdue_invoice_count += 1;
+      }
+    }
+    return {
+      id: invoice.id,
+      unit_id: invoice.unit_id,
+      unit_number: invoice.unit_number,
+      building_name: invoice.building_name,
+      resident_names: invoice.resident_names || '',
+      schedule_id: invoice.schedule_id,
+      schedule_name: invoice.schedule_name,
+      amount_cents: Number(invoice.amount_cents || 0),
+      paid_cents: paid,
+      remaining_cents: remaining,
+      currency: invoice.currency,
+      period: invoice.period,
+      due_date: invoice.due_date,
+      status: isOverdue ? 'overdue' : invoice.status,
+      raw_status: invoice.status,
+      notes: invoice.notes,
+      created_at: invoice.created_at,
+    };
+  });
+
+  const openInvoices = invoices.filter((invoice) => invoice.raw_status !== 'void' && invoice.remaining_cents > 0);
+  const overdueInvoices = openInvoices.filter((invoice) => invoice.status === 'overdue');
+
+  return ok(res, {
+    total_open_cents: openInvoices.reduce((sum, invoice) => sum + invoice.remaining_cents, 0),
+    overdue_cents: overdueInvoices.reduce((sum, invoice) => sum + invoice.remaining_cents, 0),
+    open_invoice_count: openInvoices.length,
+    overdue_invoice_count: overdueInvoices.length,
+    unit_count: units.length,
+    units,
+    invoices,
+  });
+});
+
 router.post('/invoices', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
   const parsed = invoiceSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());

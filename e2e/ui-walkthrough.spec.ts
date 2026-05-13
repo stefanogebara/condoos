@@ -94,6 +94,7 @@ test('Admin: sidebar links hit every new page (Edifício, Finanças)', async ({ 
   await clickShellLink(page, '/board/financas');
   await expect(page).toHaveURL(/\/board\/financas/);
   await expect(page.getByRole('heading', { name: /^Finanças$/i }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: /Gerar cobranças/i })).toBeVisible();
   await expect(page.getByRole('button', { name: /Nova despesa/i })).toBeVisible();
   await page.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => {});
 });
@@ -124,6 +125,8 @@ test('Finanças: shows resumo por categoria + at least one expense row', async (
   test.setTimeout(45_000);
   await seedSession(page, request, 'admin');
   await gotoApp(page, '/board/financas');
+  await expect(page.getByRole('heading', { name: /Regras de cobrança/i })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole('heading', { name: /Cobranças e pagamentos/i })).toBeVisible();
 
   // Either the seeded demo has expenses (Pine Ridge Towers, R$ 180.500) and
   // the resumo renders, or there's the empty-state message. Accept either —
@@ -195,8 +198,8 @@ test('Resident: Visitantes shows Próximas/Histórico tabs and pré-aprovar in f
 
   // Open the form
   await page.getByRole('button', { name: /Novo visitante/i }).click();
-  // Pré-aprovar checkbox appears with helper copy
-  await expect(page.getByText(/Pré-aprovar a entrada/i)).toBeVisible();
+  // Pre-approval checkbox appears with helper copy.
+  await expect(page.getByText(/Pré-aprovar entrada|Pre-approve entry|Preaprobar entrada|Pré-approuver l’entrée/i)).toBeVisible();
 });
 
 // ---------------------------------------------------------------------------

@@ -1,14 +1,26 @@
-// Admin "Finanças" — log every condo expense, attach a receipt URL,
-// see totals by category. Pairs with /app/transparencia (resident view)
-// which renders the same data read-only.
-import React, { useEffect, useState } from 'react';
+// Admin "Finanças" — money in (dues/payments) + money out (expenses).
+// Residents see the read-only mirror in /app/transparencia.
+import React, { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
-import { Plus, X, Trash2, Wallet, FileText, ExternalLink } from 'lucide-react';
+import {
+  AlertTriangle,
+  CalendarPlus,
+  CheckCircle2,
+  CreditCard,
+  Download,
+  ExternalLink,
+  FileText,
+  Plus,
+  ReceiptText,
+  Trash2,
+  Wallet,
+  X,
+} from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 import GlassCard from '../../components/GlassCard';
 import Badge from '../../components/Badge';
 import Button from '../../components/Button';
-import { apiGet, apiPost, apiDelete } from '../../lib/api';
+import { apiDelete, apiGet, apiPost } from '../../lib/api';
 import { formatCurrency, formatDate, t } from '../../lib/i18n';
 
 interface Expense {
@@ -35,6 +47,59 @@ interface ExpenseList {
   currency: string;
 }
 
+interface DuesSchedule {
+  id: number;
+  name: string;
+  amount_cents: number;
+  currency: string;
+  frequency: 'monthly' | 'quarterly' | 'annual' | 'one_time';
+  due_day: number;
+  active: number;
+  created_at: string;
+}
+
+interface ReceivableUnit {
+  unit_id: number;
+  unit_number: string;
+  building_name: string;
+  resident_names: string;
+  open_cents: number;
+  overdue_cents: number;
+  open_invoice_count: number;
+  overdue_invoice_count: number;
+  oldest_due_date: string | null;
+}
+
+interface ReceivableInvoice {
+  id: number;
+  unit_id: number;
+  unit_number: string;
+  building_name: string;
+  resident_names: string;
+  schedule_id: number | null;
+  schedule_name: string | null;
+  amount_cents: number;
+  paid_cents: number;
+  remaining_cents: number;
+  currency: string;
+  period: string;
+  due_date: string;
+  status: string;
+  raw_status: string;
+  notes: string | null;
+  created_at: string;
+}
+
+interface Receivables {
+  total_open_cents: number;
+  overdue_cents: number;
+  open_invoice_count: number;
+  overdue_invoice_count: number;
+  unit_count: number;
+  units: ReceivableUnit[];
+  invoices: ReceivableInvoice[];
+}
+
 export const EXPENSE_CATEGORIES: Array<{ value: string; label: string }> = [
   { value: 'maintenance',    label: 'Manutenção' },
   { value: 'utilities',      label: 'Contas (luz, água, gás)' },
@@ -54,72 +119,712 @@ export const CATEGORY_LABEL: Record<string, string> = Object.fromEntries(
   EXPENSE_CATEGORIES.map((c) => [c.value, c.label]),
 );
 
+const FREQUENCY_LABEL: Record<DuesSchedule['frequency'], string> = {
+  monthly: 'Mensal',
+  quarterly: 'Trimestral',
+  annual: 'Anual',
+  one_time: 'Uma vez',
+};
+
+function currentPeriod() {
+  return new Date().toISOString().slice(0, 7);
+}
+
+function dueDateInputFor(period: string, day = 10) {
+  const safeDay = String(Math.min(Math.max(day || 10, 1), 28)).padStart(2, '0');
+  return `${period}-${safeDay}`;
+}
+
+function parseAmountToCents(value: string): number | null {
+  const normalized = value.trim().replace(/\s/g, '').replace(',', '.');
+  const parsed = Number.parseFloat(normalized);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return Math.round(parsed * 100);
+}
+
+function amountInput(cents: number) {
+  return (cents / 100).toFixed(2);
+}
+
+function openInvoices(receivables: Receivables | null) {
+  return (receivables?.invoices || [])
+    .filter((invoice) => invoice.raw_status !== 'void' && invoice.remaining_cents > 0)
+    .sort((a, b) => a.due_date.localeCompare(b.due_date));
+}
+
+function exportReceivablesCsv(receivables: Receivables | null) {
+  if (!receivables) return;
+  const headers = [
+    'unit',
+    'building',
+    'residents',
+    'period',
+    'due_date',
+    'status',
+    'amount',
+    'paid',
+    'remaining',
+    'schedule',
+    'notes',
+  ];
+  const escape = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+  const rows = receivables.invoices.map((invoice) => [
+    invoice.unit_number,
+    invoice.building_name,
+    invoice.resident_names,
+    invoice.period,
+    invoice.due_date,
+    invoice.status,
+    (invoice.amount_cents / 100).toFixed(2),
+    (invoice.paid_cents / 100).toFixed(2),
+    (invoice.remaining_cents / 100).toFixed(2),
+    invoice.schedule_name || '',
+    invoice.notes || '',
+  ]);
+  const csv = [headers, ...rows].map((row) => row.map(escape).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `condoos-receivables-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function BoardFinancas() {
   const [data, setData] = useState<ExpenseList | null>(null);
-  const [showForm, setShowForm] = useState(false);
+  const [schedules, setSchedules] = useState<DuesSchedule[]>([]);
+  const [receivables, setReceivables] = useState<Receivables | null>(null);
+  const [showExpenseForm, setShowExpenseForm] = useState(false);
+  const [showScheduleForm, setShowScheduleForm] = useState(false);
+  const [showInvoiceForm, setShowInvoiceForm] = useState(false);
+  const [paymentTarget, setPaymentTarget] = useState<ReceivableInvoice | null>(null);
 
-  const load = () => apiGet<ExpenseList>('/finance/expenses').then(setData).catch(() => setData(null));
-  useEffect(() => { load(); }, []);
+  const load = async () => {
+    const [expensesNext, schedulesNext, receivablesNext] = await Promise.all([
+      apiGet<ExpenseList>('/finance/expenses'),
+      apiGet<DuesSchedule[]>('/finance/schedules'),
+      apiGet<Receivables>('/finance/receivables'),
+    ]);
+    setData(expensesNext);
+    setSchedules(schedulesNext);
+    setReceivables(receivablesNext);
+  };
+
+  useEffect(() => {
+    load().catch(() => {
+      setData(null);
+      setReceivables(null);
+      toast.error(t('Não foi possível carregar finanças'));
+    });
+  }, []);
+
+  const invoicesOpen = useMemo(() => openInvoices(receivables), [receivables]);
 
   return (
     <>
       <PageHeader
-        title="Finanças"
-        subtitle="Onde o condomínio gasta. Cada lançamento aparece para os moradores no painel de transparência — coloque o link do recibo sempre que possível."
+        title={t('Finanças')}
+        subtitle={t('Controle cobranças, pagamentos, despesas e recibos em um só lugar. Moradores veem a parte transparente sem editar nada.')}
         actions={
-          <Button
-            onClick={() => setShowForm((x) => !x)}
-            variant={showForm ? 'ghost' : 'primary'}
-            leftIcon={showForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-          >
-            {showForm ? 'Cancelar' : 'Nova despesa'}
-          </Button>
+          <>
+            <Button
+              variant={showInvoiceForm ? 'ghost' : 'primary'}
+              leftIcon={showInvoiceForm ? <X className="w-4 h-4" /> : <CalendarPlus className="w-4 h-4" />}
+              onClick={() => setShowInvoiceForm((x) => !x)}
+            >
+              {showInvoiceForm ? t('Cancelar') : t('Gerar cobranças')}
+            </Button>
+            <Button
+              variant={showExpenseForm ? 'ghost' : 'sage'}
+              leftIcon={showExpenseForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+              onClick={() => setShowExpenseForm((x) => !x)}
+            >
+              {showExpenseForm ? t('Cancelar') : t('Nova despesa')}
+            </Button>
+          </>
         }
       />
 
-      {showForm && <NewExpenseForm onCreated={() => { setShowForm(false); load(); }} />}
+      <FinanceHealth receivables={receivables} />
+
+      {showScheduleForm && (
+        <ScheduleForm
+          onCreated={() => {
+            setShowScheduleForm(false);
+            load();
+          }}
+        />
+      )}
+
+      {showInvoiceForm && (
+        <GenerateInvoicesForm
+          schedules={schedules}
+          units={receivables?.units || []}
+          onCreated={() => {
+            setShowInvoiceForm(false);
+            load();
+          }}
+        />
+      )}
+
+      <div className="grid xl:grid-cols-[0.9fr_1.4fr] gap-6 mb-8">
+        <DuesSchedulePanel
+          schedules={schedules}
+          onNew={() => setShowScheduleForm((x) => !x)}
+        />
+        <ReceivablesPanel
+          receivables={receivables}
+          invoices={invoicesOpen}
+          onPay={setPaymentTarget}
+          onExport={() => exportReceivablesCsv(receivables)}
+        />
+      </div>
+
+      {showExpenseForm && (
+        <NewExpenseForm
+          onCreated={() => {
+            setShowExpenseForm(false);
+            load();
+          }}
+        />
+      )}
 
       <CategorySummary totals={data?.totals_by_category || []} totalCents={data?.total_cents || 0} />
 
-      <h2 className="font-display text-xl text-dusk-500 mb-3">Lançamentos</h2>
+      <h2 className="font-display text-xl text-dusk-500 mb-3">{t('Lançamentos')}</h2>
       {!data ? (
-        <GlassCard className="p-6 text-sm text-dusk-300">Carregando…</GlassCard>
+        <GlassCard className="p-6 text-sm text-dusk-300">{t('Carregando…')}</GlassCard>
       ) : data.expenses.length === 0 ? (
         <GlassCard className="p-6 text-sm text-dusk-300 text-center">
-          Nenhuma despesa registrada nos últimos 12 meses. Comece pelas contas fixas (luz, água, condomínio da empresa de portaria).
+          {t('Nenhuma despesa registrada nos últimos 12 meses. Comece pelas contas fixas (luz, água, condomínio da empresa de portaria).')}
         </GlassCard>
       ) : (
         <div className="space-y-2">
           {data.expenses.map((e) => <ExpenseRow key={e.id} expense={e} onDeleted={load} />)}
         </div>
       )}
+
+      {paymentTarget && (
+        <PaymentModal
+          invoice={paymentTarget}
+          onClose={() => setPaymentTarget(null)}
+          onSaved={() => {
+            setPaymentTarget(null);
+            load();
+          }}
+        />
+      )}
     </>
   );
 }
 
+function FinanceHealth({ receivables }: { receivables: Receivables | null }) {
+  const open = receivables?.total_open_cents || 0;
+  const overdue = receivables?.overdue_cents || 0;
+  return (
+    <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3 mb-6">
+      <MetricCard
+        icon={Wallet}
+        label={t('Saldo aberto')}
+        value={formatCurrency(open / 100)}
+        tone={open > 0 ? 'peach' : 'sage'}
+      />
+      <MetricCard
+        icon={AlertTriangle}
+        label={t('Em atraso')}
+        value={formatCurrency(overdue / 100)}
+        tone={overdue > 0 ? 'warning' : 'sage'}
+      />
+      <MetricCard
+        icon={ReceiptText}
+        label={t('Cobranças abertas')}
+        value={String(receivables?.open_invoice_count || 0)}
+        tone="neutral"
+      />
+      <MetricCard
+        icon={CheckCircle2}
+        label={t('Unidades')}
+        value={String(receivables?.unit_count || 0)}
+        tone="sage"
+      />
+    </div>
+  );
+}
+
+function MetricCard({
+  icon: Icon,
+  label,
+  value,
+  tone,
+}: {
+  icon: any;
+  label: string;
+  value: string;
+  tone: 'neutral' | 'sage' | 'peach' | 'warning';
+}) {
+  const color = tone === 'sage'
+    ? 'bg-sage-200 text-sage-700'
+    : tone === 'warning'
+      ? 'bg-amber-100 text-amber-800'
+      : tone === 'peach'
+        ? 'bg-peach-100 text-peach-500'
+        : 'bg-white/70 text-dusk-400';
+  return (
+    <GlassCard variant="clay" className="p-4 flex items-center gap-3">
+      <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${color}`}>
+        <Icon className="w-5 h-5" />
+      </div>
+      <div>
+        <div className="text-xs uppercase tracking-wider text-dusk-300">{label}</div>
+        <div className="font-display text-2xl text-dusk-500">{value}</div>
+      </div>
+    </GlassCard>
+  );
+}
+
+function DuesSchedulePanel({ schedules, onNew }: { schedules: DuesSchedule[]; onNew: () => void }) {
+  return (
+    <GlassCard className="p-5">
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <div>
+          <h2 className="font-display text-xl text-dusk-500">{t('Regras de cobrança')}</h2>
+          <p className="text-sm text-dusk-300 mt-1">{t('Defina o valor recorrente que vira cobrança para as unidades.')}</p>
+        </div>
+        <Button size="sm" variant="ghost" leftIcon={<Plus className="w-4 h-4" />} onClick={onNew}>
+          {t('Nova regra')}
+        </Button>
+      </div>
+
+      {schedules.length === 0 ? (
+        <div className="rounded-2xl bg-white/55 border border-white/70 p-4 text-sm text-dusk-300">
+          {t('Nenhuma regra de cobrança ainda. Crie a mensalidade do condomínio ou uma taxa recorrente.')}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {schedules.map((schedule) => (
+            <div key={schedule.id} className="rounded-2xl bg-white/55 border border-white/70 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-semibold text-dusk-500">{schedule.name}</span>
+                    <Badge tone={schedule.active ? 'sage' : 'neutral'}>{schedule.active ? t('ativo') : t('inativo')}</Badge>
+                  </div>
+                  <p className="text-xs text-dusk-300 mt-1">
+                    {t(FREQUENCY_LABEL[schedule.frequency])} · {t('vence dia')} {schedule.due_day}
+                  </p>
+                </div>
+                <div className="font-mono font-semibold text-dusk-500 shrink-0">
+                  {formatCurrency(schedule.amount_cents / 100, schedule.currency)}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </GlassCard>
+  );
+}
+
+function ReceivablesPanel({
+  receivables,
+  invoices,
+  onPay,
+  onExport,
+}: {
+  receivables: Receivables | null;
+  invoices: ReceivableInvoice[];
+  onPay: (invoice: ReceivableInvoice) => void;
+  onExport: () => void;
+}) {
+  const topUnits = (receivables?.units || [])
+    .filter((unit) => unit.open_cents > 0)
+    .sort((a, b) => b.open_cents - a.open_cents)
+    .slice(0, 4);
+
+  return (
+    <GlassCard className="p-5">
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <div>
+          <h2 className="font-display text-xl text-dusk-500">{t('Cobranças e pagamentos')}</h2>
+          <p className="text-sm text-dusk-300 mt-1">{t('Veja saldos por unidade e registre pagamentos manuais quando entrarem.')}</p>
+        </div>
+        <Button
+          size="sm"
+          variant="ghost"
+          leftIcon={<Download className="w-4 h-4" />}
+          onClick={onExport}
+          disabled={!receivables?.invoices?.length}
+        >
+          {t('Exportar CSV')}
+        </Button>
+      </div>
+
+      {topUnits.length > 0 && (
+        <div className="grid md:grid-cols-2 gap-2 mb-4">
+          {topUnits.map((unit) => (
+            <div key={unit.unit_id} className="rounded-2xl bg-white/55 border border-white/70 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="font-semibold text-dusk-500">{t('Unidade')} {unit.unit_number}</div>
+                <Badge tone={unit.overdue_cents > 0 ? 'warning' : 'peach'}>
+                  {formatCurrency(unit.open_cents / 100)}
+                </Badge>
+              </div>
+              <p className="text-xs text-dusk-300 mt-1 truncate">
+                {unit.resident_names || t('Sem morador ativo')} · {unit.oldest_due_date ? `${t('Vence em')} ${formatDate(unit.oldest_due_date)}` : t('Sem vencimento')}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {invoices.length === 0 ? (
+        <div className="rounded-2xl bg-white/55 border border-white/70 p-4 text-sm text-dusk-300">
+          {t('Nenhum saldo aberto. Gere cobranças quando começar o próximo ciclo.')}
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[720px]">
+            <thead>
+              <tr className="text-left text-xs uppercase tracking-wider text-dusk-300">
+                <th className="py-2 pr-3">{t('Unidade')}</th>
+                <th className="py-2 pr-3">{t('Cobrança')}</th>
+                <th className="py-2 pr-3">{t('Vencimento')}</th>
+                <th className="py-2 pr-3 text-right">{t('Restante')}</th>
+                <th className="py-2 pr-3">{t('Status')}</th>
+                <th className="py-2 text-right">{t('Ação')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {invoices.slice(0, 12).map((invoice) => (
+                <tr key={invoice.id} className="border-t border-white/60">
+                  <td className="py-3 pr-3">
+                    <div className="font-semibold text-dusk-500">{invoice.unit_number}</div>
+                    <div className="text-xs text-dusk-300 truncate max-w-[180px]">{invoice.resident_names || invoice.building_name}</div>
+                  </td>
+                  <td className="py-3 pr-3">
+                    <div className="text-dusk-500">{invoice.schedule_name || t('Cobrança avulsa')}</div>
+                    <div className="text-xs text-dusk-300">{invoice.period}</div>
+                  </td>
+                  <td className="py-3 pr-3 text-dusk-400">{formatDate(invoice.due_date)}</td>
+                  <td className="py-3 pr-3 text-right font-mono font-semibold text-dusk-500">
+                    {formatCurrency(invoice.remaining_cents / 100, invoice.currency)}
+                  </td>
+                  <td className="py-3 pr-3">
+                    <InvoiceStatusBadge invoice={invoice} />
+                  </td>
+                  <td className="py-3 text-right">
+                    <Button size="sm" variant="ghost" leftIcon={<CreditCard className="w-4 h-4" />} onClick={() => onPay(invoice)}>
+                      {t('Registrar pago')}
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {invoices.length > 12 && (
+            <p className="text-xs text-dusk-300 mt-3">{t('Mostrando as 12 cobranças abertas mais antigas. Exporte CSV para ver tudo.')}</p>
+          )}
+        </div>
+      )}
+    </GlassCard>
+  );
+}
+
+function InvoiceStatusBadge({ invoice }: { invoice: ReceivableInvoice }) {
+  if (invoice.status === 'overdue') return <Badge tone="warning">{t('Em atraso')}</Badge>;
+  if (invoice.paid_cents > 0) return <Badge tone="peach">{t('Parcial')}</Badge>;
+  return <Badge tone="dark">{t('Aberto')}</Badge>;
+}
+
+function ScheduleForm({ onCreated }: { onCreated: () => void }) {
+  const [form, setForm] = useState({
+    name: t('Mensalidade do condomínio'),
+    amount: '',
+    frequency: 'monthly' as DuesSchedule['frequency'],
+    due_day: 10,
+  });
+  const [saving, setSaving] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    const cents = parseAmountToCents(form.amount);
+    if (!cents) {
+      toast.error(t('Valor inválido — use números (ex: 1500 ou 1500,00)'));
+      return;
+    }
+    setSaving(true);
+    try {
+      await apiPost('/finance/schedules', {
+        name: form.name.trim(),
+        amount_cents: cents,
+        currency: 'BRL',
+        frequency: form.frequency,
+        due_day: form.due_day,
+      });
+      toast.success(t('Regra de cobrança criada'));
+      onCreated();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || t('Falha ao salvar'));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <GlassCard className="p-6 mb-6 animate-fade-up">
+      <h3 className="font-display text-xl text-dusk-500 tracking-tight">{t('Nova regra de cobrança')}</h3>
+      <p className="text-sm text-dusk-300 mt-1">{t('Use para mensalidade do condomínio, fundo de reserva ou cobranças recorrentes.')}</p>
+      <form onSubmit={submit} className="grid md:grid-cols-4 gap-3 mt-4">
+        <label className="block text-xs text-dusk-300 font-medium md:col-span-2">
+          {t('Nome')}
+          <input className="input mt-1" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required maxLength={120} />
+        </label>
+        <label className="block text-xs text-dusk-300 font-medium">
+          {t('Valor')}
+          <input className="input mt-1" inputMode="decimal" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder={t('ex: 1500 ou 1500,00')} required />
+        </label>
+        <label className="block text-xs text-dusk-300 font-medium">
+          {t('Vence dia')}
+          <input className="input mt-1" type="number" min={1} max={28} value={form.due_day} onChange={(e) => setForm({ ...form, due_day: Number(e.target.value) || 10 })} />
+        </label>
+        <label className="block text-xs text-dusk-300 font-medium md:col-span-2">
+          {t('Frequência')}
+          <select className="input mt-1" value={form.frequency} onChange={(e) => setForm({ ...form, frequency: e.target.value as DuesSchedule['frequency'] })}>
+            {Object.entries(FREQUENCY_LABEL).map(([value, label]) => (
+              <option key={value} value={value}>{t(label)}</option>
+            ))}
+          </select>
+        </label>
+        <div className="md:col-span-2 flex items-end justify-end">
+          <Button type="submit" variant="primary" loading={saving}>{t('Salvar regra')}</Button>
+        </div>
+      </form>
+    </GlassCard>
+  );
+}
+
+function GenerateInvoicesForm({
+  schedules,
+  units,
+  onCreated,
+}: {
+  schedules: DuesSchedule[];
+  units: ReceivableUnit[];
+  onCreated: () => void;
+}) {
+  const firstSchedule = schedules[0]?.id ? String(schedules[0].id) : 'custom';
+  const [form, setForm] = useState({
+    schedule_id: firstSchedule,
+    period: currentPeriod(),
+    due_date: dueDateInputFor(currentPeriod(), schedules[0]?.due_day || 10),
+    amount: '',
+    unit_id: '',
+    notes: '',
+  });
+  const [saving, setSaving] = useState(false);
+  const custom = form.schedule_id === 'custom';
+
+  function updatePeriod(period: string) {
+    const selected = schedules.find((s) => String(s.id) === form.schedule_id);
+    setForm({ ...form, period, due_date: dueDateInputFor(period, selected?.due_day || 10) });
+  }
+
+  function updateSchedule(scheduleId: string) {
+    const selected = schedules.find((s) => String(s.id) === scheduleId);
+    setForm({
+      ...form,
+      schedule_id: scheduleId,
+      due_date: dueDateInputFor(form.period, selected?.due_day || 10),
+    });
+  }
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    const body: Record<string, unknown> = {
+      period: form.period,
+      due_date: `${form.due_date}T12:00:00.000Z`,
+      notes: form.notes.trim() || undefined,
+    };
+    if (custom) {
+      const cents = parseAmountToCents(form.amount);
+      if (!cents) {
+        toast.error(t('Valor inválido — use números (ex: 1500 ou 1500,00)'));
+        return;
+      }
+      body.amount_cents = cents;
+      body.currency = 'BRL';
+    } else {
+      body.schedule_id = Number(form.schedule_id);
+    }
+    if (form.unit_id) body.unit_ids = [Number(form.unit_id)];
+
+    setSaving(true);
+    try {
+      const res = await apiPost<{ created_count: number; skipped_count: number }>('/finance/invoices', body);
+      toast.success(`${t('Cobranças geradas')}: ${res.created_count} · ${t('ignoradas')}: ${res.skipped_count}`);
+      onCreated();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || t('Falha ao gerar cobranças'));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <GlassCard className="p-6 mb-6 animate-fade-up">
+      <h3 className="font-display text-xl text-dusk-500 tracking-tight">{t('Gerar cobranças')}</h3>
+      <p className="text-sm text-dusk-300 mt-1">{t('Gere para todas as unidades ou apenas uma unidade específica.')}</p>
+      <form onSubmit={submit} className="grid md:grid-cols-4 gap-3 mt-4">
+        <label className="block text-xs text-dusk-300 font-medium md:col-span-2">
+          {t('Regra')}
+          <select className="input mt-1" value={form.schedule_id} onChange={(e) => updateSchedule(e.target.value)}>
+            {schedules.map((schedule) => (
+              <option key={schedule.id} value={schedule.id}>{schedule.name} · {formatCurrency(schedule.amount_cents / 100, schedule.currency)}</option>
+            ))}
+            <option value="custom">{t('Cobrança avulsa')}</option>
+          </select>
+        </label>
+        <label className="block text-xs text-dusk-300 font-medium">
+          {t('Período')}
+          <input className="input mt-1" type="month" value={form.period} onChange={(e) => updatePeriod(e.target.value)} required />
+        </label>
+        <label className="block text-xs text-dusk-300 font-medium">
+          {t('Vencimento')}
+          <input className="input mt-1" type="date" value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })} required />
+        </label>
+        {custom && (
+          <label className="block text-xs text-dusk-300 font-medium">
+            {t('Valor')}
+            <input className="input mt-1" inputMode="decimal" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder={t('ex: 1500 ou 1500,00')} required />
+          </label>
+        )}
+        <label className={`block text-xs text-dusk-300 font-medium ${custom ? '' : 'md:col-span-2'}`}>
+          {t('Unidade')}
+          <select className="input mt-1" value={form.unit_id} onChange={(e) => setForm({ ...form, unit_id: e.target.value })}>
+            <option value="">{t('Todas as unidades')}</option>
+            {units.map((unit) => (
+              <option key={unit.unit_id} value={unit.unit_id}>
+                {unit.unit_number} · {unit.resident_names || unit.building_name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block text-xs text-dusk-300 font-medium md:col-span-2">
+          {t('Observações (opcional)')}
+          <input className="input mt-1" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} maxLength={500} />
+        </label>
+        <div className="md:col-span-4 flex justify-end">
+          <Button type="submit" variant="primary" loading={saving}>{t('Gerar cobranças')}</Button>
+        </div>
+      </form>
+    </GlassCard>
+  );
+}
+
+function PaymentModal({
+  invoice,
+  onClose,
+  onSaved,
+}: {
+  invoice: ReceivableInvoice;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [form, setForm] = useState({
+    amount: amountInput(invoice.remaining_cents),
+    method: 'manual',
+    reference: '',
+    paid_at: new Date().toISOString().slice(0, 10),
+  });
+  const [saving, setSaving] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    const cents = parseAmountToCents(form.amount);
+    if (!cents) {
+      toast.error(t('Valor inválido — use números (ex: 1500 ou 1500,00)'));
+      return;
+    }
+    setSaving(true);
+    try {
+      await apiPost('/finance/payments', {
+        invoice_id: invoice.id,
+        amount_cents: cents,
+        method: form.method.trim() || 'manual',
+        paid_at: `${form.paid_at}T12:00:00.000Z`,
+        reference: form.reference.trim() || undefined,
+      });
+      toast.success(t('Pagamento registrado'));
+      onSaved();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || t('Falha ao registrar pagamento'));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-dusk-500/40 backdrop-blur-sm">
+      <GlassCard className="w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <div>
+            <h2 className="font-display text-2xl text-dusk-500">{t('Registrar pagamento')}</h2>
+            <p className="text-sm text-dusk-300 mt-1">
+              {t('Unidade')} {invoice.unit_number} · {invoice.schedule_name || t('Cobrança avulsa')} · {formatCurrency(invoice.remaining_cents / 100, invoice.currency)} {t('restante')}
+            </p>
+          </div>
+          <button className="text-dusk-300 hover:text-dusk-500" onClick={onClose} aria-label={t('Fechar')}>
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <form onSubmit={submit} className="grid md:grid-cols-2 gap-3">
+          <label className="block text-xs text-dusk-300 font-medium">
+            {t('Valor')}
+            <input className="input mt-1" inputMode="decimal" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required />
+          </label>
+          <label className="block text-xs text-dusk-300 font-medium">
+            {t('Data')}
+            <input className="input mt-1" type="date" value={form.paid_at} onChange={(e) => setForm({ ...form, paid_at: e.target.value })} required />
+          </label>
+          <label className="block text-xs text-dusk-300 font-medium">
+            {t('Método')}
+            <input className="input mt-1" value={form.method} onChange={(e) => setForm({ ...form, method: e.target.value })} maxLength={40} />
+          </label>
+          <label className="block text-xs text-dusk-300 font-medium">
+            {t('Referência (opcional)')}
+            <input className="input mt-1" value={form.reference} onChange={(e) => setForm({ ...form, reference: e.target.value })} maxLength={120} placeholder={t('ex: PIX, transferência, recibo')} />
+          </label>
+          <div className="md:col-span-2 flex justify-end gap-2 pt-2">
+            <Button type="button" variant="ghost" onClick={onClose}>{t('Cancelar')}</Button>
+            <Button type="submit" variant="primary" loading={saving}>{t('Registrar pagamento')}</Button>
+          </div>
+        </form>
+      </GlassCard>
+    </div>
+  );
+}
+
 function CategorySummary({ totals, totalCents }: { totals: CategoryTotal[]; totalCents: number }) {
-  // Audit M13 — with a single category the bar always rendered at 100% and
-  // had no scale to compare against; it read like a placeholder. Hide the
-  // breakdown until there are at least two categories so the bar actually
-  // communicates relative weight.
   if (totals.length < 2) return null;
-  const max = Math.max(...totals.map((t) => t.total_cents), 1);
+  const max = Math.max(...totals.map((row) => row.total_cents), 1);
   return (
     <GlassCard variant="clay" className="p-6 mb-6">
       <div className="flex items-center gap-2 mb-3">
         <Wallet className="w-5 h-5 text-dusk-400" />
-        <h3 className="font-display text-lg text-dusk-500">Resumo por categoria</h3>
+        <h3 className="font-display text-lg text-dusk-500">{t('Resumo por categoria')}</h3>
         <Badge tone="dark" className="ml-auto">{formatCurrency(totalCents / 100)}</Badge>
       </div>
       <div className="space-y-1.5">
-        {totals.map((t) => (
-          <div key={t.category} className="flex items-center gap-3 text-sm">
-            <span className="w-44 shrink-0 text-dusk-500 truncate">{CATEGORY_LABEL[t.category] || t.category}</span>
+        {totals.map((row) => (
+          <div key={row.category} className="flex items-center gap-3 text-sm">
+            <span className="w-44 shrink-0 text-dusk-500 truncate">{t(CATEGORY_LABEL[row.category] || row.category)}</span>
             <div className="flex-1 h-2 rounded-full bg-white/40 overflow-hidden">
-              <div className="h-full bg-sage-400" style={{ width: `${(t.total_cents / max) * 100}%` }} />
+              <div className="h-full bg-sage-400" style={{ width: `${(row.total_cents / max) * 100}%` }} />
             </div>
-            <span className="w-28 text-right text-dusk-400 font-mono text-[13px]">{formatCurrency(t.total_cents / 100)}</span>
-            <span className="w-12 text-right text-[11px] text-dusk-200">{t.count}</span>
+            <span className="w-28 text-right text-dusk-400 font-mono text-[13px]">{formatCurrency(row.total_cents / 100)}</span>
+            <span className="w-12 text-right text-[11px] text-dusk-200">{row.count}</span>
           </div>
         ))}
       </div>
@@ -131,7 +836,7 @@ function ExpenseRow({ expense, onDeleted }: { expense: Expense; onDeleted: () =>
   const [deleting, setDeleting] = useState(false);
 
   async function remove() {
-    if (!confirm(`Apagar a despesa "${expense.description}"?`)) return;
+    if (!confirm(`${t('Apagar despesa')} "${expense.description}"?`)) return;
     setDeleting(true);
     try {
       await apiDelete(`/finance/expenses/${expense.id}`);
@@ -139,7 +844,9 @@ function ExpenseRow({ expense, onDeleted }: { expense: Expense; onDeleted: () =>
       onDeleted();
     } catch (err: any) {
       toast.error(err?.response?.data?.error || t('Falha ao apagar'));
-    } finally { setDeleting(false); }
+    } finally {
+      setDeleting(false);
+    }
   }
 
   return (
@@ -150,9 +857,9 @@ function ExpenseRow({ expense, onDeleted }: { expense: Expense; onDeleted: () =>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="font-semibold text-dusk-500">{expense.description}</span>
-          <Badge tone="neutral">{CATEGORY_LABEL[expense.category] || expense.category}</Badge>
+          <Badge tone="neutral">{t(CATEGORY_LABEL[expense.category] || expense.category)}</Badge>
           {expense.related_proposal_title && (
-            <Badge tone="sage">Proposta: {expense.related_proposal_title}</Badge>
+            <Badge tone="sage">{t('Proposta:')} {expense.related_proposal_title}</Badge>
           )}
         </div>
         <div className="text-xs text-dusk-300 mt-1">
@@ -166,18 +873,18 @@ function ExpenseRow({ expense, onDeleted }: { expense: Expense; onDeleted: () =>
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1 text-xs text-dusk-400 hover:text-sage-700 mt-1.5 underline decoration-dotted underline-offset-4"
           >
-            <ExternalLink className="w-3 h-3" /> ver recibo
+            <ExternalLink className="w-3 h-3" /> {t('ver recibo')}
           </a>
         )}
       </div>
       <div className="text-right shrink-0">
-        <div className="font-mono font-semibold text-dusk-500">{formatCurrency(expense.amount_cents / 100)}</div>
+        <div className="font-mono font-semibold text-dusk-500">{formatCurrency(expense.amount_cents / 100, expense.currency)}</div>
         <button
           onClick={remove}
           disabled={deleting}
           className="text-dusk-200 hover:text-peach-600 mt-2"
-          title="Apagar"
-          aria-label="Apagar despesa"
+          title={t('Apagar')}
+          aria-label={t('Apagar despesa')}
         >
           <Trash2 className="w-3.5 h-3.5" />
         </button>
@@ -200,8 +907,8 @@ function NewExpenseForm({ onCreated }: { onCreated: () => void }) {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.description.trim()) return;
-    const cents = Math.round(parseFloat(form.amount.replace(',', '.')) * 100);
-    if (!Number.isInteger(cents) || cents <= 0) {
+    const cents = parseAmountToCents(form.amount);
+    if (!cents) {
       toast.error(t('Valor inválido — use números (ex: 1500 ou 1500,00)'));
       return;
     }
@@ -219,22 +926,24 @@ function NewExpenseForm({ onCreated }: { onCreated: () => void }) {
       onCreated();
     } catch (err: any) {
       toast.error(err?.response?.data?.error || t('Falha ao registrar'));
-    } finally { setSaving(false); }
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
     <GlassCard className="p-6 mb-6 animate-fade-up">
-      <h3 className="font-display text-xl text-dusk-500 tracking-tight">Nova despesa</h3>
+      <h3 className="font-display text-xl text-dusk-500 tracking-tight">{t('Nova despesa')}</h3>
       <p className="text-sm text-dusk-300 mt-1">
-        Tudo que você lançar aqui aparece automaticamente na <strong>Transparência</strong> dos moradores.
+        {t('Tudo que você lançar aqui aparece automaticamente na Transparência dos moradores.')}
       </p>
 
       <form onSubmit={submit} className="grid md:grid-cols-2 gap-3 mt-4">
         <label className="block text-xs text-dusk-300 font-medium">
-          Descrição
+          {t('Descrição')}
           <input
             className="input mt-1"
-            placeholder="ex: Substituição do ar do saguão"
+            placeholder={t('ex: Substituição do ar do saguão')}
             value={form.description}
             onChange={(e) => setForm({ ...form, description: e.target.value })}
             maxLength={500}
@@ -242,39 +951,39 @@ function NewExpenseForm({ onCreated }: { onCreated: () => void }) {
           />
         </label>
         <label className="block text-xs text-dusk-300 font-medium">
-          Valor
+          {t('Valor')}
           <input
             className="input mt-1"
             type="text"
             inputMode="decimal"
-            placeholder="ex: 47000 ou 47000,00"
+            placeholder={t('ex: 47000 ou 47000,00')}
             value={form.amount}
             onChange={(e) => setForm({ ...form, amount: e.target.value })}
             required
           />
         </label>
         <label className="block text-xs text-dusk-300 font-medium">
-          Categoria
+          {t('Categoria')}
           <select
             className="input mt-1"
             value={form.category}
             onChange={(e) => setForm({ ...form, category: e.target.value })}
           >
-            {EXPENSE_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+            {EXPENSE_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{t(c.label)}</option>)}
           </select>
         </label>
         <label className="block text-xs text-dusk-300 font-medium">
-          Fornecedor (opcional)
+          {t('Fornecedor (opcional)')}
           <input
             className="input mt-1"
-            placeholder="ex: Cool Breeze HVAC"
+            placeholder={t('ex: Cool Breeze HVAC')}
             value={form.vendor}
             onChange={(e) => setForm({ ...form, vendor: e.target.value })}
             maxLength={120}
           />
         </label>
         <label className="block text-xs text-dusk-300 font-medium">
-          Data
+          {t('Data')}
           <input
             className="input mt-1"
             type="date"
@@ -284,7 +993,7 @@ function NewExpenseForm({ onCreated }: { onCreated: () => void }) {
           />
         </label>
         <label className="block text-xs text-dusk-300 font-medium">
-          Link do recibo (opcional)
+          {t('Link do recibo (opcional)')}
           <input
             className="input mt-1"
             type="url"
@@ -294,11 +1003,11 @@ function NewExpenseForm({ onCreated }: { onCreated: () => void }) {
             maxLength={2048}
           />
           <span className="text-[11px] text-dusk-200 mt-1 block">
-            Cole um link do Drive, Dropbox, ou foto hospedada. Os moradores podem clicar para conferir.
+            {t('Cole um link do Drive, Dropbox, ou foto hospedada. Os moradores podem clicar para conferir.')}
           </span>
         </label>
         <div className="md:col-span-2 flex justify-end">
-          <Button type="submit" variant="primary" loading={saving}>Registrar despesa</Button>
+          <Button type="submit" variant="primary" loading={saving}>{t('Registrar despesa')}</Button>
         </div>
       </form>
     </GlassCard>

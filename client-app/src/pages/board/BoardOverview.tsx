@@ -1,18 +1,19 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Inbox, Vote, Calendar, Users, ArrowRight, Bot, CheckCircle2, MessageCircle, Send, ShieldAlert, Sparkles, AlertTriangle, UserPlus } from 'lucide-react';
+import { Inbox, Vote, Calendar, Users, ArrowRight, Bot, CheckCircle2, MessageCircle, Send, ShieldAlert, Sparkles, AlertTriangle, UserPlus, Wallet } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 import GlassCard from '../../components/GlassCard';
 import Badge from '../../components/Badge';
 import { apiGet } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
-import { formatRelativeTime, t as translate } from '../../lib/i18n';
+import { formatCurrency, formatRelativeTime, t as translate } from '../../lib/i18n';
 
 interface Proposal { id: number; title: string; status: string; votes: { yes: number; no: number; abstain: number; total: number }; }
 interface Suggestion { id: number; body: string; status: string; }
 interface Meeting { id: number; title: string; scheduled_for: string; status: string; }
 interface PendingResident { id: number; first_name: string; last_name: string; unit_number: string | null; }
 interface TicketSummary { needs_admin: number; blocked_no_vendor: number; blocked_no_response: number; verified_ready: number; awaiting_verification: number; }
+interface ReceivablesSummary { total_open_cents: number; overdue_cents: number; open_invoice_count: number; overdue_invoice_count: number; }
 
 interface AutoAction {
   id: number;
@@ -69,6 +70,7 @@ export default function BoardOverview() {
   const [autoActions, setAutoActions] = useState<AutoAction[]>([]);
   const [pendingResidents, setPendingResidents] = useState<PendingResident[]>([]);
   const [ticketSummary, setTicketSummary] = useState<TicketSummary | null>(null);
+  const [receivables, setReceivables] = useState<ReceivablesSummary | null>(null);
   const tr = (k: string) => translate(k);
 
   useEffect(() => {
@@ -81,6 +83,7 @@ export default function BoardOverview() {
       apiGet<AutoAction[]>('/tickets/recent-auto-actions').then(setAutoActions),
       apiGet<PendingResident[]>('/memberships/pending').then(setPendingResidents),
       apiGet<TicketSummary>('/tickets/summary').then(setTicketSummary),
+      apiGet<ReceivablesSummary>('/finance/receivables').then(setReceivables),
       apiGet<Array<{ status: string; condo_name: string }>>('/onboarding/me').then((rows) => {
         const active = rows.find((r) => r.status === 'active');
         if (active) setCondoName(active.condo_name);
@@ -135,6 +138,18 @@ export default function BoardOverview() {
         to: '/board/tickets',
       });
     }
+    if (Number(receivables?.total_open_cents || 0) > 0) {
+      items.push({
+        key: 'receivables',
+        icon: Wallet,
+        tone: Number(receivables?.overdue_cents || 0) > 0 ? 'warning' : 'peach',
+        title: `${formatCurrency(Number(receivables?.total_open_cents || 0) / 100)} ${tr('open in dues')}`,
+        detail: Number(receivables?.overdue_cents || 0) > 0
+          ? `${formatCurrency(Number(receivables?.overdue_cents || 0) / 100)} ${tr('overdue')}`
+          : `${Number(receivables?.open_invoice_count || 0)} ${tr('open charges')}`,
+        to: '/board/financas',
+      });
+    }
     if (openSuggestions.length > 0) {
       items.push({
         key: 'suggestions',
@@ -176,7 +191,7 @@ export default function BoardOverview() {
       });
     }
     return items;
-  }, [openProposals.length, openSuggestions.length, pendingResidents, tr, upcoming.length, urgentTicketCount]);
+  }, [openProposals.length, openSuggestions.length, pendingResidents, receivables, tr, upcoming.length, urgentTicketCount]);
 
   return (
     <>
