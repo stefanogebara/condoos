@@ -9,6 +9,11 @@
 // Callers opt into the cheap tier via `{ tier: 'cheap' }` in AIOpts.
 const MODEL       = process.env.OPENROUTER_MODEL       || 'anthropic/claude-3.5-haiku';
 const CHEAP_MODEL = process.env.OPENROUTER_CHEAP_MODEL || 'deepseek/deepseek-chat';
+// Claude 3.5 Haiku doesn't support vision (Anthropic removed image input
+// from the haiku tier). For the vision path we route to claude-3-haiku
+// (the older one DOES support images) which is the closest cost match.
+// Override via env when a different vision model is preferred.
+const VISION_MODEL = process.env.OPENROUTER_VISION_MODEL || 'anthropic/claude-3-haiku';
 const API_KEY     = process.env.OPENROUTER_API_KEY || '';
 const URL = 'https://openrouter.ai/api/v1/chat/completions';
 const TIMEOUT_MS = Number(process.env.OPENROUTER_TIMEOUT_MS || 20_000);
@@ -92,7 +97,9 @@ export async function chatWithImage(
     console.warn('[ai] OPENROUTER_API_KEY not set - vision disabled');
     throw new Error('NO_API_KEY');
   }
-  const model = opts.model ?? (opts.tier === 'cheap' ? CHEAP_MODEL : MODEL);
+  // Vision path uses VISION_MODEL by default — the regular MODEL (claude-
+  // 3.5-haiku) doesn't support image input.
+  const model = opts.model ?? VISION_MODEL;
   const content: any[] = [{ type: 'text', text: userPrompt }];
   for (const img of images) {
     content.push({ type: 'image_url', image_url: { url: img.url, detail: img.detail || 'low' } });
