@@ -32,6 +32,7 @@ import unitsRoutes from './routes/units';
 import conciergeRoutes from './routes/concierge';
 import financeRoutes from './routes/finance';
 import ticketsRoutes from './routes/tickets';
+import documentsRoutes from './routes/documents';
 import webhooksRoutes from './routes/webhooks';
 import serviceContactsRoutes from './routes/service-contacts';
 import { processWhatsAppOutbox } from './lib/whatsapp';
@@ -149,6 +150,7 @@ app.use('/api/units',         scoped, unitsRoutes);
 app.use('/api/concierge',     scoped, conciergeRoutes);
 app.use('/api/finance',       scoped, financeRoutes);
 app.use('/api/tickets',       scoped, ticketsRoutes);
+app.use('/api/documents',     scoped, documentsRoutes);
 app.use('/api/service-contacts', scoped, serviceContactsRoutes);
 
 // 404

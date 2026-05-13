@@ -696,6 +696,44 @@ export default function BoardAgent() {
             </GlassCard>
           ) : null}
 
+          {result.vendor_search_plan && (
+            (result.vendor_search_plan.search_queries.length > 0 ||
+              result.vendor_search_plan.shortlisting_criteria.length > 0 ||
+              !!result.vendor_search_plan.outreach_message) && (
+              <GlassCard className="p-5">
+                <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
+                  <h2 className="font-display text-xl text-dusk-500 flex items-center gap-2">
+                    <ClipboardList className="w-5 h-5 text-sage-700" />
+                    {tr('Plano de pesquisa')}
+                  </h2>
+                  {result.vendor_search_plan.outreach_message && (
+                    <Button type="button" variant="ghost" size="sm" onClick={() => copyText(result.vendor_search_plan.outreach_message)} leftIcon={<Copy className="w-4 h-4" />}>
+                      {tr('Copiar mensagem')}
+                    </Button>
+                  )}
+                </div>
+                <div className="grid md:grid-cols-2 gap-4">
+                  {result.vendor_search_plan.search_queries.length > 0 && (
+                    <div className="rounded-3xl bg-white/60 border border-white/70 p-4">
+                      <MiniList title={tr('Buscas prontas')} items={result.vendor_search_plan.search_queries} />
+                    </div>
+                  )}
+                  {result.vendor_search_plan.shortlisting_criteria.length > 0 && (
+                    <div className="rounded-3xl bg-white/60 border border-white/70 p-4">
+                      <MiniList title={tr('Critérios de seleção')} items={result.vendor_search_plan.shortlisting_criteria} />
+                    </div>
+                  )}
+                </div>
+                {result.vendor_search_plan.outreach_message && (
+                  <div className="mt-4 rounded-3xl bg-cream-50/70 border border-white/70 p-4">
+                    <h3 className="text-xs uppercase tracking-[0.16em] text-dusk-300 mb-2">{tr('Mensagem para fornecedores')}</h3>
+                    <p className="text-sm text-dusk-500">{result.vendor_search_plan.outreach_message}</p>
+                  </div>
+                )}
+              </GlassCard>
+            )
+          )}
+
           {/* Action plan only renders when the server's denylist filter
               kept at least one item. Empty plan = nothing the platform
               can't already do, which is the honest answer for most

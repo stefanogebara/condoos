@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { AlertTriangle, Bot, Home, Inbox, Vote, Calendar, Megaphone, Users, UserCheck, Gavel, Building2, Wallet, Waves, Wrench, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, Bot, Home, Inbox, Vote, Calendar, Megaphone, Users, UserCheck, Gavel, Building2, Wallet, Waves, Wrench, ShieldCheck, FileText } from 'lucide-react';
 import Sidebar, { NavItem } from '../../components/Sidebar';
 import WhatsAppHealthPill from '../../components/WhatsAppHealthPill';
 import BoardOverview from './BoardOverview';
@@ -21,6 +21,7 @@ import BoardServices from './BoardServices';
 import BoardAgent from './BoardAgent';
 import BoardTickets from './BoardTickets';
 import BoardConciergeStaff from './BoardConciergeStaff';
+import BoardDocuments from './BoardDocuments';
 import { apiGet } from '../../lib/api';
 
 interface TicketSummary {
@@ -71,6 +72,7 @@ export default function BoardApp() {
     { to: '/board/residents',     label: 'Moradores',     icon: Users },
     { to: '/board/concierge',     label: 'Portaria',      icon: ShieldCheck },
     { to: '/board/amenities',     label: 'Áreas comuns',  icon: Waves },
+    { to: '/board/documents',     label: 'Documentos',    icon: FileText },
     { to: '/board/edificio',      label: 'Edifício',      icon: Building2 },
     { to: '/board/services',      label: 'Operação',      icon: Wrench },
     { to: '/board/tickets',       label: 'Chamados',      icon: AlertTriangle, badge: ticketBadge || undefined },
@@ -96,6 +98,7 @@ export default function BoardApp() {
           <Route path="residents"        element={<Residents />} />
           <Route path="concierge"        element={<BoardConciergeStaff />} />
           <Route path="amenities"        element={<BoardAmenities />} />
+          <Route path="documents"        element={<BoardDocuments />} />
           <Route path="edificio"         element={<BoardEdificio />} />
           <Route path="services"         element={<BoardServices />} />
           <Route path="tickets"          element={<BoardTickets />} />

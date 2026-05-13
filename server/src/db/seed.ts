@@ -38,6 +38,7 @@ function wipe() {
     'suggestion_clusters',
     'proposals',
     'meetings',
+    'building_documents',
     'amenity_reservations',
     'amenities',
     'visitors',

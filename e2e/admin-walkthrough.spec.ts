@@ -58,6 +58,7 @@ test('admin: overview renders with sidebar nav', async ({ page, request, isMobil
     /^(Meetings|Reuniões)$/i,
     /^(Announcements|Comunicados)$/i,
     /^(Residents|Moradores)$/i,
+    /^(Documents|Documentos)$/i,
     /^(Operations|Operação)$/i,
   ];
   for (const l of links) {
@@ -73,6 +74,14 @@ test('admin: operations service network page renders', async ({ page, request })
   await expect(page.getByText(/service network|Rede de serviços|No operations contacts|Nenhum contato operacional/i).first()).toBeVisible();
 });
 
+test('admin: document vault page renders', async ({ page, request }) => {
+  await adminLogin(page, request);
+  await page.goto('/board/documents');
+  await expect(page.getByRole('heading', { level: 1, name: /Documents|Documentos/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /New document|Nuevo documento|Novo documento/i })).toBeVisible();
+  await expect(page.getByText(/document vault|cofre de documentos|bóveda de documentos/i).first()).toBeVisible();
+});
+
 test('admin: AI agent generates an operational plan', async ({ page, request }) => {
   await adminLogin(page, request);
   await page.goto('/board/agent');
@@ -83,7 +92,7 @@ test('admin: AI agent generates an operational plan', async ({ page, request }) 
   await expect(page.getByText(/^(Next step|Próximo passo)$/i)).toBeVisible({ timeout: aiTimeout });
   await expect(page.getByRole('heading', { name: /^(Options|Opções)$/i })).toBeVisible();
   await expect(page.getByRole('heading', { name: /^(Research plan|Plano de pesquisa)$/i })).toBeVisible();
-  await expect(page.getByRole('button', { name: /Create proposal|Criar proposta/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /^(Resident notice|Comunicado aos moradores)$/i })).toBeVisible();
 });
 
 // ---------------------------------------------------------------------------

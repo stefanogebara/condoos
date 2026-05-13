@@ -488,6 +488,32 @@ CREATE TABLE IF NOT EXISTS payments (
 CREATE INDEX IF NOT EXISTS idx_payments_invoice ON payments(invoice_id);
 
 -- =====================================================================
+-- Document vault — rules, minutes, contracts, insurance, warranties.
+-- =====================================================================
+
+CREATE TABLE IF NOT EXISTS building_documents (
+  id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+  condominium_id      INTEGER NOT NULL REFERENCES condominiums(id) ON DELETE CASCADE,
+  uploaded_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  title               TEXT NOT NULL,
+  category            TEXT NOT NULL
+    CHECK(category IN ('rules','minutes','contracts','insurance','warranties','receipts','vendors','notices','other')),
+  description         TEXT,
+  file_url            TEXT NOT NULL,
+  document_date       TEXT,
+  visibility          TEXT NOT NULL DEFAULT 'residents'
+    CHECK(visibility IN ('residents','board_only')),
+  active              INTEGER NOT NULL DEFAULT 1,
+  created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_building_documents_condo_active_category
+  ON building_documents(condominium_id, active, category, document_date);
+CREATE INDEX IF NOT EXISTS idx_building_documents_condo_visibility
+  ON building_documents(condominium_id, visibility, active, updated_at);
+
+-- =====================================================================
 -- Maintenance tickets.
 -- =====================================================================
 

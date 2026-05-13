@@ -463,6 +463,33 @@ export function initSchema() {
   db.prepare(`CREATE INDEX IF NOT EXISTS idx_ticket_work_orders_ticket ON ticket_work_orders(ticket_id, status)`).run();
   db.prepare(`CREATE INDEX IF NOT EXISTS idx_ticket_work_orders_vendor ON ticket_work_orders(service_contact_id, status)`).run();
 
+  // Document Vault — a lightweight, storage-provider-agnostic registry for
+  // bylaws, meeting minutes, contracts, insurance, warranties, receipts, and
+  // vendor docs. Stores secure document links for now; file storage can attach
+  // behind the same table later without changing resident/admin flows.
+  db.prepare(`
+    CREATE TABLE IF NOT EXISTS building_documents (
+      id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+      condominium_id      INTEGER NOT NULL REFERENCES condominiums(id) ON DELETE CASCADE,
+      uploaded_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      title               TEXT NOT NULL,
+      category            TEXT NOT NULL
+        CHECK(category IN ('rules','minutes','contracts','insurance','warranties','receipts','vendors','notices','other')),
+      description         TEXT,
+      file_url            TEXT NOT NULL,
+      document_date       TEXT,
+      visibility          TEXT NOT NULL DEFAULT 'residents'
+        CHECK(visibility IN ('residents','board_only')),
+      active              INTEGER NOT NULL DEFAULT 1,
+      created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `).run();
+  db.prepare(`CREATE INDEX IF NOT EXISTS idx_building_documents_condo_active_category
+    ON building_documents(condominium_id, active, category, document_date)`).run();
+  db.prepare(`CREATE INDEX IF NOT EXISTS idx_building_documents_condo_visibility
+    ON building_documents(condominium_id, visibility, active, updated_at)`).run();
+
   // Roadmap item 2 — conversational thread. The agent workbench was
   // single-shot: every query was a fresh agent call with no memory of
   // what the admin asked five minutes ago. These tables let the runner

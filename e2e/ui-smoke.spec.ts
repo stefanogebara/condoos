@@ -122,6 +122,7 @@ test.describe('resident UI pages render', () => {
     { path: '/app/visitors',      heading: /Visitors|Visitantes/i },
     { path: '/app/amenities',     heading: /Amenities|Áreas/i },
     { path: '/app/announcements', heading: /Announcements|Comunicados/i },
+    { path: '/app/documents',     heading: /Documents|Documentos/i },
     { path: '/app/proposals',     heading: /Proposals|Propostas/i },
     { path: '/app/assemblies',    heading: /Assemblies|Assembl/i },
     { path: '/app/meetings',      heading: /Meetings|Reuniões/i },
@@ -156,6 +157,7 @@ test.describe('board UI pages render', () => {
     { path: '/board/meetings',      heading: /Meetings|Reuniões/i },
     { path: '/board/announcements', heading: /Announcements|Comunic/i },
     { path: '/board/residents',     heading: /Residents|Moradores/i },
+    { path: '/board/documents',     heading: /Documents|Documentos/i },
   ];
   test('all board routes load', async ({ page, request }) => {
     test.setTimeout(120_000);  // 8 pages × ~5s each — needs more than the 45s default
@@ -189,8 +191,9 @@ test('resident: settings page has phone input + opt-in checkbox + save', async (
   await browserLogin(page, request, 'resident');
   await gotoApp(page, '/app/settings');
   await expect(page.getByRole('heading', { name: /Settings|Preferênc/i })).toBeVisible();
-  await expect(page.locator('input[type="tel"]')).toBeVisible();
-  await expect(page.locator('input[type="checkbox"]')).toBeVisible();
+  await expect(page.getByRole('textbox', { name: /Mobile|Celular/i })).toBeVisible();
+  await expect(page.getByRole('textbox', { name: /Home|Casa/i })).toBeVisible();
+  await expect(page.getByRole('checkbox', { name: /Authorize|Autorizar/i })).toBeVisible();
   await expect(page.getByRole('button', { name: /Save|Salvar/i })).toBeVisible();
 });
 

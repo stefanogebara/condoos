@@ -63,6 +63,7 @@ test('resident: overview greets by name + shows full sidebar', async ({ page, re
     /^(Visitors|Visitantes)$/i,
     /^(Amenities|Áreas comuns)$/i,
     /^(Announcements|Comunicados)$/i,
+    /^(Documents|Documentos)$/i,
     /^(Proposals|Propostas)$/i,
     /^(Assemblies|Assembleias)$/i,
     /^(Meetings|Reuniões)$/i,
@@ -194,6 +195,13 @@ test('resident: announcements page renders the feed', async ({ page, request }) 
   await residentLogin(page, request);
   await page.goto('/app/announcements');
   await expect(page.getByRole('heading', { level: 1, name: /Announcements|Comunicados/i })).toBeVisible();
+});
+
+test('resident: documents page renders the published vault', async ({ page, request }) => {
+  await residentLogin(page, request);
+  await page.goto('/app/documents');
+  await expect(page.getByRole('heading', { level: 1, name: /Documents|Documentos/i })).toBeVisible();
+  await expect(page.getByText(/document|documento/i).first()).toBeVisible();
 });
 
 // ---------------------------------------------------------------------------
