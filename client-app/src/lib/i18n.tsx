@@ -2507,6 +2507,7 @@ const phrases: Copy[] = [
   c('baixa confiança', 'low confidence', 'baja confianza', 'faible confiance'),
   c('Por quê essa confiança?', 'Why this confidence?', '¿Por qué esta confianza?', 'Pourquoi cette confiance ?'),
   c('Sugestões para continuar', 'Suggestions to continue', 'Sugerencias para continuar', 'Suggestions pour continuer'),
+  c('O agente está pesquisando', 'The agent is researching', 'El agente está investigando', 'L\'agent fait sa recherche'),
   c('bloqueados', 'blocked', 'bloqueados', 'bloqués'),
   c('com plano da IA pronto', 'with AI plan ready', 'con plan de IA listo', 'avec plan IA prêt'),
   c('bloqueados — precisa de você', 'blocked — needs you', 'bloqueados — te necesitan', 'bloqués — vous attendent'),

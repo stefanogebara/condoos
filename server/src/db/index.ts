@@ -576,6 +576,12 @@ export function initSchema() {
   db.prepare(`CREATE INDEX IF NOT EXISTS idx_agent_runs_condo_status ON agent_runs(condominium_id, status, created_at)`).run();
   db.prepare(`CREATE INDEX IF NOT EXISTS idx_agent_runs_ticket ON agent_runs(ticket_id, created_at)`).run();
   db.prepare(`CREATE INDEX IF NOT EXISTS idx_agent_runs_thread ON agent_runs(thread_id, created_at)`).run();
+  // Live thinking-trace support — the runner writes incremental
+  // progress to progress_json as each ReAct tool fires, so the UI can
+  // poll and show "checking past tickets... pulled Otis history..."
+  // instead of a 30-55s spinner. Schema: JSON array of {at, label,
+  // detail?} entries, monotonically growing until status≠running.
+  addColumnIfMissing('agent_runs', 'progress_json', `TEXT`);
 
   // Ensure Pine Ridge has an invite code so the demo condo is joinable via code too.
   const pine = db.prepare(`SELECT id, invite_code FROM condominiums LIMIT 1`).get() as

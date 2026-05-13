@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import toast from 'react-hot-toast';
-import { AlertTriangle, Bot, CheckCircle2, ClipboardList, Copy, MessageCircle, Send, Sparkles, X } from 'lucide-react';
+import { AlertTriangle, Bot, CheckCircle2, ClipboardList, Copy, Loader2, MessageCircle, Send, Sparkles, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '../../components/PageHeader';
 import GlassCard from '../../components/GlassCard';
@@ -168,6 +168,40 @@ export default function BoardAgent() {
   const [budget, setBudget] = useState('');
   const [urgency, setUrgency] = useState('');
   const [loading, setLoading] = useState(false);
+  // Live progress crumbs while the agent is running. We poll
+  // /admin-agent/runs every 1.5s to find the current in-flight run, then
+  // pull its snapshot to show each step the runner emits ("Buscando
+  // chamados anteriores parecidos", "Compondo resposta final"). Renders
+  // above the form so the admin sees what's happening during the 30-55s
+  // ReAct loop instead of staring at a spinner.
+  const [liveProgress, setLiveProgress] = useState<Array<{ at: string; label: string; detail?: string }>>([]);
+  React.useEffect(() => {
+    if (!loading) {
+      setLiveProgress([]);
+      return;
+    }
+    let cancelled = false;
+    let runId: number | null = null;
+    const tick = async () => {
+      try {
+        if (runId == null) {
+          // Find the most-recent running run for this admin.
+          const runs = await apiGet<Array<{ id: number; status: string; created_at: string }>>('/ai/admin-agent/runs?limit=5');
+          const latest = runs.find((r) => r.status === 'running');
+          if (latest) runId = latest.id;
+        }
+        if (runId != null && !cancelled) {
+          const snap = await apiGet<{ status: string; progress: Array<{ at: string; label: string; detail?: string }> }>(`/ai/admin-agent/runs/${runId}`);
+          if (!cancelled) setLiveProgress(snap.progress || []);
+        }
+      } catch {
+        // Polling failures are non-fatal — just keep the existing crumbs.
+      }
+    };
+    tick();
+    const id = window.setInterval(tick, 1_500);
+    return () => { cancelled = true; window.clearInterval(id); };
+  }, [loading]);
   // Conversational thread — each agent run appends a turn instead of
   // overwriting a single result. threadId is set on the first turn and
   // re-sent on subsequent turns so the server appends rather than
@@ -425,6 +459,40 @@ export default function BoardAgent() {
           </div>
         </div>
       </GlassCard>
+
+      {/* Live progress while a request is in flight. Renders each crumb
+          the runner emits so the 30-55s ReAct wait becomes legible. The
+          last step gets a spinning icon to signal "this is still
+          happening". Hidden when no progress yet (first ~1s) or when
+          the request settles. */}
+      {loading && liveProgress.length > 0 && (
+        <GlassCard variant="clay-sage" className="p-4 mb-5 animate-fade-up">
+          <div className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-dusk-300 mb-2">
+            <Sparkles className="w-3.5 h-3.5 animate-pulse" />
+            {tr('O agente está pesquisando')}
+          </div>
+          <ol className="space-y-1.5">
+            {liveProgress.map((step, idx) => {
+              const isLast = idx === liveProgress.length - 1;
+              return (
+                <li key={idx} className="flex items-center gap-2 text-sm">
+                  {isLast ? (
+                    <Loader2 className="w-3.5 h-3.5 text-sage-700 animate-spin shrink-0" />
+                  ) : (
+                    <CheckCircle2 className="w-3.5 h-3.5 text-sage-700 shrink-0" />
+                  )}
+                  <span className={isLast ? 'text-dusk-500 font-medium' : 'text-dusk-400'}>
+                    {step.label}
+                  </span>
+                  {step.detail && (
+                    <span className="text-xs text-dusk-300 truncate">— {step.detail}</span>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+        </GlassCard>
+      )}
 
       <form onSubmit={submit} className="grid lg:grid-cols-[1.2fr_0.8fr] gap-5 mb-6">
         <GlassCard className="p-5">

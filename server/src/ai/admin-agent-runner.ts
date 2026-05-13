@@ -18,7 +18,7 @@ import {
 } from './admin-agent';
 import { ADMIN_AGENT_TOOLS, buildToolHandler } from './admin-agent-tools';
 import { analyzeTicketAttachments } from './attachment-vision';
-import { createAgentRun, finishAgentRunFailure, finishAgentRunSuccess } from '../lib/agent-runs';
+import { appendAgentRunProgress, createAgentRun, finishAgentRunFailure, finishAgentRunSuccess } from '../lib/agent-runs';
 
 function clip(value: unknown, max: number): string {
   return String(value || '').slice(0, max);
@@ -141,6 +141,10 @@ export interface RunAdminAgentArgs {
   // context. The workbench path doesn't have a ticket, so this stays
   // optional; only auto-dispatch + /run-agent fill it.
   ticketId?: number;
+  // Internal — when the outer runAdminAgent passes the run-tracking id
+  // to the inner function, progress crumbs get written to that row so
+  // the UI can poll. Set by the wrapper; callers shouldn't touch.
+  agentRunId?: number;
 }
 
 export interface RunAdminAgentResult {
@@ -168,8 +172,11 @@ export async function runAdminAgent(args: RunAdminAgentArgs): Promise<RunAdminAg
     reactEnabled: process.env.AGENT_USE_REACT === '1',
     model: agentModelLabel(),
   });
+  // First progress crumb — admin sees "Iniciando análise..." within 1s
+  // even before the slow model call begins.
+  appendAgentRunProgress(runId, { label: 'Iniciando análise', detail: args.task.slice(0, 60) });
   try {
-    const result = await runAdminAgentInner(args);
+    const result = await runAdminAgentInner({ ...args, agentRunId: runId } as RunAdminAgentArgs);
     finishAgentRunSuccess(runId, {
       fallback: result.fallback,
       plan: result.plan,
@@ -392,6 +399,9 @@ async function runAdminAgentInner(args: RunAdminAgentArgs): Promise<RunAdminAgen
   // (workbench path) or when the ticket has no attachments. The
   // analysis cost is ~$0.001-0.005 per image with the low-detail
   // setting; cached forever after first call.
+  if (args.agentRunId && args.ticketId) {
+    appendAgentRunProgress(args.agentRunId, { label: 'Analisando fotos do chamado' });
+  }
   const attachmentAnalysis = args.ticketId
     ? await analyzeTicketAttachments(args.ticketId, args.locale || 'pt-BR').catch((err) => {
         console.warn('[agent] attachment vision failed:', (err as Error)?.message || err);
@@ -538,9 +548,32 @@ async function runAdminAgentInner(args: RunAdminAgentArgs): Promise<RunAdminAgen
   // for precision on long-tail questions.
   const useReact = process.env.AGENT_USE_REACT === '1';
 
+  if (args.agentRunId) {
+    appendAgentRunProgress(args.agentRunId, {
+      label: useReact ? 'Consultando histórico do prédio com ferramentas' : 'Consultando histórico do prédio',
+    });
+  }
   if (useReact) {
     try {
-      const handler = buildToolHandler({ condoId: args.condoId });
+      const baseHandler = buildToolHandler({ condoId: args.condoId });
+      // Wrap the tool handler so each call writes a progress crumb before
+      // executing. Gives the polling UI live "checking past tickets... pulled
+      // Otis history..." instead of a blind spinner during the ReAct loop.
+      const handler: typeof baseHandler = async (name, input) => {
+        if (args.agentRunId) {
+          const friendly: Record<string, string> = {
+            search_past_tickets: 'Buscando chamados anteriores parecidos',
+            get_vendor_history: 'Consultando histórico do fornecedor',
+            list_vendors: 'Listando fornecedores cadastrados',
+            get_open_similar_tickets: 'Detectando padrões abertos',
+            submit_final_answer: 'Compondo resposta final',
+          };
+          appendAgentRunProgress(args.agentRunId, {
+            label: friendly[name] || name,
+          });
+        }
+        return baseHandler(name, input);
+      };
       // Minimal initial context for ReAct — the model can fetch the rest
       // via tools. We keep condominium + request + saved vendor list
       // because those are universally relevant; building_memory + cost

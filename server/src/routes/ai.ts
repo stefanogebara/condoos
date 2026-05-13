@@ -29,6 +29,7 @@ import {
   fallbackDecisionSummary,
 } from '../ai/fallbacks';
 import { runAdminAgent } from '../ai/admin-agent-runner';
+import { getAgentRunSnapshot } from '../lib/agent-runs';
 
 const router = Router();
 const aiRateLimit = createRateLimit({
@@ -229,6 +230,19 @@ router.post('/admin-agent', requireAuth, aiRateLimit, requireRole('board_admin')
 
 // Recent durable agent runs. This is the operational audit trail for the
 // workbench and background ticket agent without requiring log access.
+// Live progress snapshot for a single agent run — the UI polls this
+// during the 30-55s ReAct wait to show what the agent is currently
+// doing instead of a blind spinner. Cheap (single row read) so polling
+// every 1-2s is fine. Stops polling when status≠running.
+router.get('/admin-agent/runs/:id', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+  const condoId = getActiveCondoId(req);
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) return fail(res, 'invalid_id', 400);
+  const snapshot = getAgentRunSnapshot(id, condoId);
+  if (!snapshot) return fail(res, 'not_found', 404);
+  return ok(res, snapshot);
+});
+
 router.get('/admin-agent/runs', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const limit = Math.min(100, Math.max(1, Number(req.query.limit || 30)));
