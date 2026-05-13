@@ -5,6 +5,8 @@ import { requireAuth, requireRole, getActiveCondoId, AuthedRequest } from '../li
 import { ok, fail, asyncHandler } from '../lib/respond';
 import { audit } from '../lib/audit';
 import { canAssignTicketToUser, markTicketAgentFailed } from '../lib/tickets';
+import { categoryMatches } from '../lib/category-aliases';
+import { evaluateAgentAutoDispatch, isSafetyCriticalUrgent } from '../lib/agent-auto-dispatch';
 import { runAdminAgent } from '../ai/admin-agent-runner';
 import { notifyUsers } from '../lib/whatsapp';
 
@@ -107,12 +109,8 @@ const workOrderUpdateSchema = workOrderCreateSchema.partial();
 // fire alarm scenarios.
 const AUTO_DISPATCH_VETO_SECONDS = 300;
 
-const SAFETY_CRITICAL_SET = new Set([
-  'elevator', 'fire_safety', 'gas', 'gas_leak', 'water', 'water_damage', 'security',
-]);
-
 function shouldSkipVetoWindow(priority: string, category: string): boolean {
-  return priority === 'urgent' && SAFETY_CRITICAL_SET.has(category);
+  return isSafetyCriticalUrgent(priority, category);
 }
 
 export function dispatchAgentInBackground(ticketId: number, condoId: number, locale: string | undefined): void {
@@ -138,9 +136,10 @@ export function dispatchAgentInBackground(ticketId: number, condoId: number, loc
       const networkHits = Array.isArray(result.plan?.existing_network_fit)
         ? result.plan.existing_network_fit.length
         : 0;
-      const categoryMatch = db.prepare(
-        `SELECT 1 FROM service_contacts WHERE condominium_id = ? AND active = 1 AND category = ? LIMIT 1`
-      ).get(condoId, ticket.category);
+      const categoryRows = db.prepare(
+        `SELECT category FROM service_contacts WHERE condominium_id = ? AND active = 1`
+      ).all(condoId) as Array<{ category: string }>;
+      const categoryMatch = categoryRows.some((row) => categoryMatches(ticket.category, row.category));
       const blocked = networkHits === 0 && !categoryMatch;
 
       db.prepare(
@@ -188,19 +187,20 @@ export function dispatchAgentInBackground(ticketId: number, condoId: number, loc
       ).get(ticketId);
       if (existingDispatch) return;
 
-      // Confidence gate (roadmap item 5). Only auto-dispatch when the
-      // agent is high-confidence (≥0.85), OR when the ticket is urgent +
-      // safety-critical (we already skip the veto window in that case;
-      // here we also skip the confidence gate because manual triage
-      // can't wait for the admin to log in). For medium/low confidence
-      // the ticket stays in 'agent_dispatched' with a plan — admin
-      // clicks the existing manual dispatch button. This converts the
-      // confidence score into a real autonomy decision.
-      const conf = result.plan?.confidence;
-      const isSafetyUrgent = shouldSkipVetoWindow(ticket.priority, ticket.category);
-      const confidentEnough = conf?.tier === 'high' || (typeof conf?.score === 'number' && conf.score >= 0.85);
-      if (!confidentEnough && !isSafetyUrgent) {
-        console.log(`[tickets:${ticketId}] auto-dispatch held: confidence=${conf?.tier || 'unset'} score=${conf?.score ?? 'n/a'}`);
+      // Hard auto-dispatch gate. Model confidence alone is not enough:
+      // non-urgent tickets require server-visible evidence from building
+      // memory AND reliable vendor cost history. Urgent safety incidents
+      // can bypass that evidence gate, but still require category-compatible
+      // saved vendors so we do not message the wrong provider.
+      const gate = evaluateAgentAutoDispatch({
+        ticketPriority: ticket.priority,
+        ticketCategory: ticket.category,
+        vendorCategory: vendor.category,
+        plan: result.plan,
+        topFit,
+      });
+      if (!gate.allowed) {
+        console.log(`[tickets:${ticketId}] auto-dispatch held: ${gate.reason}`);
         return;
       }
 
@@ -656,12 +656,14 @@ router.post('/:id/dispatch', requireAuth, requireRole('board_admin'), (req: Auth
     vendor = db.prepare(
       `SELECT * FROM service_contacts WHERE condominium_id = ? AND active = 1 AND company_name = ? LIMIT 1`
     ).get(condoId, agentPlan.existing_network_fit[0].company_name);
+    if (vendor && !categoryMatches(ticket.category, vendor.category)) vendor = null;
   }
   if (!vendor) {
-    vendor = db.prepare(
-      `SELECT * FROM service_contacts WHERE condominium_id = ? AND active = 1 AND category = ?
-       ORDER BY preferred DESC, emergency_available DESC, last_used_at DESC NULLS LAST LIMIT 1`
-    ).get(condoId, ticket.category);
+    const candidates = db.prepare(
+      `SELECT * FROM service_contacts WHERE condominium_id = ? AND active = 1
+       ORDER BY preferred DESC, emergency_available DESC, last_used_at DESC NULLS LAST`
+    ).all(condoId) as any[];
+    vendor = candidates.find((candidate) => categoryMatches(ticket.category, candidate.category));
   }
   if (!vendor) {
     // No vendor available — surface the block so the UI can prompt the

@@ -4,6 +4,13 @@
 
 html, body, #root {
   height: 100%;
+  overflow-x: hidden;
+}
+
+@supports (overflow: clip) {
+  html, body, #root {
+    overflow-x: clip;
+  }
 }
 
 body {

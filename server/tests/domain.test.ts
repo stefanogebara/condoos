@@ -25,6 +25,7 @@ import { audit, auditRowsToCsv, listAuditRows } from '../src/lib/audit';
 import { generateInvoices, generateScheduledInvoices, recordPayment } from '../src/lib/finance';
 import { requireAuth, revokeUserTokens, signToken } from '../src/lib/auth';
 import { canAssignTicketToUser, markTicketAgentFailed } from '../src/lib/tickets';
+import { evaluateAgentAutoDispatch } from '../src/lib/agent-auto-dispatch';
 import { normalizeServiceContact, serviceContactSchema } from '../src/lib/service-contacts';
 import { listServiceContactsWithScorecards } from '../src/lib/vendor-scorecards';
 import { searchBuildingMemory } from '../src/lib/memory';
@@ -1056,6 +1057,73 @@ test('tickets: failed background agent escalates to admin attention', () => {
   ).run(ticketId);
   assert.equal(markTicketAgentFailed(ticketId), false);
   assert.equal((db.prepare(`SELECT blocked_reason FROM tickets WHERE id = ?`).get(ticketId) as any).blocked_reason, null);
+});
+
+test('tickets: auto-dispatch requires server-visible evidence, not only model confidence', () => {
+  const base = {
+    ticketPriority: 'normal',
+    ticketCategory: 'maintenance',
+    vendorCategory: 'general_maintenance',
+    plan: {
+      confidence: { tier: 'high' as const, score: 0.96, reasoning: ['model says confident'] },
+      building_memory: null,
+    },
+    topFit: { cost_history: null },
+  };
+
+  assert.deepEqual(evaluateAgentAutoDispatch(base), {
+    allowed: false,
+    reason: 'insufficient_evidence',
+    confidentEnough: true,
+    categoryCompatible: true,
+    evidence: { similarResolvedTicket: false, highConfidenceCostHistory: false },
+  });
+
+  assert.equal(evaluateAgentAutoDispatch({
+    ...base,
+    plan: {
+      ...base.plan,
+      building_memory: {
+        similar_resolved_tickets: [{
+          id: 1,
+          title: 'Hall lights flickering',
+          resolved_at: '2026-04-01',
+          dispatched_vendors: 'ACME',
+          resolution_note: 'Replaced driver',
+          estimated_cost_brl: 420,
+        }],
+        open_similar_count: 0,
+        inferred_category: 'maintenance',
+        is_outside_business_hours: false,
+        local_hour: 14,
+      },
+    },
+    topFit: {
+      cost_history: {
+        expense_count: 3,
+        last_amount_brl: 420,
+        last_spent_at: '2026-04-01',
+        avg_brl: 410,
+        min_brl: 390,
+        max_brl: 430,
+        confidence: 'high' as const,
+      },
+    },
+  }).allowed, true);
+
+  assert.deepEqual(evaluateAgentAutoDispatch({
+    ...base,
+    vendorCategory: 'cleaning',
+  }).reason, 'category_mismatch');
+
+  assert.deepEqual(evaluateAgentAutoDispatch({
+    ...base,
+    ticketPriority: 'urgent',
+    ticketCategory: 'gas',
+    vendorCategory: 'gas_leak',
+    plan: { confidence: { tier: 'low' as const, score: 0.2, reasoning: [] }, building_memory: null },
+    topFit: null,
+  }).reason, 'urgent_safety');
 });
 
 test('memberships: reassign only moves pending claims', () => {
