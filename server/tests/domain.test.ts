@@ -211,6 +211,56 @@ test('admin agent fallback uses saved service contacts and returns work-ready pl
   assert.ok(out.action_plan.length >= 2);
 });
 
+test('admin agent sanitizer drops vendors whose category does not match the task', () => {
+  // The test 5 finding: dedetização ask should NOT return elevator,
+  // maintenance, or plumbing vendors even if the model included them.
+  // Sanitiser must filter by category match against the inferred task
+  // category (pest_control here).
+  const out = sanitizeAdminAgentOutput({
+    summary: 's',
+    existing_network_fit: [
+      { company_name: 'Otis Elevadores SP', category: 'elevator', reason: 'r', contact_method: 'wa' },
+      { company_name: 'Encanador Plantão 24h', category: 'plumbing', reason: 'r', contact_method: 'wa' },
+      { company_name: 'Manutenção Geral SP', category: 'general_maintenance', reason: 'r', contact_method: 'wa' },
+    ],
+  }, {
+    task: 'Preciso de um dedetizador para baratas no térreo',
+    service_contacts: [
+      { company_name: 'Otis Elevadores SP', category: 'elevator' },
+      { company_name: 'Encanador Plantão 24h', category: 'plumbing' },
+      { company_name: 'Manutenção Geral SP', category: 'general_maintenance' },
+    ],
+  });
+  // None of the three saved vendors match pest_control. Expected: empty.
+  assert.equal(out.existing_network_fit.length, 0);
+});
+
+test('admin agent sanitizer downgrades confidence when cost is invented', () => {
+  // Test 2 finding: numeric cost range with no expense history should
+  // not survive at full confidence. The sanitiser should detect the
+  // mismatch and force confidence down (no last_used_at on any vendor
+  // = no real history = number is a hallucination).
+  const out = sanitizeAdminAgentOutput({
+    summary: 's',
+    options: [{
+      title: 'Vistoria predial',
+      fit: 'all',
+      pros: [], cons: [],
+      estimated_cost_range: 'R$ 2.000 - R$ 10.000',
+      timeline: '7-14 dias',
+      questions_for_vendor: [], evaluation_criteria: [],
+    }],
+    confidence: { score: 0.85, tier: 'high', reasoning: ['Model claimed high'] },
+  }, {
+    task: 'Quanto custa uma vistoria predial completa?',
+    service_contacts: [{ company_name: 'Otis', category: 'elevator', last_used_at: null }],
+  });
+  // High → forced down because no last_used_at on any vendor.
+  assert.notEqual(out.confidence?.tier, 'high');
+  assert.ok((out.confidence?.score || 1) <= 0.45);
+  assert.ok(out.confidence?.reasoning.some((r) => /sem histórico|hist[óo]rico real|estimativa do modelo/i.test(r)));
+});
+
 test('admin agent sanitizer drops hallucinated saved vendors and repairs invalid proposal fields', () => {
   const out = sanitizeAdminAgentOutput({
     summary: 'Use a careful process.',

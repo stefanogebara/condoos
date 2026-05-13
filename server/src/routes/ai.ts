@@ -166,6 +166,11 @@ router.post('/proposal-classify', requireAuth, aiRateLimit, asyncHandler(async (
 router.post('/admin-agent', requireAuth, aiRateLimit, requireRole('board_admin'), asyncHandler(async (req: AuthedRequest, res) => {
   const input = boundedText(req.body?.task, 6_000);
   if (!input.ok) return fail(res, input.error, input.error === 'text_too_long' ? 413 : 400);
+  // Min-length guard. The agent is expensive (4 model calls in ReAct +
+  // optional vision); single-character / one-word inputs produce noise.
+  // The client already prompts for 10+ chars but admins can paste short
+  // text or click rapidly. 8 unicode chars after trim is the floor.
+  if (input.text.length < 8) return fail(res, 'task_too_short', 400);
   const condoId = getActiveCondoId(req);
   const adminUserId = req.user!.id;
 

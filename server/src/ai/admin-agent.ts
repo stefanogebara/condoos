@@ -523,17 +523,36 @@ function sanitizeNumberOrNull(value: unknown): number | null {
 // without mojibake) pass through untouched.
 const MOJIBAKE_PATTERN = /[ÂÃ][-¿]/;
 
+// Lone replacement chars from upstream encoding failures (U+FFFD or
+// the byte sequence 0xC2 0xAD / 0xEF 0xBF 0xBD as displayed in some
+// renderers). These are already lost — the original byte can't be
+// recovered. Best we can do is strip them so the UI doesn't show
+// "dispon\\u00ad\\xadvel". Stripping vs leaving them in: residents
+// would never see them as legible text anyway.
+// U+FFFD only — that codepoint signals an upstream encoding failure
+// that's already lost the original byte, so no round-trip recovery is
+// possible. We strip it so the UI doesn't render the literal black
+// diamond. Importantly we do NOT strip U+00AD (soft hyphen) because
+// that codepoint is a LEGITIMATE part of mojibake byte sequences
+// (Ã­ = bytes 0xC3 0xAD = UTF-8 for 'í'); stripping it breaks the
+// fixer's round-trip recovery on Portuguese accents.
+function stripReplacementChars(s: string): string {
+  return s.replace(/�/g, '');
+}
+
 function fixMojibake(value: string): string {
-  if (!value || !MOJIBAKE_PATTERN.test(value)) return value;
+  if (!value) return value;
+  // Pre-strip U+FFFD before the pattern test so isolated lost-byte
+  // strings get cleaned. The classic mojibake fixer below handles the
+  // round-trip recoverable case.
+  let working = value.includes('�') ? stripReplacementChars(value) : value;
+  if (!MOJIBAKE_PATTERN.test(working)) return working;
   try {
-    const fixed = Buffer.from(value, 'latin1').toString('utf8');
-    // Sanity check — if the fixed version still has the pattern OR has
-    // replacement chars (U+FFFD), we made it worse. Bail and return the
-    // original so we never corrupt a string we couldn't repair cleanly.
-    if (MOJIBAKE_PATTERN.test(fixed) || fixed.includes('�')) return value;
+    const fixed = Buffer.from(working, 'latin1').toString('utf8');
+    if (MOJIBAKE_PATTERN.test(fixed) || fixed.includes('�')) return working;
     return fixed;
   } catch {
-    return value;
+    return working;
   }
 }
 
@@ -606,17 +625,115 @@ function sanitizeConfidence(
   return { score, tier, reasoning };
 }
 
+// Lightweight category match — duplicated from admin-agent-runner so the
+// sanitizer doesn't import the runner (would create a cycle: runner imports
+// sanitizer, sanitizer would import runner). Same alias map, kept narrow.
+// Used to drop network_fit entries the model included for vendors that
+// don't match the task's category.
+// Category inference for sanitiser — looser than the runner's because we
+// can afford false positives here (worst case: we filter too few vendors,
+// matches the legacy behaviour). Drop \b word-boundaries since they
+// don't play well with accented input and we want lenient matching.
+function sanitizerInferCategory(task: string, _taskType: string): string | null {
+  const t = String(task || '').toLowerCase();
+  const checks: Array<[RegExp, string]> = [
+    [/(vazamento de g[áa]s|gas leak)/i, 'gas_leak'],
+    [/(inunda[çc][ãa]o|inundada?|alagamento|water damage)/i, 'water_damage'],
+    [/(inc[êe]ndio|fuma[çc]a|alarme de inc|fire safety|fire alarm)/i, 'fire_safety'],
+    [/(elevador|elevator|lift)/i, 'elevator'],
+    [/(el[ée]trica?|electrical|tomada|disjuntor|curto-?circuito|fia[çc][ãa]o)/i, 'electrical'],
+    [/(hidr[áa]ulica?|encanamento|encanador|vazamento|cano|esgoto|plumbing|leak|pipe|pia|banheiro|chuveiro)/i, 'plumbing'],
+    [/(ar condicionado|ventila[çc][ãa]o|climatiza[çc][ãa]o|hvac|a\/c)/i, 'hvac'],
+    [/(seguran[çc]a|port[ãa]o|portaria|intercom|c[âa]mera|cctv|security|access|gate)/i, 'security'],
+    [/(\bg[áa]s\b)/i, 'gas'],
+    [/(dedetiza|dedetizador|barata|formiga|rato|pest|cockroach)/i, 'pest_control'],
+    [/(paisagismo|jardim|jardinagem|landscaping|garden)/i, 'landscaping'],
+    [/(piscina|pool)/i, 'pool'],
+    [/(academia|gym|treadmill|esteira)/i, 'gym_equipment'],
+    [/(limpeza|cleaning|janitor)/i, 'cleaning'],
+    [/(manuten[çc][ãa]o|conserto|maintenance|repair)/i, 'maintenance'],
+  ];
+  for (const [re, cat] of checks) if (re.test(t)) return cat;
+  return null;
+}
+
+// Two-direction alias table for category compat. Pipe-separated synonyms
+// flatten the runner-side CATEGORY_ALIASES into a fast lookup.
+const CATEGORY_COMPAT: Record<string, Set<string>> = {
+  maintenance:        new Set(['maintenance', 'general_maintenance']),
+  general_maintenance: new Set(['maintenance', 'general_maintenance']),
+  hvac:               new Set(['hvac', 'climatization']),
+  security:           new Set(['security', 'security_access']),
+  amenity:            new Set(['amenity', 'amenities']),
+  fire_safety:        new Set(['fire_safety', 'safety']),
+  gas:                new Set(['gas', 'gas_leak']),
+  gas_leak:           new Set(['gas', 'gas_leak']),
+  water:              new Set(['water', 'water_damage']),
+  water_damage:       new Set(['water', 'water_damage']),
+};
+
+function categoryCompatible(taskCategory: string, vendorCategory: string): boolean {
+  if (!taskCategory || !vendorCategory) return false;
+  if (taskCategory === vendorCategory) return true;
+  const compat = CATEGORY_COMPAT[taskCategory];
+  return !!compat && compat.has(vendorCategory);
+}
+
+// Cost discipline check — if the model emits a numeric range (e.g.
+// "R$ 2.000 - R$ 10.000") but no saved vendor has cost_history for the
+// task's category, the price is invented. The prompt forbids it; this
+// catches the violation. Returns true when the cost looks invented.
+function looksLikeInventedCost(costRange: string, input: AdminAgentInput): boolean {
+  if (!costRange) return false;
+  // Cheap detector: any decimal-grouped number that suggests real currency.
+  // Allows "Confirm by quote" / "A confirmar" / "TBD" — those are honest.
+  const hasNumber = /\b\d{2,}(?:[.,]\d{2,3})*(?:[.,]\d{2,3})*\b/.test(costRange);
+  if (!hasNumber) return false;
+  // We can't access the expenses table from the sanitiser (no condoId
+  // here), but we can use the heuristic: when service_contacts is empty
+  // OR has no last_used_at, history is thin enough to flag.
+  const contacts = input.service_contacts || [];
+  if (contacts.length === 0) return true;
+  const anyUsed = contacts.some((c) => !!c.last_used_at);
+  return !anyUsed;
+}
+
 export function sanitizeAdminAgentOutput(raw: unknown, input: AdminAgentInput): AdminAgentOutput {
   const fallback = fallbackAdminAgent(input);
   const data = obj(raw);
   const knownCompanies = new Set((input.service_contacts || []).map((c) => text(c.company_name, 140).toLowerCase()).filter(Boolean));
+  // Build a name → category lookup so we can drop vendors that don't
+  // match the inferred task category. Same hash that the model SHOULD
+  // have used to filter.
+  const companyToCategory = new Map<string, string>();
+  for (const c of input.service_contacts || []) {
+    const name = text(c.company_name, 140).toLowerCase();
+    if (name) companyToCategory.set(name, text(c.category, 80).toLowerCase());
+  }
+  // Infer the task's category to filter network_fit. Falls back to the
+  // task_type the model claimed if the keyword match misses; finally null
+  // (which disables the filter — we'd rather show some vendors than none
+  // when we genuinely can't tell).
+  const taskCategory = sanitizerInferCategory(input.task || '', String(data.task_type || ''));
 
   const rawFits = Array.isArray(data.existing_network_fit) ? data.existing_network_fit : [];
+  // Track whether the model actually produced fits we then filtered out,
+  // vs the model produced nothing at all. The first case is intentional
+  // ("the model named vendors that don't match the category"); the
+  // second is the legacy fallback case.
+  const modelProducedFits = rawFits.length > 0;
   const existing_network_fit = rawFits
     .map((item) => obj(item))
     .filter((item) => {
       const company = text(item.company_name, 140).toLowerCase();
-      return company && knownCompanies.has(company);
+      if (!company || !knownCompanies.has(company)) return false;
+      // Category gate: if we inferred a category from the task, the
+      // vendor's saved category must match (or be alias-compatible).
+      // Tasks where we couldn't infer get the legacy behavior — show
+      // every named-match the model returned.
+      if (!taskCategory) return true;
+      const vendorCat = companyToCategory.get(company) || '';
+      return categoryCompatible(taskCategory, vendorCat);
     })
     .slice(0, 4)
     .map((item) => ({
@@ -664,7 +781,14 @@ export function sanitizeAdminAgentOutput(raw: unknown, input: AdminAgentInput): 
     task_type: sanitizeTaskType(data.task_type, fallback.task_type),
     assumptions: list(data.assumptions, fallback.assumptions, 6, 220),
     recommended_next_step: text(data.recommended_next_step, 500) || fallback.recommended_next_step,
-    existing_network_fit: existing_network_fit.length ? existing_network_fit : fallback.existing_network_fit,
+    // Only fall back to the deterministic vendor list when the model
+    // produced NO network_fit at all. If it produced fits and our
+    // sanitiser filtered them all out (category mismatch / hallucinated
+    // names), the empty list is intentional — surfacing the fallback
+    // would re-introduce the unmatched vendors.
+    existing_network_fit: existing_network_fit.length || modelProducedFits
+      ? existing_network_fit
+      : fallback.existing_network_fit,
     options: options.length ? options : fallback.options,
     vendor_search_plan: {
       search_queries: list(vendorPlan.search_queries, fallback.vendor_search_plan.search_queries, 8, 180),
@@ -692,6 +816,21 @@ export function sanitizeAdminAgentOutput(raw: unknown, input: AdminAgentInput): 
     confidence: sanitizeConfidence(data.confidence, !!data._fallback, input),
     _fallback: data._fallback === true ? true : undefined,
   };
+
+  // Cost discipline: if the model emitted a numeric range with no real
+  // history backing it, downgrade confidence and tag the reasoning so
+  // the admin sees why. Doesn't rewrite the number — just rates the
+  // claim honestly. Catches the "vistoria predial — R$ 2.000-10.000"
+  // hallucination class.
+  const firstCost = output.options?.[0]?.estimated_cost_range || '';
+  if (looksLikeInventedCost(firstCost, input) && output.confidence) {
+    output.confidence.score = Math.min(output.confidence.score, 0.45);
+    output.confidence.tier = output.confidence.score >= 0.85 ? 'high'
+      : output.confidence.score >= 0.5 ? 'medium' : 'low';
+    if (!output.confidence.reasoning.some((r) => /sem histórico|no history/i.test(r))) {
+      output.confidence.reasoning.unshift('Custo não tem histórico real — número é estimativa do modelo.');
+    }
+  }
 
   // Pass every string through the mojibake fixer as the very last step,
   // after schema sanitization. Has to be last so we fix the strings the
