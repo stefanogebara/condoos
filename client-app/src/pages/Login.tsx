@@ -6,7 +6,7 @@ import { Building2, ArrowRight, Shield, User, Plus, LogIn, Sparkles, Loader2, Ke
 import { useAuth } from '../lib/auth';
 import { apiGet } from '../lib/api';
 import { track } from '../lib/analytics';
-import { t } from '../lib/i18n';
+import { t, useLocale } from '../lib/i18n';
 
 // Translate auth errors to a user-facing toast string. The runtime translates
 // DOM nodes only — react-hot-toast renders into a portal that the
@@ -53,6 +53,8 @@ const intentCopy: Record<Exclude<Intent, null>, { badge: string; icon: typeof Pl
 
 export default function Login() {
   const { login, loginWithGoogle } = useAuth();
+  const { locale } = useLocale();
+  const tr = (key: string) => t(key, locale);
   const navigate = useNavigate();
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
@@ -178,17 +180,17 @@ export default function Login() {
         <div className="relative p-12 text-cream-50 max-w-lg">
           <Link to="/"><Logo size={32} /></Link>
           <h2 className="font-display text-4xl mt-16 leading-tight">
-            Um lugar tranquilo para o prédio pensar.
+            {tr('Um lugar tranquilo para o prédio pensar.')}
           </h2>
           <p className="mt-4 text-cream-50/80 text-base">
             {demoEnabled
-              ? 'Entre com Google, com uma conta demo ou manualmente. Sem cartão, sem setup.'
-              : 'Entre com Google ou com as credenciais que o seu prédio te forneceu.'}
+              ? tr('Entre com Google, com uma conta demo ou manualmente. Sem cartão, sem setup.')
+              : tr('Entre com Google ou com as credenciais que o seu prédio te forneceu.')}
           </p>
           <div className="mt-8 flex gap-2">
             <span className="chip bg-white/15 text-cream-50 border-white/25">claymorphism</span>
             <span className="chip bg-white/15 text-cream-50 border-white/25">glassmorphism</span>
-            <span className="chip bg-white/15 text-cream-50 border-white/25">com IA</span>
+            <span className="chip bg-white/15 text-cream-50 border-white/25">{tr('com IA')}</span>
           </div>
         </div>
       </div>
@@ -205,25 +207,25 @@ export default function Login() {
                   <intentBanner.icon className="w-5 h-5" />
                 </div>
                 <div className="min-w-0">
-                  <div className="text-[11px] uppercase tracking-[0.14em] text-dusk-300 font-semibold mb-1">{intentBanner.badge}</div>
-                  <h1 className="font-display text-2xl text-dusk-500 leading-tight tracking-tight">{intentBanner.title}</h1>
-                  <p className="text-sm text-dusk-300 mt-2 leading-relaxed">{intentBanner.subtitle}</p>
+                  <div className="text-[11px] uppercase tracking-[0.14em] text-dusk-300 font-semibold mb-1">{tr(intentBanner.badge)}</div>
+                  <h1 className="font-display text-2xl text-dusk-500 leading-tight tracking-tight">{tr(intentBanner.title)}</h1>
+                  <p className="text-sm text-dusk-300 mt-2 leading-relaxed">{tr(intentBanner.subtitle)}</p>
                   {intent === 'join' && inviteCode && (
-                    <p className="text-xs text-sage-700 mt-2 font-mono">Código detectado: <strong>{inviteCode}</strong></p>
+                    <p className="text-xs text-sage-700 mt-2 font-mono">{tr('Código detectado:')} <strong>{inviteCode}</strong></p>
                   )}
                 </div>
               </div>
             </GlassCard>
           ) : (
             <>
-              <h1 className="font-display text-4xl text-dusk-500 mb-2">Bem-vindo de volta</h1>
-              <p className="text-dusk-300 mb-8">Entre no seu prédio.</p>
+              <h1 className="font-display text-4xl text-dusk-500 mb-2">{tr('Bem-vindo de volta')}</h1>
+              <p className="text-dusk-300 mb-8">{tr('Entre no seu prédio.')}</p>
             </>
           )}
 
           {demoEnabled && (
             <GlassCard className="p-4 mb-6">
-              <div className="text-xs uppercase tracking-wider text-dusk-200 mb-3 px-1">Demo com 1 clique</div>
+              <div className="text-xs uppercase tracking-wider text-dusk-200 mb-3 px-1">{tr('Demo com 1 clique')}</div>
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
@@ -235,7 +237,7 @@ export default function Login() {
                     {loadingKind === 'admin' ? <Loader2 className="w-5 h-5 animate-spin" /> : <Shield className="w-5 h-5" />}
                   </div>
                   <div className="min-w-0">
-                    <div className="text-sm font-semibold text-dusk-500 truncate">Síndico</div>
+                    <div className="text-sm font-semibold text-dusk-500 truncate">{tr('Síndico')}</div>
                     <div className="text-xs text-dusk-200 truncate">admin@condoos.dev</div>
                   </div>
                 </button>
@@ -249,7 +251,7 @@ export default function Login() {
                     {loadingKind === 'resident' ? <Loader2 className="w-5 h-5 animate-spin" /> : <User className="w-5 h-5" />}
                   </div>
                   <div className="min-w-0">
-                    <div className="text-sm font-semibold text-dusk-500 truncate">Morador</div>
+                    <div className="text-sm font-semibold text-dusk-500 truncate">{tr('Morador')}</div>
                     <div className="text-xs text-dusk-200 truncate">resident@condoos.dev</div>
                   </div>
                 </button>
@@ -261,7 +263,7 @@ export default function Login() {
             <>
               <div className="flex items-center gap-3 my-4">
                 <div className="flex-1 h-px bg-dusk-100/40" />
-                <span className="text-xs text-dusk-200">ou entre com</span>
+                <span className="text-xs text-dusk-200">{tr('ou entre com')}</span>
                 <div className="flex-1 h-px bg-dusk-100/40" />
               </div>
               <div className="flex justify-center mb-4">
@@ -280,20 +282,20 @@ export default function Login() {
 
           <div className="flex items-center gap-3 my-4">
             <div className="flex-1 h-px bg-dusk-100/40" />
-            <span className="text-xs text-dusk-200">ou manualmente</span>
+            <span className="text-xs text-dusk-200">{tr('ou manualmente')}</span>
             <div className="flex-1 h-px bg-dusk-100/40" />
           </div>
 
           <form onSubmit={submit} className="space-y-3">
-            <input type="email"    className="input" placeholder="voce@predio.com.br" value={email}    onChange={(e) => setEmail(e.target.value)}    required autoComplete="email" />
-            <input type="password" className="input" placeholder="senha"              value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" />
+            <input type="email"    className="input" placeholder={tr('voce@predio.com.br')} value={email}    onChange={(e) => setEmail(e.target.value)}    required autoComplete="email" />
+            <input type="password" className="input" placeholder={tr('senha')}              value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" />
             <Button type="submit" variant="primary" size="lg" loading={loading} rightIcon={<ArrowRight className="w-4 h-4" />} className="w-full">
-              Entrar
+              {tr('Entrar')}
             </Button>
           </form>
 
           <div className="mt-6 rounded-[2rem] border border-white/70 bg-white/45 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.65)]">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-dusk-200 mb-3">Novo no CondoOS?</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-dusk-200 mb-3">{tr('Novo no CondoOS?')}</p>
             <div className="grid sm:grid-cols-2 gap-2">
               <Link
                 to={signupJoinHref}
@@ -303,8 +305,8 @@ export default function Login() {
                   <KeyRound className="w-5 h-5" />
                 </span>
                 <span className="min-w-0">
-                  <span className="block text-sm font-semibold text-dusk-500">Criar conta com código</span>
-                  <span className="block text-xs text-dusk-300">Entre no prédio do administrador.</span>
+                  <span className="block text-sm font-semibold text-dusk-500">{tr('Criar conta com código')}</span>
+                  <span className="block text-xs text-dusk-300">{tr('Entre no prédio do administrador.')}</span>
                 </span>
               </Link>
               <Link
@@ -315,8 +317,8 @@ export default function Login() {
                   <Plus className="w-5 h-5" />
                 </span>
                 <span className="min-w-0">
-                  <span className="block text-sm font-semibold text-dusk-500">Criar um prédio</span>
-                  <span className="block text-xs text-dusk-300">Comece como administrador.</span>
+                  <span className="block text-sm font-semibold text-dusk-500">{tr('Criar um prédio')}</span>
+                  <span className="block text-xs text-dusk-300">{tr('Comece como administrador.')}</span>
                 </span>
               </Link>
             </div>

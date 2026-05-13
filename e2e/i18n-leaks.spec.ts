@@ -277,6 +277,12 @@ const PUBLIC_ROUTES = [
   '/login',
 ];
 
+const PUBLIC_LOGIN_HEADINGS: Record<'en-US' | 'es-ES' | 'fr-FR', string> = {
+  'en-US': 'Welcome back',
+  'es-ES': 'Bienvenido de vuelta',
+  'fr-FR': 'Bon retour',
+};
+
 // Reverse direction: when locale is PT-BR, ensure no English-only sentences leak.
 // We use VERY narrow markers that only appear in English and never in PT/ES/FR.
 const EN_ONLY_MARKERS: RegExp[] = [
@@ -365,6 +371,9 @@ for (const locale of ['en-US', 'es-ES', 'fr-FR'] as const) {
       const results = [] as Array<{ path: string; leaks: Leak[] }>;
       for (const path of PUBLIC_ROUTES) {
         const r = await scan(page, path, locale);
+        if (path === '/login') {
+          await expect(page.getByRole('heading', { name: PUBLIC_LOGIN_HEADINGS[locale] })).toBeVisible();
+        }
         if (r.leaks.length) results.push({ path: r.path, leaks: r.leaks });
       }
       expect(results, `Leaks on public pages: ${JSON.stringify(results, null, 2)}`).toEqual([]);
