@@ -236,12 +236,14 @@ test('admin agent sanitizer drops vendors whose category does not match the task
 });
 
 test('admin agent sanitizer downgrades confidence when cost is invented', () => {
-  // Test 2 finding: numeric cost range with no expense history should
-  // not survive at full confidence. The sanitiser should detect the
-  // mismatch and force confidence down (no last_used_at on any vendor
-  // = no real history = number is a hallucination).
+  // Audit Test 2 finding: numeric cost range without a NAMED vendor
+  // backing it is theatre. Honest answers either cite a vendor whose
+  // cost_history supports the range, or say "confirm by quote".
+  // Signal: existing_network_fit is empty + options[0].estimated_cost
+  // _range has numbers → forced confidence downgrade.
   const out = sanitizeAdminAgentOutput({
     summary: 's',
+    existing_network_fit: [], // no vendor named to back the cost
     options: [{
       title: 'Vistoria predial',
       fit: 'all',
@@ -252,10 +254,13 @@ test('admin agent sanitizer downgrades confidence when cost is invented', () => 
     }],
     confidence: { score: 0.85, tier: 'high', reasoning: ['Model claimed high'] },
   }, {
-    task: 'Quanto custa uma vistoria predial completa?',
+    // Task category infers to pest_control via "dedetiza" so fallback
+    // network_fit is suppressed; cost check then fires on the
+    // sanitiser-empty list.
+    task: 'Quanto custa uma dedetização contra baratas?',
     service_contacts: [{ company_name: 'Otis', category: 'elevator', last_used_at: null }],
   });
-  // High → forced down because no last_used_at on any vendor.
+  // High → forced down because no vendor was cited.
   assert.notEqual(out.confidence?.tier, 'high');
   assert.ok((out.confidence?.score || 1) <= 0.45);
   assert.ok(out.confidence?.reasoning.some((r) => /sem histórico|hist[óo]rico real|estimativa do modelo/i.test(r)));

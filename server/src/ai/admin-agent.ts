@@ -680,22 +680,24 @@ function categoryCompatible(taskCategory: string, vendorCategory: string): boole
 }
 
 // Cost discipline check — if the model emits a numeric range (e.g.
-// "R$ 2.000 - R$ 10.000") but no saved vendor has cost_history for the
-// task's category, the price is invented. The prompt forbids it; this
-// catches the violation. Returns true when the cost looks invented.
-function looksLikeInventedCost(costRange: string, input: AdminAgentInput): boolean {
+// "R$ 2.000 - R$ 10.000") but no saved vendor was named to back it,
+// the price is invented. The prompt forbids it; this catches the
+// violation. Returns true when the cost looks invented.
+//
+// Signal: a numeric range WITHOUT a corresponding named vendor in
+// existing_network_fit means the agent has nowhere to ground the
+// estimate. Honest answers either name a vendor whose cost_history
+// supports the range, or say "confirm by quote" / "A confirmar".
+function looksLikeInventedCost(costRange: string, networkFitCount: number): boolean {
   if (!costRange) return false;
-  // Cheap detector: any decimal-grouped number that suggests real currency.
+  // Cheap detector: any decimal-grouped number that suggests currency.
   // Allows "Confirm by quote" / "A confirmar" / "TBD" — those are honest.
-  const hasNumber = /\b\d{2,}(?:[.,]\d{2,3})*(?:[.,]\d{2,3})*\b/.test(costRange);
+  const hasNumber = /\d{2,}/.test(costRange);
   if (!hasNumber) return false;
-  // We can't access the expenses table from the sanitiser (no condoId
-  // here), but we can use the heuristic: when service_contacts is empty
-  // OR has no last_used_at, history is thin enough to flag.
-  const contacts = input.service_contacts || [];
-  if (contacts.length === 0) return true;
-  const anyUsed = contacts.some((c) => !!c.last_used_at);
-  return !anyUsed;
+  // No named vendor backing the number → it's a guess. Even when the
+  // agent has cost_history for the same category, it MUST cite a vendor
+  // to ground the number; an uncited range is theatre.
+  return networkFitCount === 0;
 }
 
 export function sanitizeAdminAgentOutput(raw: unknown, input: AdminAgentInput): AdminAgentOutput {
@@ -824,7 +826,7 @@ export function sanitizeAdminAgentOutput(raw: unknown, input: AdminAgentInput): 
   // claim honestly. Catches the "vistoria predial — R$ 2.000-10.000"
   // hallucination class.
   const firstCost = output.options?.[0]?.estimated_cost_range || '';
-  if (looksLikeInventedCost(firstCost, input) && output.confidence) {
+  if (looksLikeInventedCost(firstCost, output.existing_network_fit.length) && output.confidence) {
     output.confidence.score = Math.min(output.confidence.score, 0.45);
     output.confidence.tier = output.confidence.score >= 0.85 ? 'high'
       : output.confidence.score >= 0.5 ? 'medium' : 'low';
