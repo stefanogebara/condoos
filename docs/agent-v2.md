@@ -6,6 +6,7 @@ The admin agent is an operations copilot. It can recommend, draft, and prepare a
 
 - Every agent invocation writes an `agent_runs` row with status, model, fallback flag, duration, plan JSON, trace JSON, and errors.
 - The ReAct path has a cited `research_external_vendors` tool for competitor/vendor research.
+- Agent responses include `evidence_sources[]` derived server-side from building memory, vendor history, attachment vision, and web citations. The model cannot invent these cards.
 - Web research is provider-neutral. Configure a provider in the server env; otherwise the tool returns manual search URLs and must not claim live research.
 - `npm run agent:eval` runs a deterministic local harness against `./data/agent-evals.sqlite`.
 

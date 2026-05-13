@@ -26,6 +26,7 @@ import { generateInvoices, generateScheduledInvoices, recordPayment } from '../s
 import { requireAuth, revokeUserTokens, signToken } from '../src/lib/auth';
 import { canAssignTicketToUser, markTicketAgentFailed } from '../src/lib/tickets';
 import { createAgentRun, finishAgentRunFailure, finishAgentRunSuccess } from '../src/lib/agent-runs';
+import { buildAgentEvidenceSources } from '../src/lib/agent-evidence';
 import { evaluateAgentAutoDispatch } from '../src/lib/agent-auto-dispatch';
 import { normalizeServiceContact, serviceContactSchema } from '../src/lib/service-contacts';
 import { listServiceContactsWithScorecards } from '../src/lib/vendor-scorecards';
@@ -310,6 +311,66 @@ test('admin agent sanitizer does NOT add follow-up suggestions on refusal', () =
     options: [{ title: 'X', fit: 'y', pros: [], cons: [], estimated_cost_range: 'a', timeline: 'b', questions_for_vendor: [], evaluation_criteria: [] }],
   }, { task: 'Qual a melhor estratégia de marketing digital?', service_contacts: [] });
   assert.ok(!out.follow_up_suggestions || out.follow_up_suggestions.length === 0);
+});
+
+test('admin agent evidence sources are derived from DB/tool outputs, not model prose', () => {
+  const sources = buildAgentEvidenceSources({
+    summary: 's',
+    task_type: 'repair',
+    assumptions: [],
+    recommended_next_step: 'next',
+    existing_network_fit: [{
+      company_name: 'Otis Elevadores SP',
+      category: 'elevator',
+      reason: 'Saved vendor',
+      contact_method: 'wa',
+      cost_history: {
+        expense_count: 4,
+        last_amount_brl: 2400,
+        last_spent_at: '2026-04-01',
+        avg_brl: 2300,
+        min_brl: 2100,
+        max_brl: 2500,
+        confidence: 'high',
+      },
+    }],
+    options: [],
+    vendor_search_plan: { search_queries: [], shortlisting_criteria: [], outreach_message: '' },
+    action_plan: [],
+    resident_update: { title: '', body: '' },
+    proposal_draft: null,
+    risks: [],
+    building_memory: {
+      similar_resolved_tickets: [{
+        id: 7,
+        title: 'Elevador A com ruído',
+        resolved_at: '2026-04-01',
+        dispatched_vendors: 'Otis Elevadores SP',
+        resolution_note: 'Trocou cabo desgastado.',
+        estimated_cost_brl: 2400,
+      }],
+      open_similar_count: 4,
+      inferred_category: 'elevator',
+      is_outside_business_hours: true,
+      local_hour: 22,
+    },
+    attachment_analysis: [{ id: 3, description: 'Foto mostra painel do elevador apagado.', signals: ['urgency_high'] }],
+  }, [{
+    name: 'research_external_vendors',
+    input: { query: 'elevador condomínio SP' },
+    output: {
+      configured: true,
+      provider: 'test',
+      citations: [{ title: 'Fornecedor externo', url: 'https://example.com/vendor', snippet: 'Empresa com manutenção de elevadores.' }],
+    },
+  }]);
+
+  assert.ok(sources.some((s) => s.type === 'past_ticket' && /Elevador A/.test(s.title)));
+  assert.ok(sources.some((s) => s.type === 'vendor_history' && /4 despesa/.test(s.detail)));
+  assert.ok(sources.some((s) => s.type === 'pattern'));
+  assert.ok(sources.some((s) => s.type === 'after_hours'));
+  assert.ok(sources.some((s) => s.type === 'photo' && /urgency_high/.test(s.detail)));
+  assert.ok(sources.some((s) => s.type === 'web_citation' && s.url === 'https://example.com/vendor'));
 });
 
 test('admin agent sanitizer forces refusal on out-of-scope tasks', () => {

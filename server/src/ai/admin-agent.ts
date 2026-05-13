@@ -218,6 +218,16 @@ export interface AdminAgentOutput {
   //   - Past resolution found → "Quer ver o que foi feito da última
   //     vez nesse elevador?"
   follow_up_suggestions?: string[];
+  // Evidence source cards rendered in the workbench. These are derived by
+  // the runner from DB/tool outputs after sanitization; the model does not
+  // get to invent them.
+  evidence_sources?: Array<{
+    type: 'past_ticket' | 'vendor_history' | 'web_citation' | 'photo' | 'pattern' | 'after_hours';
+    title: string;
+    detail: string;
+    url?: string | null;
+    source?: string | null;
+  }>;
   _fallback?: boolean;
 }
 

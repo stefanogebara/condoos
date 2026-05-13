@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import toast from 'react-hot-toast';
-import { AlertTriangle, Bot, CheckCircle2, ClipboardList, Copy, Loader2, MessageCircle, Send, Sparkles, X } from 'lucide-react';
+import { AlertTriangle, Bot, CheckCircle2, ClipboardList, Copy, ExternalLink, Loader2, MessageCircle, Send, Sparkles, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '../../components/PageHeader';
 import GlassCard from '../../components/GlassCard';
@@ -9,11 +9,10 @@ import Badge from '../../components/Badge';
 import { apiGet, apiPost } from '../../lib/api';
 import { t, useLocale } from '../../lib/i18n';
 
-// 'vendor_options' mode dropped — the platform doesn't actually do live
-// vendor research (no public web access, no vendor catalog beyond saved
-// contacts). Keeping it in the dropdown was selling capability the prompt
-// is explicitly forbidden from delivering ("do not invent vendors").
-type Mode = 'general' | 'repair' | 'install' | 'policy';
+// vendor_options is back now that the backend has a cited research tool.
+// When live search is not configured, the tool returns manual search URLs
+// and the UI still labels them as evidence instead of verified vendors.
+type Mode = 'general' | 'repair' | 'install' | 'vendor_options' | 'policy';
 
 interface AgentOption {
   title: string;
@@ -67,6 +66,14 @@ interface AgentTraceStep {
   output_summary: string;
 }
 
+interface AgentEvidenceSource {
+  type: 'past_ticket' | 'vendor_history' | 'web_citation' | 'photo' | 'pattern' | 'after_hours';
+  title: string;
+  detail: string;
+  url?: string | null;
+  source?: string | null;
+}
+
 interface AgentResult {
   summary: string;
   task_type: string;
@@ -76,6 +83,7 @@ interface AgentResult {
   options: AgentOption[];
   building_memory?: BuildingMemory | null;
   agent_trace?: AgentTraceStep[];
+  evidence_sources?: AgentEvidenceSource[];
   // Vision analysis (roadmap item 6). Present when the runner ran with
   // a ticketId and the ticket had image attachments. Each entry is what
   // the model SAW, surfaced separately from the recommendation so the
@@ -110,6 +118,7 @@ interface AgentResult {
   // follow-up sends know which thread to append to.
   thread_id?: number;
   turn_index?: number;
+  agent_run_id?: number;
   _fallback?: boolean;
 }
 
@@ -132,6 +141,7 @@ const MODES: Array<{ value: Mode; label: string }> = [
   { value: 'general', label: 'Geral' },
   { value: 'repair', label: 'Conserto' },
   { value: 'install', label: 'Instalação' },
+  { value: 'vendor_options', label: 'Fornecedores / concorrentes' },
   { value: 'policy', label: 'Regra / política' },
 ];
 
@@ -454,7 +464,7 @@ export default function BoardAgent() {
               {tr('Usa a rede de serviços, áreas comuns e propostas do condomínio para sugerir o próximo passo — e te dá um botão para enviar a mensagem ao fornecedor certo direto pelo WhatsApp.')}
             </p>
             <p className="text-xs text-dusk-300 mt-3">
-              {tr('Sem pesquisa ao vivo na web, sem inventar fornecedores ou preços. Trabalha com a sua rede cadastrada.')}
+              {tr('Pesquisa externa só aparece com fontes; sem provedor configurado, o agente mostra buscas manuais e não inventa fornecedores ou preços.')}
             </p>
           </div>
         </div>
@@ -664,6 +674,10 @@ export default function BoardAgent() {
               </div>
             )}
           </GlassCard>
+
+          {result.evidence_sources && result.evidence_sources.length > 0 && (
+            <EvidenceSourcesSection sources={result.evidence_sources} tr={tr} />
+          )}
 
           {/* Building memory: the agent's recall of this building's own
               history. Rendered before the network because past resolutions
@@ -1225,6 +1239,50 @@ function ConfidenceChip({ confidence, tr }: {
         </div>
       )}
     </div>
+  );
+}
+
+function EvidenceSourcesSection({ sources, tr }: {
+  sources: AgentEvidenceSource[];
+  tr: (k: string) => string;
+}) {
+  const toneFor = (type: AgentEvidenceSource['type']): 'sage' | 'peach' | 'neutral' => {
+    if (type === 'web_citation' || type === 'vendor_history') return 'sage';
+    if (type === 'pattern' || type === 'after_hours') return 'peach';
+    return 'neutral';
+  };
+  return (
+    <GlassCard className="p-5">
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <h2 className="font-display text-xl text-dusk-500 flex items-center gap-2">
+          <Sparkles className="w-4 h-4" />
+          {tr('Evidências usadas')}
+        </h2>
+        <Badge tone="neutral">{sources.length}</Badge>
+      </div>
+      <div className="grid md:grid-cols-2 gap-3">
+        {sources.map((source, idx) => (
+          <div key={`${source.type}-${idx}`} className="rounded-3xl bg-white/60 border border-white/70 p-4">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Badge tone={toneFor(source.type)}>{tr(source.type)}</Badge>
+              {source.source && <span className="text-[11px] text-dusk-300">{source.source}</span>}
+            </div>
+            <h3 className="font-semibold text-dusk-500 mt-2">{source.title}</h3>
+            <p className="text-sm text-dusk-400 mt-1">{source.detail}</p>
+            {source.url && (
+              <a
+                href={source.url}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-sage-700 font-semibold mt-3 hover:text-sage-800"
+              >
+                {tr('Abrir fonte')} <ExternalLink className="w-3 h-3" />
+              </a>
+            )}
+          </div>
+        ))}
+      </div>
+    </GlassCard>
   );
 }
 

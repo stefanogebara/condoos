@@ -96,6 +96,67 @@ test('admin: AI agent generates an operational plan', async ({ page, request }) 
   await expect(page.getByRole('heading', { name: /^(Resident notice|Comunicado aos moradores)$/i })).toBeVisible();
 });
 
+test('admin: AI agent renders server-derived evidence cards', async ({ page, request }) => {
+  await adminLogin(page, request);
+  await page.route('**/api/ai/admin-agent', async (route) => {
+    if (route.request().method() !== 'POST') return route.continue();
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          summary: 'Plano baseado em histórico real do prédio e uma fonte externa citada.',
+          task_type: 'repair',
+          assumptions: ['Valores precisam ser confirmados por orçamento formal.'],
+          recommended_next_step: 'Acionar a Otis e comparar a cotação com a fonte externa.',
+          existing_network_fit: [],
+          options: [{
+            title: 'Diagnóstico técnico',
+            fit: 'Melhor primeiro passo.',
+            pros: ['Usa fornecedor conhecido'],
+            cons: ['Exige confirmação de agenda'],
+            estimated_cost_range: 'Confirmar por orçamento.',
+            timeline: '24-72h',
+            questions_for_vendor: ['Qual a causa raiz?'],
+            evaluation_criteria: ['Garantia', 'Prazo'],
+          }],
+          evidence_sources: [
+            {
+              type: 'past_ticket',
+              title: 'Elevador A com ruído',
+              detail: 'Resolvido em 2026-04-01 · fornecedor: Otis Elevadores SP',
+            },
+            {
+              type: 'web_citation',
+              title: 'Fornecedor externo citado',
+              detail: 'Resultado externo usado como comparação.',
+              url: 'https://example.com/vendor',
+              source: 'test',
+            },
+          ],
+          vendor_search_plan: {
+            search_queries: ['manutenção elevador condomínio São Paulo'],
+            shortlisting_criteria: ['Atende condomínios', 'Tem garantia'],
+            outreach_message: 'Olá, preciso de diagnóstico para elevador em condomínio.',
+          },
+          action_plan: [],
+          resident_update: { title: 'Elevador em análise', body: 'A administração está avaliando o reparo.' },
+          proposal_draft: null,
+          risks: ['Contratar sem escopo fechado aumenta risco de aditivo.'],
+        },
+      }),
+    });
+  });
+
+  await page.goto('/board/agent');
+  await page.getByRole('textbox', { name: /What do you want to solve|O que você quer resolver/i }).fill('Consertar o elevador A com ruído recorrente.');
+  await page.getByRole('button', { name: /Generate plan|Gerar plano/i }).click();
+  await expect(page.getByRole('heading', { name: /Evidence used|Evidências usadas/i })).toBeVisible();
+  await expect(page.getByText('Elevador A com ruído')).toBeVisible();
+  const source = page.getByRole('link', { name: /Open source|Abrir fonte/i });
+  await expect(source).toHaveAttribute('href', 'https://example.com/vendor');
+});
+
 // ---------------------------------------------------------------------------
 // /board/proposals — list + click into detail + voting compliance editor
 // ---------------------------------------------------------------------------

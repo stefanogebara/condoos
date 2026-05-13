@@ -19,6 +19,7 @@ import {
 import { ADMIN_AGENT_TOOLS, buildToolHandler } from './admin-agent-tools';
 import { analyzeTicketAttachments } from './attachment-vision';
 import { appendAgentRunProgress, createAgentRun, finishAgentRunFailure, finishAgentRunSuccess } from '../lib/agent-runs';
+import { buildAgentEvidenceSources } from '../lib/agent-evidence';
 
 function clip(value: unknown, max: number): string {
   return String(value || '').slice(0, max);
@@ -694,6 +695,10 @@ async function runAdminAgentInner(args: RunAdminAgentArgs): Promise<RunAdminAgen
       output_summary: summariseToolOutput(t.name, t.output),
     }));
   }
+
+  // First-class evidence cards. The trace tells the admin what the agent
+  // looked up; evidence_sources shows the concrete facts/citations used.
+  plan.evidence_sources = buildAgentEvidenceSources(plan, toolTrace, args.locale);
 
   // Persist the turn to agent_turns when we have a thread + admin. The
   // route is responsible for creating the thread row before calling this
