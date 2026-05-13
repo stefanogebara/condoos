@@ -285,6 +285,33 @@ test('admin agent web research returns cited fallback URLs when provider is not 
   }
 });
 
+test('admin agent sanitizer surfaces follow-up suggestions when network_fit is empty', () => {
+  // Audit follow-up: when the agent hits a data wall (no vendor in
+  // category, cost uncited), the sanitiser populates clickable rescue
+  // prompts so the conversation can pivot instead of dead-end.
+  const out = sanitizeAdminAgentOutput({
+    summary: 'Não encontramos prestadores especializados.',
+    existing_network_fit: [],
+    options: [],
+  }, {
+    task: 'Preciso de um dedetizador para baratas',
+    service_contacts: [{ company_name: 'Otis', category: 'elevator' }],
+  });
+  assert.ok(out.follow_up_suggestions);
+  assert.ok((out.follow_up_suggestions!.length || 0) >= 1);
+  assert.ok(out.follow_up_suggestions!.some((s) => /fornecedor|dedetiza/i.test(s)));
+});
+
+test('admin agent sanitizer does NOT add follow-up suggestions on refusal', () => {
+  // Out-of-scope refusal should NOT carry follow-ups — there's nothing
+  // useful to ask next, the admin needs to reformulate.
+  const out = sanitizeAdminAgentOutput({
+    summary: 'Plano de marketing.',
+    options: [{ title: 'X', fit: 'y', pros: [], cons: [], estimated_cost_range: 'a', timeline: 'b', questions_for_vendor: [], evaluation_criteria: [] }],
+  }, { task: 'Qual a melhor estratégia de marketing digital?', service_contacts: [] });
+  assert.ok(!out.follow_up_suggestions || out.follow_up_suggestions.length === 0);
+});
+
 test('admin agent sanitizer forces refusal on out-of-scope tasks', () => {
   // Audit Test 3 finding: prompt rule on scope refusal wasn't enforced
   // (model would happily produce a marketing plan). Sanitiser now

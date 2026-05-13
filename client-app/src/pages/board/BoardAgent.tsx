@@ -92,6 +92,10 @@ interface AgentResult {
     tier: 'high' | 'medium' | 'low';
     reasoning: string[];
   };
+  // Conversational rescue chips — clickable suggestions that pre-fill
+  // the follow-up composer with a relevant next question when the
+  // current call hit a data wall.
+  follow_up_suggestions?: string[];
   vendor_search_plan: {
     search_queries: string[];
     shortlisting_criteria: string[];
@@ -560,6 +564,37 @@ export default function BoardAgent() {
               <p className="text-xs uppercase tracking-[0.18em] text-dusk-300">{tr('Próximo passo')}</p>
               <p className="text-sm text-dusk-500 mt-1">{result.recommended_next_step}</p>
             </div>
+            {/* Data-wall rescue chips — when the agent couldn't fully
+                answer (no vendor, no cost data, unclear scope), it
+                surfaces follow-up questions the admin can click to
+                pre-fill the composer. Turns a wall into a conversation
+                pivot. Renders nothing when there's nothing to suggest. */}
+            {result.follow_up_suggestions && result.follow_up_suggestions.length > 0 && (
+              <div className="mt-4">
+                <p className="text-xs uppercase tracking-[0.18em] text-dusk-300 mb-2">{tr('Sugestões para continuar')}</p>
+                <div className="flex flex-wrap gap-2">
+                  {result.follow_up_suggestions.map((s, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => {
+                        setFollowUpTask(s);
+                        // Scroll the composer into view so the admin sees
+                        // the prefill landed.
+                        setTimeout(() => {
+                          const ta = Array.from(document.querySelectorAll('textarea')).find((t) => /Ricardo/.test((t as HTMLTextAreaElement).placeholder || ''));
+                          ta?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                          (ta as HTMLTextAreaElement | undefined)?.focus();
+                        }, 100);
+                      }}
+                      className="text-xs text-left rounded-full px-3 py-1.5 bg-white/70 border border-white/80 text-dusk-500 hover:bg-sage-100/60 hover:border-sage-300/60 transition"
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </GlassCard>
 
           {/* Building memory: the agent's recall of this building's own

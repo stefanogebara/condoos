@@ -204,6 +204,20 @@ export interface AdminAgentOutput {
     input_keys: string[];
     output_summary: string;
   }>;
+  // Conversational rescue prompts when the agent hit a data wall the
+  // current call couldn't cross. These are clickable suggestions the UI
+  // pre-fills into the follow-up composer, turning "I can't help" into
+  // "let's talk about how to help". Each entry is a single short
+  // sentence the admin can adjust before sending.
+  //
+  // Example triggers:
+  //   - No vendor in inferred category → "Quer que eu rascunhe uma
+  //     mensagem para procurar dedetizadores?"
+  //   - Cost uncited → "Tem um orçamento? Cole aqui e eu registro a
+  //     despesa para a próxima."
+  //   - Past resolution found → "Quer ver o que foi feito da última
+  //     vez nesse elevador?"
+  follow_up_suggestions?: string[];
   _fallback?: boolean;
 }
 
@@ -879,6 +893,45 @@ export function sanitizeAdminAgentOutput(raw: unknown, input: AdminAgentInput): 
     if (!output.confidence.reasoning.some((r) => /sem histórico|no history/i.test(r))) {
       output.confidence.reasoning.unshift('Custo não tem histórico real — número é estimativa do modelo.');
     }
+  }
+
+  // Follow-up suggestions — turn data walls into conversation pivots.
+  // Each suggestion is a short sentence the UI pre-fills into the
+  // follow-up composer. We trigger different prompts based on which
+  // walls we just hit, so the admin has an obvious next move when the
+  // current call fell short. Skip when the response is a scope refusal
+  // (no point suggesting follow-ups on a refused task).
+  const suggestions: string[] = [];
+  const isRefusal = /\bescopo desse copiloto\b|reformule a pergunta como uma decisão operacional/i.test(output.summary);
+  if (!isRefusal) {
+    // Wall 1: no vendor in the inferred category. Offer to draft an
+    // outreach for new vendors the admin would call themselves.
+    if (output.existing_network_fit.length === 0 && taskCategory) {
+      const categoryLabel = taskCategory.replace(/_/g, ' ');
+      suggestions.push(`Quer que eu rascunhe uma mensagem de WhatsApp para procurar fornecedores de ${categoryLabel}?`);
+      suggestions.push(`Posso te ajudar a definir critérios de seleção para um novo fornecedor de ${categoryLabel}?`);
+    }
+    // Wall 2: cost is uncited (we just downgraded confidence). Ask for
+    // a real quote so the next call has data.
+    if (output.confidence?.reasoning.some((r) => /sem histórico real|estimativa do modelo/i.test(r))) {
+      suggestions.push('Tem um orçamento real? Cole aqui e eu te ajudo a comparar com o histórico do prédio.');
+    }
+    // Wall 3: agent had high-confidence past resolution but the admin
+    // might want to verify before re-running the same play.
+    const memory = (output as any).building_memory as { similar_resolved_tickets?: Array<{ id: number; title: string }> } | null | undefined;
+    if (memory?.similar_resolved_tickets?.length) {
+      const t = memory.similar_resolved_tickets[0];
+      suggestions.push(`Quer ver o detalhe do chamado #${t.id} ("${t.title.slice(0, 40)}")?`);
+    }
+    // Wall 4: agent recommended a vendor but cost is unknown — surface
+    // a question the admin would naturally ask next.
+    if (output.existing_network_fit.length > 0 && output.options.some((o) => /confirm by quote|a confirmar|TBD/i.test(o.estimated_cost_range))) {
+      suggestions.push('Qual a faixa de preço aceitável antes de eu acionar o fornecedor?');
+    }
+  }
+  if (suggestions.length > 0) {
+    // Cap at 3 — anything more becomes noise. Dedupe by trimmed content.
+    output.follow_up_suggestions = Array.from(new Set(suggestions.map((s) => s.trim()))).slice(0, 3);
   }
 
   // Pass every string through the mojibake fixer as the very last step,

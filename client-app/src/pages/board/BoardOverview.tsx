@@ -129,12 +129,26 @@ export default function BoardOverview() {
       });
     }
     if (urgentTicketCount > 0) {
+      // Split the detail copy by which signal is firing — admins want
+      // to know whether the agent is BLOCKED (needs them to add a
+      // vendor or unstick a stalled dispatch) vs simply WAITING for
+      // approval (plan is ready, one click away). Different mental load.
+      const blocked = Number(ticketSummary?.needs_admin || 0);
+      const ready = Number(ticketSummary?.verified_ready || 0);
+      let detail: string;
+      if (blocked > 0 && ready > 0) {
+        detail = `${blocked} ${tr('bloqueados')} · ${ready} ${tr('com plano da IA pronto')}`;
+      } else if (blocked > 0) {
+        detail = `${blocked} ${tr('bloqueados — precisa de você')}`;
+      } else {
+        detail = `${ready} ${tr('com plano da IA pronto para acionar')}`;
+      }
       items.push({
         key: 'tickets',
         icon: AlertTriangle,
         tone: 'warning',
         title: urgentTicketCount === 1 ? tr('1 ticket needs attention') : `${urgentTicketCount} ${tr('tickets need attention')}`,
-        detail: tr('Verified, blocked, or waiting for admin action.'),
+        detail,
         to: '/board/tickets',
       });
     }

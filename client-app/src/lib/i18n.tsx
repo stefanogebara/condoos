@@ -2506,6 +2506,11 @@ const phrases: Copy[] = [
   c('confiança moderada', 'moderate confidence', 'confianza moderada', 'confiance modérée'),
   c('baixa confiança', 'low confidence', 'baja confianza', 'faible confiance'),
   c('Por quê essa confiança?', 'Why this confidence?', '¿Por qué esta confianza?', 'Pourquoi cette confiance ?'),
+  c('Sugestões para continuar', 'Suggestions to continue', 'Sugerencias para continuar', 'Suggestions pour continuer'),
+  c('bloqueados', 'blocked', 'bloqueados', 'bloqués'),
+  c('com plano da IA pronto', 'with AI plan ready', 'con plan de IA listo', 'avec plan IA prêt'),
+  c('bloqueados — precisa de você', 'blocked — needs you', 'bloqueados — te necesitan', 'bloqués — vous attendent'),
+  c('com plano da IA pronto para acionar', 'with AI plan ready to dispatch', 'con plan de IA listo para acción', 'avec plan IA prêt à déclencher'),
   // Vision / attachment analysis (roadmap item 6). Signal tags are
   // emitted by the vision model in snake_case; we translate each.
   c('O que a IA viu nas fotos', 'What the AI saw in the photos', 'Lo que la IA vio en las fotos', "Ce que l'IA a vu sur les photos"),
