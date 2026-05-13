@@ -341,9 +341,10 @@ router.post('/:combined/respond', (req: Request, res: Response) => {
     ).run(dispatch.ticket_id);
   }
 
-  // Audit log — actor is the dispatch_id itself (no user), so we use
-  // the condo for the scope and dispatch for the target.
-  audit({} as any, {
+  // Audit log — no admin user (this is the vendor responding via magic
+  // link), so we pass the real express req for ip extraction but with
+  // no user attached. audit() handles req.user being absent.
+  audit(req as any, {
     action: 'vendor.self_respond',
     target_type: 'ticket_dispatch',
     target_id: parsed.dispatchId,
