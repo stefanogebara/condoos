@@ -196,7 +196,7 @@ router.post('/admin-agent', requireAuth, aiRateLimit, requireRole('board_admin')
     threadId = Number(r.lastInsertRowid);
   }
 
-  const { plan, fallback, turn_index } = await runAdminAgent({
+  const { plan, fallback, turn_index, agent_run_id } = await runAdminAgent({
     condoId,
     task: input.text,
     mode: req.body?.mode,
@@ -221,10 +221,28 @@ router.post('/admin-agent', requireAuth, aiRateLimit, requireRole('board_admin')
       fallback,
       thread_id: threadId,
       turn_index,
+      agent_run_id,
     },
   });
-  return ok(res, { ...plan, _fallback: fallback || plan._fallback, thread_id: threadId, turn_index });
+  return ok(res, { ...plan, _fallback: fallback || plan._fallback, thread_id: threadId, turn_index, agent_run_id });
 }));
+
+// Recent durable agent runs. This is the operational audit trail for the
+// workbench and background ticket agent without requiring log access.
+router.get('/admin-agent/runs', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+  const condoId = getActiveCondoId(req);
+  const limit = Math.min(100, Math.max(1, Number(req.query.limit || 30)));
+  const rows = db.prepare(
+    `SELECT id, admin_user_id, thread_id, ticket_id, mode, task, status,
+            attempt_count, fallback, model, react_enabled, duration_ms,
+            last_error, started_at, finished_at, created_at
+       FROM agent_runs
+      WHERE condominium_id = ?
+      ORDER BY created_at DESC
+      LIMIT ?`
+  ).all(condoId, limit);
+  return ok(res, rows);
+});
 
 // List the admin's most-recent active threads. Capped at 20 — older
 // threads are still in the DB (we don't auto-archive) but the UI only

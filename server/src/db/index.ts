@@ -545,6 +545,38 @@ export function initSchema() {
   `).run();
   db.prepare(`CREATE INDEX IF NOT EXISTS idx_agent_turns_thread ON agent_turns(thread_id, turn_index)`).run();
 
+  // Agent V2 observability. Every admin-agent invocation gets a durable
+  // run row so background ticket calls, workbench chats, fallbacks and
+  // failures are auditable without scraping logs.
+  db.prepare(`
+    CREATE TABLE IF NOT EXISTS agent_runs (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      condominium_id  INTEGER NOT NULL REFERENCES condominiums(id) ON DELETE CASCADE,
+      admin_user_id   INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      thread_id       INTEGER REFERENCES agent_threads(id) ON DELETE SET NULL,
+      ticket_id       INTEGER REFERENCES tickets(id) ON DELETE SET NULL,
+      mode            TEXT,
+      task            TEXT NOT NULL,
+      status          TEXT NOT NULL DEFAULT 'running'
+        CHECK(status IN ('running','succeeded','failed')),
+      attempt_count   INTEGER NOT NULL DEFAULT 1,
+      fallback        INTEGER NOT NULL DEFAULT 0,
+      model           TEXT,
+      react_enabled   INTEGER NOT NULL DEFAULT 0,
+      duration_ms     INTEGER,
+      plan_json       TEXT,
+      trace_json      TEXT,
+      last_error      TEXT,
+      started_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      finished_at     TEXT,
+      created_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `).run();
+  db.prepare(`CREATE INDEX IF NOT EXISTS idx_agent_runs_condo_status ON agent_runs(condominium_id, status, created_at)`).run();
+  db.prepare(`CREATE INDEX IF NOT EXISTS idx_agent_runs_ticket ON agent_runs(ticket_id, created_at)`).run();
+  db.prepare(`CREATE INDEX IF NOT EXISTS idx_agent_runs_thread ON agent_runs(thread_id, created_at)`).run();
+
   // Ensure Pine Ridge has an invite code so the demo condo is joinable via code too.
   const pine = db.prepare(`SELECT id, invite_code FROM condominiums LIMIT 1`).get() as
     | { id: number; invite_code: string | null }

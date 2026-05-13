@@ -514,6 +514,70 @@ CREATE INDEX IF NOT EXISTS idx_building_documents_condo_visibility
   ON building_documents(condominium_id, visibility, active, updated_at);
 
 -- =====================================================================
+-- Admin agent observability.
+-- =====================================================================
+
+CREATE TABLE IF NOT EXISTS agent_threads (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  condominium_id  INTEGER NOT NULL REFERENCES condominiums(id) ON DELETE CASCADE,
+  admin_user_id   INTEGER NOT NULL REFERENCES users(id),
+  title           TEXT,
+  mode            TEXT,
+  status          TEXT NOT NULL DEFAULT 'active'
+    CHECK(status IN ('active','archived')),
+  created_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_agent_threads_admin
+  ON agent_threads(admin_user_id, status, updated_at);
+
+CREATE TABLE IF NOT EXISTS agent_turns (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  thread_id     INTEGER NOT NULL REFERENCES agent_threads(id) ON DELETE CASCADE,
+  turn_index    INTEGER NOT NULL,
+  user_task     TEXT NOT NULL,
+  agent_summary TEXT,
+  agent_plan    TEXT,
+  fallback      INTEGER NOT NULL DEFAULT 0,
+  created_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_agent_turns_thread
+  ON agent_turns(thread_id, turn_index);
+
+CREATE TABLE IF NOT EXISTS agent_runs (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  condominium_id  INTEGER NOT NULL REFERENCES condominiums(id) ON DELETE CASCADE,
+  admin_user_id   INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  thread_id       INTEGER REFERENCES agent_threads(id) ON DELETE SET NULL,
+  ticket_id       INTEGER REFERENCES tickets(id) ON DELETE SET NULL,
+  mode            TEXT,
+  task            TEXT NOT NULL,
+  status          TEXT NOT NULL DEFAULT 'running'
+    CHECK(status IN ('running','succeeded','failed')),
+  attempt_count   INTEGER NOT NULL DEFAULT 1,
+  fallback        INTEGER NOT NULL DEFAULT 0,
+  model           TEXT,
+  react_enabled   INTEGER NOT NULL DEFAULT 0,
+  duration_ms     INTEGER,
+  plan_json       TEXT,
+  trace_json      TEXT,
+  last_error      TEXT,
+  started_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  finished_at     TEXT,
+  created_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_agent_runs_condo_status
+  ON agent_runs(condominium_id, status, created_at);
+CREATE INDEX IF NOT EXISTS idx_agent_runs_ticket
+  ON agent_runs(ticket_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_agent_runs_thread
+  ON agent_runs(thread_id, created_at);
+
+-- =====================================================================
 -- Maintenance tickets.
 -- =====================================================================
 

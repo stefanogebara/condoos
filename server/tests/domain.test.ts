@@ -25,14 +25,19 @@ import { audit, auditRowsToCsv, listAuditRows } from '../src/lib/audit';
 import { generateInvoices, generateScheduledInvoices, recordPayment } from '../src/lib/finance';
 import { requireAuth, revokeUserTokens, signToken } from '../src/lib/auth';
 import { canAssignTicketToUser, markTicketAgentFailed } from '../src/lib/tickets';
+import { createAgentRun, finishAgentRunFailure, finishAgentRunSuccess } from '../src/lib/agent-runs';
 import { evaluateAgentAutoDispatch } from '../src/lib/agent-auto-dispatch';
 import { normalizeServiceContact, serviceContactSchema } from '../src/lib/service-contacts';
 import { listServiceContactsWithScorecards } from '../src/lib/vendor-scorecards';
 import { searchBuildingMemory } from '../src/lib/memory';
 import { getBoardPacket } from '../src/lib/board-packet';
+import { researchExternalVendors } from '../src/ai/web-research';
 
 function resetDb() {
   const tables = [
+    'agent_runs',
+    'agent_turns',
+    'agent_threads',
     'ticket_attachments',
     'ticket_comments',
     'ticket_work_orders',
@@ -210,6 +215,74 @@ test('admin agent fallback uses saved service contacts and returns work-ready pl
   // moradores" item gets stripped by the denylist; we still expect at
   // least the diagnóstico + equalizar opções pair through.
   assert.ok(out.action_plan.length >= 2);
+});
+
+test('agent runs persist success and failure lifecycle details', () => {
+  resetDb();
+  const { condoId } = createCondoFixture();
+  const adminId = createUser('board@example.com', 'board_admin');
+
+  const okRunId = createAgentRun({
+    condominiumId: condoId,
+    adminUserId: adminId,
+    task: 'Comparar fornecedores de elevador',
+    mode: 'vendor_options',
+    reactEnabled: true,
+    model: 'test-model + tools',
+  });
+  finishAgentRunSuccess(okRunId, {
+    fallback: false,
+    plan: { summary: 'Plano', agent_trace: [{ tool: 'list_vendors' }] },
+    trace: [{ tool: 'list_vendors', output_summary: '1 fornecedor' }],
+    durationMs: 42,
+  });
+
+  const okRow = db.prepare(`SELECT * FROM agent_runs WHERE id = ?`).get(okRunId) as any;
+  assert.equal(okRow.status, 'succeeded');
+  assert.equal(okRow.fallback, 0);
+  assert.equal(okRow.react_enabled, 1);
+  assert.equal(okRow.duration_ms, 42);
+  assert.match(okRow.plan_json, /Plano/);
+  assert.match(okRow.trace_json, /list_vendors/);
+  assert.equal(okRow.last_error, null);
+
+  const failRunId = createAgentRun({
+    condominiumId: condoId,
+    adminUserId: adminId,
+    task: 'Falhar de propósito',
+    mode: 'general',
+    reactEnabled: false,
+    model: 'test-model',
+  });
+  finishAgentRunFailure(failRunId, { error: new Error('provider timeout'), durationMs: 15 });
+  const failRow = db.prepare(`SELECT status, last_error, finished_at FROM agent_runs WHERE id = ?`).get(failRunId) as any;
+  assert.equal(failRow.status, 'failed');
+  assert.match(failRow.last_error, /provider timeout/);
+  assert.ok(failRow.finished_at);
+});
+
+test('admin agent web research returns cited fallback URLs when provider is not configured', async () => {
+  const prevEndpoint = process.env.WEB_SEARCH_ENDPOINT;
+  const prevKey = process.env.WEB_SEARCH_API_KEY;
+  delete process.env.WEB_SEARCH_ENDPOINT;
+  delete process.env.WEB_SEARCH_API_KEY;
+  try {
+    const result = await researchExternalVendors({
+      query: 'empresa manutenção elevador condomínio',
+      location: 'São Paulo',
+      maxResults: 3,
+    });
+    assert.equal(result.configured, false);
+    assert.equal(result.provider, 'not_configured');
+    assert.equal(result.citations.length, 3);
+    assert.ok(result.citations.every((c) => c.url.startsWith('https://')));
+    assert.match(result.citations[0].snippet, /not configured/i);
+  } finally {
+    if (prevEndpoint === undefined) delete process.env.WEB_SEARCH_ENDPOINT;
+    else process.env.WEB_SEARCH_ENDPOINT = prevEndpoint;
+    if (prevKey === undefined) delete process.env.WEB_SEARCH_API_KEY;
+    else process.env.WEB_SEARCH_API_KEY = prevKey;
+  }
 });
 
 test('admin agent sanitizer forces refusal on out-of-scope tasks', () => {

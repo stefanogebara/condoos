@@ -6,11 +6,12 @@
 // what it needs; nothing gets preloaded unless it's universally useful
 // (condo metadata, the request itself).
 //
-// Tools available in v1:
+// Tools available in v2:
 //   - search_past_tickets   — past resolved tickets matching a symptom
 //   - get_vendor_history    — full dispatch + expense trail for ONE vendor
 //   - list_vendors          — active vendors in this condo, optionally filtered
 //   - get_open_similar      — pattern detection on demand
+//   - research_external_vendors — cited web/vendor research when configured
 //   - submit_final_answer   — required terminal call; carries the JSON plan
 //
 // Why submit_final_answer as a tool instead of just letting the model
@@ -22,6 +23,7 @@
 import db from '../db';
 import type { AIToolSchema, AIToolHandler } from './openrouter';
 import { inferCategoryFromTask, extractKeywords, scoreTitleOverlap } from './admin-agent-runner';
+import { researchExternalVendors } from './web-research';
 
 export interface ToolContext {
   condoId: number;
@@ -109,6 +111,35 @@ export const ADMIN_AGENT_TOOLS: AIToolSchema[] = [
   {
     type: 'function',
     function: {
+      name: 'research_external_vendors',
+      description: 'Cited external web research for competitor/vendor options. Use ONLY when the admin asks for competitors, outside vendors, alternatives, or market options. Returns citations with URLs. If configured=false, do not claim live research; return the fallback search URLs as next steps.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: {
+            type: 'string',
+            description: 'Specific vendor/service query, e.g. "empresa manutenção elevador condomínio São Paulo".',
+          },
+          category: {
+            type: 'string',
+            description: 'Optional service category, e.g. elevator, plumbing, electrical, gym equipment.',
+          },
+          location: {
+            type: 'string',
+            description: 'Optional city/neighborhood/address context to localize vendor results.',
+          },
+          maxResults: {
+            type: 'integer',
+            description: 'Maximum cited results to return, 1-8. Default 5.',
+          },
+        },
+        required: ['query'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'submit_final_answer',
       description: 'REQUIRED terminal call. When you have gathered enough context, call this with the full plan JSON. After this, no more tools — your job is done. The plan structure follows the standard ADMIN_AGENT_SYS schema (summary, task_type, options, etc.).',
       parameters: {
@@ -138,6 +169,8 @@ export function buildToolHandler(ctx: ToolContext): AIToolHandler {
         return listVendors(ctx, input);
       case 'get_open_similar_tickets':
         return getOpenSimilarTickets(ctx, input);
+      case 'research_external_vendors':
+        return researchExternalVendors(input);
       case 'submit_final_answer':
         // This one is special — the runner intercepts it before reaching
         // the handler in normal flow, but we still need a safe default

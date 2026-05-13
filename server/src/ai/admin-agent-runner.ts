@@ -18,6 +18,7 @@ import {
 } from './admin-agent';
 import { ADMIN_AGENT_TOOLS, buildToolHandler } from './admin-agent-tools';
 import { analyzeTicketAttachments } from './attachment-vision';
+import { createAgentRun, finishAgentRunFailure, finishAgentRunSuccess } from '../lib/agent-runs';
 
 function clip(value: unknown, max: number): string {
   return String(value || '').slice(0, max);
@@ -45,6 +46,12 @@ function summariseToolOutput(toolName: string, output: any): string {
   }
   if (toolName === 'get_open_similar_tickets') {
     return `${output.open_count || 0} chamados abertos em ${output.window_days || 30} dias${output.is_pattern ? ' (padrão detectado)' : ''}`;
+  }
+  if (toolName === 'research_external_vendors') {
+    const n = Array.isArray(output.citations) ? output.citations.length : 0;
+    return output.configured
+      ? `${n} citação(ões) externas para "${String(output.query || '').slice(0, 60)}"`
+      : `web search não configurado — ${n} link(s) de pesquisa manual`;
   }
   if (toolName === 'submit_final_answer') {
     return 'plano final enviado';
@@ -139,11 +146,47 @@ export interface RunAdminAgentArgs {
 export interface RunAdminAgentResult {
   plan: any;
   fallback: boolean;
+  agent_run_id?: number;
   thread_id?: number;
   turn_index?: number;
 }
 
+function agentModelLabel(): string {
+  const base = process.env.OPENROUTER_MODEL || 'anthropic/claude-3.5-haiku';
+  return process.env.AGENT_USE_REACT === '1' ? `${base} + tools` : base;
+}
+
 export async function runAdminAgent(args: RunAdminAgentArgs): Promise<RunAdminAgentResult> {
+  const started = Date.now();
+  const runId = createAgentRun({
+    condominiumId: args.condoId,
+    adminUserId: args.adminUserId ?? null,
+    threadId: args.threadId ?? null,
+    ticketId: args.ticketId ?? null,
+    mode: String(args.mode || 'general'),
+    task: args.task,
+    reactEnabled: process.env.AGENT_USE_REACT === '1',
+    model: agentModelLabel(),
+  });
+  try {
+    const result = await runAdminAgentInner(args);
+    finishAgentRunSuccess(runId, {
+      fallback: result.fallback,
+      plan: result.plan,
+      trace: result.plan?.agent_trace || [],
+      durationMs: Date.now() - started,
+    });
+    return { ...result, agent_run_id: runId };
+  } catch (error) {
+    finishAgentRunFailure(runId, {
+      error,
+      durationMs: Date.now() - started,
+    });
+    throw error;
+  }
+}
+
+async function runAdminAgentInner(args: RunAdminAgentArgs): Promise<RunAdminAgentResult> {
   const mode = normalizeAdminAgentMode(args.mode);
 
   const condo = db.prepare(`SELECT id, name, address FROM condominiums WHERE id = ?`).get(args.condoId) as any;
