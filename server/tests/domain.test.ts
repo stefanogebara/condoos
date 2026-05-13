@@ -26,14 +26,18 @@ import { generateInvoices, generateScheduledInvoices, recordPayment } from '../s
 import { requireAuth, revokeUserTokens, signToken } from '../src/lib/auth';
 import { canAssignTicketToUser, markTicketAgentFailed } from '../src/lib/tickets';
 import { normalizeServiceContact, serviceContactSchema } from '../src/lib/service-contacts';
+import { searchBuildingMemory } from '../src/lib/memory';
 
 function resetDb() {
   const tables = [
     'ticket_attachments',
     'ticket_comments',
+    'ticket_work_orders',
     'ticket_dispatches',
     'ticket_verifications',
     'tickets',
+    'building_documents',
+    'expenses',
     'payments',
     'invoices',
     'dues_schedules',
@@ -282,6 +286,81 @@ test('service contact normalization trims fields and expands date-only usage', (
   assert.equal(normalized.phone, '+55 11 90000-0001');
   assert.equal(normalized.service_scope, 'Instalação da academia');
   assert.equal(normalized.last_used_at, '2026-05-01T00:00:00.000Z');
+});
+
+test('building memory searches operational records without leaking admin-only sources to residents', () => {
+  resetDb();
+  const { condoId, unit101 } = createCondoFixture();
+  const adminId = createUser('memory-admin@example.com', 'board_admin');
+  const residentId = createUser('memory-resident@example.com');
+  db.prepare(`UPDATE users SET condominium_id = ? WHERE id IN (?, ?)`).run(condoId, adminId, residentId);
+  db.prepare(
+    `INSERT INTO user_unit (user_id, unit_id, relationship, status, primary_contact, voting_weight)
+     VALUES (?, ?, 'owner', 'active', 1, 1.0)`
+  ).run(residentId, unit101);
+
+  const vendorId = Number(db.prepare(
+    `INSERT INTO service_contacts (
+      condominium_id, category, company_name, contact_name, phone, service_scope, active, preferred
+    ) VALUES (?, 'elevator', 'Otis Memory Elevators', 'Rita', '+1 555 1000', 'Elevator modernization and emergency service', 1, 1)`
+  ).run(condoId).lastInsertRowid);
+
+  const ticketId = Number(db.prepare(
+    `INSERT INTO tickets (
+      condominium_id, reporter_id, title, description, category, priority, verification_threshold, remediation_status
+    ) VALUES (?, ?, 'Elevator noise near garage', 'The elevator makes a loud grinding sound.', 'elevator', 'high', 1, 'verified')`
+  ).run(condoId, residentId).lastInsertRowid);
+
+  db.prepare(
+    `INSERT INTO ticket_work_orders (
+      ticket_id, service_contact_id, title, scope, status, estimated_amount_cents
+    ) VALUES (?, ?, 'Elevator inspection', 'Check rail noise and motor room vibration.', 'scheduled', 250000)`
+  ).run(ticketId, vendorId);
+
+  db.prepare(
+    `INSERT INTO building_documents (
+      condominium_id, uploaded_by_user_id, title, category, description, file_url, visibility
+    ) VALUES (?, ?, 'Secret elevator contract', 'contracts', 'Board-only vendor pricing.', 'https://example.com/secret-contract.pdf', 'board_only')`
+  ).run(condoId, adminId);
+  db.prepare(
+    `INSERT INTO building_documents (
+      condominium_id, uploaded_by_user_id, title, category, description, file_url, visibility
+    ) VALUES (?, ?, 'Resident elevator notice', 'notices', 'Elevator maintenance window.', 'https://example.com/resident-notice.pdf', 'residents')`
+  ).run(condoId, adminId);
+
+  const adminSearch = searchBuildingMemory({
+    condoId,
+    userId: adminId,
+    role: 'board_admin',
+    query: 'Otis elevator',
+  });
+  assert.ok(adminSearch.results.some((row) => row.type === 'service_contact' && row.title === 'Otis Memory Elevators'));
+  assert.ok(adminSearch.results.some((row) => row.type === 'work_order' && row.title === 'Elevator inspection'));
+
+  const adminSecret = searchBuildingMemory({
+    condoId,
+    userId: adminId,
+    role: 'board_admin',
+    query: 'secret contract',
+  });
+  assert.ok(adminSecret.results.some((row) => row.type === 'document' && row.title === 'Secret elevator contract'));
+
+  const residentSecret = searchBuildingMemory({
+    condoId,
+    userId: residentId,
+    role: 'resident',
+    query: 'secret contract',
+  });
+  assert.equal(residentSecret.results.some((row) => row.title === 'Secret elevator contract'), false);
+  assert.equal(residentSecret.results.some((row) => row.type === 'service_contact'), false);
+
+  const residentNotice = searchBuildingMemory({
+    condoId,
+    userId: residentId,
+    role: 'resident',
+    query: 'maintenance window',
+  });
+  assert.ok(residentNotice.results.some((row) => row.title === 'Resident elevator notice'));
 });
 
 test('auth: token_version revokes stale JWTs without rotating the global secret', () => {

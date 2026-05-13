@@ -177,3 +177,21 @@ The next implementation slice turns verified issues into operational work orders
 - Show work-order status and evidence on the admin ticket page.
 - Show residents a clear work-order timeline so they know whether the issue is scheduled, in progress, or completed.
 - Keep the existing AI/vendor dispatch flow intact and layer this after vendor response.
+
+## Completed Slice: Phase 2 Money, Work Orders, And Documents
+
+The second implementation wave made the operating core more buyer-ready:
+
+- Added admin dues schedules, invoice generation, receivables, CSV export, and manual payment recording.
+- Added resident statements inside Transparency so residents can see what they owe.
+- Turned verified tickets into work orders with vendor assignment, schedule, estimates, approved cost, invoice/photo links, completion notes, and resident-visible status.
+- Added a document vault for rules, minutes, contracts, insurance, warranties, receipts, vendor docs, and resident-visible notices.
+
+## Current Execution Slice: Building Memory
+
+The next slice starts the moat without adding fragile automation:
+
+- Add a role-aware search index over tickets, work orders, expenses, proposals, announcements, documents, meetings, and vendor contacts.
+- Give admins one Building Memory page to answer “when did this happen, who handled it, what did it cost, and where is the proof?”
+- Keep resident privacy boundaries intact: board-only documents and service-contact details stay admin-only.
+- Use the existing data model first; deeper AI answers can sit on top once the search surface is trusted.
