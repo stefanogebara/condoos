@@ -187,6 +187,22 @@ export function dispatchAgentInBackground(ticketId: number, condoId: number, loc
       ).get(ticketId);
       if (existingDispatch) return;
 
+      // Confidence gate (roadmap item 5). Only auto-dispatch when the
+      // agent is high-confidence (≥0.85), OR when the ticket is urgent +
+      // safety-critical (we already skip the veto window in that case;
+      // here we also skip the confidence gate because manual triage
+      // can't wait for the admin to log in). For medium/low confidence
+      // the ticket stays in 'agent_dispatched' with a plan — admin
+      // clicks the existing manual dispatch button. This converts the
+      // confidence score into a real autonomy decision.
+      const conf = result.plan?.confidence;
+      const isSafetyUrgent = shouldSkipVetoWindow(ticket.priority, ticket.category);
+      const confidentEnough = conf?.tier === 'high' || (typeof conf?.score === 'number' && conf.score >= 0.85);
+      if (!confidentEnough && !isSafetyUrgent) {
+        console.log(`[tickets:${ticketId}] auto-dispatch held: confidence=${conf?.tier || 'unset'} score=${conf?.score ?? 'n/a'}`);
+        return;
+      }
+
       // Pick the outreach message: prefer the model's WhatsApp-native
       // one-liner (the new prompt enforces this shape); fall back to a
       // short default if it's missing or unusually long.
@@ -854,12 +870,34 @@ router.post('/:id/dispatches/:dispatchId/cancel', requireAuth, requireRole('boar
   });
   tx();
 
+  // Pull the agent's confidence on this ticket so the audit log captures
+  // the miscalibration signal: if the admin cancels a 'high' confidence
+  // auto-dispatch, the agent was overconfident on this kind of case.
+  // Aggregating across rows gives us a calibration metric over time.
+  let agentConfidenceTier: string | null = null;
+  let agentConfidenceScore: number | null = null;
+  try {
+    const planRow = db.prepare(`SELECT agent_plan FROM tickets WHERE id = ?`).get(id) as { agent_plan: string | null } | undefined;
+    if (planRow?.agent_plan) {
+      const parsed = JSON.parse(planRow.agent_plan);
+      agentConfidenceTier = parsed?.confidence?.tier ?? null;
+      agentConfidenceScore = typeof parsed?.confidence?.score === 'number' ? parsed.confidence.score : null;
+    }
+  } catch { /* malformed plan — leave nulls */ }
+
   audit(req, {
     action: 'ticket.dispatch_cancelled',
     target_type: 'ticket_dispatch',
     target_id: dispatchId,
     condominium_id: condoId,
-    metadata: { ticket_id: id, reason },
+    metadata: {
+      ticket_id: id,
+      reason,
+      // Calibration signal — these get aggregated by GET /admin-agent/
+      // calibration to compute per-tier override rates.
+      agent_confidence_tier: agentConfidenceTier,
+      agent_confidence_score: agentConfidenceScore,
+    },
   });
   return ok(res, { id: dispatchId, status: 'cancelled' });
 });

@@ -2462,6 +2462,11 @@ const phrases: Copy[] = [
   c('board_only', 'board only', 'solo administración', 'admin seulement'),
   c('voto', 'vote', 'voto', 'vote'),
   c('votos', 'votes', 'votos', 'votes'),
+  // Confidence calibration chip (roadmap item 5).
+  c('alta confiança', 'high confidence', 'alta confianza', 'haute confiance'),
+  c('confiança moderada', 'moderate confidence', 'confianza moderada', 'confiance modérée'),
+  c('baixa confiança', 'low confidence', 'baja confianza', 'faible confiance'),
+  c('Por quê essa confiança?', 'Why this confidence?', '¿Por qué esta confianza?', 'Pourquoi cette confiance ?'),
 ];
 
 function c(pt: string, en: string, es: string, fr: string): Copy {

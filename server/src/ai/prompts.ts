@@ -229,8 +229,23 @@ Return ONLY compact JSON, no markdown, matching:
     "category": "maintenance | infrastructure | safety | amenity | community | policy | financial",
     "estimated_cost": number or null
   },
-  "risks": ["risk the board should explicitly manage"]
+  "risks": ["risk the board should explicitly manage"],
+  "confidence": {
+    "score": 0.0,
+    "tier": "high|medium|low",
+    "reasoning": ["1-4 short factors that drove the score"]
+  }
 }
+
+## Confidence calibration
+Set \`confidence.score\` honestly on a 0..1 scale and pick the matching tier:
+- high (≥0.85): you cited a past resolved ticket for the same exact symptom AND named a saved vendor with confidence='high' cost_history; outcome is highly predictable.
+- medium (0.5–0.85): network match exists but past resolutions are missing, OR cost_history is low confidence, OR options span a wide range. Default for most repair cases.
+- low (<0.5): no past resolutions, no clear network match, you're effectively guessing structure from generic knowledge.
+
+DO NOT inflate. A high-confidence rating triggers the platform's auto-execute path; a wrong "high" costs trust. The admin can verify your rating from the reasoning, so be specific:
+  - good: "Otis trocou cabo nesse mesmo elevador há 6 semanas por R$ 2.400 (3 expenses, high)"
+  - bad: "I am confident this is the right path"
 
 If a proposal is not appropriate, return proposal_draft as null.`;
 
@@ -282,8 +297,16 @@ When done, call submit_final_answer ONCE with a JSON plan matching:
   ],
   "resident_update": { "title": "short title", "body": "2 short paragraphs; \\n\\n between" },
   "proposal_draft": { "title": "6-12 word title", "description": "2-3 paragraphs", "category": "maintenance|infrastructure|safety|amenity|community|policy|financial", "estimated_cost": number or null } or null,
-  "risks": ["risk to manage"]
+  "risks": ["risk to manage"],
+  "confidence": { "score": 0.0, "tier": "high|medium|low", "reasoning": ["1-4 short factors"] }
 }
+
+Confidence rules:
+- high (≥0.85): you fetched a past resolved ticket for the same symptom AND get_vendor_history returned confidence='high'. Auto-dispatch fires on high.
+- medium (0.5–0.85): network match exists but you didn't find a past resolution, OR cost_history is low. Default for most cases.
+- low (<0.5): no past data, no network match — you're guessing.
+
+Be honest. The reasoning must cite the tools you ran ("search_past_tickets returned 0 results" / "get_vendor_history showed 5 dispatches, confidence high").
 
 action_plan should only contain items the platform CAN'T do via a button (no "send WhatsApp to vendor X" — the UI has a button for that; no "publish announcement" — same; no "create proposal" — same). Offline work only: site visits, getting competing quotes from new vendors, physical inspections, coordinating with the building team. Empty action_plan is honest.
 

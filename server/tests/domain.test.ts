@@ -1423,3 +1423,35 @@ test('admin agent sanitizer fixes UTF-8-as-Latin1 mojibake in output strings', (
   const clean = sanitizeAdminAgentOutput({ summary: 'All good here.' }, { task: 'test', service_contacts: [] });
   assert.equal(clean.summary, 'All good here.');
 });
+
+test('admin agent sanitizer derives confidence tier and clamps fallback ceiling', () => {
+  const input = { task: 't', service_contacts: [{ company_name: 'Otis', category: 'elevator' }] };
+
+  // High confidence with explicit reasoning passes through.
+  const high = sanitizeAdminAgentOutput({
+    summary: 's', _fallback: false,
+    confidence: { score: 0.92, tier: 'high', reasoning: ['past resolution found', 'vendor cost_history=high'] },
+  }, input);
+  assert.equal(high.confidence?.tier, 'high');
+  assert.equal(high.confidence?.score, 0.92);
+  assert.equal(high.confidence?.reasoning.length, 2);
+
+  // Score-only input gets a derived tier.
+  const numeric = sanitizeAdminAgentOutput({ summary: 's', confidence: 0.6 }, input);
+  assert.equal(numeric.confidence?.tier, 'medium');
+  assert.equal(numeric.confidence?.score, 0.6);
+
+  // Missing confidence on a real plan: synthesised medium default.
+  const missing = sanitizeAdminAgentOutput({ summary: 's' }, input);
+  assert.equal(missing.confidence?.tier, 'medium');
+  assert.ok(missing.confidence!.score >= 0.5 && missing.confidence!.score < 0.85);
+  assert.ok(missing.confidence!.reasoning.length >= 1);
+
+  // Fallback plans are capped at medium even if heuristic suggested higher.
+  const fallback = sanitizeAdminAgentOutput({
+    summary: 's', _fallback: true,
+    confidence: { score: 0.95, tier: 'high', reasoning: ['x'] },
+  }, input);
+  assert.equal(fallback.confidence?.tier, 'medium');  // capped from high
+  assert.ok(fallback.confidence!.score <= 0.65);
+});

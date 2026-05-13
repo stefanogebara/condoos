@@ -76,6 +76,13 @@ interface AgentResult {
   options: AgentOption[];
   building_memory?: BuildingMemory | null;
   agent_trace?: AgentTraceStep[];
+  // Confidence calibration — sanitiser fills this on every response.
+  // tier drives the chip colour; reasoning is the disclosure body.
+  confidence?: {
+    score: number;
+    tier: 'high' | 'medium' | 'low';
+    reasoning: string[];
+  };
   vendor_search_plan: {
     search_queries: string[];
     shortlisting_criteria: string[];
@@ -531,6 +538,7 @@ export default function BoardAgent() {
                   {result._fallback ? <Badge tone="warning">{tr('Fallback seguro')}</Badge> : null}
                   <Badge tone="neutral">{tr(result.task_type)}</Badge>
                   {turns.length > 1 && <Badge tone="neutral">{tr('Turno')} {turns.length}</Badge>}
+                  {result.confidence && <ConfidenceChip confidence={result.confidence} tr={tr} />}
                 </div>
                 <h2 className="font-display text-2xl text-dusk-500 mt-3">{tr('Resumo')}</h2>
                 <p className="text-sm text-dusk-400 mt-1 whitespace-pre-line">{result.summary}</p>
@@ -1066,6 +1074,44 @@ function OutreachModal({ target, onClose, onSent, tr, health }: {
 //      suggestion at 11pm
 // Each signal renders only when present; an empty memory block renders
 // nothing (the parent guards on `result.building_memory` being truthy).
+// Confidence chip — sage/neutral/peach tone matches the tier. Hover/tap
+// reveals the reasoning so the admin can verify the rating. Score is
+// rendered as a percentage for legibility ("85%" not "0.85").
+function ConfidenceChip({ confidence, tr }: {
+  confidence: { score: number; tier: 'high' | 'medium' | 'low'; reasoning: string[] };
+  tr: (k: string) => string;
+}) {
+  const [open, setOpen] = useState(false);
+  const tone = confidence.tier === 'high' ? 'sage' : confidence.tier === 'medium' ? 'neutral' : 'peach';
+  const pct = Math.round(confidence.score * 100);
+  const label = confidence.tier === 'high' ? tr('alta confiança')
+    : confidence.tier === 'medium' ? tr('confiança moderada')
+    : tr('baixa confiança');
+  return (
+    <div className="relative inline-block">
+      <button type="button" onClick={() => setOpen(!open)} className="inline-flex">
+        <Badge tone={tone}>{label} · {pct}%</Badge>
+      </button>
+      {open && (
+        <div
+          className="absolute top-full mt-1 left-0 z-20 w-72 rounded-2xl bg-white/95 backdrop-blur border border-white/80 shadow-clay p-3 text-xs text-dusk-400"
+          onClick={() => setOpen(false)}
+        >
+          <div className="font-semibold text-dusk-500 mb-1.5">{tr('Por quê essa confiança?')}</div>
+          <ul className="space-y-1">
+            {confidence.reasoning.map((r, i) => (
+              <li key={i} className="flex items-start gap-1.5">
+                <span className="text-dusk-300 mt-0.5">·</span>
+                <span>{r}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function BuildingMemorySection({ memory, locale, tr }: {
   memory: BuildingMemory;
   locale: string;

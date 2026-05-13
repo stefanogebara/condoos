@@ -293,6 +293,77 @@ router.post('/admin-agent/threads/:id/archive', requireAuth, requireRole('board_
   return ok(res, { id, archived: true });
 });
 
+// Calibration metrics — how often the admin overrides the agent at each
+// confidence tier. The signal is the dispatch_cancelled audit row joined
+// with the confidence tier from the time of dispatch (we stash that on
+// the audit metadata at cancel time). A well-calibrated agent has
+// override rates that match its claimed confidence:
+//   high   → admin cancels ≤ 15% of the time
+//   medium → admin cancels ~30-50%
+//   low    → we never auto-execute, so override rate is N/A
+router.get('/admin-agent/calibration', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+  const condoId = getActiveCondoId(req);
+  const days = Math.min(365, Math.max(7, Number(req.query.days || 90)));
+
+  // Cancels grouped by the tier the agent claimed at dispatch time. We
+  // parse the metadata JSON inline; SQLite json1 is enabled in modern
+  // builds but we keep the JS path simple and portable.
+  const cancels = db.prepare(
+    `SELECT metadata FROM audit_log
+     WHERE condominium_id = ?
+       AND action = 'ticket.dispatch_cancelled'
+       AND substr(created_at, 1, 10) >= date('now', '-' || ? || ' days')`
+  ).all(condoId, days) as Array<{ metadata: string | null }>;
+
+  // For the denominator we need the dispatches the agent fired. The
+  // auto-dispatch path always writes scheduled_send_after — a normal
+  // manual dispatch is null there. So we can split auto vs manual at
+  // the same time as we count tiers.
+  const dispatches = db.prepare(
+    `SELECT t.agent_plan, d.id, d.scheduled_send_after
+     FROM ticket_dispatches d
+     JOIN tickets t ON t.id = d.ticket_id
+     WHERE t.condominium_id = ?
+       AND d.scheduled_send_after IS NOT NULL
+       AND substr(d.created_at, 1, 10) >= date('now', '-' || ? || ' days')`
+  ).all(condoId, days) as Array<{ agent_plan: string | null; id: number }>;
+
+  // Bucket dispatches by claimed tier.
+  const buckets: Record<'high' | 'medium' | 'low' | 'unset', { total: number; cancelled: number }> = {
+    high: { total: 0, cancelled: 0 },
+    medium: { total: 0, cancelled: 0 },
+    low: { total: 0, cancelled: 0 },
+    unset: { total: 0, cancelled: 0 },
+  };
+  for (const d of dispatches) {
+    let tier: 'high' | 'medium' | 'low' | 'unset' = 'unset';
+    try {
+      const p = d.agent_plan ? JSON.parse(d.agent_plan) : null;
+      const t = p?.confidence?.tier;
+      if (t === 'high' || t === 'medium' || t === 'low') tier = t;
+    } catch { /* malformed, count as unset */ }
+    buckets[tier].total += 1;
+  }
+  for (const c of cancels) {
+    try {
+      const meta = c.metadata ? JSON.parse(c.metadata) : null;
+      const t = meta?.agent_confidence_tier as 'high' | 'medium' | 'low' | undefined;
+      if (t === 'high' || t === 'medium' || t === 'low') buckets[t].cancelled += 1;
+      else buckets.unset.cancelled += 1;
+    } catch { buckets.unset.cancelled += 1; }
+  }
+
+  const result = (['high', 'medium', 'low', 'unset'] as const).map((tier) => ({
+    tier,
+    auto_dispatched: buckets[tier].total,
+    cancelled: buckets[tier].cancelled,
+    cancel_rate: buckets[tier].total > 0
+      ? Math.round((buckets[tier].cancelled / buckets[tier].total) * 100) / 100
+      : null,
+  }));
+  return ok(res, { window_days: days, by_tier: result });
+});
+
 // 2. Cluster all open suggestions for the condo
 router.post('/cluster-suggestions', requireAuth, aiRateLimit, requireRole('board_admin'), asyncHandler(async (req: AuthedRequest, res) => {
   const u = req.user!;

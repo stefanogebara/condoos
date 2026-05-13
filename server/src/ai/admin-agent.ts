@@ -155,6 +155,19 @@ export interface AdminAgentOutput {
   resident_update: AdminAgentResidentUpdate;
   proposal_draft: AdminAgentProposalDraft | null;
   risks: string[];
+  // Confidence calibration (roadmap item 5). The agent self-estimates how
+  // sure it is on every recommendation. Tier gates downstream behavior:
+  //   high   (≥0.85)  → eligible for auto-execute (auto-dispatch fires)
+  //   medium (0.5-0.85) → recommend only (admin clicks dispatch)
+  //   low    (<0.5)   → manual; we hold back the auto-dispatch path
+  // The reasoning is what the admin reads to verify the rating — not a
+  // free-form essay but a short list of factors (past resolutions found,
+  // vendor history depth, network match quality).
+  confidence?: {
+    score: number;            // 0..1
+    tier: 'high' | 'medium' | 'low';
+    reasoning: string[];      // 1-4 short factors
+  };
   // Building memory — populated by the runner from SQL, attached to the
   // response so the UI can render past resolutions / pattern alerts /
   // after-hours flag without relying on the model's prose. The model
@@ -526,6 +539,64 @@ function fixMojibakeDeep<T>(value: T): T {
   return value;
 }
 
+// Confidence sanitiser. The model may emit confidence as {score, tier,
+// reasoning} or just a number — we accept both shapes and clamp. When
+// missing, we synthesise a conservative estimate based on signals we
+// know about: a fallback plan is always low; an empty service_contacts
+// list means we couldn't really cite anything, so low; otherwise default
+// to medium and let the model improve via the prompt. Tier is derived
+// from score so the two never disagree.
+function sanitizeConfidence(
+  raw: unknown,
+  isFallback: boolean,
+  input: AdminAgentInput,
+): { score: number; tier: 'high' | 'medium' | 'low'; reasoning: string[] } {
+  const reasoningCap = 4;
+  let score: number | null = null;
+  let reasoning: string[] = [];
+
+  if (typeof raw === 'number') {
+    score = raw;
+  } else if (raw && typeof raw === 'object') {
+    const o = raw as Record<string, unknown>;
+    const s = typeof o.score === 'number' ? o.score : typeof o.value === 'number' ? o.value : null;
+    if (s != null) score = s;
+    const r = Array.isArray(o.reasoning) ? o.reasoning : Array.isArray(o.reasons) ? o.reasons : [];
+    reasoning = r.map((x) => String(x || '').slice(0, 220)).filter(Boolean).slice(0, reasoningCap);
+  }
+
+  if (score == null || !Number.isFinite(score)) {
+    // No usable model confidence — synthesise from signals.
+    if (isFallback) {
+      score = 0.3;
+      if (reasoning.length === 0) reasoning = ['Plano gerado por fallback determinístico, sem modelo.'];
+    } else if (!input.service_contacts || input.service_contacts.length === 0) {
+      score = 0.4;
+      if (reasoning.length === 0) reasoning = ['Sem fornecedores cadastrados para citar.'];
+    } else {
+      score = 0.6;
+      if (reasoning.length === 0) reasoning = ['Sem confiança explícita do modelo — valor padrão de partida.'];
+    }
+  }
+
+  // Clamp to [0,1] and round to two decimals so the UI doesn't show
+  // spurious precision ("0.823 alta confiança").
+  score = Math.max(0, Math.min(1, Number(score)));
+  score = Math.round(score * 100) / 100;
+  // Fallback always degrades to at most medium — we never trust a
+  // deterministic plan more than a real one even if the heuristic
+  // pegged it higher.
+  if (isFallback && score > 0.65) score = 0.65;
+
+  const tier: 'high' | 'medium' | 'low' =
+    score >= 0.85 ? 'high' : score >= 0.5 ? 'medium' : 'low';
+
+  if (reasoning.length === 0) {
+    reasoning = ['Confiança calculada a partir de contexto disponível.'];
+  }
+  return { score, tier, reasoning };
+}
+
 export function sanitizeAdminAgentOutput(raw: unknown, input: AdminAgentInput): AdminAgentOutput {
   const fallback = fallbackAdminAgent(input);
   const data = obj(raw);
@@ -609,6 +680,7 @@ export function sanitizeAdminAgentOutput(raw: unknown, input: AdminAgentInput): 
       }
       : fallback.proposal_draft,
     risks: list(data.risks, fallback.risks, 8, 220),
+    confidence: sanitizeConfidence(data.confidence, !!data._fallback, input),
     _fallback: data._fallback === true ? true : undefined,
   };
 
