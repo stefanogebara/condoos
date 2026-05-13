@@ -688,6 +688,30 @@ function categoryCompatible(taskCategory: string, vendorCategory: string): boole
 // existing_network_fit means the agent has nowhere to ground the
 // estimate. Honest answers either name a vendor whose cost_history
 // supports the range, or say "confirm by quote" / "A confirmar".
+// Scope detection — opinionated keyword match against tasks that are
+// clearly off-domain for a condo-operations copilot. We refuse cleanly
+// so the admin doesn't get a generic marketing/legal/investment plan
+// from a tool that should only operate the building. Borderline cases
+// (anything about the building, anything ending in a vendor call) pass.
+const OUT_OF_SCOPE_PATTERNS: RegExp[] = [
+  // Marketing / promotion / branding
+  /\b(marketing|promo[çc][ãa]o|publicidade|propaganda|m[íi]dia social|redes sociais|branding|posicionamento de marca|estrat[ée]gia (digital|de m[íi]dia))\b/i,
+  /\b(brand|advertising|social media|seo|growth hacking)\b/i,
+  // Investment / portfolio / financial advice (not condo finance)
+  /\b(investir|investimento|carteira de investimento|a[çc][õo]es de bolsa|cripto|bitcoin|portf[óo]lio (financeiro|de investimento))\b/i,
+  /\b(invest|stock market|crypto|portfolio (allocation|advice))\b/i,
+  // Personal advice / lifestyle / relationship
+  /\b(conselho pessoal|terapia|psicologia|relacionamento|namorada?|casamento|filhos|adolesc[êe]ncia)\b/i,
+  /\b(life advice|personal advice|therapy|relationship|dating|parenting)\b/i,
+  // Political / opinion
+  /\b(presidente|eleicao|elei[çc][ãa]o|partido pol[íi]tico|governo federal|impeachment)\b/i,
+  /\b(election|president|political party|government)\b/i,
+];
+function looksOutOfScope(task: string): boolean {
+  const t = String(task || '');
+  return OUT_OF_SCOPE_PATTERNS.some((re) => re.test(t));
+}
+
 function looksLikeInventedCost(costRange: string, networkFitCount: number): boolean {
   if (!costRange) return false;
   // Cheap detector: any decimal-grouped number that suggests currency.
@@ -819,6 +843,28 @@ export function sanitizeAdminAgentOutput(raw: unknown, input: AdminAgentInput): 
     confidence: sanitizeConfidence(data.confidence, !!data._fallback, input),
     _fallback: data._fallback === true ? true : undefined,
   };
+
+  // Scope check: when the task is clearly off-domain, force a refusal
+  // even when the model produced a plan. Soft prompt rules are not
+  // enough — Claude / GPT will happily over-help on adjacent topics
+  // like marketing strategy, legal interpretation, personal advice.
+  // Detection is keyword-based against the task text (admin-agent.ts is
+  // the only place that scopes condo operations, so we can be opinionated).
+  if (looksOutOfScope(input.task || '')) {
+    output.summary = 'Não está no escopo desse copiloto (opera apenas operações do condomínio: reparos, instalações, fornecedores, comunicação aos moradores e propostas para decisões do conselho). Reformule como uma decisão operacional ou consulte outro recurso.';
+    output.task_type = 'general';
+    output.recommended_next_step = 'Reformule a pergunta como uma decisão operacional do condomínio.';
+    output.existing_network_fit = [];
+    output.options = [];
+    output.action_plan = [];
+    output.proposal_draft = null;
+    output.risks = ['Pergunta fora do escopo — recusa explícita.'];
+    output.confidence = {
+      score: 0.95,
+      tier: 'high',
+      reasoning: ['Pergunta fora do escopo operacional do condomínio.'],
+    };
+  }
 
   // Cost discipline: if the model emitted a numeric range with no real
   // history backing it, downgrade confidence and tag the reasoning so

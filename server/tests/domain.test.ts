@@ -211,6 +211,39 @@ test('admin agent fallback uses saved service contacts and returns work-ready pl
   assert.ok(out.action_plan.length >= 2);
 });
 
+test('admin agent sanitizer forces refusal on out-of-scope tasks', () => {
+  // Audit Test 3 finding: prompt rule on scope refusal wasn't enforced
+  // (model would happily produce a marketing plan). Sanitiser now
+  // detects off-domain tasks and rewrites the response into a clean
+  // refusal regardless of what the model returned.
+  const out = sanitizeAdminAgentOutput({
+    summary: 'Plano de marketing detalhado com 5 fases.',
+    task_type: 'policy',
+    existing_network_fit: [],
+    options: [{
+      title: 'Marketing digital', fit: 'all', pros: [], cons: [],
+      estimated_cost_range: 'R$ 5.000/mês', timeline: '6 meses',
+      questions_for_vendor: [], evaluation_criteria: [],
+    }],
+    confidence: { score: 0.7, tier: 'medium', reasoning: ['x'] },
+  }, {
+    task: 'Qual a melhor estratégia de marketing digital nas redes sociais?',
+    service_contacts: [],
+  });
+  assert.match(out.summary, /escopo|reformule/i);
+  assert.equal(out.existing_network_fit.length, 0);
+  assert.equal(out.options.length, 0);
+  assert.equal(out.action_plan.length, 0);
+  assert.equal(out.proposal_draft, null);
+  assert.equal(out.confidence?.tier, 'high'); // high confidence we're refusing
+  // In-scope task should NOT be refused — sanity check the negative.
+  const inScope = sanitizeAdminAgentOutput({
+    summary: 'Plano para conserto.',
+    options: [{ title: 'X', fit: 'y', pros: [], cons: [], estimated_cost_range: 'a', timeline: 'b', questions_for_vendor: [], evaluation_criteria: [] }],
+  }, { task: 'Elevador A com ruído', service_contacts: [] });
+  assert.doesNotMatch(inScope.summary, /escopo|reformule/i);
+});
+
 test('admin agent sanitizer drops vendors whose category does not match the task', () => {
   // The test 5 finding: dedetização ask should NOT return elevator,
   // maintenance, or plumbing vendors even if the model included them.
