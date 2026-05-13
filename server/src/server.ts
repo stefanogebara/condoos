@@ -34,6 +34,7 @@ import financeRoutes from './routes/finance';
 import ticketsRoutes from './routes/tickets';
 import documentsRoutes from './routes/documents';
 import memoryRoutes from './routes/memory';
+import reportsRoutes from './routes/reports';
 import webhooksRoutes from './routes/webhooks';
 import serviceContactsRoutes from './routes/service-contacts';
 import { processWhatsAppOutbox } from './lib/whatsapp';
@@ -153,6 +154,7 @@ app.use('/api/finance',       scoped, financeRoutes);
 app.use('/api/tickets',       scoped, ticketsRoutes);
 app.use('/api/documents',     scoped, documentsRoutes);
 app.use('/api/memory',        scoped, memoryRoutes);
+app.use('/api/reports',       scoped, reportsRoutes);
 app.use('/api/service-contacts', scoped, serviceContactsRoutes);
 
 // 404

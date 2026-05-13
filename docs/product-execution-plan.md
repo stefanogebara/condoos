@@ -196,7 +196,7 @@ The moat work started without adding fragile automation:
 - Kept resident privacy boundaries intact: board-only documents and service-contact details stay admin-only.
 - Used the existing data model first; deeper AI answers can sit on top once the search surface is trusted.
 
-## Current Execution Slice: Vendor Intelligence
+## Completed Slice: Vendor Intelligence
 
 This slice makes the saved service network feel operational instead of static:
 
@@ -204,3 +204,13 @@ This slice makes the saved service network feel operational instead of static:
 - Show response rate, average response time, completed/open work orders, tracked spend, and latest operational activity.
 - Keep aggregation scoped by condominium so management-company data does not leak across buildings.
 - Add indexes and tests around the vendor scorecard query so it can later feed AI recommendations and portfolio reporting.
+
+## Current Execution Slice: Monthly Board Packet
+
+This slice turns the operating data already in CONDOS into a board-ready report:
+
+- Add an admin Reports page with a monthly board packet.
+- Aggregate expenses, dues, overdue units, tickets, work orders, proposals, meetings, announcements, and vendor network health.
+- Surface risks and next steps so admins know what needs attention before a board meeting.
+- Let admins copy, download, or print the packet without leaving the app.
+- Keep all queries scoped to the active condominium and cover the report with domain and E2E tests.

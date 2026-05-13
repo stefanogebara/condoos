@@ -52,6 +52,7 @@ test('admin: overview renders with sidebar nav', async ({ page, request, isMobil
     /^(Overview|Visão geral)$/i,
     /^(Suggestions|Sugestões)$/i,
     /AI agent|Agente IA/i,
+    /^(Reports|Relatórios|Informes)$/i,
     /Pending|Pendentes/i,
     /^(Proposals|Propostas)$/i,
     /^(Assemblies|Assembleias)$/i,

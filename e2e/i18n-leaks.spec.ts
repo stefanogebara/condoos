@@ -217,7 +217,11 @@ async function seedCommunityTicket(page: Page) {
 
 async function scan(page: Page, path: string, locale: string) {
   await page.goto(path, { waitUntil: 'domcontentloaded' });
-  await page.waitForLoadState('networkidle').catch(() => {});
+  // App pages poll several lightweight endpoints from the sidebar, so the
+  // browser may never become fully "network idle". Keep this bounded or the
+  // leak sweep spends 30s per route waiting for a state the product correctly
+  // does not reach.
+  await page.waitForLoadState('networkidle', { timeout: 1500 }).catch(() => {});
   if (path === '/board/tickets') {
     const ticket = page.getByRole('button', { name: /Lights in lobby are not working/i }).first();
     if (await ticket.isVisible().catch(() => false)) {
@@ -235,6 +239,7 @@ async function scan(page: Page, path: string, locale: string) {
 const ADMIN_ROUTES = [
   '/board',
   '/board/agent',
+  '/board/reports',
   '/board/pending',
   '/board/suggestions',
   '/board/edificio',

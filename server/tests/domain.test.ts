@@ -28,6 +28,7 @@ import { canAssignTicketToUser, markTicketAgentFailed } from '../src/lib/tickets
 import { normalizeServiceContact, serviceContactSchema } from '../src/lib/service-contacts';
 import { listServiceContactsWithScorecards } from '../src/lib/vendor-scorecards';
 import { searchBuildingMemory } from '../src/lib/memory';
+import { getBoardPacket } from '../src/lib/board-packet';
 
 function resetDb() {
   const tables = [
@@ -52,6 +53,8 @@ function resetDb() {
     'assembly_attendance',
     'assembly_agenda_items',
     'assemblies',
+    'action_items',
+    'meetings',
     'invites',
     'user_unit',
     'units',
@@ -368,6 +371,82 @@ test('service contact scorecards aggregate vendor operations without cross-condo
   assert.equal(scorecard.expense_count, 1);
   assert.equal(scorecard.expense_total_cents, 80000);
   assert.equal(scorecard.expense_currency, 'USD');
+});
+
+test('board packet aggregates monthly operations without cross-condo leakage', () => {
+  resetDb();
+  const { condoId, unit101 } = createCondoFixture();
+  const adminId = createUser('packet-admin@example.com', 'board_admin');
+  const residentId = createUser('packet-resident@example.com');
+  db.prepare(`UPDATE users SET condominium_id = ? WHERE id IN (?, ?)`).run(condoId, adminId, residentId);
+  db.prepare(
+    `INSERT INTO user_unit (user_id, unit_id, relationship, status, primary_contact, voting_weight)
+     VALUES (?, ?, 'owner', 'active', 1, 1.0)`
+  ).run(residentId, unit101);
+
+  const vendorId = Number(db.prepare(
+    `INSERT INTO service_contacts (condominium_id, category, company_name, active, preferred)
+     VALUES (?, 'plumbing', 'Packet Plumbing', 1, 1)`
+  ).run(condoId).lastInsertRowid);
+
+  db.prepare(
+    `INSERT INTO expenses (condominium_id, amount_cents, currency, category, vendor, description, spent_at, created_by_user_id)
+     VALUES (?, 10000, 'USD', 'maintenance', 'Packet Plumbing', 'May pipe repair', '2026-05-04T12:00:00.000Z', ?)`
+  ).run(condoId, adminId);
+  db.prepare(
+    `INSERT INTO expenses (condominium_id, amount_cents, currency, category, vendor, description, spent_at, created_by_user_id)
+     VALUES (?, 50000, 'USD', 'maintenance', 'Old Vendor', 'April repair', '2026-04-20T12:00:00.000Z', ?)`
+  ).run(condoId, adminId);
+
+  db.prepare(
+    `INSERT INTO invoices (condominium_id, unit_id, amount_cents, currency, period, due_date, status)
+     VALUES (?, ?, 20000, 'USD', '2026-05', '2026-05-01T12:00:00.000Z', 'open')`
+  ).run(condoId, unit101);
+
+  const ticketId = Number(db.prepare(
+    `INSERT INTO tickets (condominium_id, unit_id, reporter_id, title, description, category, priority, status, remediation_status, created_at, updated_at)
+     VALUES (?, ?, ?, 'Packet leak', 'Pipe leak by lobby.', 'plumbing', 'urgent', 'open', 'verified', '2026-05-08T10:00:00.000Z', '2026-05-08T10:00:00.000Z')`
+  ).run(condoId, unit101, residentId).lastInsertRowid);
+  db.prepare(
+    `INSERT INTO ticket_work_orders (ticket_id, service_contact_id, title, status, estimated_amount_cents, scheduled_for)
+     VALUES (?, ?, 'Fix packet leak', 'scheduled', 30000, '2026-05-09T14:00:00.000Z')`
+  ).run(ticketId, vendorId);
+
+  db.prepare(
+    `INSERT INTO proposals (condominium_id, author_id, title, description, category, status, estimated_cost, created_at)
+     VALUES (?, ?, 'Paint garage', 'Paint garage walls.', 'maintenance', 'voting', 1200, '2026-05-02T12:00:00.000Z')`
+  ).run(condoId, adminId);
+  db.prepare(
+    `INSERT INTO meetings (condominium_id, title, scheduled_for, status)
+     VALUES (?, 'May board meeting', '2026-05-20T18:00:00.000Z', 'scheduled')`
+  ).run(condoId);
+  db.prepare(
+    `INSERT INTO announcements (condominium_id, author_id, title, body, created_at)
+     VALUES (?, ?, 'May notice', 'Maintenance notice.', '2026-05-03T10:00:00.000Z')`
+  ).run(condoId, adminId);
+
+  const otherCondoId = Number(db.prepare(
+    `INSERT INTO condominiums (name, address, invite_code) VALUES ('Other Packet Condo', '2 Main', 'PKT02')`
+  ).run().lastInsertRowid);
+  const otherAdminId = createUser('packet-other-admin@example.com', 'board_admin');
+  db.prepare(`UPDATE users SET condominium_id = ? WHERE id = ?`).run(otherCondoId, otherAdminId);
+  db.prepare(
+    `INSERT INTO expenses (condominium_id, amount_cents, currency, category, vendor, description, spent_at, created_by_user_id)
+     VALUES (?, 999999, 'USD', 'maintenance', 'Leaky Other Vendor', 'Should not leak', '2026-05-04T12:00:00.000Z', ?)`
+  ).run(otherCondoId, otherAdminId);
+
+  const packet = getBoardPacket(condoId, '2026-05', new Date('2026-05-13T12:00:00.000Z'));
+  assert.equal(packet.period_end, '2026-05-31');
+  assert.equal(packet.finances.expenses_total_cents, 10000);
+  assert.equal(packet.finances.receivables.total_open_cents, 20000);
+  assert.equal(packet.finances.receivables.overdue_cents, 20000);
+  assert.equal(packet.tickets.urgent_open_count, 1);
+  assert.equal(packet.tickets.work_orders.open_count, 1);
+  assert.equal(packet.proposals.active_count, 1);
+  assert.equal(packet.meetings.upcoming_count, 1);
+  assert.equal(packet.vendors.count, 1);
+  assert.match(packet.markdown, /Test Condo board packet/);
+  assert.doesNotMatch(JSON.stringify(packet), /Leaky Other Vendor/);
 });
 
 test('building memory searches operational records without leaking admin-only sources to residents', () => {

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { AlertTriangle, Bot, Home, Inbox, Vote, Calendar, Megaphone, Users, UserCheck, Gavel, Building2, Wallet, Waves, Wrench, ShieldCheck, FileText, BookOpenText } from 'lucide-react';
+import { AlertTriangle, Bot, Home, Inbox, Vote, Calendar, Megaphone, Users, UserCheck, Gavel, Building2, Wallet, Waves, Wrench, ShieldCheck, FileText, BookOpenText, ClipboardList } from 'lucide-react';
 import Sidebar, { NavItem } from '../../components/Sidebar';
 import WhatsAppHealthPill from '../../components/WhatsAppHealthPill';
 import BoardOverview from './BoardOverview';
@@ -23,6 +23,7 @@ import BoardTickets from './BoardTickets';
 import BoardConciergeStaff from './BoardConciergeStaff';
 import BoardDocuments from './BoardDocuments';
 import BoardMemory from './BoardMemory';
+import BoardReports from './BoardReports';
 import { apiGet } from '../../lib/api';
 
 interface TicketSummary {
@@ -66,6 +67,7 @@ export default function BoardApp() {
     { to: '/board/suggestions',   label: 'Sugestões',     icon: Inbox },
     { to: '/board/agent',         label: 'Agente IA',     icon: Bot },
     { to: '/board/memory',        label: 'Memória',       icon: BookOpenText },
+    { to: '/board/reports',       label: 'Relatórios',    icon: ClipboardList },
     { to: '/board/pending',       label: 'Pendentes',     icon: UserCheck, badge: pendingCount || undefined },
     { to: '/board/proposals',     label: 'Propostas',     icon: Vote },
     { to: '/board/assemblies',    label: 'Assembleias',   icon: Gavel },
@@ -90,6 +92,7 @@ export default function BoardApp() {
           <Route path="suggestions"      element={<Suggestions />} />
           <Route path="agent"            element={<BoardAgent />} />
           <Route path="memory"           element={<BoardMemory />} />
+          <Route path="reports"          element={<BoardReports />} />
           <Route path="pending"          element={<Pending />} />
           <Route path="proposals"        element={<BoardProposals />} />
           <Route path="proposals/:id"    element={<BoardProposalDetail />} />
