@@ -782,11 +782,12 @@ export function sanitizeAdminAgentOutput(raw: unknown, input: AdminAgentInput): 
     assumptions: list(data.assumptions, fallback.assumptions, 6, 220),
     recommended_next_step: text(data.recommended_next_step, 500) || fallback.recommended_next_step,
     // Only fall back to the deterministic vendor list when the model
-    // produced NO network_fit at all. If it produced fits and our
-    // sanitiser filtered them all out (category mismatch / hallucinated
-    // names), the empty list is intentional — surfacing the fallback
-    // would re-introduce the unmatched vendors.
-    existing_network_fit: existing_network_fit.length || modelProducedFits
+    // produced NO network_fit at all AND we couldn't infer a category
+    // from the task. If the model returned fits and we filtered them
+    // all out, OR we inferred a category and no saved vendor matches,
+    // the empty list is intentional — surfacing the fallback would
+    // re-introduce vendors the admin shouldn't see for this task.
+    existing_network_fit: existing_network_fit.length || modelProducedFits || taskCategory
       ? existing_network_fit
       : fallback.existing_network_fit,
     options: options.length ? options : fallback.options,
