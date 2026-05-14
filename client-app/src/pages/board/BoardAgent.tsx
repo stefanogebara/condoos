@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import toast from 'react-hot-toast';
-import { AlertTriangle, Bot, CheckCircle2, ClipboardList, Copy, ExternalLink, Loader2, MessageCircle, Send, Sparkles, X } from 'lucide-react';
+import { AlertTriangle, Bot, CheckCircle2, ChevronDown, ClipboardList, Copy, ExternalLink, Loader2, MessageCircle, Send, Sparkles, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '../../components/PageHeader';
 import GlassCard from '../../components/GlassCard';
@@ -760,19 +760,32 @@ export default function BoardAgent() {
             )}
           </GlassCard>
 
-          {result.evidence_sources && result.evidence_sources.length > 0 && (
-            <EvidenceSourcesSection sources={result.evidence_sources} tr={tr} />
-          )}
-
-          {/* Building memory: the agent's recall of this building's own
-              history. Rendered before the network because past resolutions
-              are stronger evidence than abstract vendor matching. Renders
-              nothing when memory is empty (new buildings, no patterns,
-              business hours) — empty silence is honest. */}
-          {result.building_memory && <BuildingMemorySection memory={result.building_memory} locale={locale} tr={tr} />}
-
-          {result.attachment_analysis && result.attachment_analysis.length > 0 && (
-            <VisualEvidenceSection items={result.attachment_analysis} tr={tr} />
+          {/* Justification — the "why" behind the plan. These three blocks
+              (cited evidence, building memory, photo analysis) explain the
+              reasoning but aren't what the admin acts on, so they're
+              collapsed by default to keep the answer + actions above the
+              fold instead of walling them off behind a long scroll. */}
+          {(
+            (result.evidence_sources && result.evidence_sources.length > 0) ||
+            result.building_memory ||
+            (result.attachment_analysis && result.attachment_analysis.length > 0)
+          ) && (
+            <details className="group">
+              <summary className="cursor-pointer list-none flex items-center gap-2 rounded-3xl bg-white/50 border border-white/70 px-4 py-3 text-sm text-dusk-400 hover:bg-white/70 transition-colors">
+                <Sparkles className="w-4 h-4 shrink-0" />
+                <span>{tr('Por que esse plano — evidências e memória do prédio')}</span>
+                <ChevronDown className="w-4 h-4 ml-auto shrink-0 transition-transform group-open:rotate-180" />
+              </summary>
+              <div className="mt-3 space-y-5">
+                {result.evidence_sources && result.evidence_sources.length > 0 && (
+                  <EvidenceSourcesSection sources={result.evidence_sources} tr={tr} />
+                )}
+                {result.building_memory && <BuildingMemorySection memory={result.building_memory} locale={locale} tr={tr} />}
+                {result.attachment_analysis && result.attachment_analysis.length > 0 && (
+                  <VisualEvidenceSection items={result.attachment_analysis} tr={tr} />
+                )}
+              </div>
+            </details>
           )}
 
           {/* Hero: the only block in the result panel with a write action.

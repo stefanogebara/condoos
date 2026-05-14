@@ -2177,6 +2177,7 @@ const phrases: Copy[] = [
   c('Proposta criada', 'Proposal created', 'Propuesta creada', 'Proposition créée'),
   c('Falha ao criar proposta', 'Failed to create proposal', 'Error al crear la propuesta', 'Échec de création de la proposition'),
   c('Fallback seguro', 'Safe fallback', 'Fallback seguro', 'Repli sécurisé'),
+  c('Por que esse plano — evidências e memória do prédio', 'Why this plan — evidence and building memory', 'Por qué este plan — evidencia y memoria del edificio', "Pourquoi ce plan — preuves et mémoire de l'immeuble"),
   c('IA disponível', 'AI available', 'IA disponible', 'IA disponible'),
   c('IA indisponível', 'AI unavailable', 'IA no disponible', 'IA indisponible'),
   c('Uso dos últimos 7 dias', 'Usage over the last 7 days', 'Uso de los últimos 7 días', 'Utilisation des 7 derniers jours'),
