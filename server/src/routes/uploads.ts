@@ -13,7 +13,6 @@ import {
   FILE_VISIBILITIES,
   FilePurpose,
   FileVisibility,
-  attachFileToTarget,
   canAccessFile,
   cleanFilename,
   createPendingFile,
@@ -36,8 +35,6 @@ const presignSchema = z.object({
 
 const completeSchema = z.object({
   file_id: z.number().int().positive(),
-  target_type: z.string().min(1).max(80).optional(),
-  target_id: z.number().int().positive().optional(),
 });
 
 type StorageDriver = 'local' | 'r2';
@@ -238,16 +235,13 @@ router.post('/complete', requireAuth, asyncHandler(async (req: AuthedRequest, re
     }
   }
 
-  const ready = markFileReady(file.id);
-  if (ready && parsed.data.target_type && parsed.data.target_id) {
-    attachFileToTarget(ready.id, parsed.data.target_type, parsed.data.target_id);
-  }
+  markFileReady(file.id);
   audit(req, {
     action: 'file.complete',
     target_type: 'file',
     target_id: file.id,
     condominium_id: condoId,
-    metadata: { purpose: file.purpose, target_type: parsed.data.target_type || null, target_id: parsed.data.target_id || null },
+    metadata: { purpose: file.purpose },
   });
   return ok(res, { file: filePayload(file.id) });
 }));

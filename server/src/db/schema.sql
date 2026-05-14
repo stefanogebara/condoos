@@ -583,6 +583,8 @@ CREATE INDEX IF NOT EXISTS idx_payment_proofs_invoice
   ON payment_proofs(invoice_id, status);
 CREATE INDEX IF NOT EXISTS idx_payment_proofs_resident
   ON payment_proofs(resident_user_id, created_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_payment_proofs_file
+  ON payment_proofs(file_id);
 
 -- =====================================================================
 -- File storage registry — uploaded evidence and document vault files.

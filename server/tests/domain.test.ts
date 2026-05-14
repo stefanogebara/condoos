@@ -1510,6 +1510,18 @@ test('finance: resident payment proof approval creates a payment after admin rev
   assert.equal(proof.ok, true);
   assert.equal((proof as any).status, 'pending');
 
+  const duplicateFileProof = submitPaymentProof({
+    condoId,
+    invoice_id: invoiceId,
+    resident_user_id: residentId,
+    file_id: fileId,
+    amount_cents: 10000,
+    method: 'pix',
+    reference: 'PIX-PROOF-1-DUP',
+  });
+  assert.equal(duplicateFileProof.ok, false);
+  assert.equal((duplicateFileProof as any).error, 'payment_proof_file_already_used');
+
   const approved = approvePaymentProof({ condoId, proof_id: (proof as any).id, reviewer_user_id: boardId });
   assert.equal(approved.ok, true);
   assert.equal((approved as any).status, 'approved');

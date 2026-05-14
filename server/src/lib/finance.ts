@@ -522,7 +522,9 @@ function readyPaymentProofFile(fileId: number, condoId: number, userId: number):
        AND uploaded_by_user_id = ?
        AND purpose = 'payment_proof'
        AND visibility = 'board_only'
-       AND status = 'ready'`
+       AND status = 'ready'
+       AND target_type IS NULL
+       AND target_id IS NULL`
   ).get(fileId, condoId, userId) as { id: number } | undefined;
 }
 
@@ -605,6 +607,10 @@ export function submitPaymentProof(input: PaymentProofInput): PaymentProofSucces
   if (!invoice.unit_id || !userCanSeeUnit(input.resident_user_id, 'resident', invoice.unit_id, input.condoId)) {
     return { ok: false, error: 'forbidden', status: 403 };
   }
+  const fileAlreadyUsed = db.prepare(
+    `SELECT id FROM payment_proofs WHERE file_id = ? LIMIT 1`
+  ).get(input.file_id) as { id: number } | undefined;
+  if (fileAlreadyUsed) return { ok: false, error: 'payment_proof_file_already_used', status: 409 };
   const file = readyPaymentProofFile(input.file_id, input.condoId, input.resident_user_id);
   if (!file) return { ok: false, error: 'invalid_payment_proof_file', status: 400 };
 
