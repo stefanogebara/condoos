@@ -171,7 +171,7 @@ export default function BoardProposalDetail() {
       </div>
 
       <GlassCard variant="clay" className="p-7 mb-6">
-        <p className="text-dusk-400 whitespace-pre-line leading-relaxed">{t(p.description)}</p>
+        <p data-user-content className="text-dusk-400 whitespace-pre-line leading-relaxed">{t(p.description)}</p>
       </GlassCard>
 
       {/* Pre-vote analysis (#13) — block opening voting until estimated_cost is set. */}

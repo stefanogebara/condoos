@@ -91,6 +91,10 @@ test('admin: AI agent generates an operational plan', async ({ page, request }) 
   await page.getByRole('button', { name: /Generate plan|Gerar plano/i }).click();
   const aiTimeout = process.env.E2E_HAS_LLM ? 60_000 : 20_000;
   await expect(page.getByText(/^(Next step|Próximo passo)$/i)).toBeVisible({ timeout: aiTimeout });
+  // The agent legitimately returns one option for vendor-search-flavored
+  // tasks ("find maintenance vendors"); the workbench then renders a single
+  // "Recommendation" card instead of the multi-option "Options" grid. Both
+  // are valid plan shapes — assert on either rather than forcing >=2 options.
   await expect(page.getByRole('heading', { name: /^(Options|Opções|Recommendation|Recomendação)$/i })).toBeVisible();
   await expect(page.getByRole('heading', { name: /^(Research plan|Plano de pesquisa)$/i })).toBeVisible();
   await expect(page.getByRole('heading', { name: /^(Resident notice|Comunicado aos moradores)$/i })).toBeVisible();

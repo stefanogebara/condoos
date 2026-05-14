@@ -23,7 +23,16 @@ const visitorWhere = "(visitor_name LIKE 'E2E %' OR visitor_name LIKE 'PROD_E2E%
 // row. Scrub them by title pattern. Patterns chosen so a real resident-
 // reported issue ("Elevador A travando…") would never match.
 const ticketWhere = "(title LIKE 'Lights in lobby are not working%' OR title LIKE 'Fast-track test%' OR title LIKE 'Playwright walk%' OR title LIKE 'Playwright test%' OR title LIKE 'UX fast-track%' OR title LIKE 'UX walk%' OR title LIKE 'Round2 picker test%' OR title LIKE 'walkthrough %' OR title LIKE 'E2E %' OR description LIKE 'Playwright%' OR description LIKE 'UX walk%')";
-const announcementWhere = "(title LIKE 'E2E %' OR title LIKE 'PROD_E2E%' OR title LIKE 'walkthrough %')";
+// Announcements include the auto-generated "Resolvido: <ticket title>" rows
+// that the resolve-ticket flow spawns. When the source ticket is an E2E
+// artifact, that announcement carries a Portuguese resolution body that the
+// i18n-leak scanner then flags on /app/announcements in en/es/fr locales.
+// Scrub them by the same tightly-scoped test-ticket title patterns.
+const announcementWhere = "(title LIKE 'E2E %' OR title LIKE 'PROD_E2E%' OR title LIKE 'walkthrough %'"
+  + " OR title LIKE 'Resolvido: Playwright %' OR title LIKE 'Resolvido: E2E %'"
+  + " OR title LIKE 'Resolvido: walkthrough %' OR title LIKE 'Resolvido: Fast-track test%'"
+  + " OR title LIKE 'Resolvido: UX walk%' OR title LIKE 'Resolvido: UX fast-track%'"
+  + " OR title LIKE 'Resolvido: Lights in lobby%' OR title LIKE 'Resolvido: Round2 picker test%')";
 const packageWhere = "(description LIKE 'WAHA live test%' OR description LIKE 'CondoOS production notification test%' OR description LIKE 'E2E %' OR description LIKE 'PROD_E2E%' OR carrier LIKE 'E2E %')";
 const expenseWhere = "(description LIKE 'audit dup test%' OR description LIKE 'E2E %' OR description LIKE 'PROD_E2E%' OR vendor LIKE 'E2E %')";
 

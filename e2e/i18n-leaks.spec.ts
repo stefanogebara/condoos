@@ -231,7 +231,21 @@ async function scan(page: Page, path: string, locale: string) {
   }
   // Let MutationObserver translate any late-rendered text.
   await page.waitForTimeout(800);
-  const text = await page.locator('body').innerText();
+  // The scanner verifies product UI chrome is translated. User-authored
+  // content (proposal descriptions, announcement bodies, ticket notes) is
+  // never translated by design and lives in [data-user-content] regions —
+  // hide those before reading text so seed data in one language can't be
+  // mistaken for a chrome leak.
+  const text = await page.evaluate(() => {
+    const hidden: { el: HTMLElement; prev: string }[] = [];
+    document.querySelectorAll<HTMLElement>('[data-user-content]').forEach((el) => {
+      hidden.push({ el, prev: el.style.display });
+      el.style.display = 'none';
+    });
+    const result = document.body.innerText;
+    hidden.forEach(({ el, prev }) => { el.style.display = prev; });
+    return result;
+  });
   const leaks = findLeaks(text, locale);
   return { path, leaks, sample: text.slice(0, 4000) };
 }

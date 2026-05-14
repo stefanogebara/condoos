@@ -182,7 +182,7 @@ export default function ProposalDetail() {
       </div>
 
       <GlassCard variant="clay" className="p-7 mb-6">
-        <p className="text-dusk-400 leading-relaxed whitespace-pre-line">{t(p.description)}</p>
+        <p data-user-content className="text-dusk-400 leading-relaxed whitespace-pre-line">{t(p.description)}</p>
       </GlassCard>
 
       {/* Cost + risk analysis (#13) — surfaces above the vote buttons so

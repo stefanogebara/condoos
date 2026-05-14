@@ -273,6 +273,10 @@ test('Tickets: admin records vendor response through the modal', async ({ reques
   await page.getByPlaceholder(/Confirmou visita|Confirmed a visit|Confirmó visita/i).fill(responseSummary);
   await page.getByRole('button', { name: /Salvar resposta|Save response|Guardar respuesta/i }).click();
 
+  // The modal only closes after the awaited POST /responded resolves, so a
+  // hidden heading is a reliable "write committed" signal. Asserting on the
+  // summary text instead raced the still-open textarea against the API write.
+  await expect(page.getByRole('heading', { name: /Registrar resposta do fornecedor|Record vendor response|Registrar respuesta del proveedor/i })).toBeHidden();
   await expect(page.getByText(responseSummary)).toBeVisible();
   const detail = (await (await request.get(`${apiURL}/tickets/${ticketId}`, { headers: admH })).json()).data;
   const dispatch = detail.dispatches.find((row: any) => row.id === dispatchId);
