@@ -183,30 +183,56 @@ function renderPage(opts: {
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>${escapeHtml(opts.title)}</title>
 ${opts.noindex ? '<meta name="robots" content="noindex,nofollow">' : ''}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Inter+Tight:wght@500;600;700&display=swap">
 <style>
-  :root { --bg:#FBF7F1; --card:#fff; --ink:#403028; --ink-soft:#6B5A52; --ink-muted:#A89A92; --sage:#7FA382; --sage-soft:#E4EEDF; --peach:#D88E6F; --border:rgba(0,0,0,.08); }
+  /* Palette + type mirror client-app (tailwind.config.js + index.css) so the
+     portal feels like the same product, not an orphaned server page. */
+  :root {
+    --card:#fff; --ink:#342824; --ink-soft:#66504A; --ink-muted:#A98B7C;
+    --body:#4A3A36; --sage:#7A9070; --sage-soft:#E5EADF; --peach:#D48E6C;
+    --peach-text:#8F442A; --peach-soft:#F6E0D0; --border:rgba(75,55,45,.12);
+    --clay:0 10px 30px -12px rgba(75,55,45,.25), 0 2px 8px -2px rgba(75,55,45,.08), inset 0 1px 0 0 rgba(255,255,255,.5);
+  }
   * { box-sizing: border-box; }
-  body { margin:0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background:var(--bg); color:var(--ink); line-height:1.5; }
-  .wrap { max-width: 560px; margin: 0 auto; padding: 24px 16px 64px; }
-  h1 { font-size: 22px; margin: 0 0 6px; font-weight: 600; }
+  body {
+    margin:0;
+    font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: linear-gradient(140deg, #FBF1EA 0%, #F3ECE0 40%, #E5EADF 100%);
+    background-attachment: fixed; min-height: 100vh;
+    color: var(--body); line-height:1.5;
+    -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: 'cv11', 'ss01', 'ss03';
+    letter-spacing: -0.01em;
+  }
+  .wrap { max-width: 560px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1, h2, h3 {
+    font-family: 'Inter Tight', 'Inter', system-ui, sans-serif;
+    letter-spacing: -0.025em; font-feature-settings: 'ss01', 'cv11'; color: var(--ink);
+  }
+  h1 { font-size: 24px; margin: 0 0 6px; font-weight: 600; letter-spacing: -0.035em; }
   .muted { color: var(--ink-soft); font-size: 14px; }
-  .pill { display:inline-block; padding:2px 10px; border-radius:999px; background:var(--sage-soft); color:var(--ink); font-size:12px; margin-right:6px; }
-  .pill.peach { background:#F7DDD1; color:#7A3F2A; }
-  .card { background:var(--card); border:1px solid var(--border); border-radius: 24px; padding: 16px; margin: 16px 0; }
+  .pill { display:inline-block; padding:3px 11px; border-radius:999px; background:var(--sage-soft); color:var(--ink); font-size:12px; font-weight:500; margin-right:6px; }
+  .pill.peach { background:var(--peach-soft); color:var(--peach-text); }
+  .card { background:var(--card); border:1px solid rgba(255,255,255,.6); border-radius: 2rem; padding: 20px; margin: 16px 0; box-shadow: var(--clay); }
   .label { font-size: 11px; text-transform: uppercase; letter-spacing: .12em; color: var(--ink-muted); margin-bottom: 4px; }
   .photos { display:grid; grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); gap: 8px; margin-top: 8px; }
-  .photos img { width:100%; aspect-ratio:1; object-fit: cover; border-radius: 12px; border:1px solid var(--border); }
-  textarea, input { width:100%; padding:10px 12px; border:1px solid var(--border); border-radius: 14px; font: inherit; background:#fff; }
+  .photos img { width:100%; aspect-ratio:1; object-fit: cover; border-radius: 14px; border:1px solid var(--border); }
+  textarea, input { width:100%; padding:11px 13px; border:1px solid var(--border); border-radius: 1rem; font: inherit; letter-spacing: inherit; background:rgba(255,255,255,.85); color: var(--body); }
+  textarea:focus, input:focus { outline: 2px solid var(--sage); outline-offset: 1px; }
   textarea { min-height: 88px; resize: vertical; }
   .row { display:flex; gap:8px; margin-top: 12px; }
   .row > * { flex: 1; }
-  button { padding: 12px 16px; border-radius: 16px; border: none; font: inherit; font-weight: 600; cursor: pointer; }
+  button { padding: 12px 18px; border-radius: 1rem; border: none; font: inherit; letter-spacing: -0.01em; font-weight: 600; cursor: pointer; box-shadow: var(--clay); }
   .btn-primary { background: var(--ink); color: #fff; }
   .btn-secondary { background: #fff; color: var(--ink); border: 1px solid var(--border); }
   .btn-danger { background: var(--peach); color: #fff; }
-  .ok { background: var(--sage-soft); border-radius: 24px; padding: 24px; text-align: center; }
+  .ok { background: var(--sage-soft); border-radius: 2rem; padding: 28px; text-align: center; box-shadow: var(--clay); }
   .ok h2 { margin: 8px 0 4px; }
   small { font-size: 12px; color: var(--ink-muted); }
+  a { color: var(--ink); }
 </style>
 </head>
 <body>

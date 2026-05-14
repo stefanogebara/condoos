@@ -836,6 +836,16 @@ export function sanitizeAdminAgentOutput(raw: unknown, input: AdminAgentInput): 
       contact_method: text(item.contact_method, 180) || 'Saved contact',
     }));
 
+  // Vendors the category gate dropped. The deterministic fallback builds
+  // recommended_next_step from its own (looser) vendor match, so the gate
+  // can leave the plan naming a wrong-category vendor — "call Otis
+  // Elevadores" for a camera install. Track the dropped names so we can
+  // scrub an orphaned reference below.
+  const keptCompanies = new Set(existing_network_fit.map((f) => f.company_name.toLowerCase()));
+  const droppedVendorNames = rawFits
+    .map((f) => text(obj(f).company_name, 140))
+    .filter((name) => name && !keptCompanies.has(name.toLowerCase()));
+
   const options = (Array.isArray(data.options) ? data.options : [])
     .map((item) => obj(item))
     .map((item, idx) => ({
@@ -931,6 +941,20 @@ export function sanitizeAdminAgentOutput(raw: unknown, input: AdminAgentInput): 
       tier: 'high',
       reasoning: ['Pergunta fora do escopo operacional do condomínio.'],
     };
+  }
+
+  // Consistency: if the category gate dropped every saved vendor but the
+  // recommended_next_step still names one of them (the deterministic
+  // fallback builds that line from a looser match), the plan would tell
+  // the admin to call a wrong-category vendor. Replace it with a generic,
+  // category-safe next step.
+  if (
+    output.existing_network_fit.length === 0 &&
+    droppedVendorNames.some((name) => output.recommended_next_step.includes(name))
+  ) {
+    output.recommended_next_step = likelyPortuguese(input)
+      ? 'Peça um diagnóstico técnico por escrito a fornecedores que atendam essa categoria antes de contratar.'
+      : 'Request a written technical diagnosis from category-matched vendors before contracting.';
   }
 
   // Cost discipline: if the model emitted a numeric range with no real
