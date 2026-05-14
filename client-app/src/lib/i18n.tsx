@@ -2177,6 +2177,8 @@ const phrases: Copy[] = [
   c('Proposta criada', 'Proposal created', 'Propuesta creada', 'Proposition créée'),
   c('Falha ao criar proposta', 'Failed to create proposal', 'Error al crear la propuesta', 'Échec de création de la proposition'),
   c('Fallback seguro', 'Safe fallback', 'Fallback seguro', 'Repli sécurisé'),
+  c('A IA não rodou — checklist genérico', 'AI did not run — generic checklist', 'La IA no se ejecutó — lista genérica', "L'IA n'a pas tourné — liste générique"),
+  c('O serviço de IA está indisponível (sem créditos). Este é um checklist padrão, não um plano sob medida para o seu prédio. Para reativar a IA, recarregue os créditos do OpenRouter.', 'The AI service is unavailable (out of credits). This is a standard checklist, not a plan tailored to your building. To re-enable the AI, top up OpenRouter credits.', 'El servicio de IA no está disponible (sin créditos). Esta es una lista estándar, no un plan adaptado a su edificio. Para reactivar la IA, recargue los créditos de OpenRouter.', "Le service d'IA est indisponible (plus de crédits). Ceci est une liste standard, pas un plan adapté à votre immeuble. Pour réactiver l'IA, rechargez les crédits OpenRouter."),
   c('repair', 'repair', 'reparación', 'réparation'),
   c('install', 'install', 'instalación', 'installation'),
   c('vendor_research', 'vendor research', 'investigación de proveedores', 'recherche prestataires'),

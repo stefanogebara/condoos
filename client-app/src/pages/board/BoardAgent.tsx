@@ -621,6 +621,18 @@ export default function BoardAgent() {
             </details>
           )}
 
+          {/* Fallback mode is not a tailored plan — say so loudly. A small
+              badge alone lets an admin mistake the generic checklist for
+              real AI output. This fires when the LLM call failed (e.g.
+              OpenRouter out of credits) and the deterministic template
+              was served instead. */}
+          {result._fallback && (
+            <div className="rounded-3xl border border-peach-200 bg-peach-50/80 p-4">
+              <p className="text-sm font-medium text-peach-500">⚠ {tr('A IA não rodou — checklist genérico')}</p>
+              <p className="text-xs text-dusk-400 mt-1">{tr('O serviço de IA está indisponível (sem créditos). Este é um checklist padrão, não um plano sob medida para o seu prédio. Para reativar a IA, recarregue os créditos do OpenRouter.')}</p>
+            </div>
+          )}
+
           <GlassCard variant="clay" className="p-5">
             <div className="flex items-start justify-between gap-3">
               <div>
