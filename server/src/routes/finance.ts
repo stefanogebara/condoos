@@ -4,7 +4,15 @@ import db from '../db';
 import { requireAuth, requireRole, requireActiveMembership, getActiveCondoId, AuthedRequest } from '../lib/auth';
 import { ok, fail } from '../lib/respond';
 import { audit } from '../lib/audit';
-import { generateInvoices, recordPayment, unitInCondo, userCanSeeUnit } from '../lib/finance';
+import {
+  approvePaymentProof,
+  generateInvoices,
+  recordPayment,
+  rejectPaymentProof,
+  submitPaymentProof,
+  unitInCondo,
+  userCanSeeUnit,
+} from '../lib/finance';
 import { assertFileReadyForUse, attachFileToTarget, fileDownloadPath } from '../lib/files';
 
 const router = Router();
@@ -33,6 +41,19 @@ const paymentSchema = z.object({
   method: z.string().min(1).max(40).default('manual'),
   paid_at: z.string().datetime().optional(),
   reference: z.string().max(120).optional(),
+});
+
+const paymentProofSchema = z.object({
+  invoice_id: z.number().int().positive(),
+  amount_cents: z.number().int().positive(),
+  method: z.string().min(1).max(40).default('transfer'),
+  reference: z.string().max(120).optional(),
+  note: z.string().max(500).optional(),
+  file_id: z.number().int().positive(),
+});
+
+const paymentProofRejectSchema = z.object({
+  reason: z.string().max(500).optional(),
 });
 
 // Expense categories — broad enough to bucket anything a Brazilian condo
@@ -235,11 +256,23 @@ router.get('/statements/:unit_id', requireAuth, (req: AuthedRequest, res) => {
      WHERE i.unit_id = ? AND i.condominium_id = ?
      ORDER BY p.paid_at DESC`
   ).all(unitId, condoId);
+  const payment_proofs = db.prepare(
+    `SELECT pp.*,
+            f.original_filename AS file_name,
+            f.content_type AS file_content_type,
+            f.size_bytes AS file_size_bytes
+     FROM payment_proofs pp
+     JOIN invoices i ON i.id = pp.invoice_id
+     LEFT JOIN files f ON f.id = pp.file_id
+     WHERE i.unit_id = ? AND pp.condominium_id = ?
+       AND (? = 'board_admin' OR pp.resident_user_id = ?)
+     ORDER BY pp.created_at DESC, pp.id DESC`
+  ).all(unitId, condoId, req.user!.role, req.user!.id);
   const balance_cents = invoices.reduce((sum, invoice) => {
     if (invoice.status === 'void') return sum;
     return sum + Math.max(0, invoice.amount_cents - Number(invoice.paid_cents || 0));
   }, 0);
-  return ok(res, { unit, invoices, payments, balance_cents });
+  return ok(res, { unit, invoices, payments, payment_proofs, balance_cents });
 });
 
 router.post('/payments', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
@@ -267,6 +300,102 @@ router.post('/payments', requireAuth, requireRole('board_admin'), (req: AuthedRe
     duplicate: !!result.duplicate,
     remaining_cents: result.remaining_cents,
   }, result.duplicate ? 200 : 201);
+});
+
+router.get('/payment-proofs', requireAuth, requireActiveMembership, (req: AuthedRequest, res) => {
+  const condoId = getActiveCondoId(req);
+  const status = String(req.query.status || '').trim();
+  const statusClause = ['pending', 'approved', 'rejected'].includes(status) ? `AND pp.status = ?` : '';
+  const params: any[] = [condoId];
+  if (statusClause) params.push(status);
+  if (req.user!.role !== 'board_admin') params.push(req.user!.id);
+
+  const rows = db.prepare(
+    `SELECT pp.*,
+            i.amount_cents AS invoice_amount_cents,
+            i.currency,
+            i.period,
+            i.due_date,
+            u.number AS unit_number,
+            b.name AS building_name,
+            TRIM(submitter.first_name || ' ' || submitter.last_name) AS resident_name,
+            TRIM(reviewer.first_name || ' ' || reviewer.last_name) AS reviewer_name,
+            f.original_filename AS file_name,
+            f.content_type AS file_content_type,
+            f.size_bytes AS file_size_bytes
+     FROM payment_proofs pp
+     JOIN invoices i ON i.id = pp.invoice_id
+     JOIN units u ON u.id = i.unit_id
+     JOIN buildings b ON b.id = u.building_id
+     JOIN users submitter ON submitter.id = pp.resident_user_id
+     LEFT JOIN users reviewer ON reviewer.id = pp.reviewed_by_user_id
+     LEFT JOIN files f ON f.id = pp.file_id
+     WHERE pp.condominium_id = ?
+       ${statusClause}
+       ${req.user!.role === 'board_admin' ? '' : 'AND pp.resident_user_id = ?'}
+     ORDER BY CASE pp.status WHEN 'pending' THEN 0 ELSE 1 END, pp.created_at DESC, pp.id DESC`
+  ).all(...params);
+
+  return ok(res, rows);
+});
+
+router.post('/payment-proofs', requireAuth, requireActiveMembership, (req: AuthedRequest, res) => {
+  const parsed = paymentProofSchema.safeParse(req.body);
+  if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
+  const condoId = getActiveCondoId(req);
+  const result = submitPaymentProof({
+    condoId,
+    ...parsed.data,
+    resident_user_id: req.user!.id,
+  });
+  if (!result.ok) return fail(res, result.error, result.status, result.details);
+  audit(req, {
+    action: 'finance.payment_proof_submit',
+    target_type: 'payment_proof',
+    target_id: result.id,
+    condominium_id: condoId,
+    metadata: { invoice_id: result.invoice_id, amount_cents: parsed.data.amount_cents },
+  });
+  return ok(res, result, 201);
+});
+
+router.post('/payment-proofs/:id/approve', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+  const condoId = getActiveCondoId(req);
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) return fail(res, 'invalid_payment_proof_id', 400);
+  const result = approvePaymentProof({ condoId, proof_id: id, reviewer_user_id: req.user!.id });
+  if (!result.ok) return fail(res, result.error, result.status, result.details);
+  audit(req, {
+    action: 'finance.payment_proof_approve',
+    target_type: 'payment_proof',
+    target_id: id,
+    condominium_id: condoId,
+    metadata: { invoice_id: result.invoice_id, payment_id: result.payment_id },
+  });
+  return ok(res, result);
+});
+
+router.post('/payment-proofs/:id/reject', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+  const parsed = paymentProofRejectSchema.safeParse(req.body || {});
+  if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
+  const condoId = getActiveCondoId(req);
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) return fail(res, 'invalid_payment_proof_id', 400);
+  const result = rejectPaymentProof({
+    condoId,
+    proof_id: id,
+    reviewer_user_id: req.user!.id,
+    reason: parsed.data.reason,
+  });
+  if (!result.ok) return fail(res, result.error, result.status, result.details);
+  audit(req, {
+    action: 'finance.payment_proof_reject',
+    target_type: 'payment_proof',
+    target_id: id,
+    condominium_id: condoId,
+    metadata: { invoice_id: result.invoice_id },
+  });
+  return ok(res, result);
 });
 
 // ---------------------------------------------------------------------------

@@ -21,8 +21,30 @@ interface ScheduleRow {
 
 interface InvoiceRow {
   id: number;
+  condominium_id?: number;
+  unit_id?: number;
   amount_cents: number;
+  currency?: string;
   status: string;
+}
+
+interface PaymentProofRow {
+  id: number;
+  condominium_id: number;
+  invoice_id: number;
+  resident_user_id: number;
+  file_id: number;
+  amount_cents: number;
+  method: string;
+  reference: string | null;
+  note: string | null;
+  status: 'pending' | 'approved' | 'rejected';
+  reviewed_by_user_id: number | null;
+  reviewed_at: string | null;
+  rejection_reason: string | null;
+  payment_id: number | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface InvoiceGenerationInput {
@@ -60,6 +82,26 @@ export interface PaymentSuccess {
   invoice_id: number;
   invoice_status: string;
   duplicate?: boolean;
+  remaining_cents?: number;
+}
+
+export interface PaymentProofInput {
+  condoId: number;
+  invoice_id: number;
+  resident_user_id: number;
+  file_id: number;
+  amount_cents: number;
+  method: string;
+  reference?: string;
+  note?: string;
+}
+
+export interface PaymentProofSuccess {
+  ok: true;
+  id: number;
+  invoice_id: number;
+  status: 'pending' | 'approved' | 'rejected';
+  payment_id?: number | null;
   remaining_cents?: number;
 }
 
@@ -266,6 +308,23 @@ function paidCents(invoiceId: number): number {
   return Number(paid.total || 0);
 }
 
+function invoiceRemainingCents(invoice: InvoiceRow): number {
+  return Math.max(0, Number(invoice.amount_cents || 0) - paidCents(invoice.id));
+}
+
+function readyPaymentProofFile(fileId: number, condoId: number, userId: number): { id: number } | undefined {
+  return db.prepare(
+    `SELECT id
+     FROM files
+     WHERE id = ?
+       AND condominium_id = ?
+       AND uploaded_by_user_id = ?
+       AND purpose = 'payment_proof'
+       AND visibility = 'board_only'
+       AND status = 'ready'`
+  ).get(fileId, condoId, userId) as { id: number } | undefined;
+}
+
 export function recordPayment(input: PaymentInput): PaymentSuccess | FinanceError {
   const invoice = db.prepare(
     `SELECT * FROM invoices WHERE id = ? AND condominium_id = ?`
@@ -334,4 +393,116 @@ export function recordPayment(input: PaymentInput): PaymentSuccess | FinanceErro
     invoice_status: result.invoice_status,
     remaining_cents: result.remaining_cents,
   };
+}
+
+export function submitPaymentProof(input: PaymentProofInput): PaymentProofSuccess | FinanceError {
+  const invoice = db.prepare(
+    `SELECT * FROM invoices WHERE id = ? AND condominium_id = ?`
+  ).get(input.invoice_id, input.condoId) as InvoiceRow | undefined;
+  if (!invoice) return { ok: false, error: 'invoice_not_found', status: 404 };
+  if (invoice.status === 'void') return { ok: false, error: 'invoice_void', status: 409 };
+  if (!invoice.unit_id || !userCanSeeUnit(input.resident_user_id, 'resident', invoice.unit_id, input.condoId)) {
+    return { ok: false, error: 'forbidden', status: 403 };
+  }
+  const file = readyPaymentProofFile(input.file_id, input.condoId, input.resident_user_id);
+  if (!file) return { ok: false, error: 'invalid_payment_proof_file', status: 400 };
+
+  const remaining = invoiceRemainingCents(invoice);
+  if (remaining <= 0 || invoice.status === 'paid') {
+    return { ok: false, error: 'invoice_already_paid', status: 409, details: { remaining_cents: remaining } };
+  }
+  if (input.amount_cents > remaining) {
+    return { ok: false, error: 'payment_proof_exceeds_balance', status: 409, details: { remaining_cents: remaining } };
+  }
+
+  const result = db.prepare(
+    `INSERT INTO payment_proofs (
+      condominium_id, invoice_id, resident_user_id, file_id, amount_cents,
+      method, reference, note
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    input.condoId,
+    invoice.id,
+    input.resident_user_id,
+    file.id,
+    input.amount_cents,
+    input.method || 'transfer',
+    input.reference?.trim() || null,
+    input.note?.trim() || null,
+  );
+  const id = Number(result.lastInsertRowid);
+  db.prepare(`UPDATE files SET target_type = 'payment_proof', target_id = ? WHERE id = ?`).run(id, file.id);
+  return { ok: true, id, invoice_id: invoice.id, status: 'pending', remaining_cents: remaining };
+}
+
+export function approvePaymentProof(input: {
+  condoId: number;
+  proof_id: number;
+  reviewer_user_id: number;
+}): PaymentProofSuccess | FinanceError {
+  const proof = db.prepare(
+    `SELECT * FROM payment_proofs WHERE id = ? AND condominium_id = ?`
+  ).get(input.proof_id, input.condoId) as PaymentProofRow | undefined;
+  if (!proof) return { ok: false, error: 'payment_proof_not_found', status: 404 };
+  if (proof.status !== 'pending') return { ok: false, error: 'payment_proof_already_reviewed', status: 409 };
+  if (proof.resident_user_id === input.reviewer_user_id) {
+    return { ok: false, error: 'cannot_approve_own_payment_proof', status: 403 };
+  }
+
+  const payment = recordPayment({
+    condoId: input.condoId,
+    invoice_id: proof.invoice_id,
+    amount_cents: proof.amount_cents,
+    method: proof.method || 'proof',
+    reference: proof.reference || `proof-${proof.id}`,
+    created_by_user_id: input.reviewer_user_id,
+  });
+  if (!payment.ok) return payment;
+
+  db.prepare(
+    `UPDATE payment_proofs
+     SET status = 'approved',
+         reviewed_by_user_id = ?,
+         reviewed_at = ?,
+         payment_id = ?,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = ?`
+  ).run(input.reviewer_user_id, new Date().toISOString(), payment.id, proof.id);
+
+  return {
+    ok: true,
+    id: proof.id,
+    invoice_id: proof.invoice_id,
+    status: 'approved',
+    payment_id: payment.id,
+    remaining_cents: payment.remaining_cents,
+  };
+}
+
+export function rejectPaymentProof(input: {
+  condoId: number;
+  proof_id: number;
+  reviewer_user_id: number;
+  reason?: string;
+}): PaymentProofSuccess | FinanceError {
+  const proof = db.prepare(
+    `SELECT * FROM payment_proofs WHERE id = ? AND condominium_id = ?`
+  ).get(input.proof_id, input.condoId) as PaymentProofRow | undefined;
+  if (!proof) return { ok: false, error: 'payment_proof_not_found', status: 404 };
+  if (proof.status !== 'pending') return { ok: false, error: 'payment_proof_already_reviewed', status: 409 };
+  if (proof.resident_user_id === input.reviewer_user_id) {
+    return { ok: false, error: 'cannot_reject_own_payment_proof', status: 403 };
+  }
+
+  db.prepare(
+    `UPDATE payment_proofs
+     SET status = 'rejected',
+         reviewed_by_user_id = ?,
+         reviewed_at = ?,
+         rejection_reason = ?,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = ?`
+  ).run(input.reviewer_user_id, new Date().toISOString(), input.reason?.trim() || null, proof.id);
+
+  return { ok: true, id: proof.id, invoice_id: proof.invoice_id, status: 'rejected', payment_id: null };
 }

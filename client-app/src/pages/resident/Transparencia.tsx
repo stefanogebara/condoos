@@ -1,13 +1,15 @@
 // Resident "Transparência" — money out (expenses) and money owed (dues).
 // Read-only view backed by /api/finance/expenses and /api/finance/statements.
 import React, { useEffect, useState } from 'react';
-import { AlertCircle, CheckCircle2, ExternalLink, FileText, ReceiptText, Sparkles, Wallet } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { AlertCircle, CheckCircle2, ExternalLink, FileText, ReceiptText, Sparkles, UploadCloud, Wallet, X } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 import GlassCard from '../../components/GlassCard';
 import Badge from '../../components/Badge';
-import { apiGet } from '../../lib/api';
+import Button from '../../components/Button';
+import { apiGet, apiPost } from '../../lib/api';
 import { formatCurrency, formatDate, t, useLocale } from '../../lib/i18n';
-import { openUploadedFile } from '../../lib/uploads';
+import { openUploadedFile, uploadFileToCondoOS } from '../../lib/uploads';
 import { CATEGORY_LABEL } from '../board/BoardFinancas';
 
 interface Expense {
@@ -52,11 +54,27 @@ interface Invoice {
   notes: string | null;
 }
 
+interface PaymentProof {
+  id: number;
+  invoice_id: number;
+  file_id: number;
+  amount_cents: number;
+  method: string;
+  reference: string | null;
+  note: string | null;
+  status: 'pending' | 'approved' | 'rejected';
+  rejection_reason: string | null;
+  file_name: string | null;
+  created_at: string;
+  reviewed_at: string | null;
+}
+
 interface Statement {
   unit: { id: number; number: string; building_name: string };
   invoices: Invoice[];
   balance_cents: number;
   payments: Array<{ id: number }>;
+  payment_proofs: PaymentProof[];
 }
 
 type BadgeTone = 'neutral' | 'sage' | 'peach' | 'warning' | 'dark';
@@ -68,6 +86,17 @@ export default function Transparencia() {
   const [memberships, setMemberships] = useState<Membership[]>([]);
   const [statement, setStatement] = useState<Statement | null>(null);
   const [statementLoading, setStatementLoading] = useState(true);
+  const [proofTarget, setProofTarget] = useState<Invoice | null>(null);
+
+  async function loadStatement(activeMemberships?: Membership[]) {
+    const active = activeMemberships || memberships;
+    if (active.length === 0) {
+      setStatement(null);
+      return;
+    }
+    const next = await apiGet<Statement>(`/finance/statements/${active[0].unit_id}`);
+    setStatement(next);
+  }
 
   useEffect(() => {
     let alive = true;
@@ -117,7 +146,20 @@ export default function Transparencia() {
         memberships={memberships}
         loading={statementLoading}
         tr={tr}
+        onProof={setProofTarget}
       />
+
+      {proofTarget && (
+        <PaymentProofModal
+          invoice={proofTarget}
+          tr={tr}
+          onClose={() => setProofTarget(null)}
+          onSubmitted={() => {
+            setProofTarget(null);
+            loadStatement().catch(() => toast.error(tr('Não foi possível atualizar cobranças')));
+          }}
+        />
+      )}
 
       {!data ? (
         <GlassCard className="p-6 text-sm text-dusk-300">{tr('Carregando…')}</GlassCard>
@@ -191,11 +233,13 @@ function ResidentStatement({
   memberships,
   loading,
   tr,
+  onProof,
 }: {
   statement: Statement | null;
   memberships: Membership[];
   loading: boolean;
   tr: (key: string) => string;
+  onProof: (invoice: Invoice) => void;
 }) {
   if (loading) {
     return <GlassCard className="p-6 text-sm text-dusk-300 mb-4">{tr('Carregando…')}</GlassCard>;
@@ -258,7 +302,13 @@ function ResidentStatement({
         ) : (
           <div className="space-y-2">
             {statement.invoices.slice(0, 6).map((invoice) => (
-              <InvoiceRow key={invoice.id} invoice={invoice} tr={tr} />
+              <InvoiceRow
+                key={invoice.id}
+                invoice={invoice}
+                proofs={(statement.payment_proofs || []).filter((proof) => proof.invoice_id === invoice.id)}
+                tr={tr}
+                onProof={onProof}
+              />
             ))}
           </div>
         )}
@@ -276,7 +326,17 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
-function InvoiceRow({ invoice, tr }: { invoice: Invoice; tr: (key: string) => string }) {
+function InvoiceRow({
+  invoice,
+  proofs,
+  tr,
+  onProof,
+}: {
+  invoice: Invoice;
+  proofs: PaymentProof[];
+  tr: (key: string) => string;
+  onProof: (invoice: Invoice) => void;
+}) {
   const paid = Number(invoice.paid_cents || 0);
   const remaining = Math.max(0, invoice.amount_cents - paid);
   const paidInFull = remaining === 0 || invoice.status === 'paid';
@@ -285,8 +345,11 @@ function InvoiceRow({ invoice, tr }: { invoice: Invoice; tr: (key: string) => st
   const label = cancelled ? tr('Cancelado') : paidInFull ? tr('Pago') : partial ? tr('Parcial') : tr('Aberto');
   const tone: BadgeTone = cancelled ? 'neutral' : paidInFull ? 'sage' : partial ? 'peach' : 'dark';
 
+  const latestProof = [...proofs].sort((a, b) => b.created_at.localeCompare(a.created_at))[0] || null;
+
   return (
-    <GlassCard variant="clay" className="p-4 flex items-start gap-3">
+    <GlassCard variant="clay" className="p-4">
+      <div className="flex items-start gap-3">
       <div className="w-10 h-10 rounded-2xl bg-sage-100 text-sage-700 flex items-center justify-center shrink-0">
         <ReceiptText className="w-5 h-5" />
       </div>
@@ -300,11 +363,160 @@ function InvoiceRow({ invoice, tr }: { invoice: Invoice; tr: (key: string) => st
         <div className="text-xs text-dusk-300 mt-1.5">
           {tr('Pago até agora')}: {formatCurrency(paid / 100)} · {tr('Restante')}: {formatCurrency(remaining / 100)}
         </div>
+        {latestProof && (
+          <div className="flex items-center gap-2 flex-wrap mt-2">
+            <PaymentProofBadge proof={latestProof} tr={tr} />
+            <button
+              type="button"
+              onClick={() => openUploadedFile(latestProof.file_id, latestProof.file_name || 'payment-proof')}
+              className="inline-flex items-center gap-1 text-xs text-dusk-400 hover:text-sage-700 underline decoration-dotted underline-offset-4"
+            >
+              <ExternalLink className="w-3 h-3" /> {tr('Abrir comprovante')}
+            </button>
+            {latestProof.rejection_reason && (
+              <span className="text-xs text-peach-500">{latestProof.rejection_reason}</span>
+            )}
+          </div>
+        )}
       </div>
-      <div className="font-mono font-semibold text-dusk-500 shrink-0 self-center">
-        {formatCurrency(invoice.amount_cents / 100, invoice.currency)}
+      <div className="shrink-0 self-center text-right">
+        <div className="font-mono font-semibold text-dusk-500">
+          {formatCurrency(invoice.amount_cents / 100, invoice.currency)}
+        </div>
+        {!paidInFull && !cancelled && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="mt-2"
+            leftIcon={<UploadCloud className="w-4 h-4" />}
+            onClick={() => onProof(invoice)}
+          >
+            {tr('Enviar comprovante')}
+          </Button>
+        )}
+      </div>
       </div>
     </GlassCard>
+  );
+}
+
+function PaymentProofBadge({ proof, tr }: { proof: PaymentProof; tr: (key: string) => string }) {
+  if (proof.status === 'approved') return <Badge tone="sage">{tr('Comprovante aprovado')}</Badge>;
+  if (proof.status === 'rejected') return <Badge tone="peach">{tr('Comprovante rejeitado')}</Badge>;
+  return <Badge tone="warning">{tr('Aguardando revisão')}</Badge>;
+}
+
+function PaymentProofModal({
+  invoice,
+  tr,
+  onClose,
+  onSubmitted,
+}: {
+  invoice: Invoice;
+  tr: (key: string) => string;
+  onClose: () => void;
+  onSubmitted: () => void;
+}) {
+  const remaining = Math.max(0, invoice.amount_cents - Number(invoice.paid_cents || 0));
+  const [form, setForm] = useState({
+    amount: (remaining / 100).toFixed(2),
+    method: '',
+    reference: '',
+    note: '',
+  });
+  const [file, setFile] = useState<File | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  function parseAmountToCents(value: string) {
+    const parsed = Number.parseFloat(value.trim().replace(/\s/g, '').replace(',', '.'));
+    return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed * 100) : null;
+  }
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!file) {
+      toast.error(tr('Selecione um arquivo de comprovante.'));
+      return;
+    }
+    const cents = parseAmountToCents(form.amount);
+    if (!cents) {
+      toast.error(tr('Valor inválido — use números (ex: 1500 ou 1500,00)'));
+      return;
+    }
+    setSaving(true);
+    try {
+      const uploaded = await uploadFileToCondoOS(file, {
+        purpose: 'payment_proof',
+        visibility: 'board_only',
+      });
+      await apiPost('/finance/payment-proofs', {
+        invoice_id: invoice.id,
+        amount_cents: cents,
+        method: form.method.trim() || 'transfer',
+        reference: form.reference.trim() || undefined,
+        note: form.note.trim() || undefined,
+        file_id: uploaded.id,
+      });
+      toast.success(tr('Comprovante enviado'));
+      onSubmitted();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || tr('Falha ao enviar comprovante'));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-dusk-500/40 backdrop-blur-sm">
+      <GlassCard className="w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <div>
+            <h2 className="font-display text-2xl text-dusk-500">{tr('Comprovante de pagamento')}</h2>
+            <p className="text-sm text-dusk-300 mt-1">
+              {tr('O admin confere o recibo antes de registrar o pagamento.')}
+            </p>
+          </div>
+          <button className="text-dusk-300 hover:text-dusk-500" onClick={onClose} aria-label={tr('Fechar')}>
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <form onSubmit={submit} className="grid md:grid-cols-2 gap-3">
+          <label className="block text-xs text-dusk-300 font-medium">
+            {tr('Valor pago')}
+            <input className="input mt-1" inputMode="decimal" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required />
+          </label>
+          <label className="block text-xs text-dusk-300 font-medium">
+            {tr('Método de pagamento')}
+            <input className="input mt-1" value={form.method} onChange={(e) => setForm({ ...form, method: e.target.value })} maxLength={40} placeholder={tr('ex: PIX, transferência, recibo')} />
+          </label>
+          <label className="block text-xs text-dusk-300 font-medium md:col-span-2">
+            {tr('Referência')}
+            <input className="input mt-1" value={form.reference} onChange={(e) => setForm({ ...form, reference: e.target.value })} maxLength={120} />
+          </label>
+          <label className="block text-xs text-dusk-300 font-medium md:col-span-2">
+            {tr('Arquivo do comprovante')}
+            <input
+              className="input mt-1"
+              type="file"
+              accept="image/*,application/pdf"
+              onChange={(e) => setFile(e.target.files?.[0] || null)}
+              required
+            />
+          </label>
+          <label className="block text-xs text-dusk-300 font-medium md:col-span-2">
+            {tr('Observação para administração')}
+            <textarea className="input mt-1 min-h-[90px]" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} maxLength={500} />
+          </label>
+          <div className="md:col-span-2 flex justify-end gap-2 pt-2">
+            <Button type="button" variant="ghost" onClick={onClose}>{tr('Cancelar')}</Button>
+            <Button type="submit" variant="primary" loading={saving} leftIcon={<UploadCloud className="w-4 h-4" />}>
+              {tr('Enviar comprovante')}
+            </Button>
+          </div>
+        </form>
+      </GlassCard>
+    </div>
   );
 }
 

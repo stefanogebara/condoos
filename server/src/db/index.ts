@@ -429,6 +429,36 @@ export function initSchema() {
 
   addColumnIfMissing('expenses', 'receipt_file_id', `INTEGER REFERENCES files(id) ON DELETE SET NULL`);
 
+  // Resident payment proofs — residents upload transfer receipts/screenshots;
+  // admins review them before they become real payment records.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS payment_proofs (
+      id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+      condominium_id      INTEGER NOT NULL REFERENCES condominiums(id) ON DELETE CASCADE,
+      invoice_id          INTEGER NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+      resident_user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      file_id             INTEGER NOT NULL REFERENCES files(id) ON DELETE RESTRICT,
+      amount_cents        INTEGER NOT NULL,
+      method              TEXT NOT NULL DEFAULT 'transfer',
+      reference           TEXT,
+      note                TEXT,
+      status              TEXT NOT NULL DEFAULT 'pending'
+        CHECK(status IN ('pending','approved','rejected')),
+      reviewed_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      reviewed_at         TEXT,
+      rejection_reason    TEXT,
+      payment_id          INTEGER REFERENCES payments(id) ON DELETE SET NULL,
+      created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_payment_proofs_condo_status
+      ON payment_proofs(condominium_id, status, created_at);
+    CREATE INDEX IF NOT EXISTS idx_payment_proofs_invoice
+      ON payment_proofs(invoice_id, status);
+    CREATE INDEX IF NOT EXISTS idx_payment_proofs_resident
+      ON payment_proofs(resident_user_id, created_at);
+  `);
+
   migrateLegacyUnits();
 
   // Incident Loop (Phase 1) — community-verified tickets that auto-route to

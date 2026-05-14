@@ -104,6 +104,29 @@ interface Receivables {
   invoices: ReceivableInvoice[];
 }
 
+interface PaymentProof {
+  id: number;
+  invoice_id: number;
+  resident_user_id: number;
+  file_id: number;
+  amount_cents: number;
+  method: string;
+  reference: string | null;
+  note: string | null;
+  status: 'pending' | 'approved' | 'rejected';
+  reviewed_at: string | null;
+  rejection_reason: string | null;
+  payment_id: number | null;
+  created_at: string;
+  unit_number: string;
+  building_name: string;
+  resident_name: string;
+  file_name: string | null;
+  currency: string;
+  period: string;
+  due_date: string;
+}
+
 export const EXPENSE_CATEGORIES: Array<{ value: string; label: string }> = [
   { value: 'maintenance',    label: 'Manutenção' },
   { value: 'utilities',      label: 'Contas (luz, água, gás)' },
@@ -199,20 +222,23 @@ export default function BoardFinancas() {
   const [data, setData] = useState<ExpenseList | null>(null);
   const [schedules, setSchedules] = useState<DuesSchedule[]>([]);
   const [receivables, setReceivables] = useState<Receivables | null>(null);
+  const [paymentProofs, setPaymentProofs] = useState<PaymentProof[]>([]);
   const [showExpenseForm, setShowExpenseForm] = useState(false);
   const [showScheduleForm, setShowScheduleForm] = useState(false);
   const [showInvoiceForm, setShowInvoiceForm] = useState(false);
   const [paymentTarget, setPaymentTarget] = useState<ReceivableInvoice | null>(null);
 
   const load = async () => {
-    const [expensesNext, schedulesNext, receivablesNext] = await Promise.all([
+    const [expensesNext, schedulesNext, receivablesNext, paymentProofsNext] = await Promise.all([
       apiGet<ExpenseList>('/finance/expenses'),
       apiGet<DuesSchedule[]>('/finance/schedules'),
       apiGet<Receivables>('/finance/receivables'),
+      apiGet<PaymentProof[]>('/finance/payment-proofs'),
     ]);
     setData(expensesNext);
     setSchedules(schedulesNext);
     setReceivables(receivablesNext);
+    setPaymentProofs(paymentProofsNext);
   };
 
   useEffect(() => {
@@ -251,6 +277,8 @@ export default function BoardFinancas() {
       />
 
       <FinanceHealth receivables={receivables} />
+
+      <PaymentProofReviewPanel proofs={paymentProofs} onChanged={load} />
 
       {showScheduleForm && (
         <ScheduleForm
@@ -320,6 +348,120 @@ export default function BoardFinancas() {
         />
       )}
     </>
+  );
+}
+
+function PaymentProofReviewPanel({
+  proofs,
+  onChanged,
+}: {
+  proofs: PaymentProof[];
+  onChanged: () => void;
+}) {
+  const [busyId, setBusyId] = useState<number | null>(null);
+  const pending = proofs.filter((proof) => proof.status === 'pending');
+
+  async function approve(proof: PaymentProof) {
+    setBusyId(proof.id);
+    try {
+      await apiPost(`/finance/payment-proofs/${proof.id}/approve`, {});
+      toast.success(t('Comprovante aprovado'));
+      onChanged();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || t('Falha ao aprovar comprovante'));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function reject(proof: PaymentProof) {
+    const reason = window.prompt(t('Motivo da rejeição')) || '';
+    setBusyId(proof.id);
+    try {
+      await apiPost(`/finance/payment-proofs/${proof.id}/reject`, {
+        reason: reason.trim() || undefined,
+      });
+      toast.success(t('Comprovante rejeitado'));
+      onChanged();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || t('Falha ao rejeitar comprovante'));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <GlassCard className="p-5 mb-6">
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+        <div>
+          <h2 className="font-display text-xl text-dusk-500">{t('Comprovantes pendentes')}</h2>
+          <p className="text-sm text-dusk-300 mt-1">{t('Revise recibos enviados por moradores antes de registrar o pagamento.')}</p>
+        </div>
+        <Badge tone={pending.length > 0 ? 'peach' : 'sage'}>
+          {pending.length} {t('pendente')}
+        </Badge>
+      </div>
+
+      {pending.length === 0 ? (
+        <div className="rounded-2xl bg-white/55 border border-white/70 p-4 text-sm text-dusk-300">
+          {t('Nenhum comprovante pendente.')}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {pending.map((proof) => (
+            <div key={proof.id} className="rounded-2xl bg-white/55 border border-white/70 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-semibold text-dusk-500">{t('Unidade')} {proof.unit_number}</span>
+                    <Badge tone="neutral">{proof.resident_name}</Badge>
+                    <Badge tone="warning">{t('Aguardando revisão')}</Badge>
+                  </div>
+                  <p className="text-xs text-dusk-300 mt-1">
+                    {proof.period} · {formatDate(proof.due_date)} · {proof.method}
+                    {proof.reference ? ` · ${proof.reference}` : ''}
+                  </p>
+                  {proof.note && <p className="text-xs text-dusk-400 mt-1.5">{proof.note}</p>}
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="font-mono font-semibold text-dusk-500">
+                    {formatCurrency(proof.amount_cents / 100, proof.currency)}
+                  </div>
+                  <div className="text-xs text-dusk-300">{formatDate(proof.created_at)}</div>
+                </div>
+              </div>
+              <div className="flex flex-wrap justify-end gap-2 mt-3">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  leftIcon={<ExternalLink className="w-4 h-4" />}
+                  onClick={() => openUploadedFile(proof.file_id, proof.file_name || 'payment-proof')}
+                >
+                  {t('Abrir comprovante')}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={busyId === proof.id}
+                  onClick={() => reject(proof)}
+                >
+                  {t('Rejeitar')}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="sage"
+                  loading={busyId === proof.id}
+                  leftIcon={<CheckCircle2 className="w-4 h-4" />}
+                  onClick={() => approve(proof)}
+                >
+                  {t('Aprovar comprovante')}
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </GlassCard>
   );
 }
 

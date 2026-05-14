@@ -22,7 +22,14 @@ import {
   transferUnit,
 } from '../src/lib/memberships';
 import { audit, auditRowsToCsv, listAuditRows } from '../src/lib/audit';
-import { generateInvoices, generateScheduledInvoices, recordPayment } from '../src/lib/finance';
+import {
+  approvePaymentProof,
+  generateInvoices,
+  generateScheduledInvoices,
+  recordPayment,
+  rejectPaymentProof,
+  submitPaymentProof,
+} from '../src/lib/finance';
 import { requireAuth, revokeUserTokens, signToken } from '../src/lib/auth';
 import { canAssignTicketToUser, markTicketAgentFailed } from '../src/lib/tickets';
 import { createAgentRun, finishAgentRunFailure, finishAgentRunSuccess } from '../src/lib/agent-runs';
@@ -50,6 +57,7 @@ function resetDb() {
     'tickets',
     'building_documents',
     'expenses',
+    'payment_proofs',
     'files',
     'payments',
     'invoices',
@@ -1458,6 +1466,132 @@ test('finance: payments are reference-idempotent and cannot overpay invoices', (
   });
   assert.equal(extra.ok, false);
   assert.equal((extra as any).error, 'invoice_already_paid');
+});
+
+test('finance: resident payment proof approval creates a payment after admin review', () => {
+  resetDb();
+  const { condoId, unit101 } = createCondoFixture();
+  const residentId = createUser('proof-resident@example.com');
+  const boardId = createUser('proof-board@example.com', 'board_admin');
+  db.prepare(`UPDATE users SET condominium_id = ? WHERE id IN (?, ?)`).run(condoId, residentId, boardId);
+  db.prepare(
+    `INSERT INTO user_unit (user_id, unit_id, relationship, status, primary_contact)
+     VALUES (?, ?, 'tenant', 'active', 1)`
+  ).run(residentId, unit101);
+  const invoiceId = Number(db.prepare(
+    `INSERT INTO invoices (condominium_id, unit_id, amount_cents, currency, period, due_date)
+     VALUES (?, ?, 10000, 'BRL', '2026-05', '2026-05-10T12:00:00.000Z')`
+  ).run(condoId, unit101).lastInsertRowid);
+  const fileId = createPendingFile({
+    condominiumId: condoId,
+    uploadedByUserId: residentId,
+    originalFilename: 'pix-proof.pdf',
+    contentType: 'application/pdf',
+    sizeBytes: 512,
+    purpose: 'payment_proof',
+    visibility: 'board_only',
+    storageDriver: 'local',
+    storageKey: 'test/proof/pix-proof.pdf',
+  }).id;
+  markFileReady(fileId);
+
+  const proof = submitPaymentProof({
+    condoId,
+    invoice_id: invoiceId,
+    resident_user_id: residentId,
+    file_id: fileId,
+    amount_cents: 10000,
+    method: 'pix',
+    reference: 'PIX-PROOF-1',
+  });
+  assert.equal(proof.ok, true);
+  assert.equal((proof as any).status, 'pending');
+
+  const approved = approvePaymentProof({ condoId, proof_id: (proof as any).id, reviewer_user_id: boardId });
+  assert.equal(approved.ok, true);
+  assert.equal((approved as any).status, 'approved');
+  assert.equal((approved as any).remaining_cents, 0);
+
+  const paymentCount = db.prepare(`SELECT COUNT(*) AS count FROM payments WHERE invoice_id = ?`).get(invoiceId) as { count: number };
+  assert.equal(paymentCount.count, 1);
+  const invoice = db.prepare(`SELECT status FROM invoices WHERE id = ?`).get(invoiceId) as { status: string };
+  assert.equal(invoice.status, 'paid');
+});
+
+test('finance: payment proof review protects ownership, overpay, and rejection paths', () => {
+  resetDb();
+  const { condoId, unit101 } = createCondoFixture();
+  const residentId = createUser('proof-guarded-resident@example.com');
+  const boardId = createUser('proof-guarded-board@example.com', 'board_admin');
+  db.prepare(`UPDATE users SET condominium_id = ? WHERE id IN (?, ?)`).run(condoId, residentId, boardId);
+  db.prepare(
+    `INSERT INTO user_unit (user_id, unit_id, relationship, status, primary_contact)
+     VALUES (?, ?, 'tenant', 'active', 1)`
+  ).run(residentId, unit101);
+  const invoiceId = Number(db.prepare(
+    `INSERT INTO invoices (condominium_id, unit_id, amount_cents, currency, period, due_date)
+     VALUES (?, ?, 10000, 'BRL', '2026-05', '2026-05-10T12:00:00.000Z')`
+  ).run(condoId, unit101).lastInsertRowid);
+  const makeProof = (amount: number, filename: string) => {
+    const fileId = createPendingFile({
+      condominiumId: condoId,
+      uploadedByUserId: residentId,
+      originalFilename: filename,
+      contentType: 'image/png',
+      sizeBytes: 128,
+      purpose: 'payment_proof',
+      visibility: 'board_only',
+      storageDriver: 'local',
+      storageKey: `test/proof/${filename}`,
+    }).id;
+    markFileReady(fileId);
+    return submitPaymentProof({
+      condoId,
+      invoice_id: invoiceId,
+      resident_user_id: residentId,
+      file_id: fileId,
+      amount_cents: amount,
+      method: 'transfer',
+      reference: filename,
+    });
+  };
+
+  const rejectedProof = makeProof(2000, 'reject-me.png');
+  assert.equal(rejectedProof.ok, true);
+  const selfReject = rejectPaymentProof({ condoId, proof_id: (rejectedProof as any).id, reviewer_user_id: residentId });
+  assert.equal(selfReject.ok, false);
+  assert.equal((selfReject as any).error, 'cannot_reject_own_payment_proof');
+  const rejected = rejectPaymentProof({
+    condoId,
+    proof_id: (rejectedProof as any).id,
+    reviewer_user_id: boardId,
+    reason: 'Unreadable receipt',
+  });
+  assert.equal(rejected.ok, true);
+  assert.equal((rejected as any).status, 'rejected');
+  let paymentCount = db.prepare(`SELECT COUNT(*) AS count FROM payments WHERE invoice_id = ?`).get(invoiceId) as { count: number };
+  assert.equal(paymentCount.count, 0);
+
+  const overpayProof = makeProof(9000, 'overpay.png');
+  assert.equal(overpayProof.ok, true);
+  const partial = recordPayment({
+    condoId,
+    invoice_id: invoiceId,
+    amount_cents: 3000,
+    method: 'manual',
+    reference: 'MANUAL-1',
+    created_by_user_id: boardId,
+  });
+  assert.equal(partial.ok, true);
+  const overpayApproval = approvePaymentProof({ condoId, proof_id: (overpayProof as any).id, reviewer_user_id: boardId });
+  assert.equal(overpayApproval.ok, false);
+  assert.equal((overpayApproval as any).error, 'payment_exceeds_balance');
+  const stillPending = db.prepare(`SELECT status FROM payment_proofs WHERE id = ?`).get((overpayProof as any).id) as { status: string };
+  assert.equal(stillPending.status, 'pending');
+
+  const ownApproval = approvePaymentProof({ condoId, proof_id: (overpayProof as any).id, reviewer_user_id: residentId });
+  assert.equal(ownApproval.ok, false);
+  assert.equal((ownApproval as any).error, 'cannot_approve_own_payment_proof');
 });
 
 test('tickets: assignees must be active board users in the same condo', () => {
