@@ -447,8 +447,9 @@ router.get('/admin-agent/calibration', requireAuth, requireRole('board_admin'), 
 // the credit circuit breaker — false means a recent 402 tripped it and the
 // agent is serving the deterministic fallback until credits return.
 router.get('/admin-agent/usage', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+  const condoId = getActiveCondoId(req);
   const days = Math.min(90, Math.max(1, Number(req.query.days || 7)));
-  const summary = getAiUsageSummary(days);
+  const summary = getAiUsageSummary(days, condoId);
   const breaker = aiBreakerState();
   return ok(res, {
     ...summary,
