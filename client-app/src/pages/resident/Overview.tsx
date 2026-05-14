@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import {
   AlertTriangle,
   CalendarClock,
@@ -17,9 +18,9 @@ import PageHeader from '../../components/PageHeader';
 import GlassCard from '../../components/GlassCard';
 import Badge from '../../components/Badge';
 import Button from '../../components/Button';
-import { apiGet } from '../../lib/api';
+import { apiGet, apiPost } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
-import { formatCurrency, formatDate, formatDateTime, t } from '../../lib/i18n';
+import { formatDate, t } from '../../lib/i18n';
 
 interface Pkg { id: number; carrier: string; description: string; status: string; arrived_at: string; }
 interface Visitor { id: number; visitor_name: string; visitor_type: string; status: string; expected_at: string; }
@@ -29,14 +30,21 @@ interface Announcement { id: number; title: string; body: string; created_at: st
 interface Membership { status: string; unit_id: number; unit_number: string; building_name: string; }
 interface Invoice { id: number; amount_cents: number; due_date: string; status: string; paid_cents: number; }
 interface Statement { balance_cents: number; invoices: Invoice[]; }
-interface Ticket { id: number; title: string; status: string; priority: string; updated_at: string; remediation_status?: string; }
-
-function isToday(value: string) {
-  const date = new Date(value);
-  const now = new Date();
-  return date.getFullYear() === now.getFullYear()
-    && date.getMonth() === now.getMonth()
-    && date.getDate() === now.getDate();
+interface DashboardQuickAction { label: string; path: string; body?: Record<string, unknown>; success_label?: string; }
+interface DashboardAction {
+  id: string;
+  source: string;
+  priority: 'low' | 'normal' | 'high' | 'urgent';
+  title: string;
+  detail: string;
+  href: string;
+  cta: string;
+  icon: string;
+  quick_actions?: DashboardQuickAction[];
+}
+interface DashboardPayload {
+  actions: DashboardAction[];
+  unread_count: number;
 }
 
 function remainingCents(invoice: Invoice) {
@@ -52,6 +60,16 @@ const PROPOSAL_STATUS: Record<string, string> = {
   inconclusive: 'inconclusiva',
 };
 
+const ACTION_ICONS: Record<string, any> = {
+  AlertTriangle,
+  CalendarClock,
+  CheckCircle2,
+  DoorOpen,
+  Package,
+  ReceiptText,
+  Vote,
+};
+
 export default function Overview() {
   const { user } = useAuth();
   const [pkgs, setPkgs] = useState<Pkg[]>([]);
@@ -60,11 +78,14 @@ export default function Overview() {
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [anns, setAnns] = useState<Announcement[]>([]);
   const [statement, setStatement] = useState<Statement | null>(null);
-  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [dashboard, setDashboard] = useState<DashboardPayload | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
+    const loadDashboard = () => apiGet<DashboardPayload>('/dashboard/actions').then((next) => {
+      if (alive) setDashboard(next);
+    });
     async function loadStatement() {
       const rows = await apiGet<Membership[]>('/onboarding/me');
       if (!alive) return;
@@ -82,7 +103,7 @@ export default function Overview() {
       apiGet<Reservation[]>('/amenities/reservations').then(setReservations),
       apiGet<Proposal[]>('/proposals').then(setProposals),
       apiGet<Announcement[]>('/announcements').then(setAnns),
-      apiGet<Ticket[]>('/tickets').then(setTickets),
+      loadDashboard(),
       loadStatement(),
     ];
     Promise.allSettled(loads).then((results) => {
@@ -101,101 +122,18 @@ export default function Overview() {
   const openInvoices = (statement?.invoices || [])
     .filter((invoice) => invoice.status !== 'void' && remainingCents(invoice) > 0)
     .sort((a, b) => a.due_date.localeCompare(b.due_date));
-  const actionableTickets = tickets
-    .filter((ticket) => !['resolved', 'closed'].includes(ticket.status))
-    .sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+  const actionItems = dashboard?.actions || [];
 
-  const actionItems = useMemo(() => {
-    const items: Array<{
-      key: string;
-      icon: any;
-      tone: 'sage' | 'peach' | 'warning';
-      title: string;
-      detail: string;
-      to: string;
-      cta: string;
-    }> = [];
-
-    const visitorToApprove = visitors.find((v) => v.status === 'pending');
-    if (visitorToApprove) {
-      items.push({
-        key: `visitor-${visitorToApprove.id}`,
-        icon: DoorOpen,
-        tone: 'warning',
-        title: t('Approve visitor'),
-        detail: `${visitorToApprove.visitor_name} · ${formatDateTime(visitorToApprove.expected_at)}`,
-        to: '/app/visitors',
-        cta: t('Review'),
-      });
+  async function runQuickAction(action: DashboardAction, quick: DashboardQuickAction) {
+    try {
+      await apiPost(quick.path, quick.body);
+      toast.success(t(quick.success_label || 'Done'));
+      const next = await apiGet<DashboardPayload>('/dashboard/actions');
+      setDashboard(next);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || t('Falha'));
     }
-
-    const packageWaiting = waiting[0];
-    if (packageWaiting) {
-      items.push({
-        key: `package-${packageWaiting.id}`,
-        icon: Package,
-        tone: 'peach',
-        title: t('Package waiting'),
-        detail: `${packageWaiting.carrier}${packageWaiting.description ? ` · ${packageWaiting.description}` : ''}`,
-        to: '/app/packages',
-        cta: t('See package'),
-      });
-    }
-
-    const dueInvoice = openInvoices[0];
-    if (dueInvoice) {
-      items.push({
-        key: `invoice-${dueInvoice.id}`,
-        icon: ReceiptText,
-        tone: 'warning',
-        title: t('Payment due'),
-        detail: `${formatCurrency(remainingCents(dueInvoice) / 100)} · ${t('Vence em')} ${formatDate(dueInvoice.due_date)}`,
-        to: '/app/transparencia',
-        cta: t('Open charges'),
-      });
-    }
-
-    const todayReservation = futureReservations.find((r) => isToday(r.starts_at));
-    if (todayReservation) {
-      items.push({
-        key: `reservation-${todayReservation.id}`,
-        icon: CalendarClock,
-        tone: 'sage',
-        title: t('Reservation today'),
-        detail: `${t(todayReservation.amenity_name)} · ${formatDateTime(todayReservation.starts_at)}`,
-        to: '/app/amenities',
-        cta: t('View booking'),
-      });
-    }
-
-    const voteNow = proposals.find((p) => p.status === 'voting');
-    if (voteNow) {
-      items.push({
-        key: `proposal-${voteNow.id}`,
-        icon: Vote,
-        tone: 'peach',
-        title: t('Vote now'),
-        detail: t(voteNow.title),
-        to: `/app/proposals/${voteNow.id}`,
-        cta: t('Vote'),
-      });
-    }
-
-    const ticketUpdate = actionableTickets[0];
-    if (ticketUpdate) {
-      items.push({
-        key: `ticket-${ticketUpdate.id}`,
-        icon: AlertTriangle,
-        tone: ticketUpdate.priority === 'urgent' || ticketUpdate.priority === 'high' ? 'warning' : 'sage',
-        title: t('Ticket updated'),
-        detail: t(ticketUpdate.title),
-        to: '/app/tickets',
-        cta: t('Follow up'),
-      });
-    }
-
-    return items.slice(0, 6);
-  }, [actionableTickets, futureReservations, openInvoices, proposals, visitors, waiting]);
+  }
 
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Bom dia' : hour < 18 ? 'Boa tarde' : 'Boa noite';
@@ -229,22 +167,44 @@ export default function Overview() {
         ) : (
           <div className="grid md:grid-cols-2 gap-3">
             {actionItems.map((item) => {
-              const Icon = item.icon;
+              const Icon = ACTION_ICONS[item.icon] || AlertTriangle;
+              const tone = item.priority === 'urgent' || item.priority === 'high'
+                ? 'warning'
+                : item.priority === 'normal'
+                  ? 'peach'
+                  : 'sage';
               return (
-                <Link key={item.key} to={item.to} className="rounded-2xl bg-white/60 border border-white/70 p-4 hover:bg-white/80 transition flex items-center gap-3">
+                <div key={item.id} className="rounded-2xl bg-white/60 border border-white/70 p-4 transition">
+                  <div className="flex items-center gap-3">
                   <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${
-                    item.tone === 'sage' ? 'bg-sage-200 text-sage-700' : item.tone === 'warning' ? 'bg-peach-100 text-peach-600' : 'bg-peach-100 text-peach-500'
+                    tone === 'sage' ? 'bg-sage-200 text-sage-700' : tone === 'warning' ? 'bg-peach-100 text-peach-600' : 'bg-peach-100 text-peach-500'
                   }`}>
                     <Icon className="w-5 h-5" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="font-semibold text-dusk-500 truncate">{item.title}</div>
-                    <div className="text-xs text-dusk-300 mt-0.5 truncate">{item.detail}</div>
+                    <div className="font-semibold text-dusk-500 truncate">{t(item.title)}</div>
+                    <div className="text-xs text-dusk-300 mt-0.5 truncate">{t(item.detail)}</div>
                   </div>
-                  <span className="text-xs font-semibold text-dusk-400 shrink-0 inline-flex items-center gap-1">
-                    {item.cta} <ArrowRight className="w-3 h-3" />
-                  </span>
-                </Link>
+                  <Link to={item.href} className="text-xs font-semibold text-dusk-400 shrink-0 inline-flex items-center gap-1 hover:text-dusk-500">
+                    {t(item.cta)} <ArrowRight className="w-3 h-3" />
+                  </Link>
+                  </div>
+                  {item.quick_actions && item.quick_actions.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {item.quick_actions.map((quick) => (
+                        <Button
+                          key={quick.label}
+                          type="button"
+                          size="sm"
+                          variant={quick.label === 'Reject' ? 'ghost' : 'primary'}
+                          onClick={() => runQuickAction(item, quick)}
+                        >
+                          {t(quick.label)}
+                        </Button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               );
             })}
           </div>

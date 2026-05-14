@@ -33,6 +33,8 @@ import { listServiceContactsWithScorecards } from '../src/lib/vendor-scorecards'
 import { searchBuildingMemory } from '../src/lib/memory';
 import { getBoardPacket } from '../src/lib/board-packet';
 import { researchExternalVendors } from '../src/ai/web-research';
+import { getDashboardActions } from '../src/lib/dashboard-actions';
+import { createInAppNotification, markInAppNotificationRead } from '../src/lib/in-app-notifications';
 
 function resetDb() {
   const tables = [
@@ -50,7 +52,11 @@ function resetDb() {
     'payments',
     'invoices',
     'dues_schedules',
+    'in_app_notifications',
     'notification_outbox',
+    'packages',
+    'visitors',
+    'announcements',
     'audit_log',
     'amenity_reservations',
     'amenities',
@@ -66,8 +72,11 @@ function resetDb() {
     'user_unit',
     'units',
     'buildings',
+    'proposal_comments',
     'proposal_votes',
     'proposals',
+    'suggestion_clusters',
+    'suggestions',
     'users',
     'condominiums',
   ];
@@ -93,7 +102,7 @@ function createCondoFixture() {
   return { condoId, buildingId, unit101, unit102 };
 }
 
-function createUser(email: string, role: 'resident' | 'board_admin' = 'resident') {
+function createUser(email: string, role: 'resident' | 'board_admin' | 'concierge' = 'resident') {
   return Number(db.prepare(
     `INSERT INTO users (condominium_id, email, password_hash, first_name, last_name, role)
      VALUES (NULL, ?, 'hash', 'Test', 'User', ?)`
@@ -854,6 +863,85 @@ test('board packet aggregates monthly operations without cross-condo leakage', (
   assert.equal(packet.vendors.count, 1);
   assert.match(packet.markdown, /Test Condo board packet/);
   assert.doesNotMatch(JSON.stringify(packet), /Leaky Other Vendor/);
+});
+
+test('dashboard actions are role-scoped and backed by in-app notifications', () => {
+  resetDb();
+  const { condoId, unit101 } = createCondoFixture();
+  const adminId = createUser('dashboard-admin@example.com', 'board_admin');
+  const residentId = createUser('dashboard-resident@example.com');
+  const conciergeId = createUser('dashboard-concierge@example.com', 'concierge');
+  db.prepare(`UPDATE users SET condominium_id = ? WHERE id IN (?, ?, ?)`).run(condoId, adminId, residentId, conciergeId);
+  db.prepare(
+    `INSERT INTO user_unit (user_id, unit_id, relationship, status, primary_contact, voting_weight)
+     VALUES (?, ?, 'owner', 'active', 1, 1.0)`
+  ).run(residentId, unit101);
+
+  const visitorId = Number(db.prepare(
+    `INSERT INTO visitors (condominium_id, host_id, visitor_name, visitor_type, expected_at, status)
+     VALUES (?, ?, 'Ana Visitor', 'guest', '2026-05-14T14:00:00.000Z', 'pending')`
+  ).run(condoId, residentId).lastInsertRowid);
+  const packageId = Number(db.prepare(
+    `INSERT INTO packages (condominium_id, recipient_id, carrier, description, status)
+     VALUES (?, ?, 'DHL', 'Keys', 'waiting')`
+  ).run(condoId, residentId).lastInsertRowid);
+  db.prepare(
+    `INSERT INTO invoices (condominium_id, unit_id, amount_cents, currency, period, due_date, status)
+     VALUES (?, ?, 10000, 'USD', '2026-05', '2026-05-01T12:00:00.000Z', 'open')`
+  ).run(condoId, unit101);
+  db.prepare(
+    `INSERT INTO proposals (condominium_id, author_id, title, description, category, status, created_at)
+     VALUES (?, ?, 'Fix lobby door', 'Door repair.', 'maintenance', 'voting', '2026-05-10T12:00:00.000Z')`
+  ).run(condoId, adminId);
+  db.prepare(
+    `INSERT INTO meetings (condominium_id, title, scheduled_for, status)
+     VALUES (?, 'Dashboard meeting', '2026-05-20T18:00:00.000Z', 'scheduled')`
+  ).run(condoId);
+  const notificationId = createInAppNotification({
+    condominium_id: condoId,
+    user_id: residentId,
+    source: 'package',
+    title: 'Package waiting',
+    body: 'DHL · Keys',
+    href: '/app/packages',
+    priority: 'high',
+    target_type: 'package',
+    target_id: packageId,
+  });
+
+  const otherCondoId = Number(db.prepare(
+    `INSERT INTO condominiums (name, address, invite_code) VALUES ('Other Dashboard Condo', '3 Main', 'DASH2')`
+  ).run().lastInsertRowid);
+  const otherResidentId = createUser('dashboard-other@example.com');
+  db.prepare(`UPDATE users SET condominium_id = ? WHERE id = ?`).run(otherCondoId, otherResidentId);
+  db.prepare(
+    `INSERT INTO packages (condominium_id, recipient_id, carrier, description, status)
+     VALUES (?, ?, 'Leaky Other Carrier', 'Should not show', 'waiting')`
+  ).run(otherCondoId, otherResidentId);
+
+  const resident = db.prepare(`SELECT * FROM users WHERE id = ?`).get(residentId) as any;
+  const admin = db.prepare(`SELECT * FROM users WHERE id = ?`).get(adminId) as any;
+  const concierge = db.prepare(`SELECT * FROM users WHERE id = ?`).get(conciergeId) as any;
+
+  const residentPayload = getDashboardActions(resident, condoId);
+  assert.equal(residentPayload.unread_count, 1);
+  assert.ok(residentPayload.actions.some((action) => action.id === `visitor-${visitorId}`));
+  assert.ok(residentPayload.actions.some((action) => action.id === `package-${packageId}`));
+  assert.ok(residentPayload.actions.some((action) => action.source === 'finance'));
+  assert.doesNotMatch(JSON.stringify(residentPayload), /Leaky Other Carrier/);
+
+  const adminPayload = getDashboardActions(admin, condoId);
+  assert.ok(adminPayload.actions.some((action) => action.source === 'finance'));
+  assert.ok(adminPayload.actions.some((action) => action.source === 'proposal'));
+  assert.ok(adminPayload.actions.some((action) => action.source === 'meeting'));
+
+  const conciergePayload = getDashboardActions(concierge, condoId);
+  assert.ok(conciergePayload.actions.some((action) => action.id === `visitor-${visitorId}`));
+  assert.ok(conciergePayload.actions.some((action) => action.id === `package-${packageId}`));
+
+  const read = markInAppNotificationRead(residentId, notificationId);
+  assert.equal(read?.status, 'read');
+  assert.equal(getDashboardActions(resident, condoId).unread_count, 0);
 });
 
 test('building memory searches operational records without leaking admin-only sources to residents', () => {

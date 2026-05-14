@@ -85,6 +85,17 @@ interface TodayPayload {
   parties: PartyRow[];
   today: string;
 }
+interface DashboardAction {
+  id: string;
+  priority: 'low' | 'normal' | 'high' | 'urgent';
+  title: string;
+  detail: string;
+  cta: string;
+}
+interface DashboardPayload {
+  actions: DashboardAction[];
+  counts: Record<string, number>;
+}
 
 const POLL_MS = 20_000;
 
@@ -116,6 +127,15 @@ function contactNumbers(row: {
   }) as Array<[string, string]>;
 }
 
+function MiniCounter({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-2xl bg-white/60 border border-white/70 p-3 text-center">
+      <div className="font-display text-2xl text-dusk-500">{value}</div>
+      <div className="text-[11px] text-dusk-300 truncate">{label}</div>
+    </div>
+  );
+}
+
 function notify(title: string, body: string) {
   if (typeof Notification === 'undefined') return;
   if (Notification.permission !== 'granted') return;
@@ -127,6 +147,7 @@ function notify(title: string, body: string) {
 export default function ConciergeApp() {
   const { user, logout } = useAuth();
   const [data, setData] = useState<TodayPayload | null>(null);
+  const [dashboard, setDashboard] = useState<DashboardPayload | null>(null);
   const [residents, setResidents] = useState<ResidentRow[]>([]);
   const [search, setSearch] = useState('');
   const [walkup, setWalkup] = useState({
@@ -148,6 +169,7 @@ export default function ConciergeApp() {
   const load = useCallback(async () => {
     try {
       const next = await apiGet<TodayPayload>('/concierge/today');
+      apiGet<DashboardPayload>('/dashboard/actions').then(setDashboard).catch(() => {});
       // Diff against previous state to surface new arrivals.
       if (!isFirstLoad.current) {
         for (const v of next.visitors) {
@@ -338,6 +360,38 @@ export default function ConciergeApp() {
             </div>
           )}
         </GlassCard>
+
+        {dashboard && (
+          <GlassCard variant="clay-sage" className="p-4">
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <div>
+                <h1 className="font-display text-xl text-dusk-500">{t('Front desk command')}</h1>
+                <p className="text-xs text-dusk-300">{t('Expected visitors, packages, and parties for the guard desk.')}</p>
+              </div>
+              <Badge tone={dashboard.actions[0]?.priority === 'low' ? 'sage' : 'peach'}>
+                {(dashboard.counts.expected_visitors || 0) + (dashboard.counts.waiting_packages || 0)} {t('active')}
+              </Badge>
+            </div>
+            <div className="grid grid-cols-3 gap-2 mb-3">
+              <MiniCounter label={t('Visitantes')} value={dashboard.counts.expected_visitors || 0} />
+              <MiniCounter label={t('Encomendas')} value={dashboard.counts.waiting_packages || 0} />
+              <MiniCounter label={t('Eventos')} value={dashboard.counts.parties_today || 0} />
+            </div>
+            <div className="space-y-2">
+              {dashboard.actions.slice(0, 3).map((action) => (
+                <div key={action.id} className="rounded-2xl bg-white/60 border border-white/70 px-3 py-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-dusk-500 truncate">{t(action.title)}</div>
+                      <div className="text-xs text-dusk-300 truncate">{t(action.detail)}</div>
+                    </div>
+                    <span className="text-[11px] font-semibold text-dusk-400 shrink-0">{t(action.cta)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </GlassCard>
+        )}
 
         <section>
           <h2 className="font-display text-xl text-dusk-500 mb-3 flex items-center gap-2">

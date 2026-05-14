@@ -205,7 +205,7 @@ This slice makes the saved service network feel operational instead of static:
 - Keep aggregation scoped by condominium so management-company data does not leak across buildings.
 - Add indexes and tests around the vendor scorecard query so it can later feed AI recommendations and portfolio reporting.
 
-## Current Execution Slice: Monthly Board Packet
+## Completed Slice: Monthly Board Packet
 
 This slice turns the operating data already in CONDOS into a board-ready report:
 
@@ -214,3 +214,12 @@ This slice turns the operating data already in CONDOS into a board-ready report:
 - Surface risks and next steps so admins know what needs attention before a board meeting.
 - Let admins copy, download, or print the packet without leaving the app.
 - Keep all queries scoped to the active condominium and cover the report with domain and E2E tests.
+
+## Current Execution Slice: Role Command Centers
+
+This slice starts the new multi-week roadmap in `docs/condos-operating-roadmap.md`:
+
+- Add a shared role-scoped `/api/dashboard/actions` contract for resident, admin, and guard command centers.
+- Add in-app notification records plus read tracking so arrivals/packages can become durable app alerts.
+- Wire the resident, admin, and guard home screens to the shared action feed instead of page-local guesses.
+- Add release and pilot-readiness docs so every future push has the same quality gate.

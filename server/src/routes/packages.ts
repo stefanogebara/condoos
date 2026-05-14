@@ -4,6 +4,7 @@ import { requireAuth, requireRole, getActiveCondoId, AuthedRequest } from '../li
 import { ok, fail } from '../lib/respond';
 import { notifyUsers } from '../lib/whatsapp';
 import { audit } from '../lib/audit';
+import { createInAppNotification } from '../lib/in-app-notifications';
 
 const router = Router();
 
@@ -43,6 +44,42 @@ router.post('/:id/pickup', requireAuth, (req: AuthedRequest, res) => {
   return ok(res, { id, status: 'picked_up' });
 });
 
+router.post('/:id/notify-resident', requireAuth, async (req: AuthedRequest, res) => {
+  const u = req.user!;
+  if (!['board_admin', 'concierge'].includes(u.role)) return fail(res, 'forbidden', 403);
+  const id = Number(req.params.id);
+  const pkg = db.prepare(
+    `SELECT p.*, usr.unit_number
+     FROM packages p
+     JOIN users usr ON usr.id = p.recipient_id
+     WHERE p.id = ? AND p.condominium_id = ?`
+  ).get(id, u.condominium_id) as any;
+  if (!pkg) return fail(res, 'not_found', 404);
+  const messageType = req.body?.message_type === 'food_delivery_arrived' ? 'food_delivery_arrived' : 'package_arrived';
+  const label = messageType === 'food_delivery_arrived' ? 'food delivery' : `${pkg.carrier} package`;
+  const body = `CondoOS: your ${label} has arrived at the front desk${pkg.unit_number ? ` for unit ${pkg.unit_number}` : ''}.`;
+  createInAppNotification({
+    condominium_id: u.condominium_id!,
+    user_id: pkg.recipient_id,
+    source: 'package',
+    title: messageType === 'food_delivery_arrived' ? 'Food delivery arrived' : 'Package waiting',
+    body,
+    href: '/app/packages',
+    priority: 'high',
+    target_type: 'package',
+    target_id: id,
+  });
+  const result = await notifyUsers([pkg.recipient_id], body);
+  audit(req, {
+    action: 'package.notify_resident',
+    target_type: 'package',
+    target_id: id,
+    condominium_id: u.condominium_id,
+    metadata: { recipient_id: pkg.recipient_id, message_type: messageType, attempted: result.attempted, sent: result.sent, skipped: result.skipped },
+  });
+  return ok(res, { id, notified_user_id: pkg.recipient_id, message_type: messageType });
+});
+
 // Board logs a new package
 router.post('/', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
   const { recipient_id, carrier, description } = req.body || {};
@@ -64,19 +101,31 @@ router.post('/', requireAuth, requireRole('board_admin'), (req: AuthedRequest, r
     `INSERT INTO packages (condominium_id, recipient_id, carrier, description)
      VALUES (?, ?, ?, ?)`
   ).run(condoId, recipient_id, carrier, description || null);
+  const packageId = Number(row.lastInsertRowid);
 
   // WhatsApp notification (fire-and-forget; never blocks response)
   const body = `📦 CondoOS — Uma encomenda (${carrier}) chegou para você na portaria. Passe para retirar!`;
+  createInAppNotification({
+    condominium_id: condoId,
+    user_id: recipient_id,
+    source: 'package',
+    title: 'Package waiting',
+    body: `${carrier}${description ? ` · ${description}` : ''}`,
+    href: '/app/packages',
+    priority: 'high',
+    target_type: 'package',
+    target_id: packageId,
+  });
   notifyUsers([recipient_id], body).catch((e) => console.warn('[packages] notify failed:', e?.message));
 
   audit(req, {
     action: 'package.create',
     target_type: 'package',
-    target_id: Number(row.lastInsertRowid),
+    target_id: packageId,
     condominium_id: condoId,
     metadata: { recipient_id, carrier },
   });
-  return ok(res, { id: row.lastInsertRowid });
+  return ok(res, { id: packageId });
 });
 
 export default router;

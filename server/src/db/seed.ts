@@ -92,7 +92,7 @@ function run() {
 
   const users = [
     { email: 'admin@condoos.dev',    pw: 'admin123',    first: 'Alex',   last: 'Silva',   role: 'board_admin', unit: 'PH-1', mobile: '+1 305 555 0100', home: '+1 305 555 0101' },
-    { email: 'porteiro@condoos.dev', pw: 'porteiro123', first: 'Seu',    last: 'João',    role: 'concierge',   unit: '',     mobile: null, home: null },
+    { email: 'porteiro@condoos.dev', pw: 'porteiro123', first: 'Carlos', last: 'Duarte',  role: 'concierge',   unit: '',     mobile: null, home: null },
     { email: 'resident@condoos.dev', pw: 'resident123', first: 'Maya',   last: 'Chen',    role: 'resident',    unit: '704',  mobile: '+1 305 555 0704', home: '+1 305 555 1704' },
     { email: 'jordan@condoos.dev',   pw: 'resident123', first: 'Jordan', last: 'Martins', role: 'resident',    unit: '612',  mobile: '+1 305 555 0612', home: null },
     { email: 'taylor@condoos.dev',   pw: 'resident123', first: 'Taylor', last: 'Khan',    role: 'resident',    unit: '305',  mobile: '+1 305 555 0305', home: '+1 305 555 1305' },

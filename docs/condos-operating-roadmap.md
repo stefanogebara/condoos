@@ -1,0 +1,70 @@
+# CONDOS Operating Roadmap
+
+This is the current source of truth for building CONDOS into a real condo-board operating system. The north star is simple: reduce front-desk confusion, resident WhatsApps, unresolved maintenance, unclear money, and board conflict.
+
+## Buyer Promise
+
+Every shipped feature must improve at least one promise:
+
+- Front desk knows who can enter.
+- Residents know what needs action.
+- Admin knows what needs attention.
+- Board can explain money and decisions.
+
+## Market Defaults
+
+- First buyer: condo boards.
+- First markets: Brazil and Ecuador.
+- First revenue wedge: operations trust.
+- Payments and AI become stronger once daily workflows are reliable.
+
+## Execution Order
+
+1. **Daily utility and command centers**
+   - Role-scoped action feed for residents, admins, and guards.
+   - Resident quick actions for visitors, packages, dues, reservations, votes, and tickets.
+   - Admin command center for approvals, urgent tickets, overdue dues, proposal budget gaps, reservation conflicts, and meetings.
+   - Guard command center for expected visitors, pending approvals, packages, parties, and resident contact fallback.
+
+2. **Real document vault and evidence storage**
+   - Add Cloudflare R2-backed uploads.
+   - Store bylaws, rules, minutes, contracts, insurance, warranties, receipts, ticket photos, work-order photos, and payment proofs.
+   - Keep link-based documents as an option, but do not depend on external links for real pilots.
+
+3. **Money trust before full accounting**
+   - Add resident payment-proof submission.
+   - Add admin approval/rejection queue.
+   - Add budget vs actual, receipt coverage, and transparent expense explanations.
+   - Defer live processors until the workflow is trusted.
+
+4. **Maintenance as work orders**
+   - Add ticket timeline events, quote comparison, SLA alerts, recurring problem detection, and resident-safe progress visibility.
+
+5. **Brazil + Ecuador readiness**
+   - Add building-level country, currency, timezone, locale, and governance mode.
+   - Keep Portuguese, Spanish, and English clean, with no cross-language leak.
+
+6. **Concierge and visitor operations 2.0**
+   - Add arrival/check-in history, resident notification fallback, party guest search, and package/delivery handoff audit.
+
+7. **AI moat on trusted workflows**
+   - Add cited Building Memory answers, explain-expense, proposal readiness score, incident mode, and board packet PDF export.
+
+8. **Production reliability and pilot operations**
+   - Add health/integration status, backup checks, Sentry/PostHog routines, production smoke gates, and pilot-safe mode.
+
+9. **Revenue packaging**
+   - Add Brazil/Ecuador landing copy, pricing, pilot onboarding checklist, 15-minute sales script, and ROI proof.
+
+10. **Management-company expansion**
+   - Add portfolio dashboards, staff permissions, white-label basics, cross-building vendor intelligence, and multi-building monthly reports after single-building workflows are pilot-ready.
+
+## Current Slice
+
+Week 1 is focused on Phase 0 and Phase 1:
+
+- Add `/api/dashboard/actions` as the role-scoped source for resident/admin/guard command centers.
+- Add in-app notification records and `/api/notifications/:id/read`.
+- Wire resident, admin, and guard home screens to the shared action feed.
+- Add release and pilot-readiness docs.
+- Verify with server tests, production build, and focused E2E.

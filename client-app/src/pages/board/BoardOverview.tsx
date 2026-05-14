@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Inbox, Vote, Calendar, Users, ArrowRight, Bot, CheckCircle2, MessageCircle, Send, ShieldAlert, Sparkles, AlertTriangle, UserPlus, Wallet } from 'lucide-react';
+import { Inbox, Vote, Calendar, Users, ArrowRight, Bot, CheckCircle2, MessageCircle, Send, ShieldAlert, Sparkles, AlertTriangle, UserPlus, Wallet, Waves } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 import GlassCard from '../../components/GlassCard';
 import Badge from '../../components/Badge';
@@ -14,6 +14,18 @@ interface Meeting { id: number; title: string; scheduled_for: string; status: st
 interface PendingResident { id: number; first_name: string; last_name: string; unit_number: string | null; }
 interface TicketSummary { needs_admin: number; blocked_no_vendor: number; blocked_no_response: number; verified_ready: number; awaiting_verification: number; }
 interface ReceivablesSummary { total_open_cents: number; overdue_cents: number; open_invoice_count: number; overdue_invoice_count: number; }
+interface DashboardAction {
+  id: string;
+  priority: 'low' | 'normal' | 'high' | 'urgent';
+  title: string;
+  detail: string;
+  href: string;
+  icon: string;
+}
+interface DashboardPayload {
+  actions: DashboardAction[];
+  unread_count: number;
+}
 
 interface AutoAction {
   id: number;
@@ -59,6 +71,17 @@ function autoActionDescriptor(row: AutoAction, tr: (k: string) => string) {
   return { icon: Bot, label: row.remediation_status, tone: 'neutral' as const, at: row.updated_at };
 }
 
+const ACTION_ICONS: Record<string, any> = {
+  AlertTriangle,
+  Calendar,
+  CheckCircle2,
+  Inbox,
+  UserPlus,
+  Vote,
+  Wallet,
+  Waves,
+};
+
 export default function BoardOverview() {
   const { user } = useAuth();
   const [proposals, setProposals] = useState<Proposal[]>([]);
@@ -71,6 +94,7 @@ export default function BoardOverview() {
   const [pendingResidents, setPendingResidents] = useState<PendingResident[]>([]);
   const [ticketSummary, setTicketSummary] = useState<TicketSummary | null>(null);
   const [receivables, setReceivables] = useState<ReceivablesSummary | null>(null);
+  const [dashboard, setDashboard] = useState<DashboardPayload | null>(null);
   const tr = (k: string) => translate(k);
 
   useEffect(() => {
@@ -84,6 +108,7 @@ export default function BoardOverview() {
       apiGet<PendingResident[]>('/memberships/pending').then(setPendingResidents),
       apiGet<TicketSummary>('/tickets/summary').then(setTicketSummary),
       apiGet<ReceivablesSummary>('/finance/receivables').then(setReceivables),
+      apiGet<DashboardPayload>('/dashboard/actions').then(setDashboard),
       apiGet<Array<{ status: string; condo_name: string }>>('/onboarding/me').then((rows) => {
         const active = rows.find((r) => r.status === 'active');
         if (active) setCondoName(active.condo_name);
@@ -109,6 +134,20 @@ export default function BoardOverview() {
   };
 
   const attentionItems = useMemo(() => {
+    if (dashboard?.actions?.length) {
+      return dashboard.actions.map((action) => ({
+        key: action.id,
+        icon: ACTION_ICONS[action.icon] || AlertTriangle,
+        tone: action.priority === 'urgent' || action.priority === 'high'
+          ? 'warning' as const
+          : action.priority === 'normal'
+            ? 'peach' as const
+            : 'sage' as const,
+        title: tr(action.title),
+        detail: tr(action.detail),
+        to: action.href,
+      }));
+    }
     const items: Array<{
       key: string;
       icon: any;
@@ -205,7 +244,7 @@ export default function BoardOverview() {
       });
     }
     return items;
-  }, [openProposals.length, openSuggestions.length, pendingResidents, receivables, tr, upcoming.length, urgentTicketCount]);
+  }, [dashboard, openProposals.length, openSuggestions.length, pendingResidents, receivables, tr, upcoming.length, urgentTicketCount]);
 
   return (
     <>

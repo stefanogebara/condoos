@@ -35,6 +35,8 @@ import ticketsRoutes from './routes/tickets';
 import documentsRoutes from './routes/documents';
 import memoryRoutes from './routes/memory';
 import reportsRoutes from './routes/reports';
+import dashboardRoutes from './routes/dashboard';
+import notificationsRoutes from './routes/notifications';
 import webhooksRoutes from './routes/webhooks';
 import vendorPortalRoutes from './routes/vendor-portal';
 import serviceContactsRoutes from './routes/service-contacts';
@@ -162,6 +164,8 @@ app.use('/api/tickets',       scoped, ticketsRoutes);
 app.use('/api/documents',     scoped, documentsRoutes);
 app.use('/api/memory',        scoped, memoryRoutes);
 app.use('/api/reports',       scoped, reportsRoutes);
+app.use('/api/dashboard',     scoped, dashboardRoutes);
+app.use('/api/notifications', scoped, notificationsRoutes);
 app.use('/api/service-contacts', scoped, serviceContactsRoutes);
 
 // 404

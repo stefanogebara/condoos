@@ -129,6 +129,33 @@ CREATE INDEX IF NOT EXISTS idx_notification_outbox_due
 CREATE INDEX IF NOT EXISTS idx_notification_outbox_user
   ON notification_outbox(user_id, created_at);
 
+-- In-app notifications — fast role-specific tasks and arrival/payment alerts.
+-- These are user-scoped records, separate from notification_outbox, which is
+-- only for external delivery channels like WhatsApp/email.
+CREATE TABLE IF NOT EXISTS in_app_notifications (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  condominium_id   INTEGER NOT NULL REFERENCES condominiums(id) ON DELETE CASCADE,
+  user_id          INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  source           TEXT NOT NULL DEFAULT 'system'
+    CHECK(source IN ('system','visitor','package','finance','ticket','proposal','reservation','concierge')),
+  title            TEXT NOT NULL,
+  body             TEXT,
+  href             TEXT,
+  priority         TEXT NOT NULL DEFAULT 'normal'
+    CHECK(priority IN ('low','normal','high','urgent')),
+  target_type      TEXT,
+  target_id        INTEGER,
+  status           TEXT NOT NULL DEFAULT 'unread'
+    CHECK(status IN ('unread','read','archived')),
+  created_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  read_at          TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_in_app_notifications_user_status
+  ON in_app_notifications(user_id, status, created_at);
+CREATE INDEX IF NOT EXISTS idx_in_app_notifications_condo_created
+  ON in_app_notifications(condominium_id, created_at);
+
 -- Operational service network — vendors, installers, maintenance providers,
 -- emergency contacts, and other trusted building partners.
 CREATE TABLE IF NOT EXISTS service_contacts (

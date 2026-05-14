@@ -364,6 +364,33 @@ export function initSchema() {
       ON audit_log(condominium_id, target_type, target_id);
   `);
 
+  // In-app notifications power the role-specific command centers. Keep them
+  // separate from notification_outbox, which is only external delivery.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS in_app_notifications (
+      id               INTEGER PRIMARY KEY AUTOINCREMENT,
+      condominium_id   INTEGER NOT NULL REFERENCES condominiums(id) ON DELETE CASCADE,
+      user_id          INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      source           TEXT NOT NULL DEFAULT 'system'
+        CHECK(source IN ('system','visitor','package','finance','ticket','proposal','reservation','concierge')),
+      title            TEXT NOT NULL,
+      body             TEXT,
+      href             TEXT,
+      priority         TEXT NOT NULL DEFAULT 'normal'
+        CHECK(priority IN ('low','normal','high','urgent')),
+      target_type      TEXT,
+      target_id        INTEGER,
+      status           TEXT NOT NULL DEFAULT 'unread'
+        CHECK(status IN ('unread','read','archived')),
+      created_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      read_at          TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_in_app_notifications_user_status
+      ON in_app_notifications(user_id, status, created_at);
+    CREATE INDEX IF NOT EXISTS idx_in_app_notifications_condo_created
+      ON in_app_notifications(condominium_id, created_at);
+  `);
+
   migrateLegacyUnits();
 
   // Incident Loop (Phase 1) — community-verified tickets that auto-route to

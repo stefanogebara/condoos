@@ -14,6 +14,7 @@ import { requireAuth, requireRole, getActiveCondoId, AuthedRequest } from '../li
 import { ok, fail } from '../lib/respond';
 import { audit } from '../lib/audit';
 import { notifyUsers } from '../lib/whatsapp';
+import { createInAppNotification } from '../lib/in-app-notifications';
 
 const router = Router();
 
@@ -158,6 +159,17 @@ router.post('/walkup', requireAuth, requireConciergeOrAdmin, async (req: AuthedR
   const visitorId = Number(row.lastInsertRowid);
 
   const body = `CondoOS: ${data.visitor_name.trim()} arrived at the front desk${resident.unit_number ? ` for unit ${resident.unit_number}` : ''}. Open CondoOS to approve, or call the front desk.`;
+  createInAppNotification({
+    condominium_id: condoId,
+    user_id: resident.id,
+    source: 'visitor',
+    title: 'Approve visitor',
+    body: `${data.visitor_name.trim()} arrived at the front desk${resident.unit_number ? ` for unit ${resident.unit_number}` : ''}.`,
+    href: '/app/visitors',
+    priority: 'urgent',
+    target_type: 'visitor',
+    target_id: visitorId,
+  });
   const result = await notifyUsers([resident.id], body);
   audit(req, {
     action: 'concierge.walkup_notify',
@@ -207,6 +219,21 @@ router.post('/notify', requireAuth, requireConciergeOrAdmin, async (req: AuthedR
   }
 
   const result = await notifyUsers([userId], body);
+  createInAppNotification({
+    condominium_id: condoId,
+    user_id: userId,
+    source: target_type === 'visitor' ? 'visitor' : 'package',
+    title: message_type === 'food_delivery_arrived'
+      ? 'Food delivery arrived'
+      : target_type === 'visitor'
+        ? 'Visitor arrived'
+        : 'Package waiting',
+    body,
+    href: target_type === 'visitor' ? '/app/visitors' : '/app/packages',
+    priority: target_type === 'visitor' ? 'urgent' : 'high',
+    target_type,
+    target_id,
+  });
   audit(req, {
     action: 'concierge.notify_resident',
     target_type,
