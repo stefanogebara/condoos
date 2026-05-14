@@ -644,12 +644,13 @@ async function runAdminAgentInner(args: RunAdminAgentArgs): Promise<RunAdminAgen
         handler,
         {
           maxTokens: 2_000,
-          // 4 rounds is plenty: a typical run does 1-3 info-gathering tool
-          // calls then submit_final_answer, and terminalTool exits the loop
-          // the moment that lands. Each extra round re-sends the whole
-          // grown conversation, so the cap is a real cost lever. Tunable
-          // via AGENT_MAX_ITERATIONS without a redeploy.
-          maxIterations: Number(process.env.AGENT_MAX_ITERATIONS || 4),
+          // terminalTool is the real cost lever — the loop exits the moment
+          // submit_final_answer lands, so a well-behaved run never reaches
+          // the cap regardless of its value. The cap is just a runaway
+          // ceiling: 4 proved too tight (some tasks legitimately need 4-5
+          // info-gathering rounds and then hit the cap without finalising),
+          // so keep it at 6. Tunable via AGENT_MAX_ITERATIONS.
+          maxIterations: Number(process.env.AGENT_MAX_ITERATIONS || 6),
           terminalTool: 'submit_final_answer',
           caller: 'admin-agent-react',
           condoId: args.condoId,
@@ -664,7 +665,14 @@ async function runAdminAgentInner(args: RunAdminAgentArgs): Promise<RunAdminAgen
       if (finalCall?.input?.plan) {
         raw = finalCall.input.plan;
       } else if (result.text) {
-        raw = parseJsonLoose<any>(result.text) || null;
+        // No submit_final_answer means the loop didn't converge cleanly
+        // (e.g. it hit the iteration cap). result.text is then the last
+        // tool RESULT, not a plan — parseJsonLoose would happily parse it
+        // into non-null garbage and slip past the !raw guard, so the run
+        // serves a fallback-shaped plan that isn't flagged as fallback.
+        // Only accept text that actually parses into a plan-shaped object.
+        const parsed = parseJsonLoose<any>(result.text);
+        raw = parsed && typeof parsed.summary === 'string' ? parsed : null;
       }
       if (!raw) {
         raw = fallbackAdminAgent(adminInput);

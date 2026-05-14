@@ -285,7 +285,14 @@ export function agentLanguage(input: AdminAgentInput): AgentLanguage {
   if (locale.startsWith('es')) return 'es';
   if (locale.startsWith('fr')) return 'fr';
   if (locale.startsWith('en')) return 'en';
-  return likelyPortuguese(input) ? 'pt' : 'en';
+  // No usable locale (API-direct calls without one). CondoOS is a
+  // Portuguese-first product, so default to PT unless the task text
+  // itself carries a clear non-PT signal — better than defaulting a
+  // Brazilian síndico's plan to English on a missing locale.
+  if (likelyPortuguese(input)) return 'pt';
+  return /[a-z]/i.test(input.task || '') && !/[çãõáéíóúàâê]/i.test(input.task || '') && /\b(the|please|need|want|repair|install|vendor|building|how|what)\b/i.test(input.task || '')
+    ? 'en'
+    : 'pt';
 }
 
 function byAgentLanguage<T>(input: AdminAgentInput, copy: Record<AgentLanguage, T>): T {
