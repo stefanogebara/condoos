@@ -275,7 +275,50 @@ function boolish(value: unknown): boolean {
 
 function likelyPortuguese(input: AdminAgentInput): boolean {
   const haystack = `${input.locale || ''} ${input.task || ''}`.toLowerCase();
-  return haystack.includes('pt') || /[çãõáéíóúàêô]/i.test(haystack) || /\b(consert|instalar|síndico|condomínio|orçamento|fornecedor)\b/i.test(haystack);
+  return haystack.includes('pt') || /[çãõáéíóúàêô]/i.test(haystack) || /\b(consert|instalar|síndico|condomínio|condominio|orçamento|orcamento|fornecedor|dedetiza|dedetizador|barata|academia|esteira|elevador|portaria|morador|condômino|condomino)\b/i.test(haystack);
+}
+
+type AgentLanguage = 'pt' | 'en' | 'es' | 'fr';
+
+function agentLanguage(input: AdminAgentInput): AgentLanguage {
+  const locale = String(input.locale || '').toLowerCase();
+  if (locale.startsWith('es')) return 'es';
+  if (locale.startsWith('fr')) return 'fr';
+  if (locale.startsWith('en')) return 'en';
+  return likelyPortuguese(input) ? 'pt' : 'en';
+}
+
+function byAgentLanguage<T>(input: AdminAgentInput, copy: Record<AgentLanguage, T>): T {
+  return copy[agentLanguage(input)];
+}
+
+const AGENT_CATEGORY_LABELS: Record<string, Record<AgentLanguage, string>> = {
+  cleaning: { pt: 'limpeza', en: 'cleaning', es: 'limpieza', fr: 'nettoyage' },
+  electrical: { pt: 'elétrica', en: 'electrical work', es: 'electricidad', fr: 'électricité' },
+  elevator: { pt: 'elevadores', en: 'elevators', es: 'ascensores', fr: 'ascenseurs' },
+  fire_safety: { pt: 'segurança contra incêndio', en: 'fire safety', es: 'seguridad contra incendios', fr: 'sécurité incendie' },
+  gas: { pt: 'gás', en: 'gas service', es: 'gas', fr: 'gaz' },
+  gas_leak: { pt: 'vazamento de gás', en: 'gas leak repair', es: 'fuga de gas', fr: 'fuite de gaz' },
+  general_maintenance: { pt: 'manutenção geral', en: 'general maintenance', es: 'mantenimiento general', fr: 'maintenance générale' },
+  gym_equipment: { pt: 'equipamentos de academia', en: 'gym equipment', es: 'equipos de gimnasio', fr: 'équipements de salle de sport' },
+  hvac: { pt: 'climatização', en: 'HVAC', es: 'climatización', fr: 'climatisation' },
+  internet_cctv: { pt: 'internet e CFTV', en: 'internet and CCTV', es: 'internet y CCTV', fr: 'internet et vidéosurveillance' },
+  landscaping: { pt: 'jardinagem', en: 'landscaping', es: 'jardinería', fr: 'espaces verts' },
+  maintenance: { pt: 'manutenção', en: 'maintenance', es: 'mantenimiento', fr: 'maintenance' },
+  other: { pt: 'serviços gerais', en: 'general services', es: 'servicios generales', fr: 'services généraux' },
+  pest_control: { pt: 'dedetização', en: 'pest control', es: 'control de plagas', fr: 'désinsectisation' },
+  plumbing: { pt: 'hidráulica', en: 'plumbing', es: 'plomería', fr: 'plomberie' },
+  pool: { pt: 'piscina', en: 'pool service', es: 'piscina', fr: 'piscine' },
+  security: { pt: 'segurança', en: 'security', es: 'seguridad', fr: 'sécurité' },
+  security_access: { pt: 'controle de acesso', en: 'access control', es: 'control de acceso', fr: 'contrôle d’accès' },
+  water: { pt: 'água', en: 'water service', es: 'agua', fr: 'eau' },
+  water_damage: { pt: 'infiltração ou alagamento', en: 'water damage', es: 'daños por agua', fr: 'dégât des eaux' },
+};
+
+function agentCategoryLabel(category: string, input: AdminAgentInput): string {
+  const labels = AGENT_CATEGORY_LABELS[category];
+  if (labels) return byAgentLanguage(input, labels);
+  return category.replace(/_/g, ' ');
 }
 
 function taskType(input: AdminAgentInput): AdminAgentTaskType {
@@ -917,26 +960,51 @@ export function sanitizeAdminAgentOutput(raw: unknown, input: AdminAgentInput): 
     // Wall 1: no vendor in the inferred category. Offer to draft an
     // outreach for new vendors the admin would call themselves.
     if (output.existing_network_fit.length === 0 && taskCategory) {
-      const categoryLabel = taskCategory.replace(/_/g, ' ');
-      suggestions.push(`Quer que eu rascunhe uma mensagem de WhatsApp para procurar fornecedores de ${categoryLabel}?`);
-      suggestions.push(`Posso te ajudar a definir critérios de seleção para um novo fornecedor de ${categoryLabel}?`);
+      const categoryLabel = agentCategoryLabel(taskCategory, input);
+      suggestions.push(byAgentLanguage(input, {
+        pt: `Quer que eu rascunhe uma mensagem de WhatsApp para procurar fornecedores para ${categoryLabel}?`,
+        en: `Want me to draft a WhatsApp message to find vendors for ${categoryLabel}?`,
+        es: `¿Quieres que redacte un mensaje de WhatsApp para buscar proveedores de ${categoryLabel}?`,
+        fr: `Voulez-vous que je rédige un message WhatsApp pour trouver des prestataires en ${categoryLabel} ?`,
+      }));
+      suggestions.push(byAgentLanguage(input, {
+        pt: `Posso te ajudar a definir critérios de seleção para um novo fornecedor de ${categoryLabel}?`,
+        en: `Want help defining selection criteria for a new ${categoryLabel} vendor?`,
+        es: `¿Quieres ayuda para definir criterios de selección para un nuevo proveedor de ${categoryLabel}?`,
+        fr: `Voulez-vous de l’aide pour définir les critères de sélection d’un nouveau prestataire en ${categoryLabel} ?`,
+      }));
     }
     // Wall 2: cost is uncited (we just downgraded confidence). Ask for
     // a real quote so the next call has data.
     if (output.confidence?.reasoning.some((r) => /sem histórico real|estimativa do modelo/i.test(r))) {
-      suggestions.push('Tem um orçamento real? Cole aqui e eu te ajudo a comparar com o histórico do prédio.');
+      suggestions.push(byAgentLanguage(input, {
+        pt: 'Tem um orçamento real? Cole aqui e eu te ajudo a comparar com o histórico do prédio.',
+        en: 'Do you have a real quote? Paste it here and I will compare it against the building history.',
+        es: '¿Tienes un presupuesto real? Pégalo aquí y lo comparo con el historial del edificio.',
+        fr: 'Avez-vous un devis réel ? Collez-le ici et je le comparerai à l’historique de l’immeuble.',
+      }));
     }
     // Wall 3: agent had high-confidence past resolution but the admin
     // might want to verify before re-running the same play.
     const memory = (output as any).building_memory as { similar_resolved_tickets?: Array<{ id: number; title: string }> } | null | undefined;
     if (memory?.similar_resolved_tickets?.length) {
       const t = memory.similar_resolved_tickets[0];
-      suggestions.push(`Quer ver o detalhe do chamado #${t.id} ("${t.title.slice(0, 40)}")?`);
+      suggestions.push(byAgentLanguage(input, {
+        pt: `Quer ver o detalhe do chamado #${t.id} ("${t.title.slice(0, 40)}")?`,
+        en: `Want to see the details for ticket #${t.id} ("${t.title.slice(0, 40)}")?`,
+        es: `¿Quieres ver el detalle del llamado #${t.id} ("${t.title.slice(0, 40)}")?`,
+        fr: `Voulez-vous voir le détail du ticket #${t.id} (« ${t.title.slice(0, 40)} ») ?`,
+      }));
     }
     // Wall 4: agent recommended a vendor but cost is unknown — surface
     // a question the admin would naturally ask next.
     if (output.existing_network_fit.length > 0 && output.options.some((o) => /confirm by quote|a confirmar|TBD/i.test(o.estimated_cost_range))) {
-      suggestions.push('Qual a faixa de preço aceitável antes de eu acionar o fornecedor?');
+      suggestions.push(byAgentLanguage(input, {
+        pt: 'Qual a faixa de preço aceitável antes de eu acionar o fornecedor?',
+        en: 'What price range is acceptable before I contact the vendor?',
+        es: '¿Qué rango de precio es aceptable antes de contactar al proveedor?',
+        fr: 'Quelle fourchette de prix est acceptable avant de contacter le prestataire ?',
+      }));
     }
   }
   if (suggestions.length > 0) {

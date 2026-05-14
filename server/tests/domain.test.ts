@@ -409,6 +409,22 @@ test('admin agent sanitizer surfaces follow-up suggestions when network_fit is e
   assert.ok(out.follow_up_suggestions!.some((s) => /fornecedor|dedetiza/i.test(s)));
 });
 
+test('admin agent sanitizer localizes category labels in follow-up suggestions', () => {
+  const out = sanitizeAdminAgentOutput({
+    summary: 'Não encontramos fornecedor de academia cadastrado.',
+    existing_network_fit: [],
+    options: [],
+  }, {
+    task: 'Instalar uma nova esteira na academia',
+    locale: 'pt-BR',
+    service_contacts: [],
+  });
+
+  const copy = out.follow_up_suggestions?.join(' ') || '';
+  assert.match(copy, /equipamentos de academia/);
+  assert.doesNotMatch(copy, /gym_equipment/);
+});
+
 test('admin agent sanitizer does NOT add follow-up suggestions on refusal', () => {
   // Out-of-scope refusal should NOT carry follow-ups — there's nothing
   // useful to ask next, the admin needs to reformulate.
@@ -477,6 +493,41 @@ test('admin agent evidence sources are derived from DB/tool outputs, not model p
   assert.ok(sources.some((s) => s.type === 'after_hours'));
   assert.ok(sources.some((s) => s.type === 'photo' && /urgency_high/.test(s.detail)));
   assert.ok(sources.some((s) => s.type === 'web_citation' && s.url === 'https://example.com/vendor'));
+});
+
+test('admin agent evidence localizes manual-search fallback citations', () => {
+  const sources = buildAgentEvidenceSources({
+    summary: 's',
+    task_type: 'vendor_research',
+    assumptions: [],
+    recommended_next_step: 'next',
+    existing_network_fit: [],
+    options: [],
+    vendor_search_plan: { search_queries: [], shortlisting_criteria: [], outreach_message: '' },
+    action_plan: [],
+    resident_update: { title: '', body: '' },
+    proposal_draft: null,
+    risks: [],
+  }, [{
+    name: 'research_external_vendors',
+    input: { query: 'esteira academia Miami' },
+    output: {
+      configured: false,
+      provider: 'not_configured',
+      citations: [{
+        title: 'Google search: esteira academia Miami',
+        url: 'https://www.google.com/search?q=esteira',
+        snippet: 'Live web search is not configured on the server.',
+        source: 'search_url',
+      }],
+    },
+  }], 'pt-BR');
+
+  assert.equal(sources.length, 1);
+  assert.match(sources[0].title, /^Busca no Google:/);
+  assert.match(sources[0].detail, /URL de busca manual/);
+  assert.equal(sources[0].source, 'busca manual');
+  assert.doesNotMatch(sources[0].detail, /Live web search/i);
 });
 
 test('admin agent sanitizer forces refusal on out-of-scope tasks', () => {

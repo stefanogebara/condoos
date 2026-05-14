@@ -43,6 +43,32 @@ function safeUrl(value: unknown): string | null {
   }
 }
 
+function manualSearchTitle(value: unknown, locale?: string): string {
+  const raw = text(value, 220);
+  const query = raw.includes(':') ? text(raw.slice(raw.indexOf(':') + 1), 160) : raw;
+  const lower = raw.toLowerCase();
+  if (lower.startsWith('google maps search:')) {
+    return `${pick(locale, 'Busca no Google Maps', 'Google Maps search', 'Búsqueda en Google Maps', 'Recherche Google Maps')}: ${query}`;
+  }
+  if (lower.startsWith('bing search:')) {
+    return `${pick(locale, 'Busca no Bing', 'Bing search', 'Búsqueda en Bing', 'Recherche Bing')}: ${query}`;
+  }
+  if (lower.startsWith('google search:')) {
+    return `${pick(locale, 'Busca no Google', 'Google search', 'Búsqueda en Google', 'Recherche Google')}: ${query}`;
+  }
+  return raw || pick(locale, 'Busca manual', 'Manual search', 'Búsqueda manual', 'Recherche manuelle');
+}
+
+function manualSearchDetail(locale?: string): string {
+  return pick(
+    locale,
+    'URL de busca manual; nenhum dado de fornecedor foi verificado ao vivo pelo CondoOS.',
+    'Manual search URL only; no live vendor facts were verified by CondoOS.',
+    'URL de búsqueda manual; CondoOS no verificó datos del proveedor en vivo.',
+    'URL de recherche manuelle ; CondoOS n’a vérifié aucune donnée prestataire en direct.',
+  );
+}
+
 export function buildAgentEvidenceSources(plan: AdminAgentOutput, toolTrace: ToolTrace = [], locale?: string): AgentEvidenceSource[] {
   const sources: AgentEvidenceSource[] = [];
 
@@ -120,12 +146,14 @@ export function buildAgentEvidenceSources(plan: AdminAgentOutput, toolTrace: Too
       if (!url) continue;
       sources.push({
         type: 'web_citation',
-        title: text(citation?.title || url, 160),
+        title: configured ? text(citation?.title || url, 160) : manualSearchTitle(citation?.title || url, locale),
         detail: configured
-          ? text(citation?.snippet || 'External search result cited by the agent.', 320)
-          : text(citation?.snippet || pick(locale, 'URL de busca manual; nenhum dado de fornecedor verificado ao vivo.', 'Manual search URL only; no live vendor facts verified.', 'URL de búsqueda manual; no se verificaron datos del proveedor en vivo.', 'URL de recherche manuelle ; aucune donnée prestataire vérifiée en direct.'), 320),
+          ? text(citation?.snippet || pick(locale, 'Resultado externo citado pelo agente.', 'External search result cited by the agent.', 'Resultado externo citado por el agente.', 'Résultat externe cité par l’agent.'), 320)
+          : manualSearchDetail(locale),
         url,
-        source: text(citation?.source || call.output?.provider || 'web', 80),
+        source: configured
+          ? text(citation?.source || call.output?.provider || 'web', 80)
+          : pick(locale, 'busca manual', 'manual search', 'búsqueda manual', 'recherche manuelle'),
       });
     }
   }

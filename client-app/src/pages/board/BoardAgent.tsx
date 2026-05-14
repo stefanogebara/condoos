@@ -627,7 +627,7 @@ export default function BoardAgent() {
                 <div className="flex items-center gap-2 flex-wrap">
                   <Badge tone="sage">{tr('Plano gerado')}</Badge>
                   {result._fallback ? <Badge tone="warning">{tr('Fallback seguro')}</Badge> : null}
-                  <Badge tone="neutral">{tr(result.task_type)}</Badge>
+                  <Badge tone="neutral">{agentTaskTypeLabel(result.task_type, tr)}</Badge>
                   {turns.length > 1 && <Badge tone="neutral">{tr('Turno')} {turns.length}</Badge>}
                   {result.confidence && <ConfidenceChip confidence={result.confidence} tr={tr} />}
                 </div>
@@ -1242,6 +1242,29 @@ function ConfidenceChip({ confidence, tr }: {
   );
 }
 
+function agentTaskTypeLabel(type: string, tr: (k: string) => string) {
+  const labels: Record<string, string> = {
+    repair: 'Conserto',
+    install: 'Instalação',
+    vendor_research: 'Pesquisa de fornecedores',
+    policy: 'Política',
+    general: 'Geral',
+  };
+  return tr(labels[type] || type);
+}
+
+function evidenceTypeLabel(type: AgentEvidenceSource['type'], tr: (k: string) => string) {
+  const labels: Record<AgentEvidenceSource['type'], string> = {
+    past_ticket: 'Chamado anterior',
+    vendor_history: 'Histórico do fornecedor',
+    web_citation: 'Citação web',
+    photo: 'Foto',
+    pattern: 'Padrão',
+    after_hours: 'Fora do expediente',
+  };
+  return tr(labels[type]);
+}
+
 function EvidenceSourcesSection({ sources, tr }: {
   sources: AgentEvidenceSource[];
   tr: (k: string) => string;
@@ -1264,7 +1287,7 @@ function EvidenceSourcesSection({ sources, tr }: {
         {sources.map((source, idx) => (
           <div key={`${source.type}-${idx}`} className="rounded-3xl bg-white/60 border border-white/70 p-4">
             <div className="flex items-center gap-2 flex-wrap">
-              <Badge tone={toneFor(source.type)}>{tr(source.type)}</Badge>
+              <Badge tone={toneFor(source.type)}>{evidenceTypeLabel(source.type, tr)}</Badge>
               {source.source && <span className="text-[11px] text-dusk-300">{source.source}</span>}
             </div>
             <h3 className="font-semibold text-dusk-500 mt-2">{source.title}</h3>

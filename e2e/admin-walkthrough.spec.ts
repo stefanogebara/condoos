@@ -91,7 +91,7 @@ test('admin: AI agent generates an operational plan', async ({ page, request }) 
   await page.getByRole('button', { name: /Generate plan|Gerar plano/i }).click();
   const aiTimeout = process.env.E2E_HAS_LLM ? 60_000 : 20_000;
   await expect(page.getByText(/^(Next step|Próximo passo)$/i)).toBeVisible({ timeout: aiTimeout });
-  await expect(page.getByRole('heading', { name: /^(Options|Opções)$/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /^(Options|Opções|Recommendation|Recomendação)$/i })).toBeVisible();
   await expect(page.getByRole('heading', { name: /^(Research plan|Plano de pesquisa)$/i })).toBeVisible();
   await expect(page.getByRole('heading', { name: /^(Resident notice|Comunicado aos moradores)$/i })).toBeVisible();
 });
@@ -152,6 +152,8 @@ test('admin: AI agent renders server-derived evidence cards', async ({ page, req
   await page.getByRole('textbox', { name: /What do you want to solve|O que você quer resolver/i }).fill('Consertar o elevador A com ruído recorrente.');
   await page.getByRole('button', { name: /Generate plan|Gerar plano/i }).click();
   await expect(page.getByRole('heading', { name: /Evidence used|Evidências usadas/i })).toBeVisible();
+  await expect(page.getByText('Chamado anterior')).toBeVisible();
+  await expect(page.getByText('Citação web')).toBeVisible();
   await expect(page.getByText('Elevador A com ruído')).toBeVisible();
   const source = page.getByRole('link', { name: /Open source|Abrir fonte/i });
   await expect(source).toHaveAttribute('href', 'https://example.com/vendor');
