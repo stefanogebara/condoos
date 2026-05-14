@@ -119,6 +119,7 @@ interface AgentResult {
   thread_id?: number;
   turn_index?: number;
   agent_run_id?: number;
+  ai_status?: 'ok' | 'degraded' | 'unavailable';
   _fallback?: boolean;
 }
 
@@ -153,6 +154,17 @@ interface ServiceContactLite {
   email: string | null;
 }
 
+interface AiUsageStatus {
+  since: string;
+  total_calls: number;
+  total_tokens: number;
+  est_cost_usd: number;
+  by_caller: Array<{ caller: string; calls: number; total_tokens: number; est_cost_usd: number }>;
+  window_days: number;
+  ai_available: boolean;
+  breaker_open_until: string | number | null;
+}
+
 const EXAMPLES = [
   'Comparar fornecedores para manutenção da esteira da academia',
   'Encontrar opções para instalar carregadores de carro elétrico',
@@ -166,6 +178,18 @@ function formatEstimatedCost(value: number, locale: string) {
     currency: 'BRL',
     maximumFractionDigits: 0,
   }).format(value);
+}
+
+function formatCompactNumber(value: number, locale: string) {
+  return new Intl.NumberFormat(locale, { notation: 'compact', maximumFractionDigits: 1 }).format(value || 0);
+}
+
+function formatUsd(value: number, locale: string) {
+  return new Intl.NumberFormat(locale, {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: value >= 1 ? 2 : 4,
+  }).format(value || 0);
 }
 
 export default function BoardAgent() {
@@ -234,6 +258,7 @@ export default function BoardAgent() {
   const [vendors, setVendors] = useState<ServiceContactLite[]>([]);
   const [outreachTarget, setOutreachTarget] = useState<{ vendor: ServiceContactLite; initialMessage: string } | null>(null);
   const [waHealth, setWaHealth] = useState<WhatsAppHealth | null>(null);
+  const [aiUsage, setAiUsage] = useState<AiUsageStatus | null>(null);
 
   // The most-recent turn drives the result UI (network cards, options,
   // resident update, etc.). Older turns render as small "ago" cards on
@@ -245,6 +270,11 @@ export default function BoardAgent() {
     apiGet<ThreadSummary[]>('/ai/admin-agent/threads').then(setThreads).catch(() => setThreads([]));
   }, []);
   React.useEffect(() => { refreshThreads(); }, [refreshThreads]);
+
+  const refreshAiUsage = React.useCallback(() => {
+    apiGet<AiUsageStatus>('/ai/admin-agent/usage?days=7').then(setAiUsage).catch(() => setAiUsage(null));
+  }, []);
+  React.useEffect(() => { refreshAiUsage(); }, [refreshAiUsage]);
 
   // Reset to a fresh conversation — clears thread state, lets the next
   // submit create a new thread server-side.
@@ -315,6 +345,7 @@ export default function BoardAgent() {
       setTurns([...turns, { user_task: task, result: out }]);
       if (out.thread_id) setThreadId(out.thread_id);
       refreshThreads();
+      refreshAiUsage();
       // Clear the main composer so the same text doesn't accidentally
       // get resubmitted as a follow-up. The form fields (mode/budget/
       // urgency/location) stay so the admin can refine without retyping.
@@ -353,6 +384,7 @@ export default function BoardAgent() {
       if (out.thread_id) setThreadId(out.thread_id);
       setFollowUpTask('');
       refreshThreads();
+      refreshAiUsage();
     } catch (err: any) {
       toast.error(err?.response?.data?.error || tr('Falha ao enviar pergunta'));
     } finally {
@@ -468,6 +500,47 @@ export default function BoardAgent() {
             </p>
           </div>
         </div>
+      </GlassCard>
+
+      <GlassCard className="p-4 mb-5">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <Badge tone={aiUsage?.ai_available === false ? 'warning' : 'sage'}>
+                {aiUsage?.ai_available === false ? tr('IA indisponível') : tr('IA disponível')}
+              </Badge>
+              <span className="text-xs uppercase tracking-[0.18em] text-dusk-300">
+                {tr('Uso dos últimos 7 dias')}
+              </span>
+            </div>
+            <p className="text-sm text-dusk-400 mt-2">
+              {aiUsage?.ai_available === false && aiUsage.breaker_open_until
+                ? `${tr('Circuito de créditos aberto até')} ${new Date(aiUsage.breaker_open_until).toLocaleString(locale)}`
+                : tr('Mostra chamadas reais ao modelo, tokens e custo estimado para o condomínio ativo.')}
+            </p>
+          </div>
+          <div className="grid grid-cols-3 gap-2 min-w-full lg:min-w-[360px]">
+            <div className="rounded-2xl border border-white/70 bg-white/60 p-3">
+              <p className="text-[10px] uppercase tracking-[0.16em] text-dusk-300">{tr('Chamadas')}</p>
+              <p className="font-display text-xl text-dusk-500 mt-1">{aiUsage ? aiUsage.total_calls : '—'}</p>
+            </div>
+            <div className="rounded-2xl border border-white/70 bg-white/60 p-3">
+              <p className="text-[10px] uppercase tracking-[0.16em] text-dusk-300">{tr('Tokens')}</p>
+              <p className="font-display text-xl text-dusk-500 mt-1">{aiUsage ? formatCompactNumber(aiUsage.total_tokens, locale) : '—'}</p>
+            </div>
+            <div className="rounded-2xl border border-white/70 bg-white/60 p-3">
+              <p className="text-[10px] uppercase tracking-[0.16em] text-dusk-300">{tr('Custo est.')}</p>
+              <p className="font-display text-xl text-dusk-500 mt-1">{aiUsage ? formatUsd(aiUsage.est_cost_usd, locale) : '—'}</p>
+            </div>
+          </div>
+        </div>
+        {aiUsage?.by_caller?.[0] && (
+          <div className="mt-3 text-xs text-dusk-300">
+            {tr('Maior uso')}: <span className="text-dusk-500 font-medium">{aiUsage.by_caller[0].caller}</span>
+            {' · '}
+            {formatCompactNumber(aiUsage.by_caller[0].total_tokens, locale)} {tr('tokens')}
+          </div>
+        )}
       </GlassCard>
 
       {/* Live progress while a request is in flight. Renders each crumb
