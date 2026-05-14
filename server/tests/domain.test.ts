@@ -5,7 +5,7 @@ import { claimPendingInvitesForUser } from '../src/lib/invites';
 import { canVote, getProposalVoteTally, resolveVoteOutcome, computeQuorum, countEligibleVoters } from '../src/lib/proposal-tally';
 import { parseJsonLoose, classifyStatus, OpenRouterError, aiBreakerState } from '../src/ai/openrouter';
 import { estimateCostUsd, getAiUsageSummary, recordAiUsage } from '../src/lib/ai-usage';
-import { fallbackAdminAgent, sanitizeAdminAgentOutput } from '../src/ai/admin-agent';
+import { agentLanguage, fallbackAdminAgent, sanitizeAdminAgentOutput } from '../src/ai/admin-agent';
 import { tickVoteCloser } from '../src/lib/vote-closer';
 import {
   canVoteInAssembly,
@@ -240,6 +240,15 @@ test('admin agent fallback uses saved service contacts and returns work-ready pl
   // moradores" item gets stripped by the denylist; we still expect at
   // least the diagnóstico + equalizar opções pair through.
   assert.ok(out.action_plan.length >= 2);
+});
+
+test('admin agent language defaults to Portuguese unless the task is clearly English', () => {
+  assert.equal(agentLanguage({ task: 'Consertar elevador do condomínio' }), 'pt');
+  assert.equal(agentLanguage({ task: 'Preciso instalar carregador na garagem', locale: '' }), 'pt');
+  assert.equal(agentLanguage({ task: 'Need to repair the elevator and compare vendors' }), 'en');
+  assert.equal(agentLanguage({ task: 'Consertar elevador', locale: 'en-US' }), 'en');
+  assert.equal(agentLanguage({ task: 'Reparar ascensor', locale: 'es-ES' }), 'es');
+  assert.equal(agentLanguage({ task: 'Réparer ascenseur', locale: 'fr-FR' }), 'fr');
 });
 
 test('agent runs persist success and failure lifecycle details', () => {
