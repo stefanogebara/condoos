@@ -147,6 +147,10 @@ export interface RunAdminAgentArgs {
   // to the inner function, progress crumbs get written to that row so
   // the UI can poll. Set by the wrapper; callers shouldn't touch.
   agentRunId?: number;
+  // Internal — set by the concurrency guard when the condo is at its
+  // in-flight cap. Forces the deterministic fallback (no LLM call) so a
+  // burst of ticket verifications can't pile onto the OpenRouter bill.
+  forceFallback?: boolean;
 }
 
 export interface RunAdminAgentResult {
@@ -162,6 +166,14 @@ function agentModelLabel(): string {
   return process.env.AGENT_USE_REACT === '1' ? `${base} + tools` : base;
 }
 
+// Per-condo concurrency guard. dispatchAgentInBackground fires one agent
+// run per verified ticket with no rate limit, and each run fans out to up
+// to 4 LLM calls. A burst of verifications could pile dozens of calls onto
+// the OpenRouter bill. Cap concurrent runs per condo — excess runs serve
+// the deterministic fallback (free, instant, still a usable plan).
+const MAX_CONCURRENT_AGENT_RUNS_PER_CONDO = Number(process.env.AGENT_MAX_CONCURRENT_PER_CONDO || 2);
+const inFlightByCondo = new Map<number, number>();
+
 export async function runAdminAgent(args: RunAdminAgentArgs): Promise<RunAdminAgentResult> {
   const started = Date.now();
   const runId = createAgentRun({
@@ -174,11 +186,19 @@ export async function runAdminAgent(args: RunAdminAgentArgs): Promise<RunAdminAg
     reactEnabled: process.env.AGENT_USE_REACT === '1',
     model: agentModelLabel(),
   });
+
+  const condoInFlight = inFlightByCondo.get(args.condoId) || 0;
+  const overloaded = condoInFlight >= MAX_CONCURRENT_AGENT_RUNS_PER_CONDO;
+  if (overloaded) {
+    console.warn(`[agent] condo ${args.condoId} at concurrency cap (${condoInFlight} in flight) — serving deterministic fallback`);
+  }
+  inFlightByCondo.set(args.condoId, condoInFlight + 1);
+
   // First progress crumb — admin sees "Iniciando análise..." within 1s
   // even before the slow model call begins.
   appendAgentRunProgress(runId, { label: 'Iniciando análise', detail: args.task.slice(0, 60) });
   try {
-    const result = await runAdminAgentInner({ ...args, agentRunId: runId } as RunAdminAgentArgs);
+    const result = await runAdminAgentInner({ ...args, agentRunId: runId, forceFallback: overloaded } as RunAdminAgentArgs);
     finishAgentRunSuccess(runId, {
       fallback: result.fallback,
       plan: result.plan,
@@ -192,6 +212,10 @@ export async function runAdminAgent(args: RunAdminAgentArgs): Promise<RunAdminAg
       durationMs: Date.now() - started,
     });
     throw error;
+  } finally {
+    const remaining = (inFlightByCondo.get(args.condoId) || 1) - 1;
+    if (remaining <= 0) inFlightByCondo.delete(args.condoId);
+    else inFlightByCondo.set(args.condoId, remaining);
   }
 }
 
@@ -557,8 +581,18 @@ async function runAdminAgentInner(args: RunAdminAgentArgs): Promise<RunAdminAgen
   // gets a smaller initial context + tool access and decides what data
   // it needs. Multi-step (2-4 LLM calls per agent run) trades latency
   // for precision on long-tail questions.
-  const useReact = process.env.AGENT_USE_REACT === '1';
+  // Concurrency guard tripped — skip the LLM entirely and serve the
+  // deterministic plan. Still useful, just not model-quality, and the
+  // _fallback flag + UI banner already make that honest to the admin.
+  const useReact = !args.forceFallback && process.env.AGENT_USE_REACT === '1';
 
+  if (args.forceFallback) {
+    raw = fallbackAdminAgent(adminInput);
+    usedFallback = true;
+    if (args.agentRunId) {
+      appendAgentRunProgress(args.agentRunId, { label: 'Muitas análises simultâneas — usando checklist padrão' });
+    }
+  } else {
   if (args.agentRunId) {
     appendAgentRunProgress(args.agentRunId, {
       label: useReact ? 'Consultando histórico do prédio com ferramentas' : 'Consultando histórico do prédio',
@@ -660,6 +694,7 @@ async function runAdminAgentInner(args: RunAdminAgentArgs): Promise<RunAdminAgen
       usedFallback = true;
     }
   }
+  } // end: concurrency-guard fallback vs live LLM path
 
   const plan = sanitizeAdminAgentOutput(raw, adminInput);
   // Decorate the existing_network_fit entries with cost history from the
