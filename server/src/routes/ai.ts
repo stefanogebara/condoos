@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type Response } from 'express';
 import db from '../db';
 import { requireAuth, requireRole, AuthedRequest, getActiveCondoId } from '../lib/auth';
 import { ok, fail, asyncHandler } from '../lib/respond';
@@ -59,9 +59,18 @@ function optionalText(value: unknown, max: number): string {
 async function tryAI<T>(
   messages: any[],
   fallback: () => T,
-  opts?: { jsonMode?: boolean; maxTokens?: number; label?: string; tier?: 'quality' | 'cheap'; condoId?: number | null }
+  opts?: { jsonMode?: boolean; maxTokens?: number; label?: string; tier?: 'quality' | 'cheap'; condoId?: number | null; res?: Response }
 ): Promise<T> {
   const label = opts?.label || 'ai';
+  // When we degrade to canned output, stamp X-AI-Status so the client can
+  // tell a real AI response from a fallback. 'unavailable' = the credit
+  // circuit breaker is open (systemic outage); 'degraded' = this one call
+  // failed or returned unparseable JSON. Absent header = 'ok'.
+  const markDegraded = () => {
+    if (opts?.res && !opts.res.headersSent) {
+      opts.res.setHeader('X-AI-Status', aiBreakerState().open ? 'unavailable' : 'degraded');
+    }
+  };
   try {
     const raw = await chat(messages, {
       jsonMode: opts?.jsonMode,
@@ -74,6 +83,7 @@ async function tryAI<T>(
       const parsed = parseJsonLoose<T>(raw);
       if (!parsed) {
         console.warn(`[${label}] JSON parse failed, using fallback. length=${raw.length}`);
+        markDegraded();
         return fallback();
       }
       return parsed;
@@ -81,6 +91,7 @@ async function tryAI<T>(
     return raw as unknown as T;
   } catch (err) {
     console.warn(`[${label}] fallback used:`, (err as Error).message);
+    markDegraded();
     return fallback();
   }
 }
@@ -111,7 +122,7 @@ router.post('/proposal-draft', requireAuth, aiRateLimit, asyncHandler(async (req
       { role: 'user', content: text },
     ],
     () => fallbackProposalDraft(text),
-    { jsonMode: true, maxTokens: 600, label: 'proposal-draft', condoId }
+    { jsonMode: true, maxTokens: 600, label: 'proposal-draft', condoId, res }
   );
   return ok(res, out);
 }));
@@ -151,7 +162,7 @@ router.post('/proposal-classify', requireAuth, aiRateLimit, asyncHandler(async (
       { role: 'user', content: trimmed },
     ],
     () => fallbackClassify(trimmed),
-    { jsonMode: true, maxTokens: 150, tier: 'cheap', label: 'proposal-classify', condoId }
+    { jsonMode: true, maxTokens: 150, tier: 'cheap', label: 'proposal-classify', condoId, res }
   );
 
   // Guard against model hallucinating a new category
@@ -230,7 +241,22 @@ router.post('/admin-agent', requireAuth, aiRateLimit, requireRole('board_admin')
       agent_run_id,
     },
   });
-  return ok(res, { ...plan, _fallback: fallback || plan._fallback, thread_id: threadId, turn_index, agent_run_id });
+  // Explicit status the workbench reads directly. 'unavailable' = the
+  // credit breaker is open (systemic — AI is down); 'degraded' = a one-off
+  // failure dropped this run to the deterministic template; 'ok' = real
+  // LLM output. The _fallback bool is kept for backward compatibility.
+  const isFallback = fallback || !!plan._fallback;
+  const ai_status: 'ok' | 'degraded' | 'unavailable' = isFallback
+    ? (aiBreakerState().open ? 'unavailable' : 'degraded')
+    : 'ok';
+  return ok(res, {
+    ...plan,
+    _fallback: isFallback,
+    ai_status,
+    thread_id: threadId,
+    turn_index,
+    agent_run_id,
+  });
 }));
 
 // Board-admin AI operations status: credit-breaker state + condo-scoped spend.
@@ -416,6 +442,22 @@ router.get('/admin-agent/calibration', requireAuth, requireRole('board_admin'), 
   return ok(res, { window_days: days, by_tier: result });
 });
 
+// AI spend visibility (Phase 1.6). Admin-only rollup of token usage + an
+// estimated cost so the team sees the bill forming. `ai_available` reflects
+// the credit circuit breaker — false means a recent 402 tripped it and the
+// agent is serving the deterministic fallback until credits return.
+router.get('/admin-agent/usage', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+  const days = Math.min(90, Math.max(1, Number(req.query.days || 7)));
+  const summary = getAiUsageSummary(days);
+  const breaker = aiBreakerState();
+  return ok(res, {
+    ...summary,
+    window_days: days,
+    ai_available: !breaker.open,
+    breaker_open_until: breaker.openUntil,
+  });
+});
+
 // 2. Cluster all open suggestions for the condo
 router.post('/cluster-suggestions', requireAuth, aiRateLimit, requireRole('board_admin'), asyncHandler(async (req: AuthedRequest, res) => {
   const u = req.user!;
@@ -452,7 +494,7 @@ router.post('/cluster-suggestions', requireAuth, aiRateLimit, requireRole('board
         { role: 'user', content: `Here are the open suggestions:\n\n${payload}` },
       ],
       () => fallbackCluster(rows),
-      { jsonMode: true, maxTokens: 1200, tier: 'cheap', label: 'cluster-suggestions', condoId: u.condominium_id }
+      { jsonMode: true, maxTokens: 1200, tier: 'cheap', label: 'cluster-suggestions', condoId: u.condominium_id, res }
     );
 
     // Persist clusters
@@ -520,7 +562,7 @@ router.post('/proposals/:id/summarize-thread', requireAuth, aiRateLimit, asyncHa
       { role: 'user', content: `Proposal: ${clip(prop.title, 300)}\n\nDescription: ${clip(prop.description, 4_000)}\n\nDiscussion:\n${formatted}` },
     ],
     () => fallbackThreadSummary(comments.length),
-    { jsonMode: true, maxTokens: 800, label: 'summarize-thread', condoId: u.condominium_id }
+    { jsonMode: true, maxTokens: 800, label: 'summarize-thread', condoId: u.condominium_id, res }
   );
 
   db.prepare(`UPDATE proposals SET ai_summary=? WHERE id=?`).run(JSON.stringify(out), id);
@@ -550,7 +592,7 @@ router.post('/meetings/:id/summarize', requireAuth, aiRateLimit, requireRole('bo
       { role: 'user', content: `Meeting: ${clip(m.title, 300)}\nAgenda: ${clip(m.agenda || '(none)', 2_000)}\n\nRaw notes:\n${clip(m.raw_notes, 12_000)}` },
     ],
     () => fallbackMeetingSummary(clip(m.raw_notes, 12_000)),
-    { jsonMode: true, maxTokens: 1800, label: 'meetings/summarize', condoId: u.condominium_id }
+    { jsonMode: true, maxTokens: 1800, label: 'meetings/summarize', condoId: u.condominium_id, res }
   );
 
   db.prepare(`UPDATE meetings SET ai_summary=?, status='completed' WHERE id=?`).run(JSON.stringify(out), id);
@@ -606,7 +648,7 @@ router.post('/proposals/:id/analyze-cost', requireAuth, aiRateLimit, requireRole
       { role: 'user', content: `Title: ${clip(p.title, 300)}\nCategoria: ${p.category || 'não definida'}\n\nDescription:\n${clip(p.description, 4_000)}` },
     ],
     fallbackCostAnalysis,
-    { jsonMode: true, maxTokens: 600, label: 'analyze-cost', tier: 'quality', condoId: u.condominium_id }
+    { jsonMode: true, maxTokens: 600, label: 'analyze-cost', tier: 'quality', condoId: u.condominium_id, res }
   );
 
   // Sanitize: clamp cost into a reasonable range, trim long fields.
@@ -644,7 +686,7 @@ router.post('/proposals/:id/explain', requireAuth, aiRateLimit, asyncHandler(asy
       { role: 'user', content: `Title: ${clip(p.title, 300)}\n\nDescription: ${clip(p.description, 4_000)}` },
     ],
     () => fallbackExplain(p.title, p.description),
-    { maxTokens: 500, label: 'explain', condoId: u.condominium_id }
+    { maxTokens: 500, label: 'explain', condoId: u.condominium_id, res }
   );
 
   db.prepare(`UPDATE proposals SET ai_explainer=? WHERE id=?`).run(text, id);
@@ -682,7 +724,7 @@ router.post('/proposals/:id/decision-summary', requireAuth, aiRateLimit, require
       },
     ],
     () => fallbackDecisionSummary(p.title, outcome, votes),
-    { jsonMode: true, maxTokens: 800, label: 'decision-summary', condoId: u.condominium_id }
+    { jsonMode: true, maxTokens: 800, label: 'decision-summary', condoId: u.condominium_id, res }
   );
 
   db.prepare(
@@ -750,7 +792,7 @@ router.post('/assemblies/:id/suggest-agenda', requireAuth, aiRateLimit, requireR
         { title: 'Assuntos gerais', description: 'Open discussion on any remaining topic raised by residents.', item_type: 'other', required_majority: 'simple' },
       ],
     }),
-    { jsonMode: true, maxTokens: 800, label: 'assembly-agenda', condoId }
+    { jsonMode: true, maxTokens: 800, label: 'assembly-agenda', condoId, res }
   );
   return ok(res, out);
 }));
@@ -772,7 +814,7 @@ router.post('/assemblies/:id/draft-ata', requireAuth, aiRateLimit, requireRole('
       { role: 'user', content: clip(rawAta, 12_000) },
     ],
     () => rawAta,
-    { jsonMode: false, maxTokens: 1500, label: 'assembly-ata', condoId }
+    { jsonMode: false, maxTokens: 1500, label: 'assembly-ata', condoId, res }
   );
   db.prepare(`UPDATE assemblies SET ata_markdown = ? WHERE id = ?`).run(polished, id);
   audit(req, {

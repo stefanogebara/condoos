@@ -35,11 +35,24 @@ export interface AiUsageRecord {
   iterations?: number;      // >1 for the ReAct tool-use loop
 }
 
+// In-process cumulative spend since boot. Crude on purpose: it resets on
+// every deploy/restart, but it's enough to surface a runaway burn in the
+// logs ("we spent $20 of estimated credit since the last deploy") without
+// a query. Persistent/windowed numbers come from getAiUsageSummary().
+let processSpendUsd = 0;
+let nextSpendWarnUsd = 5;
+
 export function recordAiUsage(rec: AiUsageRecord): void {
   // Usage logging must never break the actual AI call — swallow everything.
   try {
     const prompt = Math.max(0, Math.round(rec.promptTokens || 0));
     const completion = Math.max(0, Math.round(rec.completionTokens || 0));
+    const cost = estimateCostUsd(rec.model, prompt, completion);
+    processSpendUsd += cost;
+    if (processSpendUsd >= nextSpendWarnUsd) {
+      console.warn(`[ai-usage] ~$${processSpendUsd.toFixed(2)} estimated OpenRouter spend since boot`);
+      nextSpendWarnUsd = Math.ceil((processSpendUsd + 0.01) / 5) * 5; // next $5 boundary
+    }
     db.prepare(
       `INSERT INTO ai_usage
          (caller, model, prompt_tokens, completion_tokens, total_tokens,
@@ -51,7 +64,7 @@ export function recordAiUsage(rec: AiUsageRecord): void {
       prompt,
       completion,
       prompt + completion,
-      estimateCostUsd(rec.model, prompt, completion),
+      cost,
       String(rec.outcome || 'ok').slice(0, 40),
       rec.condoId ?? null,
       Math.max(1, Math.round(rec.iterations || 1)),
