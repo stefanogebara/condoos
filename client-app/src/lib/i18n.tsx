@@ -2797,6 +2797,15 @@ const dynamicPatterns: Pattern[] = [
       `L’éclairage du hall du ${floor} étage clignote la nuit et semble pouvoir s’éteindre à tout moment.`,
     ]),
   },
+  {
+    match: /\bElevador\s+([A-Za-z0-9-]+)\s+parado no\s+([0-9]+)º?\s+[—-]\s+porta não abre\b/gu,
+    replace: (locale, _match, elevator, floor) => pickWord(locale, [
+      `Elevador ${elevator} parado no ${floor}º — porta não abre`,
+      `Elevator ${elevator} stopped on floor ${floor} — door will not open`,
+      `Ascensor ${elevator} detenido en el piso ${floor} — la puerta no abre`,
+      `Ascenseur ${elevator} bloqué à l’étage ${floor} — la porte ne s’ouvre pas`,
+    ]),
+  },
   // "Reunião X" e.g. "Reunião do síndico"
   {
     match: /\bReunião\b/gu,
