@@ -157,6 +157,7 @@ test('admin: AI agent renders server-derived evidence cards', async ({ page, req
   await page.goto('/board/agent');
   await page.getByRole('textbox', { name: /What do you want to solve|O que você quer resolver/i }).fill('Consertar o elevador A com ruído recorrente.');
   await page.getByRole('button', { name: /Generate plan|Gerar plano/i }).click();
+  await page.getByText(/Why this plan|Por que esse plano/i).click();
   await expect(page.getByRole('heading', { name: /Evidence used|Evidências usadas/i })).toBeVisible();
   await expect(page.getByText('Chamado anterior')).toBeVisible();
   await expect(page.getByText('Citação web')).toBeVisible();
