@@ -598,7 +598,18 @@ async function runAdminAgentInner(args: RunAdminAgentArgs): Promise<RunAdminAgen
         ],
         ADMIN_AGENT_TOOLS,
         handler,
-        { maxTokens: 2_000, maxIterations: 6, caller: 'admin-agent-react', condoId: args.condoId }
+        {
+          maxTokens: 2_000,
+          // 4 rounds is plenty: a typical run does 1-3 info-gathering tool
+          // calls then submit_final_answer, and terminalTool exits the loop
+          // the moment that lands. Each extra round re-sends the whole
+          // grown conversation, so the cap is a real cost lever. Tunable
+          // via AGENT_MAX_ITERATIONS without a redeploy.
+          maxIterations: Number(process.env.AGENT_MAX_ITERATIONS || 4),
+          terminalTool: 'submit_final_answer',
+          caller: 'admin-agent-react',
+          condoId: args.condoId,
+        }
       );
       toolTrace = result.toolCalls;
       // The model is expected to terminate by calling submit_final_answer

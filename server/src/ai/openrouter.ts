@@ -275,7 +275,7 @@ export async function chatWithTools(
   initialMessages: AIMessage[],
   tools: AIToolSchema[],
   toolHandler: AIToolHandler,
-  opts: AIOpts & { maxIterations?: number } = {},
+  opts: AIOpts & { maxIterations?: number; terminalTool?: string } = {},
 ): Promise<ChatWithToolsResult> {
   if (!API_KEY) {
     console.warn('[ai] OPENROUTER_API_KEY not set - tool-use disabled');
@@ -358,6 +358,19 @@ export async function chatWithTools(
         tool_call_id: call.id,
         content: JSON.stringify(output),
       });
+    }
+
+    // Early-exit: the model called the terminal tool (submit_final_answer)
+    // — the plan is already in toolCalls. Looping for one more LLM round
+    // would re-send the whole grown conversation just to get an empty
+    // turn back. Return now and save that round-trip.
+    if (opts.terminalTool && calls.some((c: any) => (c.function?.name || '') === opts.terminalTool)) {
+      recordAiUsage({
+        caller: opts.caller || 'tool-use',
+        model, promptTokens, completionTokens,
+        outcome: 'ok', condoId: opts.condoId, iterations: iter + 1,
+      });
+      return { text: '', toolCalls, iterations: iter + 1 };
     }
   }
 
