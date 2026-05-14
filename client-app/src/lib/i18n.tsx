@@ -2244,6 +2244,7 @@ const phrases: Copy[] = [
   c('fornecedor', 'vendor', 'proveedor', 'prestataire'),
   c('Aguardando síndico — sem fornecedor disponível', 'Awaiting manager — no vendor available', 'Esperando al administrador — sin proveedor disponible', 'En attente du syndic — aucun prestataire disponible'),
   c('Sem resposta do fornecedor — síndico vai retomar', 'No response from vendor — manager will follow up', 'Sin respuesta del proveedor — el administrador retomará', 'Pas de réponse du prestataire — le syndic va relancer'),
+  c('Fornecedor não pôde atender — síndico vai acionar outro', 'Vendor could not take the job — manager will contact another', 'El proveedor no pudo atender — el administrador contactará a otro', 'Le prestataire n\'a pas pu intervenir — le syndic en contactera un autre'),
   c('Problema resolvido', 'Issue resolved', 'Problema resuelto', 'Problème résolu'),
   // Vendor auto-rewire toast (BoardServices) — fired when a new contact
   // unsticks tickets that were blocked on no_vendor_in_category.
@@ -2257,6 +2258,7 @@ const phrases: Copy[] = [
   // Plural-suffix variant — kept distinct so the (n) marker only renders when count>1.
   c('sem fornecedor (n)', 'no vendor', 'sin proveedor', 'aucun prestataire'),
   c('sem resposta do fornecedor', 'no vendor reply', 'sin respuesta del proveedor', 'aucune réponse du prestataire'),
+  c('fornecedor recusou', 'vendor declined', 'proveedor rechazó', 'prestataire a refusé'),
   c('sem resposta do fornecedor (n)', 'no vendor reply', 'sin respuesta del proveedor', 'aucune réponse du prestataire'),
   // Agent workbench overhaul — replaces the broken search-queries panel
   // and the standalone "Mensagem para fornecedores" with per-vendor send

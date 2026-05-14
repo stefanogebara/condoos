@@ -233,6 +233,10 @@ function vendorCategoryLabel(category: string): string {
 const BLOCKED_REASON_LABEL: Record<string, string> = {
   no_vendor_in_category: 'Nenhum fornecedor cadastrado para essa categoria. Adicione um em Operação para a IA acionar.',
   vendor_no_response: 'O fornecedor acionado não respondeu dentro do prazo. Considere acionar outro ou contactar manualmente.',
+  // Set by the vendor portal when the vendor opens the magic link and
+  // explicitly declines. Distinct from vendor_no_response (silence) —
+  // here we got a clear "no", so the admin should re-dispatch.
+  vendor_declined: 'O fornecedor recusou o chamado pelo link. Acione outro fornecedor.',
   physical_action_required: 'O agente identificou que é necessária inspeção presencial antes do conserto.',
   ambiguous_reports: 'Os relatos da comunidade estão divididos. Verifique pessoalmente antes de acionar.',
   agent_failed: 'A IA falhou ao montar o plano automaticamente. Gere novamente ou resolva manualmente.',
@@ -662,6 +666,9 @@ function AdminCard({
               )}
               {isBlocked && ticket.blocked_reason === 'vendor_no_response' && (
                 <Badge tone="peach">{tr('sem resposta do fornecedor')}</Badge>
+              )}
+              {isBlocked && ticket.blocked_reason === 'vendor_declined' && (
+                <Badge tone="peach">{tr('fornecedor recusou')}</Badge>
               )}
               {isResolved && <Badge tone="sage"><CheckCircle2 className="w-3 h-3" /> {tr('resolvido')}</Badge>}
             </div>

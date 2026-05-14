@@ -488,12 +488,19 @@ function TicketTimeline({ ticket, detail }: { ticket: Ticket; detail: TicketDeta
   }
 
   if (ticket.blocked_reason && ticket.remediation_status === 'blocked_needs_admin') {
-    // Differentiate the two scenarios so the resident knows whether the
-    // admin needs to add a contact (no_vendor_in_category) vs chase one
-    // that already exists but didn't reply (vendor_no_response).
-    const blockedText = ticket.blocked_reason === 'vendor_no_response'
-      ? t('Sem resposta do fornecedor — síndico vai retomar')
-      : t('Aguardando síndico — sem fornecedor disponível');
+    // Three distinct blocked reasons, three distinct messages so the
+    // resident knows what's actually happening:
+    //   vendor_no_response — vendor was contacted but went silent
+    //   vendor_declined    — vendor explicitly said no via the link
+    //   (default)          — no vendor in the network for this category
+    let blockedText: string;
+    if (ticket.blocked_reason === 'vendor_no_response') {
+      blockedText = t('Sem resposta do fornecedor — síndico vai retomar');
+    } else if (ticket.blocked_reason === 'vendor_declined') {
+      blockedText = t('Fornecedor não pôde atender — síndico vai acionar outro');
+    } else {
+      blockedText = t('Aguardando síndico — sem fornecedor disponível');
+    }
     events.push({
       key: 'blocked',
       at: ticket.agent_run_at || ticket.created_at,

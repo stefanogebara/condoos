@@ -106,6 +106,57 @@ function loadPhotosForTicket(ticketId: number): Array<{ url: string; content_typ
   return rows;
 }
 
+// Pull a "Label: value" field out of the · -separated summary string.
+// The /respond route writes summaries like
+//   "✓ Aceita · Quando: Hoje 18h · Custo: 420 · Obs: ..."
+// so we split on · and find the segment starting with the label.
+// Exported for unit testing — money parsing is bug-prone enough to
+// warrant direct coverage.
+export function extractField(summary: string, label: string): string {
+  for (const seg of String(summary || '').split('·')) {
+    const trimmed = seg.trim();
+    if (trimmed.toLowerCase().startsWith(label.toLowerCase() + ':')) {
+      return trimmed.slice(label.length + 1).trim();
+    }
+  }
+  return '';
+}
+
+// Parse a BRL-ish money string into a number. Handles "420", "R$ 420",
+// "1.200,50" (pt-BR grouping), "1200.50" (en grouping). Returns null
+// when there's no parseable number — we'd rather skip the variance
+// check than flag on garbage input. Exported for unit testing.
+export function parseBrl(raw: string): number | null {
+  if (!raw) return null;
+  // Strip everything but digits + separators.
+  const s = String(raw).replace(/[^0-9.,]/g, '');
+  if (!s) return null;
+  const hasComma = s.includes(',');
+  const hasDot = s.includes('.');
+  let normalized = s;
+  if (hasComma && hasDot) {
+    // Both present — whichever appears LAST is the decimal separator.
+    // "1.200,50" (pt-BR) vs "1,200.50" (en).
+    if (s.lastIndexOf(',') > s.lastIndexOf('.')) {
+      normalized = s.replace(/\./g, '').replace(',', '.');
+    } else {
+      normalized = s.replace(/,/g, '');
+    }
+  } else if (hasComma) {
+    // Comma only — decimal if 1-2 trailing digits ("12,50"), else
+    // thousands grouping ("1,200").
+    normalized = /,\d{1,2}$/.test(s) ? s.replace(',', '.') : s.replace(/,/g, '');
+  } else if (hasDot) {
+    // Dot only — the ambiguous case. "2.400" in pt-BR is two-thousand-
+    // four-hundred; "12.50" is twelve-fifty. Heuristic: exactly 3
+    // trailing digits after the LAST dot → thousands grouping, strip
+    // all dots. Otherwise the dot is a decimal point, leave it.
+    normalized = /\.\d{3}$/.test(s) ? s.replace(/\./g, '') : s;
+  }
+  const n = parseFloat(normalized);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 function escapeHtml(s: string | null | undefined): string {
   return String(s ?? '').replace(/[&<>"']/g, (ch) => {
     if (ch === '&') return '&amp;';
@@ -525,21 +576,59 @@ router.post('/:combined/complete', (req: Request, res: Response) => {
      WHERE id = ? AND remediation_status != 'resolved'`
   ).run(dispatch.ticket_id);
 
+  // Cost-variance check — compare the final cost the vendor reported
+  // against the estimate they promised at accept time. The accept
+  // summary was written by /respond as "...· Custo: 420 ·..." — we
+  // parse both numbers and flag when they diverge by >25%. This is the
+  // signal that catches an estimate-then-overcharge: the admin gets a
+  // loud ⚠️ instead of a quiet 🎉.
+  const promisedCost = parseBrl(extractField(dispatch.response_summary || '', 'Custo'));
+  const finalCost = parseBrl(validated.data.final_cost || '');
+  let costVariance: { promised: number; final: number; ratio: number; overBudget: boolean } | null = null;
+  if (promisedCost != null && finalCost != null && promisedCost > 0) {
+    const ratio = finalCost / promisedCost;
+    // Flag at >25% in either direction — overcharge is the obvious risk
+    // but a final far BELOW estimate can mean scope was cut.
+    if (ratio > 1.25 || ratio < 0.75) {
+      costVariance = { promised: promisedCost, final: finalCost, ratio, overBudget: ratio > 1 };
+    }
+  }
+
   audit(req as any, {
     action: 'vendor.self_complete',
     target_type: 'ticket_dispatch',
     target_id: parsed.dispatchId,
     condominium_id: dispatch.condominium_id,
-    metadata: { has_final_cost: !!validated.data.final_cost, ticket_id: dispatch.ticket_id },
+    metadata: {
+      has_final_cost: !!validated.data.final_cost,
+      ticket_id: dispatch.ticket_id,
+      ...(costVariance ? {
+        cost_variance: {
+          promised_brl: costVariance.promised,
+          final_brl: costVariance.final,
+          ratio: Math.round(costVariance.ratio * 100) / 100,
+        },
+      } : {}),
+    },
   });
 
-  // Notify admins of completion.
+  // Notify admins of completion. When cost diverged, the message turns
+  // from a celebration into a flag so the admin actually reads it.
   const admins = adminUserIdsForCondo(dispatch.condominium_id);
   if (admins.length > 0) {
     const vendor = dispatch.vendor_name || 'Fornecedor';
     const ticketTitle = String(dispatch.title || '').slice(0, 80);
     const costStr = validated.data.final_cost ? ` (R$ ${validated.data.final_cost})` : '';
-    const msg = `🎉 ${vendor} concluiu: "${ticketTitle}"${costStr}. Ver: /board/tickets`;
+    let msg: string;
+    if (costVariance) {
+      const pct = Math.round((costVariance.ratio - 1) * 100);
+      const dir = costVariance.overBudget
+        ? `${pct}% ACIMA do orçado (R$ ${costVariance.promised})`
+        : `${Math.abs(pct)}% abaixo do orçado (R$ ${costVariance.promised})`;
+      msg = `⚠️ ${vendor} concluiu "${ticketTitle}" com custo final R$ ${costVariance.final} — ${dir}. Confira: /board/tickets`;
+    } else {
+      msg = `🎉 ${vendor} concluiu: "${ticketTitle}"${costStr}. Ver: /board/tickets`;
+    }
     void notifyUsers(admins, msg).catch((err) => {
       console.warn(`[vendor.complete] admin notify failed:`, (err as Error)?.message || err);
     });

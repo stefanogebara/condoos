@@ -316,6 +316,32 @@ test('vendor portal tokens: sign + verify, expired rejection, tampered rejection
   assert.equal(exp.error, 'expired');
 });
 
+test('vendor portal: parseBrl + extractField handle pt-BR and en money strings', async () => {
+  const { parseBrl, extractField } = await import('../src/routes/vendor-portal');
+
+  // parseBrl — plain, R$-prefixed, pt-BR grouping, en grouping.
+  assert.equal(parseBrl('420'), 420);
+  assert.equal(parseBrl('R$ 420'), 420);
+  assert.equal(parseBrl('1.200,50'), 1200.5);     // pt-BR: dot=thousands, comma=decimal
+  assert.equal(parseBrl('1,200.50'), 1200.5);     // en: comma=thousands, dot=decimal
+  assert.equal(parseBrl('R$ 2.400'), 2400);       // pt-BR thousands, no decimal
+  assert.equal(parseBrl(''), null);
+  assert.equal(parseBrl('grátis'), null);          // no number → null, not 0
+  assert.equal(parseBrl('0'), null);               // zero rejected (can't divide by it)
+
+  // extractField — pulls "Custo: X" out of the · -separated summary.
+  const summary = '✓ Aceita · Quando: Hoje 18h · Custo: 420 · Obs: levo cabo';
+  assert.equal(extractField(summary, 'Custo'), '420');
+  assert.equal(extractField(summary, 'Quando'), 'Hoje 18h');
+  assert.equal(extractField(summary, 'Obs'), 'levo cabo');
+  assert.equal(extractField(summary, 'Inexistente'), '');
+
+  // The end-to-end variance: promised 420, final 800 → ratio 1.9 → flagged.
+  const promised = parseBrl(extractField(summary, 'Custo'));
+  const final = parseBrl('800');
+  assert.ok(promised && final && final / promised > 1.25);
+});
+
 test('vendor portal: respond → complete flips the ticket to resolved', async () => {
   resetDb();
   const { signDispatchToken } = await import('../src/lib/vendor-tokens');
