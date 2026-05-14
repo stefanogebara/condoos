@@ -66,6 +66,7 @@ async function tryAI<T>(
       jsonMode: opts?.jsonMode,
       maxTokens: opts?.maxTokens,
       tier: opts?.tier,
+      caller: `ai:${label}`,
     });
     if (opts?.jsonMode) {
       const parsed = parseJsonLoose<T>(raw);

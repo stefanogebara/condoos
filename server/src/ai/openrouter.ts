@@ -2,6 +2,8 @@
 // Returns sensible canned output if API key is missing/errors so demo never hangs.
 // Audit L-N2 — Node 20+ has built-in fetch; node-fetch dep removed.
 
+import { recordAiUsage } from '../lib/ai-usage';
+
 // Two-tier model strategy for cost + quality:
 //   - MODEL:       Claude 3.5 Haiku for user-facing copy (drafts, summaries, announcements, ata).
 //   - CHEAP_MODEL: DeepSeek V3 (~3x cheaper than Haiku) for pure structured tasks
@@ -139,6 +141,10 @@ export interface AIOpts {
   tier?: 'quality' | 'cheap';
   /** Explicit model override — takes precedence over tier. */
   model?: string;
+  /** Label for spend tracking (Phase 1.3), e.g. 'admin-agent', 'vision'. */
+  caller?: string;
+  /** Best-effort condo attribution for spend tracking. */
+  condoId?: number | null;
 }
 
 export async function chat(messages: AIMessage[], opts: AIOpts = {}): Promise<string> {
@@ -162,6 +168,14 @@ export async function chat(messages: AIMessage[], opts: AIOpts = {}): Promise<st
   const content = data?.choices?.[0]?.message?.content;
   if (!content) throw new OpenRouterError(502, 'server', 'OpenRouter empty response');
   noteSuccess();
+  recordAiUsage({
+    caller: opts.caller || 'chat',
+    model,
+    promptTokens: data?.usage?.prompt_tokens || 0,
+    completionTokens: data?.usage?.completion_tokens || 0,
+    outcome: 'ok',
+    condoId: opts.condoId,
+  });
   return String(content);
 }
 
@@ -208,6 +222,14 @@ export async function chatWithImage(
   const text = data?.choices?.[0]?.message?.content;
   if (!text) throw new OpenRouterError(502, 'server', 'OpenRouter empty vision response');
   noteSuccess();
+  recordAiUsage({
+    caller: opts.caller || 'vision',
+    model,
+    promptTokens: data?.usage?.prompt_tokens || 0,
+    completionTokens: data?.usage?.completion_tokens || 0,
+    outcome: 'ok',
+    condoId: opts.condoId,
+  });
   return String(text);
 }
 
@@ -262,6 +284,10 @@ export async function chatWithTools(
   const model = opts.model ?? (opts.tier === 'cheap' ? CHEAP_MODEL : MODEL);
   const maxIterations = opts.maxIterations ?? 6;
   const toolCalls: ChatWithToolsResult['toolCalls'] = [];
+  // Token usage accumulates across the ReAct iterations — one usage row is
+  // recorded per chatWithTools() call, summed, with iterations = round count.
+  let promptTokens = 0;
+  let completionTokens = 0;
   // Conversation grows each iteration — clone the initial messages so
   // callers don't see their array mutated, then append assistant + tool
   // responses as we go.
@@ -282,6 +308,8 @@ export async function chatWithTools(
     const choice = data?.choices?.[0];
     if (!choice) throw new OpenRouterError(502, 'server', 'OpenRouter empty response');
     noteSuccess();
+    promptTokens += data?.usage?.prompt_tokens || 0;
+    completionTokens += data?.usage?.completion_tokens || 0;
 
     const message = choice.message || {};
     const finishReason = choice.finish_reason;
@@ -289,6 +317,11 @@ export async function chatWithTools(
     // If the model didn't request tools, we're done — return its text.
     const calls = Array.isArray(message.tool_calls) ? message.tool_calls : [];
     if (calls.length === 0 || finishReason === 'stop') {
+      recordAiUsage({
+        caller: opts.caller || 'tool-use',
+        model, promptTokens, completionTokens,
+        outcome: 'ok', condoId: opts.condoId, iterations: iter + 1,
+      });
       return { text: String(message.content || ''), toolCalls, iterations: iter + 1 };
     }
 
@@ -330,6 +363,11 @@ export async function chatWithTools(
 
   // Out of iterations — return whatever assistant text we have plus a
   // marker so the caller knows the loop didn't converge cleanly.
+  recordAiUsage({
+    caller: opts.caller || 'tool-use',
+    model, promptTokens, completionTokens,
+    outcome: 'ok', condoId: opts.condoId, iterations: maxIterations,
+  });
   const last = messages[messages.length - 1];
   return {
     text: typeof last?.content === 'string' ? last.content : '',

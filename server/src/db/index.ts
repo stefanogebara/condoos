@@ -290,6 +290,27 @@ export function initSchema() {
     CREATE INDEX IF NOT EXISTS idx_expenses_condo_vendor_spent
       ON expenses(condominium_id, vendor, spent_at);
   `);
+  // AI spend tracking (Phase 1.3) — one row per successful OpenRouter call.
+  // Lets the team see token spend forming instead of discovering it via a
+  // 402 outage. condominium_id is best-effort (some calls have no condo
+  // context) so it's intentionally not a FK.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ai_usage (
+      id                INTEGER PRIMARY KEY AUTOINCREMENT,
+      created_at        TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      caller            TEXT NOT NULL,
+      model             TEXT NOT NULL,
+      prompt_tokens     INTEGER NOT NULL DEFAULT 0,
+      completion_tokens INTEGER NOT NULL DEFAULT 0,
+      total_tokens      INTEGER NOT NULL DEFAULT 0,
+      est_cost_usd      REAL NOT NULL DEFAULT 0,
+      outcome           TEXT NOT NULL DEFAULT 'ok',
+      condominium_id    INTEGER,
+      iterations        INTEGER NOT NULL DEFAULT 1
+    );
+    CREATE INDEX IF NOT EXISTS idx_ai_usage_created ON ai_usage(created_at);
+    CREATE INDEX IF NOT EXISTS idx_ai_usage_caller  ON ai_usage(created_at, caller);
+  `);
   db.exec(`
     CREATE TABLE IF NOT EXISTS budget_targets (
       id               INTEGER PRIMARY KEY AUTOINCREMENT,

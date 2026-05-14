@@ -598,7 +598,7 @@ async function runAdminAgentInner(args: RunAdminAgentArgs): Promise<RunAdminAgen
         ],
         ADMIN_AGENT_TOOLS,
         handler,
-        { maxTokens: 2_000, maxIterations: 6 }
+        { maxTokens: 2_000, maxIterations: 6, caller: 'admin-agent-react', condoId: args.condoId }
       );
       toolTrace = result.toolCalls;
       // The model is expected to terminate by calling submit_final_answer
@@ -627,7 +627,7 @@ async function runAdminAgentInner(args: RunAdminAgentArgs): Promise<RunAdminAgen
           { role: 'system', content: ADMIN_AGENT_SYS },
           { role: 'user', content: JSON.stringify(context) },
         ],
-        { jsonMode: true, maxTokens: 2_000 }
+        { jsonMode: true, maxTokens: 2_000, caller: 'admin-agent', condoId: args.condoId }
       );
       raw = parseJsonLoose<any>(text);
       if (!raw) {

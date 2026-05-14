@@ -4,6 +4,7 @@ import db from '../src/db';
 import { claimPendingInvitesForUser } from '../src/lib/invites';
 import { canVote, getProposalVoteTally, resolveVoteOutcome, computeQuorum, countEligibleVoters } from '../src/lib/proposal-tally';
 import { parseJsonLoose, classifyStatus, OpenRouterError, aiBreakerState } from '../src/ai/openrouter';
+import { estimateCostUsd } from '../src/lib/ai-usage';
 import { fallbackAdminAgent, sanitizeAdminAgentOutput } from '../src/ai/admin-agent';
 import { tickVoteCloser } from '../src/lib/vote-closer';
 import {
@@ -2379,4 +2380,17 @@ test('openrouter: circuit breaker starts closed', () => {
   const state = aiBreakerState();
   assert.equal(state.open, false);
   assert.equal(state.openUntil, null);
+});
+
+test('ai-usage: estimateCostUsd uses per-model rates', () => {
+  // Haiku 3.5: $0.80 in / $4.00 out per 1M.
+  const haiku = estimateCostUsd('anthropic/claude-3.5-haiku', 1_000_000, 1_000_000);
+  assert.equal(haiku, 4.8);
+  // DeepSeek cheap tier is several times cheaper on a balanced workload.
+  const deepseek = estimateCostUsd('deepseek/deepseek-chat', 1_000_000, 1_000_000);
+  assert.ok(deepseek < haiku / 5);
+  // Unknown model falls back to the Haiku rate, never $0.
+  assert.equal(estimateCostUsd('some/unknown-model', 1_000_000, 0), 0.8);
+  // Zero tokens → zero cost.
+  assert.equal(estimateCostUsd('anthropic/claude-3.5-haiku', 0, 0), 0);
 });
