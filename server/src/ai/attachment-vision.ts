@@ -65,6 +65,8 @@ interface VisionResult {
   signals: string[];
 }
 
+type VisionChat = typeof chatWithImage;
+
 const ALLOWED_SIGNALS = new Set([
   'water_damage', 'water_visible', 'mold_visible', 'leak_active', 'leak_dried',
   'electrical_burn', 'exposed_wiring', 'damaged_fixture',
@@ -105,7 +107,11 @@ function isImageContentType(ct: string | null | undefined): boolean {
 // so we don't burn budget retrying a broken URL forever. TRANSIENT failures
 // (out of credits, rate-limited, server blip) are NOT cached — the row
 // stays retryable so it self-heals once the AI service recovers.
-export async function analyzeAttachment(attachmentId: number, locale = 'pt-BR'): Promise<VisionResult | null> {
+export async function analyzeAttachment(
+  attachmentId: number,
+  locale = 'pt-BR',
+  chatImage: VisionChat = chatWithImage,
+): Promise<VisionResult | null> {
   const row = db.prepare(
     `SELECT id, ticket_id, url, filename, content_type,
             ai_description, ai_signals, ai_analyzed_at, ai_analysis_error
@@ -135,7 +141,7 @@ export async function analyzeAttachment(attachmentId: number, locale = 'pt-BR'):
 
   try {
     const userPrompt = `Locale: ${locale}\nReturn the JSON object only. Describe what is visible and list any matching signal tags.`;
-    const text = await chatWithImage(VISION_SYS, userPrompt, [{ url: row.url, detail: 'low' }], { maxTokens: 400 });
+    const text = await chatImage(VISION_SYS, userPrompt, [{ url: row.url, detail: 'low' }], { maxTokens: 400 });
     const parsed = parseVisionJson(text);
     if (!parsed) {
       db.prepare(
