@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import db from '../src/db';
 import { claimPendingInvitesForUser } from '../src/lib/invites';
 import { canVote, getProposalVoteTally, resolveVoteOutcome, computeQuorum, countEligibleVoters } from '../src/lib/proposal-tally';
-import { parseJsonLoose } from '../src/ai/openrouter';
+import { parseJsonLoose, classifyStatus, OpenRouterError, aiBreakerState } from '../src/ai/openrouter';
 import { fallbackAdminAgent, sanitizeAdminAgentOutput } from '../src/ai/admin-agent';
 import { tickVoteCloser } from '../src/lib/vote-closer';
 import {
@@ -2321,4 +2321,32 @@ test('admin agent sanitizer derives confidence tier and clamps fallback ceiling'
   }, input);
   assert.equal(fallback.confidence?.tier, 'medium');  // capped from high
   assert.ok(fallback.confidence!.score <= 0.65);
+});
+
+test('openrouter: classifyStatus maps HTTP codes to error kinds', () => {
+  assert.equal(classifyStatus(402), 'credits');     // out of credits — hard
+  assert.equal(classifyStatus(401), 'auth');
+  assert.equal(classifyStatus(403), 'auth');
+  assert.equal(classifyStatus(429), 'rate_limit');  // throttled — transient
+  assert.equal(classifyStatus(500), 'server');
+  assert.equal(classifyStatus(503), 'server');
+  assert.equal(classifyStatus(418), 'unknown');
+});
+
+test('openrouter: OpenRouterError carries status + kind for callers to branch on', () => {
+  const err = new OpenRouterError(402, 'credits', 'OpenRouter 402 chat');
+  assert.ok(err instanceof Error);
+  assert.equal(err.name, 'OpenRouterError');
+  assert.equal(err.status, 402);
+  assert.equal(err.kind, 'credits');
+  // Default message is derived when none is passed.
+  assert.match(new OpenRouterError(429, 'rate_limit').message, /429.*rate_limit/);
+});
+
+test('openrouter: circuit breaker starts closed', () => {
+  // No 402 has been seen in this test process, so the breaker is closed
+  // and exposes no openUntil. Trip behaviour is exercised live on prod.
+  const state = aiBreakerState();
+  assert.equal(state.open, false);
+  assert.equal(state.openUntil, null);
 });

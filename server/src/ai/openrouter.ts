@@ -18,6 +18,114 @@ const API_KEY     = process.env.OPENROUTER_API_KEY || '';
 const URL = 'https://openrouter.ai/api/v1/chat/completions';
 const TIMEOUT_MS = Number(process.env.OPENROUTER_TIMEOUT_MS || 20_000);
 
+// ---------------------------------------------------------------------------
+// Typed errors + credit circuit breaker
+//
+// Every caller used to get an opaque `Error("OpenRouter 402")`, so a hard
+// account-level failure (out of credits) was indistinguishable from a
+// transient 5xx — and every subsequent request kept hammering a dead
+// account. We now classify the failure and, on a credits (402) error, open
+// a short circuit breaker: further calls short-circuit to the caller's
+// fallback instantly instead of round-tripping to a known-dead API. The
+// breaker auto-resets after a cooldown, so it self-heals once credits return.
+// ---------------------------------------------------------------------------
+
+export type OpenRouterErrorKind =
+  | 'credits'      // 402 — account out of credits (hard, account-level)
+  | 'rate_limit'   // 429 — throttled (transient)
+  | 'auth'         // 401/403 or missing key (config)
+  | 'server'       // 5xx or network failure (transient)
+  | 'timeout'      // request aborted on TIMEOUT_MS
+  | 'unknown';
+
+export class OpenRouterError extends Error {
+  status: number;
+  kind: OpenRouterErrorKind;
+  constructor(status: number, kind: OpenRouterErrorKind, message?: string) {
+    super(message || `OpenRouter ${status} (${kind})`);
+    this.name = 'OpenRouterError';
+    this.status = status;
+    this.kind = kind;
+  }
+}
+
+export function classifyStatus(status: number): OpenRouterErrorKind {
+  if (status === 402) return 'credits';
+  if (status === 401 || status === 403) return 'auth';
+  if (status === 429) return 'rate_limit';
+  if (status >= 500) return 'server';
+  return 'unknown';
+}
+
+const BREAKER_COOLDOWN_MS = Number(process.env.OPENROUTER_BREAKER_COOLDOWN_MS || 5 * 60_000);
+let breakerOpenUntil = 0;
+
+function breakerIsOpen(): boolean {
+  return Date.now() < breakerOpenUntil;
+}
+
+function tripBreaker(reason: string): void {
+  const wasOpen = breakerIsOpen();
+  breakerOpenUntil = Date.now() + BREAKER_COOLDOWN_MS;
+  if (!wasOpen) {
+    console.warn(`[ai] credit circuit breaker OPEN (~${Math.round(BREAKER_COOLDOWN_MS / 60_000)}min) — ${reason}`);
+  }
+}
+
+// Called after any successful OpenRouter response. If the breaker had
+// tripped earlier, a success means credits are back — clear it and log.
+function noteSuccess(): void {
+  if (breakerOpenUntil !== 0) {
+    console.info('[ai] credit circuit breaker recovered — OpenRouter call succeeded');
+    breakerOpenUntil = 0;
+  }
+}
+
+/** Breaker state for the spend-visibility endpoint (Phase 1.6). */
+export function aiBreakerState(): { open: boolean; openUntil: number | null } {
+  return { open: breakerIsOpen(), openUntil: breakerOpenUntil || null };
+}
+
+// Shared !res.ok handler — classifies, logs, trips the breaker on credits,
+// and throws a typed error every caller can branch on.
+async function throwForResponse(res: Response, label: string): Promise<never> {
+  const txt = await res.text().catch(() => '');
+  const kind = classifyStatus(res.status);
+  console.error(`[ai] OpenRouter ${label} error`, res.status, kind, txt.slice(0, 300));
+  if (kind === 'credits') tripBreaker(`${res.status} on ${label}`);
+  throw new OpenRouterError(res.status, kind, `OpenRouter ${res.status} ${label}`);
+}
+
+// Wraps the fetch so an AbortController timeout (or a raw network failure)
+// becomes a typed OpenRouterError instead of a bare DOMException.
+async function fetchOpenRouter(body: unknown, label: string): Promise<Response> {
+  if (breakerIsOpen()) {
+    throw new OpenRouterError(402, 'credits', `OpenRouter ${label} skipped — credit circuit breaker open`);
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    return await fetch(URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${API_KEY}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://condoos.dev',
+        'X-Title': 'CondoOS',
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if ((err as Error)?.name === 'AbortError') {
+      throw new OpenRouterError(0, 'timeout', `OpenRouter ${label} timed out after ${TIMEOUT_MS}ms`);
+    }
+    throw new OpenRouterError(0, 'server', `OpenRouter ${label} network error: ${(err as Error)?.message || err}`);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export interface AIMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;
@@ -36,7 +144,7 @@ export interface AIOpts {
 export async function chat(messages: AIMessage[], opts: AIOpts = {}): Promise<string> {
   if (!API_KEY) {
     console.warn('[ai] OPENROUTER_API_KEY not set - using fallback');
-    throw new Error('NO_API_KEY');
+    throw new OpenRouterError(0, 'auth', 'NO_API_KEY');
   }
   const model = opts.model ?? (opts.tier === 'cheap' ? CHEAP_MODEL : MODEL);
   const body: any = {
@@ -47,33 +155,13 @@ export async function chat(messages: AIMessage[], opts: AIOpts = {}): Promise<st
   };
   if (opts.jsonMode) body.response_format = { type: 'json_object' };
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  let res;
-  try {
-    res = await fetch(URL, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${API_KEY}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://condoos.dev',
-        'X-Title': 'CondoOS',
-      },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
-  } finally {
-    clearTimeout(timeout);
-  }
+  const res = await fetchOpenRouter(body, 'chat');
+  if (!res.ok) await throwForResponse(res, 'chat');
 
-  if (!res.ok) {
-    const txt = await res.text();
-    console.error('[ai] OpenRouter error', res.status, txt.slice(0, 300));
-    throw new Error(`OpenRouter ${res.status}`);
-  }
   const data: any = await res.json();
   const content = data?.choices?.[0]?.message?.content;
-  if (!content) throw new Error('OpenRouter empty response');
+  if (!content) throw new OpenRouterError(502, 'server', 'OpenRouter empty response');
+  noteSuccess();
   return String(content);
 }
 
@@ -95,7 +183,7 @@ export async function chatWithImage(
 ): Promise<string> {
   if (!API_KEY) {
     console.warn('[ai] OPENROUTER_API_KEY not set - vision disabled');
-    throw new Error('NO_API_KEY');
+    throw new OpenRouterError(0, 'auth', 'NO_API_KEY');
   }
   // Vision path uses VISION_MODEL by default — the regular MODEL (claude-
   // 3.5-haiku) doesn't support image input.
@@ -104,41 +192,22 @@ export async function chatWithImage(
   for (const img of images) {
     content.push({ type: 'image_url', image_url: { url: img.url, detail: img.detail || 'low' } });
   }
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  let res;
-  try {
-    res = await fetch(URL, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${API_KEY}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://condoos.dev',
-        'X-Title': 'CondoOS',
-      },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content },
-        ],
-        max_tokens: opts.maxTokens ?? 600,
-        temperature: opts.temperature ?? 0.2,
-        ...(opts.jsonMode ? { response_format: { type: 'json_object' } } : {}),
-      }),
-      signal: controller.signal,
-    });
-  } finally {
-    clearTimeout(timeout);
-  }
-  if (!res.ok) {
-    const txt = await res.text();
-    console.error('[ai] OpenRouter vision error', res.status, txt.slice(0, 300));
-    throw new Error(`OpenRouter ${res.status}`);
-  }
+  const res = await fetchOpenRouter({
+    model,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content },
+    ],
+    max_tokens: opts.maxTokens ?? 600,
+    temperature: opts.temperature ?? 0.2,
+    ...(opts.jsonMode ? { response_format: { type: 'json_object' } } : {}),
+  }, 'vision');
+  if (!res.ok) await throwForResponse(res, 'vision');
+
   const data: any = await res.json();
   const text = data?.choices?.[0]?.message?.content;
-  if (!text) throw new Error('OpenRouter empty vision response');
+  if (!text) throw new OpenRouterError(502, 'server', 'OpenRouter empty vision response');
+  noteSuccess();
   return String(text);
 }
 
@@ -188,7 +257,7 @@ export async function chatWithTools(
 ): Promise<ChatWithToolsResult> {
   if (!API_KEY) {
     console.warn('[ai] OPENROUTER_API_KEY not set - tool-use disabled');
-    throw new Error('NO_API_KEY');
+    throw new OpenRouterError(0, 'auth', 'NO_API_KEY');
   }
   const model = opts.model ?? (opts.tier === 'cheap' ? CHEAP_MODEL : MODEL);
   const maxIterations = opts.maxIterations ?? 6;
@@ -199,40 +268,20 @@ export async function chatWithTools(
   const messages: any[] = initialMessages.map((m) => ({ role: m.role, content: m.content }));
 
   for (let iter = 0; iter < maxIterations; iter++) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
-    let res;
-    try {
-      res = await fetch(URL, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${API_KEY}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://condoos.dev',
-          'X-Title': 'CondoOS',
-        },
-        body: JSON.stringify({
-          model,
-          messages,
-          max_tokens: opts.maxTokens ?? 2_000,
-          temperature: opts.temperature ?? 0.3,
-          tools,
-          tool_choice: 'auto',
-        }),
-        signal: controller.signal,
-      });
-    } finally {
-      clearTimeout(timeout);
-    }
+    const res = await fetchOpenRouter({
+      model,
+      messages,
+      max_tokens: opts.maxTokens ?? 2_000,
+      temperature: opts.temperature ?? 0.3,
+      tools,
+      tool_choice: 'auto',
+    }, 'tool-use');
+    if (!res.ok) await throwForResponse(res, 'tool-use');
 
-    if (!res.ok) {
-      const txt = await res.text();
-      console.error('[ai] OpenRouter tool-use error', res.status, txt.slice(0, 300));
-      throw new Error(`OpenRouter ${res.status}`);
-    }
     const data: any = await res.json();
     const choice = data?.choices?.[0];
-    if (!choice) throw new Error('OpenRouter empty response');
+    if (!choice) throw new OpenRouterError(502, 'server', 'OpenRouter empty response');
+    noteSuccess();
 
     const message = choice.message || {};
     const finishReason = choice.finish_reason;
