@@ -68,8 +68,8 @@ export default function BoardAnnouncements() {
                   {a.source !== 'manual' && <Badge tone="sage">Redigido pela IA</Badge>}
                   <span className="text-xs text-dusk-200 ml-auto">{formatDate(a.created_at)}</span>
                 </div>
-                <h3 className="font-display text-lg text-dusk-500 mt-1">{a.title}</h3>
-                <p className="text-sm text-dusk-400 mt-1 whitespace-pre-line">{a.body}</p>
+                <h3 className="font-display text-lg text-dusk-500 mt-1">{t(a.title)}</h3>
+                <p className="text-sm text-dusk-400 mt-1 whitespace-pre-line">{t(a.body)}</p>
               </div>
             </div>
           </GlassCard>
