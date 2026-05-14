@@ -23,6 +23,26 @@ import { z } from 'zod';
 import { ok, fail } from '../lib/respond';
 import { audit } from '../lib/audit';
 import { verifyDispatchToken } from '../lib/vendor-tokens';
+import { notifyUsers } from '../lib/whatsapp';
+
+// Find every board_admin in the condo for proactive notifications. Used
+// after a vendor responds via the portal so the admin learns about it
+// from WhatsApp instead of having to refresh the tickets page. Same
+// query the SLA escalator uses for escalation pings — kept here too so
+// the vendor-portal module doesn't import the escalator.
+function adminUserIdsForCondo(condoId: number): number[] {
+  const rows = db.prepare(
+    `SELECT DISTINCT u.id
+     FROM users u
+     JOIN user_unit uu ON uu.user_id = u.id
+     JOIN units un ON un.id = uu.unit_id
+     JOIN buildings b ON b.id = un.building_id
+     WHERE b.condominium_id = ?
+       AND u.role = 'board_admin'
+       AND uu.status = 'active'`
+  ).all(condoId) as Array<{ id: number }>;
+  return rows.map((r) => r.id);
+}
 
 const router = Router();
 
@@ -352,6 +372,35 @@ router.post('/:combined/respond', (req: Request, res: Response) => {
     metadata: { accept, has_eta: !!validated.data.eta, has_cost: !!validated.data.cost, ticket_id: dispatch.ticket_id },
   });
 
+  // Proactive admin notification — the admin shouldn't have to refresh
+  // /board/tickets to discover the response landed. Fire-and-forget so
+  // the form POST doesn't block on WhatsApp delivery. notifyUsers
+  // handles opt-in + missing-phone filtering, queues to the outbox.
+  const admins = adminUserIdsForCondo(dispatch.condominium_id);
+  if (admins.length > 0) {
+    const vendor = dispatch.vendor_name || 'Fornecedor';
+    const ticketTitle = String(dispatch.title || '').slice(0, 80);
+    const extras: string[] = [];
+    if (validated.data.eta) extras.push(`Quando: ${validated.data.eta}`);
+    if (validated.data.cost) extras.push(`R$ ${validated.data.cost}`);
+    const extrasStr = extras.length > 0 ? ` (${extras.join(', ')})` : '';
+    const msg = accept
+      ? `✅ ${vendor} aceitou: "${ticketTitle}"${extrasStr}. Ver: /board/tickets`
+      : `❌ ${vendor} não pode atender: "${ticketTitle}". Considere acionar outro fornecedor: /board/tickets`;
+    void notifyUsers(admins, msg).catch((err) => {
+      console.warn(`[vendor.respond] admin notify failed:`, (err as Error)?.message || err);
+    });
+  }
+
+  // Completion link — appended to the thank-you page so the vendor can
+  // come back and mark the work done. Same HMAC token works for both
+  // /respond and /complete; the server differentiates by route. No
+  // separate token rotation needed since both paths flow off the same
+  // dispatch_id and the TTL already covers a full week.
+  const completionUrl = accept
+    ? `/api/v/${dispatch.id}.${escapeHtml(parsed.token)}/complete`
+    : null;
+
   return res.type('html').send(renderPage({
     title: 'Resposta enviada',
     noindex: true,
@@ -361,6 +410,147 @@ router.post('/:combined/respond', (req: Request, res: Response) => {
     ? `O síndico do ${escapeHtml(dispatch.condo_name || 'condomínio')} foi avisado e vai te contatar para confirmar os detalhes.`
     : `O síndico do ${escapeHtml(dispatch.condo_name || 'condomínio')} foi avisado. Obrigado pela honestidade.`}
   </p>
+  ${completionUrl ? `<p style="margin-top:16px;">Quando o trabalho estiver concluído, <a href="${completionUrl}" style="color:var(--ink); font-weight:600;">clique aqui para confirmar a conclusão</a>.</p>` : ''}
+  <p style="margin-top:14px;"><small>Você já pode fechar essa janela.</small></p>
+</div>`,
+  }));
+});
+
+// ── GET /v/:combined/complete — show the completion form ──────────
+// Available only after the vendor has accepted (status='responded' AND
+// summary starts with the accept marker). Lets them mark the work done
+// + record the final cost + optional note so the ticket flips to
+// resolved without admin intervention.
+router.get('/:combined/complete', (req: Request, res: Response) => {
+  const parsed = parseTokenParam(req.params.combined);
+  if (!parsed) return res.status(400).type('html').send(renderPage({
+    title: 'Link inválido', noindex: true,
+    body: '<div class="card"><h1>Link inválido</h1></div>',
+  }));
+  const verify = verifyDispatchToken(parsed.dispatchId, parsed.token);
+  if (!verify.ok) return res.status(verify.error === 'expired' ? 410 : 401).type('html').send(renderPage({
+    title: verify.error === 'expired' ? 'Link expirado' : 'Link inválido', noindex: true,
+    body: `<div class="card"><h1>${verify.error === 'expired' ? 'Link expirado' : 'Link inválido'}</h1></div>`,
+  }));
+  const dispatch = loadDispatchForVendor(parsed.dispatchId);
+  if (!dispatch) return res.status(404).type('html').send(renderPage({
+    title: 'Não encontrado', noindex: true,
+    body: '<div class="card"><h1>Chamado não encontrado</h1></div>',
+  }));
+  // Must have accepted first.
+  if (!dispatch.response_summary?.startsWith('✓')) {
+    return res.type('html').send(renderPage({
+      title: 'Aceite primeiro', noindex: true,
+      body: '<div class="card"><h1>Confirme antes</h1><p class="muted">Você precisa confirmar que vai atender esse chamado antes de marcá-lo como concluído.</p></div>',
+    }));
+  }
+  // Already completed (resolved ticket) — show confirmation.
+  if (/Concluído/i.test(dispatch.response_summary)) {
+    return res.type('html').send(renderPage({
+      title: 'Já concluído', noindex: true,
+      body: '<div class="ok"><h2>Já concluído</h2><p class="muted">Esse trabalho já foi marcado como concluído. Obrigado!</p></div>',
+    }));
+  }
+
+  const body = `
+<h1>Marcar como concluído</h1>
+<p class="muted">Confirme que o trabalho em <strong>${escapeHtml(dispatch.title)}</strong> foi feito. O síndico vai ser avisado.</p>
+
+<div class="card">
+  <form method="POST" action="/api/v/${dispatch.id}.${escapeHtml(parsed.token)}/complete" enctype="application/x-www-form-urlencoded">
+    <div style="margin-bottom: 12px;">
+      <label class="label">Custo final (R$)</label>
+      <input name="final_cost" inputmode="decimal" maxlength="20" placeholder="ex: 350">
+    </div>
+    <div style="margin-bottom: 12px;">
+      <label class="label">O que foi feito?</label>
+      <textarea name="completion_note" maxlength="800" placeholder="ex: troquei o cabo desgastado, testei 5 viagens, está OK"></textarea>
+    </div>
+    <button type="submit" class="btn-primary" style="width:100%;">Marcar como concluído</button>
+  </form>
+</div>`;
+  res.type('html').send(renderPage({
+    title: `Concluir: ${dispatch.title.slice(0, 50)}`,
+    noindex: true, body,
+  }));
+});
+
+// ── POST /v/:combined/complete — process completion ───────────────
+const completeSchema = z.object({
+  final_cost: z.string().max(40).optional(),
+  completion_note: z.string().max(1_000).optional(),
+});
+
+router.post('/:combined/complete', (req: Request, res: Response) => {
+  const parsed = parseTokenParam(req.params.combined);
+  if (!parsed) return fail(res, 'invalid_link', 400);
+  const verify = verifyDispatchToken(parsed.dispatchId, parsed.token);
+  if (!verify.ok) return fail(res, verify.error === 'expired' ? 'link_expired' : 'invalid_link', verify.error === 'expired' ? 410 : 401);
+  const validated = completeSchema.safeParse(req.body);
+  if (!validated.success) return fail(res, 'invalid_input', 400, validated.error.flatten());
+
+  const dispatch = loadDispatchForVendor(parsed.dispatchId);
+  if (!dispatch) return fail(res, 'not_found', 404);
+  if (!dispatch.response_summary?.startsWith('✓')) {
+    return fail(res, 'must_accept_first', 409);
+  }
+  if (/Concluído/i.test(dispatch.response_summary)) {
+    return res.type('html').send(renderPage({
+      title: 'Já concluído', noindex: true,
+      body: '<div class="ok"><h2>Já concluído</h2></div>',
+    }));
+  }
+
+  // Compose the new response_summary by appending the completion to
+  // the existing accept-summary. This preserves the original ETA/cost
+  // promise so the admin can compare it to the final outcome.
+  const parts: string[] = ['Concluído'];
+  if (validated.data.final_cost) parts.push(`Final: R$ ${validated.data.final_cost}`);
+  if (validated.data.completion_note) parts.push(validated.data.completion_note);
+  const completionSummary = parts.join(' · ').slice(0, 1_200);
+  const newSummary = `${dispatch.response_summary}\n→ ${completionSummary}`.slice(0, 4_000);
+
+  db.prepare(
+    `UPDATE ticket_dispatches SET response_summary = ? WHERE id = ?`
+  ).run(newSummary, parsed.dispatchId);
+  // Flip the ticket to resolved — same path the admin's manual
+  // /resolve route takes, minus the resident announcement (the admin
+  // can publish that later if they want).
+  db.prepare(
+    `UPDATE tickets
+     SET status = 'resolved',
+         remediation_status = 'resolved',
+         resolved_at = CURRENT_TIMESTAMP,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = ? AND remediation_status != 'resolved'`
+  ).run(dispatch.ticket_id);
+
+  audit(req as any, {
+    action: 'vendor.self_complete',
+    target_type: 'ticket_dispatch',
+    target_id: parsed.dispatchId,
+    condominium_id: dispatch.condominium_id,
+    metadata: { has_final_cost: !!validated.data.final_cost, ticket_id: dispatch.ticket_id },
+  });
+
+  // Notify admins of completion.
+  const admins = adminUserIdsForCondo(dispatch.condominium_id);
+  if (admins.length > 0) {
+    const vendor = dispatch.vendor_name || 'Fornecedor';
+    const ticketTitle = String(dispatch.title || '').slice(0, 80);
+    const costStr = validated.data.final_cost ? ` (R$ ${validated.data.final_cost})` : '';
+    const msg = `🎉 ${vendor} concluiu: "${ticketTitle}"${costStr}. Ver: /board/tickets`;
+    void notifyUsers(admins, msg).catch((err) => {
+      console.warn(`[vendor.complete] admin notify failed:`, (err as Error)?.message || err);
+    });
+  }
+
+  return res.type('html').send(renderPage({
+    title: 'Trabalho concluído',
+    noindex: true,
+    body: `<div class="ok">
+  <h2>Tudo certo!</h2>
+  <p class="muted">O síndico do ${escapeHtml(dispatch.condo_name || 'condomínio')} foi avisado da conclusão. Obrigado!</p>
   <p style="margin-top:14px;"><small>Você já pode fechar essa janela.</small></p>
 </div>`,
   }));

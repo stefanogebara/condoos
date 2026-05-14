@@ -316,6 +316,56 @@ test('vendor portal tokens: sign + verify, expired rejection, tampered rejection
   assert.equal(exp.error, 'expired');
 });
 
+test('vendor portal: respond → complete flips the ticket to resolved', async () => {
+  resetDb();
+  const { signDispatchToken } = await import('../src/lib/vendor-tokens');
+  const { condoId, unit101 } = createCondoFixture();
+  const resident = createUser('r-vp@test');
+  db.prepare(
+    `INSERT INTO user_unit (user_id, unit_id, relationship, status, primary_contact, voting_weight)
+     VALUES (?, ?, 'owner', 'active', 1, 1.0)`
+  ).run(resident, unit101);
+  const vendorId = Number(db.prepare(
+    `INSERT INTO service_contacts (condominium_id, category, company_name, whatsapp, active)
+     VALUES (?, 'elevator', 'Otis Test', '+5511999990000', 1)`
+  ).run(condoId).lastInsertRowid);
+  const ticketId = Number(db.prepare(
+    `INSERT INTO tickets (condominium_id, reporter_id, title, description, category, priority, status, remediation_status, verification_threshold)
+     VALUES (?, ?, 'Elevador travado', 'Travou', 'elevator', 'urgent', 'open', 'awaiting_vendor', 1)`
+  ).run(condoId, resident).lastInsertRowid);
+  const dispatchId = Number(db.prepare(
+    `INSERT INTO ticket_dispatches (ticket_id, service_contact_id, channel, message_body, status)
+     VALUES (?, ?, 'whatsapp', 'test', 'queued')`
+  ).run(ticketId, vendorId).lastInsertRowid);
+
+  // Simulate the /respond accept: set the summary the way the route does.
+  db.prepare(
+    `UPDATE ticket_dispatches SET status = 'responded', responded_at = CURRENT_TIMESTAMP, response_summary = ? WHERE id = ?`
+  ).run('✓ Aceita · Quando: Hoje 18h', dispatchId);
+  db.prepare(`UPDATE tickets SET remediation_status = 'vendor_engaged' WHERE id = ?`).run(ticketId);
+
+  // Token still valid for this dispatch.
+  const token = signDispatchToken(dispatchId);
+  const { verifyDispatchToken } = await import('../src/lib/vendor-tokens');
+  assert.equal(verifyDispatchToken(dispatchId, token).ok, true);
+
+  // Simulate /complete: the route appends 'Concluído' + flips ticket.
+  const existing = db.prepare(`SELECT response_summary FROM ticket_dispatches WHERE id = ?`).get(dispatchId) as { response_summary: string };
+  db.prepare(`UPDATE ticket_dispatches SET response_summary = ? WHERE id = ?`)
+    .run(`${existing.response_summary}\n→ Concluído · Final: R$ 350`, dispatchId);
+  db.prepare(
+    `UPDATE tickets SET status = 'resolved', remediation_status = 'resolved', resolved_at = CURRENT_TIMESTAMP WHERE id = ? AND remediation_status != 'resolved'`
+  ).run(ticketId);
+
+  const finalTicket = db.prepare(`SELECT status, remediation_status, resolved_at FROM tickets WHERE id = ?`).get(ticketId) as any;
+  assert.equal(finalTicket.status, 'resolved');
+  assert.equal(finalTicket.remediation_status, 'resolved');
+  assert.ok(finalTicket.resolved_at);
+  const finalDispatch = db.prepare(`SELECT response_summary FROM ticket_dispatches WHERE id = ?`).get(dispatchId) as any;
+  assert.match(finalDispatch.response_summary, /Concluído/);
+  assert.match(finalDispatch.response_summary, /Aceita/); // original accept preserved
+});
+
 test('admin agent sanitizer surfaces follow-up suggestions when network_fit is empty', () => {
   // Audit follow-up: when the agent hits a data wall (no vendor in
   // category, cost uncited), the sanitiser populates clickable rescue
