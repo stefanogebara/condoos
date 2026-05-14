@@ -514,6 +514,49 @@ CREATE TABLE IF NOT EXISTS payments (
 
 CREATE INDEX IF NOT EXISTS idx_payments_invoice ON payments(invoice_id);
 
+CREATE TABLE IF NOT EXISTS expenses (
+  id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+  condominium_id      INTEGER NOT NULL REFERENCES condominiums(id) ON DELETE CASCADE,
+  amount_cents        INTEGER NOT NULL,
+  currency            TEXT NOT NULL DEFAULT 'BRL',
+  category            TEXT NOT NULL,
+  vendor              TEXT,
+  description         TEXT NOT NULL,
+  admin_explanation   TEXT,
+  spent_at            TEXT NOT NULL,
+  receipt_url         TEXT,
+  receipt_file_id     INTEGER REFERENCES files(id) ON DELETE SET NULL,
+  related_proposal_id INTEGER REFERENCES proposals(id) ON DELETE SET NULL,
+  created_by_user_id  INTEGER REFERENCES users(id),
+  created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_expenses_condo_spent
+  ON expenses(condominium_id, spent_at);
+CREATE INDEX IF NOT EXISTS idx_expenses_condo_category
+  ON expenses(condominium_id, category, spent_at);
+CREATE INDEX IF NOT EXISTS idx_expenses_condo_vendor_spent
+  ON expenses(condominium_id, vendor, spent_at);
+
+CREATE TABLE IF NOT EXISTS budget_targets (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  condominium_id   INTEGER NOT NULL REFERENCES condominiums(id) ON DELETE CASCADE,
+  month            TEXT NOT NULL CHECK(month GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]'),
+  category         TEXT NOT NULL CHECK(category IN (
+    'maintenance','utilities','cleaning','security','staff','admin',
+    'infrastructure','amenity','insurance','tax','reserve','other'
+  )),
+  amount_cents     INTEGER NOT NULL CHECK(amount_cents >= 0),
+  currency         TEXT NOT NULL DEFAULT 'BRL',
+  notes            TEXT,
+  created_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(condominium_id, month, category)
+);
+
+CREATE INDEX IF NOT EXISTS idx_budget_targets_condo_month
+  ON budget_targets(condominium_id, month);
+
 CREATE TABLE IF NOT EXISTS payment_proofs (
   id                  INTEGER PRIMARY KEY AUTOINCREMENT,
   condominium_id      INTEGER NOT NULL REFERENCES condominiums(id) ON DELETE CASCADE,

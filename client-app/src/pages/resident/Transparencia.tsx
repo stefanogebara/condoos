@@ -19,6 +19,7 @@ interface Expense {
   category: string;
   vendor: string | null;
   description: string;
+  admin_explanation: string | null;
   spent_at: string;
   receipt_url: string | null;
   receipt_file_id: number | null;
@@ -34,6 +35,31 @@ interface ExpenseList {
   expenses: Expense[];
   totals_by_category: CategoryTotal[];
   total_cents: number;
+}
+
+interface BudgetCategorySummary {
+  category: string;
+  budget_cents: number;
+  actual_cents: number;
+  variance_cents: number;
+  expense_count: number;
+  receipt_count: number;
+  receipt_coverage_percent: number;
+  currency: string;
+  notes: string | null;
+}
+
+interface BudgetSummary {
+  month: string;
+  currency: string;
+  total_budget_cents: number;
+  total_actual_cents: number;
+  variance_cents: number;
+  expense_count: number;
+  receipt_count: number;
+  receipt_coverage_percent: number;
+  over_budget_category_count: number;
+  categories: BudgetCategorySummary[];
 }
 
 interface Membership {
@@ -83,6 +109,7 @@ export default function Transparencia() {
   const { locale } = useLocale();
   const tr = (key: string) => t(key, locale);
   const [data, setData] = useState<ExpenseList | null>(null);
+  const [budgetSummary, setBudgetSummary] = useState<BudgetSummary | null>(null);
   const [memberships, setMemberships] = useState<Membership[]>([]);
   const [statement, setStatement] = useState<Statement | null>(null);
   const [statementLoading, setStatementLoading] = useState(true);
@@ -104,6 +131,10 @@ export default function Transparencia() {
     apiGet<ExpenseList>('/finance/expenses')
       .then((next) => { if (alive) setData(next); })
       .catch(() => { if (alive) setData(null); });
+
+    apiGet<BudgetSummary>(`/finance/budget-summary?month=${new Date().toISOString().slice(0, 7)}`)
+      .then((next) => { if (alive) setBudgetSummary(next); })
+      .catch(() => { if (alive) setBudgetSummary(null); });
 
     apiGet<Membership[]>('/onboarding/me')
       .then(async (rows) => {
@@ -161,6 +192,8 @@ export default function Transparencia() {
         />
       )}
 
+      <TransparencyBudgetSummary summary={budgetSummary} tr={tr} />
+
       {!data ? (
         <GlassCard className="p-6 text-sm text-dusk-300">{tr('Carregando…')}</GlassCard>
       ) : (
@@ -195,6 +228,12 @@ export default function Transparencia() {
                       <div className="text-xs text-dusk-300 mt-1">
                         {formatDate(expense.spent_at)}{expense.vendor && <> · {expense.vendor}</>}
                       </div>
+                      {expense.admin_explanation && (
+                        <div className="mt-2 rounded-2xl bg-sage-50/70 border border-sage-100 px-3 py-2">
+                          <div className="text-[11px] uppercase tracking-wider text-sage-700">{tr('Explicação do administrador')}</div>
+                          <p className="text-xs text-dusk-400 mt-0.5">{expense.admin_explanation}</p>
+                        </div>
+                      )}
                       {expense.receipt_file_id ? (
                         <button
                           type="button"
@@ -225,6 +264,86 @@ export default function Transparencia() {
         </>
       )}
     </>
+  );
+}
+
+function TransparencyBudgetSummary({
+  summary,
+  tr,
+}: {
+  summary: BudgetSummary | null;
+  tr: (key: string) => string;
+}) {
+  if (!summary) return null;
+
+  const budgetUsed = summary.total_budget_cents > 0
+    ? Math.round((summary.total_actual_cents / summary.total_budget_cents) * 100)
+    : 0;
+  const remaining = summary.total_budget_cents - summary.total_actual_cents;
+  const topCategories = summary.categories
+    .filter((row) => row.actual_cents > 0 || row.budget_cents > 0)
+    .sort((a, b) => b.actual_cents - a.actual_cents)
+    .slice(0, 4);
+
+  return (
+    <GlassCard variant="clay-sage" className="p-5 mb-6">
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+        <div>
+          <h2 className="font-display text-xl text-dusk-500">{tr('Resumo financeiro do mês')}</h2>
+          <p className="text-sm text-dusk-300 mt-1">
+            {summary.total_budget_cents > 0
+              ? `${budgetUsed}% ${tr('do orçamento usado')}`
+              : tr('O orçamento ainda não foi configurado para este mês.')}
+          </p>
+        </div>
+        <Badge tone={summary.receipt_coverage_percent >= 80 ? 'sage' : 'peach'}>
+          {summary.receipt_coverage_percent}% {tr('com recibo')}
+        </Badge>
+      </div>
+
+      <div className="grid sm:grid-cols-3 gap-3">
+        <Metric
+          label={tr('Orçamento do mês')}
+          value={formatCurrency(summary.total_budget_cents / 100, summary.currency)}
+        />
+        <Metric
+          label={tr('Gasto atual')}
+          value={formatCurrency(summary.total_actual_cents / 100, summary.currency)}
+        />
+        <Metric
+          label={tr(remaining < 0 ? 'Acima do orçamento' : 'Sobra no orçamento')}
+          value={formatCurrency(Math.abs(remaining) / 100, summary.currency)}
+        />
+      </div>
+
+      {topCategories.length > 0 ? (
+        <div className="space-y-2 mt-4">
+          {topCategories.map((row) => {
+            const over = row.budget_cents > 0 && row.actual_cents > row.budget_cents;
+            return (
+              <div key={row.category} className="rounded-2xl bg-white/50 border border-white/70 px-3 py-2 flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <div className="font-semibold text-sm text-dusk-500">{tr(CATEGORY_LABEL[row.category] || row.category)}</div>
+                  <div className="text-xs text-dusk-300">
+                    {row.receipt_count}/{row.expense_count} {tr('Recibos anexados')}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="font-mono text-sm text-dusk-500">{formatCurrency(row.actual_cents / 100, row.currency)}</div>
+                  {row.budget_cents > 0 && (
+                    <Badge tone={over ? 'warning' : 'sage'} className="mt-1">
+                      {over ? tr('Acima do orçamento') : tr('Dentro do orçamento')}
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="text-sm text-dusk-300 mt-4">{tr('Nenhum gasto lançado neste mês.')}</p>
+      )}
+    </GlassCard>
   );
 }
 

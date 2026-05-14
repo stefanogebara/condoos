@@ -24,11 +24,13 @@ import {
 import { audit, auditRowsToCsv, listAuditRows } from '../src/lib/audit';
 import {
   approvePaymentProof,
+  getBudgetSummary,
   generateInvoices,
   generateScheduledInvoices,
   recordPayment,
   rejectPaymentProof,
   submitPaymentProof,
+  upsertBudgetTargets,
 } from '../src/lib/finance';
 import { requireAuth, revokeUserTokens, signToken } from '../src/lib/auth';
 import { canAssignTicketToUser, markTicketAgentFailed } from '../src/lib/tickets';
@@ -57,6 +59,7 @@ function resetDb() {
     'tickets',
     'building_documents',
     'expenses',
+    'budget_targets',
     'payment_proofs',
     'files',
     'payments',
@@ -1592,6 +1595,63 @@ test('finance: payment proof review protects ownership, overpay, and rejection p
   const ownApproval = approvePaymentProof({ condoId, proof_id: (overpayProof as any).id, reviewer_user_id: residentId });
   assert.equal(ownApproval.ok, false);
   assert.equal((ownApproval as any).error, 'cannot_approve_own_payment_proof');
+});
+
+test('finance: budget summary compares targets to actual spend and receipt coverage', () => {
+  resetDb();
+  const { condoId } = createCondoFixture();
+  const boardId = createUser('budget-board@example.com', 'board_admin');
+  db.prepare(`UPDATE users SET condominium_id = ? WHERE id = ?`).run(condoId, boardId);
+
+  const saved = upsertBudgetTargets({
+    condoId,
+    month: '2026-05',
+    currency: 'BRL',
+    targets: [
+      { category: 'maintenance', amount_cents: 12000 },
+      { category: 'security', amount_cents: 4000 },
+      { category: 'cleaning', amount_cents: 3000 },
+    ],
+  });
+  assert.equal(saved.ok, true);
+
+  db.prepare(
+    `INSERT INTO expenses (condominium_id, amount_cents, currency, category, vendor, description, spent_at, receipt_url, created_by_user_id)
+     VALUES (?, ?, 'BRL', ?, ?, ?, ?, ?, ?)`
+  ).run(condoId, 10000, 'maintenance', 'FixCo', 'Lobby repair', '2026-05-03T12:00:00.000Z', 'https://example.com/lobby.pdf', boardId);
+  db.prepare(
+    `INSERT INTO expenses (condominium_id, amount_cents, currency, category, vendor, description, spent_at, created_by_user_id)
+     VALUES (?, ?, 'BRL', ?, ?, ?, ?, ?)`
+  ).run(condoId, 5000, 'security', 'SafeCo', 'Night guard', '2026-05-10T12:00:00.000Z', boardId);
+  db.prepare(
+    `INSERT INTO expenses (condominium_id, amount_cents, currency, category, vendor, description, spent_at, receipt_url, created_by_user_id)
+     VALUES (?, ?, 'BRL', ?, ?, ?, ?, ?, ?)`
+  ).run(condoId, 9000, 'maintenance', 'OtherMonth', 'April repair', '2026-04-20T12:00:00.000Z', 'https://example.com/april.pdf', boardId);
+
+  const summary = getBudgetSummary(condoId, '2026-05');
+  assert.equal(summary.month, '2026-05');
+  assert.equal(summary.total_budget_cents, 19000);
+  assert.equal(summary.total_actual_cents, 15000);
+  assert.equal(summary.variance_cents, 4000);
+  assert.equal(summary.expense_count, 2);
+  assert.equal(summary.receipt_count, 1);
+  assert.equal(summary.receipt_coverage_percent, 50);
+
+  const maintenance = summary.categories.find((row) => row.category === 'maintenance')!;
+  assert.equal(maintenance.budget_cents, 12000);
+  assert.equal(maintenance.actual_cents, 10000);
+  assert.equal(maintenance.variance_cents, 2000);
+  assert.equal(maintenance.receipt_coverage_percent, 100);
+
+  const security = summary.categories.find((row) => row.category === 'security')!;
+  assert.equal(security.budget_cents, 4000);
+  assert.equal(security.actual_cents, 5000);
+  assert.equal(security.variance_cents, -1000);
+  assert.equal(security.receipt_coverage_percent, 0);
+
+  const cleaning = summary.categories.find((row) => row.category === 'cleaning')!;
+  assert.equal(cleaning.budget_cents, 3000);
+  assert.equal(cleaning.actual_cents, 0);
 });
 
 test('tickets: assignees must be active board users in the same condo', () => {

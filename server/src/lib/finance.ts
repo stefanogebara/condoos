@@ -47,6 +47,14 @@ interface PaymentProofRow {
   updated_at: string;
 }
 
+export const FINANCE_EXPENSE_CATEGORIES = [
+  'maintenance', 'utilities', 'cleaning', 'security', 'staff',
+  'admin', 'infrastructure', 'amenity', 'insurance', 'tax',
+  'reserve', 'other',
+] as const;
+
+export type FinanceExpenseCategory = typeof FINANCE_EXPENSE_CATEGORIES[number];
+
 export interface InvoiceGenerationInput {
   condoId: number;
   schedule_id?: number;
@@ -105,6 +113,51 @@ export interface PaymentProofSuccess {
   remaining_cents?: number;
 }
 
+export interface BudgetTargetInput {
+  category: FinanceExpenseCategory;
+  amount_cents: number;
+  notes?: string | null;
+}
+
+export interface BudgetTargetWriteInput {
+  condoId: number;
+  month: string;
+  currency?: string;
+  targets: BudgetTargetInput[];
+}
+
+export interface BudgetCategorySummary {
+  category: FinanceExpenseCategory;
+  budget_cents: number;
+  actual_cents: number;
+  variance_cents: number;
+  expense_count: number;
+  receipt_count: number;
+  receipt_coverage_percent: number;
+  currency: string;
+  notes: string | null;
+}
+
+export interface BudgetSummary {
+  month: string;
+  currency: string;
+  total_budget_cents: number;
+  total_actual_cents: number;
+  variance_cents: number;
+  expense_count: number;
+  receipt_count: number;
+  receipt_coverage_percent: number;
+  over_budget_category_count: number;
+  categories: BudgetCategorySummary[];
+}
+
+export interface BudgetTargetWriteSuccess {
+  ok: true;
+  month: string;
+  saved_count: number;
+  deleted_count: number;
+}
+
 export interface ScheduledInvoiceGenerationResult {
   period: string;
   schedule_count: number;
@@ -133,6 +186,154 @@ export function userCanSeeUnit(userId: number, role: string, unitId: number, con
      JOIN buildings b ON b.id = u.building_id
      WHERE uu.user_id = ? AND uu.unit_id = ? AND uu.status = 'active' AND b.condominium_id = ?`
   ).get(userId, unitId, condoId);
+}
+
+function assertMonth(month: string) {
+  if (!/^\d{4}-\d{2}$/.test(month)) throw new Error('invalid_month');
+}
+
+function monthBounds(month: string) {
+  assertMonth(month);
+  const [year, monthNum] = month.split('-').map(Number);
+  const start = new Date(Date.UTC(year, monthNum - 1, 1, 0, 0, 0, 0)).toISOString();
+  const end = new Date(Date.UTC(year, monthNum, 1, 0, 0, 0, 0)).toISOString();
+  return { start, end };
+}
+
+function coveragePercent(receiptCount: number, expenseCount: number) {
+  if (expenseCount <= 0) return 0;
+  return Math.round((receiptCount / expenseCount) * 100);
+}
+
+export function upsertBudgetTargets(input: BudgetTargetWriteInput): BudgetTargetWriteSuccess | FinanceError {
+  try {
+    assertMonth(input.month);
+  } catch {
+    return { ok: false, error: 'invalid_month', status: 400 };
+  }
+  const currency = (input.currency || 'BRL').toUpperCase();
+  if (!/^[A-Z]{3}$/.test(currency)) return { ok: false, error: 'invalid_currency', status: 400 };
+
+  let saved = 0;
+  let deleted = 0;
+  const write = db.transaction((targets: BudgetTargetInput[]) => {
+    for (const target of targets) {
+      if (!FINANCE_EXPENSE_CATEGORIES.includes(target.category)) {
+        throw new Error('invalid_budget_category');
+      }
+      const amount = Math.max(0, Math.round(Number(target.amount_cents || 0)));
+      if (amount <= 0) {
+        const result = db.prepare(
+          `DELETE FROM budget_targets
+           WHERE condominium_id = ? AND month = ? AND category = ?`
+        ).run(input.condoId, input.month, target.category);
+        deleted += Number(result.changes || 0);
+        continue;
+      }
+      db.prepare(
+        `INSERT INTO budget_targets (condominium_id, month, category, amount_cents, currency, notes)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(condominium_id, month, category)
+         DO UPDATE SET amount_cents = excluded.amount_cents,
+                       currency = excluded.currency,
+                       notes = excluded.notes,
+                       updated_at = CURRENT_TIMESTAMP`
+      ).run(
+        input.condoId,
+        input.month,
+        target.category,
+        amount,
+        currency,
+        target.notes?.trim() || null,
+      );
+      saved += 1;
+    }
+  });
+
+  try {
+    write(input.targets || []);
+  } catch (err) {
+    if ((err as Error).message === 'invalid_budget_category') {
+      return { ok: false, error: 'invalid_budget_category', status: 400 };
+    }
+    throw err;
+  }
+
+  return { ok: true, month: input.month, saved_count: saved, deleted_count: deleted };
+}
+
+export function getBudgetSummary(condoId: number, month: string): BudgetSummary {
+  const { start, end } = monthBounds(month);
+  const actualRows = db.prepare(
+    `SELECT category,
+            SUM(amount_cents) AS actual_cents,
+            COUNT(*) AS expense_count,
+            SUM(CASE WHEN receipt_url IS NOT NULL OR receipt_file_id IS NOT NULL THEN 1 ELSE 0 END) AS receipt_count,
+            COALESCE(MAX(currency), 'BRL') AS currency
+     FROM expenses
+     WHERE condominium_id = ?
+       AND spent_at >= ?
+       AND spent_at < ?
+     GROUP BY category`
+  ).all(condoId, start, end) as Array<{
+    category: FinanceExpenseCategory;
+    actual_cents: number;
+    expense_count: number;
+    receipt_count: number;
+    currency: string;
+  }>;
+  const targetRows = db.prepare(
+    `SELECT category, amount_cents, currency, notes
+     FROM budget_targets
+     WHERE condominium_id = ? AND month = ?`
+  ).all(condoId, month) as Array<{
+    category: FinanceExpenseCategory;
+    amount_cents: number;
+    currency: string;
+    notes: string | null;
+  }>;
+
+  const actualByCategory = new Map(actualRows.map((row) => [row.category, row]));
+  const targetByCategory = new Map(targetRows.map((row) => [row.category, row]));
+  const fallbackCurrency = targetRows[0]?.currency || actualRows[0]?.currency || 'BRL';
+
+  const categories = FINANCE_EXPENSE_CATEGORIES.map((category) => {
+    const actual = actualByCategory.get(category);
+    const target = targetByCategory.get(category);
+    const actualCents = Number(actual?.actual_cents || 0);
+    const budgetCents = Number(target?.amount_cents || 0);
+    const expenseCount = Number(actual?.expense_count || 0);
+    const receiptCount = Number(actual?.receipt_count || 0);
+    return {
+      category,
+      budget_cents: budgetCents,
+      actual_cents: actualCents,
+      variance_cents: budgetCents - actualCents,
+      expense_count: expenseCount,
+      receipt_count: receiptCount,
+      receipt_coverage_percent: coveragePercent(receiptCount, expenseCount),
+      currency: target?.currency || actual?.currency || fallbackCurrency,
+      notes: target?.notes || null,
+    };
+  });
+
+  const totalBudget = categories.reduce((sum, row) => sum + row.budget_cents, 0);
+  const totalActual = categories.reduce((sum, row) => sum + row.actual_cents, 0);
+  const expenseCount = categories.reduce((sum, row) => sum + row.expense_count, 0);
+  const receiptCount = categories.reduce((sum, row) => sum + row.receipt_count, 0);
+
+  return {
+    month,
+    currency: fallbackCurrency,
+    total_budget_cents: totalBudget,
+    total_actual_cents: totalActual,
+    variance_cents: totalBudget - totalActual,
+    expense_count: expenseCount,
+    receipt_count: receiptCount,
+    receipt_coverage_percent: coveragePercent(receiptCount, expenseCount),
+    over_budget_category_count: categories.filter((row) => row.budget_cents > 0 && row.actual_cents > row.budget_cents).length,
+    categories,
+  };
 }
 
 function existingInvoice(unitId: number, period: string, scheduleId?: number): { id: number } | undefined {

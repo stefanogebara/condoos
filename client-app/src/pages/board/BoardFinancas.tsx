@@ -32,6 +32,7 @@ interface Expense {
   category: string;
   vendor: string | null;
   description: string;
+  admin_explanation: string | null;
   spent_at: string;
   receipt_url: string | null;
   receipt_file_id: number | null;
@@ -104,6 +105,31 @@ interface Receivables {
   invoices: ReceivableInvoice[];
 }
 
+interface BudgetCategorySummary {
+  category: string;
+  budget_cents: number;
+  actual_cents: number;
+  variance_cents: number;
+  expense_count: number;
+  receipt_count: number;
+  receipt_coverage_percent: number;
+  currency: string;
+  notes: string | null;
+}
+
+interface BudgetSummary {
+  month: string;
+  currency: string;
+  total_budget_cents: number;
+  total_actual_cents: number;
+  variance_cents: number;
+  expense_count: number;
+  receipt_count: number;
+  receipt_coverage_percent: number;
+  over_budget_category_count: number;
+  categories: BudgetCategorySummary[];
+}
+
 interface PaymentProof {
   id: number;
   invoice_id: number;
@@ -169,6 +195,14 @@ function parseAmountToCents(value: string): number | null {
   return Math.round(parsed * 100);
 }
 
+function parseBudgetAmountToCents(value: string): number | null {
+  const normalized = value.trim().replace(/\s/g, '').replace(',', '.');
+  if (!normalized) return 0;
+  const parsed = Number.parseFloat(normalized);
+  if (!Number.isFinite(parsed) || parsed < 0) return null;
+  return Math.round(parsed * 100);
+}
+
 function amountInput(cents: number) {
   return (cents / 100).toFixed(2);
 }
@@ -222,6 +256,8 @@ export default function BoardFinancas() {
   const [data, setData] = useState<ExpenseList | null>(null);
   const [schedules, setSchedules] = useState<DuesSchedule[]>([]);
   const [receivables, setReceivables] = useState<Receivables | null>(null);
+  const [budgetMonth, setBudgetMonth] = useState(currentPeriod());
+  const [budgetSummary, setBudgetSummary] = useState<BudgetSummary | null>(null);
   const [paymentProofs, setPaymentProofs] = useState<PaymentProof[]>([]);
   const [showExpenseForm, setShowExpenseForm] = useState(false);
   const [showScheduleForm, setShowScheduleForm] = useState(false);
@@ -229,15 +265,17 @@ export default function BoardFinancas() {
   const [paymentTarget, setPaymentTarget] = useState<ReceivableInvoice | null>(null);
 
   const load = async () => {
-    const [expensesNext, schedulesNext, receivablesNext, paymentProofsNext] = await Promise.all([
+    const [expensesNext, schedulesNext, receivablesNext, budgetSummaryNext, paymentProofsNext] = await Promise.all([
       apiGet<ExpenseList>('/finance/expenses'),
       apiGet<DuesSchedule[]>('/finance/schedules'),
       apiGet<Receivables>('/finance/receivables'),
+      apiGet<BudgetSummary>(`/finance/budget-summary?month=${budgetMonth}`),
       apiGet<PaymentProof[]>('/finance/payment-proofs'),
     ]);
     setData(expensesNext);
     setSchedules(schedulesNext);
     setReceivables(receivablesNext);
+    setBudgetSummary(budgetSummaryNext);
     setPaymentProofs(paymentProofsNext);
   };
 
@@ -245,9 +283,10 @@ export default function BoardFinancas() {
     load().catch(() => {
       setData(null);
       setReceivables(null);
+      setBudgetSummary(null);
       toast.error(t('Não foi possível carregar finanças'));
     });
-  }, []);
+  }, [budgetMonth]);
 
   const invoicesOpen = useMemo(() => openInvoices(receivables), [receivables]);
 
@@ -277,6 +316,13 @@ export default function BoardFinancas() {
       />
 
       <FinanceHealth receivables={receivables} />
+
+      <BudgetSummaryPanel
+        summary={budgetSummary}
+        month={budgetMonth}
+        onMonthChange={setBudgetMonth}
+        onSaved={load}
+      />
 
       <PaymentProofReviewPanel proofs={paymentProofs} onChanged={load} />
 
@@ -348,6 +394,215 @@ export default function BoardFinancas() {
         />
       )}
     </>
+  );
+}
+
+function BudgetSummaryPanel({
+  summary,
+  month,
+  onMonthChange,
+  onSaved,
+}: {
+  summary: BudgetSummary | null;
+  month: string;
+  onMonthChange: (month: string) => void;
+  onSaved: () => void;
+}) {
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!summary) {
+      setDrafts({});
+      return;
+    }
+    const next: Record<string, string> = {};
+    summary.categories.forEach((row) => {
+      next[row.category] = row.budget_cents > 0 ? amountInput(row.budget_cents) : '';
+    });
+    setDrafts(next);
+  }, [summary]);
+
+  if (!summary) {
+    return (
+      <GlassCard className="p-5 mb-6 text-sm text-dusk-300">
+        {t('Carregando…')}
+      </GlassCard>
+    );
+  }
+
+  const remaining = summary.total_budget_cents - summary.total_actual_cents;
+  const budgetUsed = summary.total_budget_cents > 0
+    ? Math.round((summary.total_actual_cents / summary.total_budget_cents) * 100)
+    : 0;
+  const visibleRows = summary.categories.filter((row) => row.budget_cents > 0 || row.actual_cents > 0);
+  const rows = visibleRows.length > 0 ? visibleRows : summary.categories;
+
+  async function saveTargets() {
+    if (!summary) return;
+    setSaving(true);
+    try {
+      const targets = summary.categories.map((row) => {
+        const amount = parseBudgetAmountToCents(drafts[row.category] || '');
+        if (amount === null) {
+          throw new Error('invalid_amount');
+        }
+        return {
+          category: row.category,
+          amount_cents: amount,
+        };
+      });
+
+      await apiPost('/finance/budget-targets/bulk', {
+        month,
+        currency: summary.currency || 'BRL',
+        targets,
+      });
+      toast.success(t('Orçamento salvo'));
+      onSaved();
+    } catch (err: any) {
+      if (err?.message === 'invalid_amount') {
+        toast.error(t('Valor inválido — use números (ex: 1500 ou 1500,00)'));
+      } else {
+        toast.error(err?.response?.data?.error || t('Falha ao salvar orçamento'));
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <GlassCard className="p-5 mb-6">
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-5">
+        <div>
+          <h2 className="font-display text-xl text-dusk-500">{t('Orçamento vs realizado')}</h2>
+          <p className="text-sm text-dusk-300 mt-1">
+            {t('Defina o teto mensal por categoria e acompanhe o gasto real lançado.')}
+          </p>
+        </div>
+        <label className="block text-xs text-dusk-300 font-medium">
+          {t('Mês')}
+          <input
+            className="input mt-1 w-44"
+            type="month"
+            value={month}
+            onChange={(e) => onMonthChange(e.target.value || currentPeriod())}
+          />
+        </label>
+      </div>
+
+      <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3 mb-5">
+        <BudgetMetric
+          label={t('Orçamento do mês')}
+          value={formatCurrency(summary.total_budget_cents / 100, summary.currency)}
+        />
+        <BudgetMetric
+          label={t('Gasto atual')}
+          value={formatCurrency(summary.total_actual_cents / 100, summary.currency)}
+        />
+        <BudgetMetric
+          label={t(remaining < 0 ? 'Acima do orçamento' : 'Sobra no orçamento')}
+          value={formatCurrency(Math.abs(remaining) / 100, summary.currency)}
+        />
+        <BudgetMetric
+          label={t('Cobertura de recibos')}
+          value={`${summary.receipt_coverage_percent}%`}
+        />
+      </div>
+
+      <div className="flex flex-wrap gap-2 mb-4">
+        <Badge tone={summary.total_budget_cents > 0 && budgetUsed > 100 ? 'warning' : 'sage'}>
+          {summary.total_budget_cents > 0 ? `${budgetUsed}% ${t('do orçamento usado')}` : t('O orçamento ainda não foi configurado para este mês.')}
+        </Badge>
+        <Badge tone={summary.receipt_coverage_percent >= 80 ? 'sage' : 'peach'}>
+          {summary.receipt_count}/{summary.expense_count} {t('com recibo')}
+        </Badge>
+        {summary.over_budget_category_count > 0 && (
+          <Badge tone="warning">
+            {summary.over_budget_category_count} {t('Categorias acima do orçamento')}
+          </Badge>
+        )}
+      </div>
+
+      <div className="overflow-x-auto rounded-3xl border border-white/70 bg-white/35">
+        <table className="w-full text-sm min-w-[760px]">
+          <thead>
+            <tr className="text-left text-xs uppercase tracking-wider text-dusk-300">
+              <th className="px-4 py-3">{t('Categoria')}</th>
+              <th className="px-4 py-3">{t('Meta do mês')}</th>
+              <th className="px-4 py-3 text-right">{t('Realizado')}</th>
+              <th className="px-4 py-3 text-right">{t('Diferença')}</th>
+              <th className="px-4 py-3">{t('Recibos anexados')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => {
+              const rowUsed = row.budget_cents > 0
+                ? Math.min(100, Math.round((row.actual_cents / row.budget_cents) * 100))
+                : row.actual_cents > 0 ? 100 : 0;
+              const rowOver = row.budget_cents > 0 && row.actual_cents > row.budget_cents;
+              return (
+                <tr key={row.category} className="border-t border-white/60 align-top">
+                  <td className="px-4 py-3">
+                    <div className="font-semibold text-dusk-500">{t(CATEGORY_LABEL[row.category] || row.category)}</div>
+                    {row.notes && <div className="text-xs text-dusk-300 mt-0.5">{row.notes}</div>}
+                  </td>
+                  <td className="px-4 py-3">
+                    <input
+                      className="input h-10 max-w-[150px]"
+                      inputMode="decimal"
+                      placeholder={t('Sem meta')}
+                      value={drafts[row.category] || ''}
+                      onChange={(e) => setDrafts({ ...drafts, [row.category]: e.target.value })}
+                    />
+                  </td>
+                  <td className="px-4 py-3 text-right font-mono text-dusk-500">
+                    {formatCurrency(row.actual_cents / 100, row.currency)}
+                    <div className="h-1.5 rounded-full bg-white/60 overflow-hidden mt-2">
+                      <div className={`h-full ${rowOver ? 'bg-amber-500' : 'bg-sage-400'}`} style={{ width: `${rowUsed}%` }} />
+                    </div>
+                  </td>
+                  <td className={`px-4 py-3 text-right font-mono ${row.variance_cents < 0 ? 'text-amber-800' : 'text-sage-700'}`}>
+                    {row.budget_cents > 0
+                      ? formatCurrency(Math.abs(row.variance_cents) / 100, row.currency)
+                      : t('Sem meta')}
+                  </td>
+                  <td className="px-4 py-3">
+                    <Badge tone={row.receipt_coverage_percent >= 80 ? 'sage' : row.expense_count > 0 ? 'peach' : 'neutral'}>
+                      {row.receipt_count}/{row.expense_count} · {row.receipt_coverage_percent}%
+                    </Badge>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {summary.expense_count === 0 && (
+        <p className="text-xs text-dusk-300 mt-3">{t('Nenhum gasto lançado neste mês.')}</p>
+      )}
+      <div className="flex flex-wrap items-center justify-between gap-3 mt-4">
+        <p className="text-xs text-dusk-300">{t('Use valores zerados para limpar uma meta.')}</p>
+        <Button
+          variant="primary"
+          loading={saving}
+          leftIcon={<Wallet className="w-4 h-4" />}
+          onClick={() => saveTargets()}
+        >
+          {t('Salvar orçamento do mês')}
+        </Button>
+      </div>
+    </GlassCard>
+  );
+}
+
+function BudgetMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl bg-white/55 border border-white/70 p-4">
+      <div className="text-[11px] uppercase tracking-wider text-dusk-300">{label}</div>
+      <div className="font-display text-2xl text-dusk-500 mt-0.5">{value}</div>
+    </div>
   );
 }
 
@@ -1012,6 +1267,12 @@ function ExpenseRow({ expense, onDeleted }: { expense: Expense; onDeleted: () =>
           {formatDate(expense.spent_at)}
           {expense.vendor && <span> · {expense.vendor}</span>}
         </div>
+        {expense.admin_explanation && (
+          <div className="mt-2 rounded-2xl bg-sage-50/70 border border-sage-100 px-3 py-2">
+            <div className="text-[11px] uppercase tracking-wider text-sage-700">{t('Explicação do administrador')}</div>
+            <p className="text-xs text-dusk-400 mt-0.5">{expense.admin_explanation}</p>
+          </div>
+        )}
         {expense.receipt_file_id ? (
           <button
             type="button"
@@ -1053,6 +1314,7 @@ function NewExpenseForm({ onCreated }: { onCreated: () => void }) {
     category: 'maintenance',
     vendor: '',
     description: '',
+    admin_explanation: '',
     spent_at: new Date().toISOString().slice(0, 10),
     receipt_url: '',
   });
@@ -1077,6 +1339,7 @@ function NewExpenseForm({ onCreated }: { onCreated: () => void }) {
         category: form.category,
         vendor: form.vendor.trim() || null,
         description: form.description.trim(),
+        admin_explanation: form.admin_explanation.trim() || null,
         spent_at: form.spent_at,
         receipt_url: uploaded ? null : form.receipt_url.trim() || null,
         receipt_file_id: uploaded?.id || null,
@@ -1164,6 +1427,16 @@ function NewExpenseForm({ onCreated }: { onCreated: () => void }) {
           <span className="text-[11px] text-dusk-200 mt-1 block">
             {t('Cole um link do Drive, Dropbox, ou foto hospedada. Os moradores podem clicar para conferir.')}
           </span>
+        </label>
+        <label className="block text-xs text-dusk-300 font-medium md:col-span-2">
+          {t('Explicação para moradores')}
+          <textarea
+            className="input mt-1 min-h-[90px]"
+            placeholder={t('Explique em linguagem simples por que esse gasto foi necessário.')}
+            value={form.admin_explanation}
+            onChange={(e) => setForm({ ...form, admin_explanation: e.target.value })}
+            maxLength={800}
+          />
         </label>
         <label className="block text-xs text-dusk-300 font-medium md:col-span-2">
           {t('Arquivo do recibo (opcional)')}

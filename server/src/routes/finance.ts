@@ -6,10 +6,13 @@ import { ok, fail } from '../lib/respond';
 import { audit } from '../lib/audit';
 import {
   approvePaymentProof,
+  FINANCE_EXPENSE_CATEGORIES,
+  getBudgetSummary,
   generateInvoices,
   recordPayment,
   rejectPaymentProof,
   submitPaymentProof,
+  upsertBudgetTargets,
   unitInCondo,
   userCanSeeUnit,
 } from '../lib/finance';
@@ -56,19 +59,25 @@ const paymentProofRejectSchema = z.object({
   reason: z.string().max(500).optional(),
 });
 
-// Expense categories — broad enough to bucket anything a Brazilian condo
-// actually spends on. Stored as the canonical English code; UI translates.
-const EXPENSE_CATEGORIES = [
-  'maintenance', 'utilities', 'cleaning', 'security', 'staff',
-  'admin', 'infrastructure', 'amenity', 'insurance', 'tax',
-  'reserve', 'other',
-] as const;
+const budgetMonthSchema = z.string().regex(/^\d{4}-\d{2}$/);
+
+const budgetTargetsBulkSchema = z.object({
+  month: budgetMonthSchema,
+  currency: z.string().min(3).max(3).default('BRL'),
+  targets: z.array(z.object({
+    category: z.enum(FINANCE_EXPENSE_CATEGORIES),
+    amount_cents: z.number().int().min(0),
+    notes: z.string().max(500).optional().nullable(),
+  })).max(FINANCE_EXPENSE_CATEGORIES.length),
+});
+
 const expenseSchema = z.object({
   amount_cents: z.number().int().positive(),
   currency: z.string().min(3).max(3).optional().default('BRL'),
-  category: z.enum(EXPENSE_CATEGORIES),
+  category: z.enum(FINANCE_EXPENSE_CATEGORIES),
   vendor: z.string().min(0).max(120).optional().nullable(),
   description: z.string().min(1).max(500),
+  admin_explanation: z.string().max(800).optional().nullable(),
   spent_at: z.string().datetime().or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)),
   // Audit M1 — restrict to https:// to block file:/javascript:/internal-IP
   // URLs that previously matched z.string().url() and were stored verbatim.
@@ -398,6 +407,29 @@ router.post('/payment-proofs/:id/reject', requireAuth, requireRole('board_admin'
   return ok(res, result);
 });
 
+router.get('/budget-summary', requireAuth, requireActiveMembership, (req: AuthedRequest, res) => {
+  const month = String(req.query.month || '').trim() || new Date().toISOString().slice(0, 7);
+  const parsed = budgetMonthSchema.safeParse(month);
+  if (!parsed.success) return fail(res, 'invalid_month', 400);
+  const condoId = getActiveCondoId(req);
+  return ok(res, getBudgetSummary(condoId, parsed.data));
+});
+
+router.post('/budget-targets/bulk', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+  const parsed = budgetTargetsBulkSchema.safeParse(req.body);
+  if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
+  const condoId = getActiveCondoId(req);
+  const result = upsertBudgetTargets({ condoId, ...parsed.data });
+  if (!result.ok) return fail(res, result.error, result.status, result.details);
+  audit(req, {
+    action: 'finance.budget_targets_update',
+    target_type: 'budget_targets',
+    condominium_id: condoId,
+    metadata: { month: result.month, saved_count: result.saved_count, deleted_count: result.deleted_count },
+  });
+  return ok(res, result);
+});
+
 // ---------------------------------------------------------------------------
 // Expenses (#12 — budget transparency).
 // GET is open to all members (residents see where the money goes).
@@ -500,11 +532,11 @@ router.post('/expenses', requireAuth, requireRole('board_admin'), (req: AuthedRe
   const result = db.prepare(
     `INSERT INTO expenses (
       condominium_id, amount_cents, currency, category, vendor,
-      description, spent_at, receipt_url, receipt_file_id, related_proposal_id, created_by_user_id
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      description, admin_explanation, spent_at, receipt_url, receipt_file_id, related_proposal_id, created_by_user_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     condoId, body.amount_cents, body.currency, body.category, body.vendor || null,
-    body.description, spentAt, receiptUrl, receiptFile?.id || null, body.related_proposal_id || null,
+    body.description, body.admin_explanation?.trim() || null, spentAt, receiptUrl, receiptFile?.id || null, body.related_proposal_id || null,
     req.user!.id,
   );
   const id = Number(result.lastInsertRowid);
@@ -514,7 +546,7 @@ router.post('/expenses', requireAuth, requireRole('board_admin'), (req: AuthedRe
     target_type: 'expense',
     target_id: id,
     condominium_id: condoId,
-    metadata: { amount_cents: body.amount_cents, category: body.category, has_receipt: !!body.receipt_url },
+    metadata: { amount_cents: body.amount_cents, category: body.category, has_receipt: !!receiptUrl },
   });
   return ok(res, { id, spent_at: spentAt }, 201);
 });

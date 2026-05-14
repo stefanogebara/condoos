@@ -276,6 +276,7 @@ export function initSchema() {
       category            TEXT NOT NULL,
       vendor              TEXT,
       description         TEXT NOT NULL,
+      admin_explanation   TEXT,
       spent_at            TEXT NOT NULL,
       receipt_url         TEXT,
       related_proposal_id INTEGER REFERENCES proposals(id) ON DELETE SET NULL,
@@ -288,6 +289,25 @@ export function initSchema() {
       ON expenses(condominium_id, category, spent_at);
     CREATE INDEX IF NOT EXISTS idx_expenses_condo_vendor_spent
       ON expenses(condominium_id, vendor, spent_at);
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS budget_targets (
+      id               INTEGER PRIMARY KEY AUTOINCREMENT,
+      condominium_id   INTEGER NOT NULL REFERENCES condominiums(id) ON DELETE CASCADE,
+      month            TEXT NOT NULL CHECK(month GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]'),
+      category         TEXT NOT NULL CHECK(category IN (
+        'maintenance','utilities','cleaning','security','staff','admin',
+        'infrastructure','amenity','insurance','tax','reserve','other'
+      )),
+      amount_cents     INTEGER NOT NULL CHECK(amount_cents >= 0),
+      currency         TEXT NOT NULL DEFAULT 'BRL',
+      notes            TEXT,
+      created_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(condominium_id, month, category)
+    );
+    CREATE INDEX IF NOT EXISTS idx_budget_targets_condo_month
+      ON budget_targets(condominium_id, month);
   `);
   // Operational service network — admin-maintained directory of known vendors,
   // installers, maintenance providers, emergency contacts, and contracts.
@@ -428,6 +448,7 @@ export function initSchema() {
   `);
 
   addColumnIfMissing('expenses', 'receipt_file_id', `INTEGER REFERENCES files(id) ON DELETE SET NULL`);
+  addColumnIfMissing('expenses', 'admin_explanation', `TEXT`);
 
   // Resident payment proofs — residents upload transfer receipts/screenshots;
   // admins review them before they become real payment records.
