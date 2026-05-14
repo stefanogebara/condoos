@@ -7,6 +7,7 @@ import GlassCard from '../../components/GlassCard';
 import Badge from '../../components/Badge';
 import { apiGet } from '../../lib/api';
 import { formatCurrency, formatDate, t, useLocale } from '../../lib/i18n';
+import { openUploadedFile } from '../../lib/uploads';
 import { CATEGORY_LABEL } from '../board/BoardFinancas';
 
 interface Expense {
@@ -18,6 +19,8 @@ interface Expense {
   description: string;
   spent_at: string;
   receipt_url: string | null;
+  receipt_file_id: number | null;
+  receipt_file_name: string | null;
   related_proposal_id: number | null;
   related_proposal_title: string | null;
 }
@@ -150,7 +153,15 @@ export default function Transparencia() {
                       <div className="text-xs text-dusk-300 mt-1">
                         {formatDate(expense.spent_at)}{expense.vendor && <> · {expense.vendor}</>}
                       </div>
-                      {expense.receipt_url && (
+                      {expense.receipt_file_id ? (
+                        <button
+                          type="button"
+                          onClick={() => openUploadedFile(expense.receipt_file_id!, expense.receipt_file_name || 'receipt')}
+                          className="inline-flex items-center gap-1 text-xs text-dusk-400 hover:text-sage-700 mt-1.5 underline decoration-dotted underline-offset-4"
+                        >
+                          <ExternalLink className="w-3 h-3" /> {tr('ver recibo')}
+                        </button>
+                      ) : expense.receipt_url ? (
                         <a
                           href={expense.receipt_url}
                           target="_blank"
@@ -159,7 +170,7 @@ export default function Transparencia() {
                         >
                           <ExternalLink className="w-3 h-3" /> {tr('ver recibo')}
                         </a>
-                      )}
+                      ) : null}
                     </div>
                     <div className="font-mono font-semibold text-dusk-500 shrink-0 self-center">
                       {formatCurrency(expense.amount_cents / 100)}

@@ -5,6 +5,7 @@ import GlassCard from '../../components/GlassCard';
 import Badge from '../../components/Badge';
 import { apiGet } from '../../lib/api';
 import { formatDate, t, useLocale } from '../../lib/i18n';
+import { openUploadedFile } from '../../lib/uploads';
 import { DOCUMENT_CATEGORIES, documentCategoryLabel } from '../board/BoardDocuments';
 import type { BuildingDocument } from '../board/BoardDocuments';
 
@@ -79,14 +80,24 @@ export default function Documents() {
                 {doc.description && <p className="text-sm text-dusk-300 mt-2">{doc.description}</p>}
                 <div className="mt-3 flex flex-wrap gap-2 text-xs text-dusk-300">
                   {doc.document_date && <span className="rounded-full bg-white/60 px-3 py-1">{formatDate(doc.document_date)}</span>}
-                  <a
-                    className="inline-flex items-center gap-1 rounded-full bg-white/60 px-3 py-1 hover:text-dusk-500"
-                    href={doc.file_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <ExternalLink className="w-3 h-3" /> {tr('abrir documento')}
-                  </a>
+                  {doc.file_id ? (
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 rounded-full bg-white/60 px-3 py-1 hover:text-dusk-500"
+                      onClick={() => openUploadedFile(doc.file_id!, doc.file_name || doc.title)}
+                    >
+                      <ExternalLink className="w-3 h-3" /> {tr('abrir documento')}
+                    </button>
+                  ) : (
+                    <a
+                      className="inline-flex items-center gap-1 rounded-full bg-white/60 px-3 py-1 hover:text-dusk-500"
+                      href={doc.file_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <ExternalLink className="w-3 h-3" /> {tr('abrir documento')}
+                    </a>
+                  )}
                 </div>
               </div>
             </GlassCard>

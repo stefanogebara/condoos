@@ -37,6 +37,7 @@ import memoryRoutes from './routes/memory';
 import reportsRoutes from './routes/reports';
 import dashboardRoutes from './routes/dashboard';
 import notificationsRoutes from './routes/notifications';
+import uploadsRoutes from './routes/uploads';
 import webhooksRoutes from './routes/webhooks';
 import vendorPortalRoutes from './routes/vendor-portal';
 import serviceContactsRoutes from './routes/service-contacts';
@@ -166,6 +167,7 @@ app.use('/api/memory',        scoped, memoryRoutes);
 app.use('/api/reports',       scoped, reportsRoutes);
 app.use('/api/dashboard',     scoped, dashboardRoutes);
 app.use('/api/notifications', scoped, notificationsRoutes);
+app.use('/api/uploads',       scoped, uploadsRoutes);
 app.use('/api/service-contacts', scoped, serviceContactsRoutes);
 
 // 404

@@ -13,6 +13,7 @@ import {
   Plus,
   ReceiptText,
   Trash2,
+  UploadCloud,
   Wallet,
   X,
 } from 'lucide-react';
@@ -22,6 +23,7 @@ import Badge from '../../components/Badge';
 import Button from '../../components/Button';
 import { apiDelete, apiGet, apiPost } from '../../lib/api';
 import { formatCurrency, formatDate, t } from '../../lib/i18n';
+import { openUploadedFile, uploadFileToCondoOS } from '../../lib/uploads';
 
 interface Expense {
   id: number;
@@ -32,6 +34,8 @@ interface Expense {
   description: string;
   spent_at: string;
   receipt_url: string | null;
+  receipt_file_id: number | null;
+  receipt_file_name: string | null;
   related_proposal_id: number | null;
   related_proposal_title: string | null;
   created_at: string;
@@ -866,7 +870,15 @@ function ExpenseRow({ expense, onDeleted }: { expense: Expense; onDeleted: () =>
           {formatDate(expense.spent_at)}
           {expense.vendor && <span> · {expense.vendor}</span>}
         </div>
-        {expense.receipt_url && (
+        {expense.receipt_file_id ? (
+          <button
+            type="button"
+            onClick={() => openUploadedFile(expense.receipt_file_id!, expense.receipt_file_name || 'receipt')}
+            className="inline-flex items-center gap-1 text-xs text-dusk-400 hover:text-sage-700 mt-1.5 underline decoration-dotted underline-offset-4"
+          >
+            <ExternalLink className="w-3 h-3" /> {t('ver recibo')}
+          </button>
+        ) : expense.receipt_url ? (
           <a
             href={expense.receipt_url}
             target="_blank"
@@ -875,7 +887,7 @@ function ExpenseRow({ expense, onDeleted }: { expense: Expense; onDeleted: () =>
           >
             <ExternalLink className="w-3 h-3" /> {t('ver recibo')}
           </a>
-        )}
+        ) : null}
       </div>
       <div className="text-right shrink-0">
         <div className="font-mono font-semibold text-dusk-500">{formatCurrency(expense.amount_cents / 100, expense.currency)}</div>
@@ -902,6 +914,7 @@ function NewExpenseForm({ onCreated }: { onCreated: () => void }) {
     spent_at: new Date().toISOString().slice(0, 10),
     receipt_url: '',
   });
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
 
   async function submit(e: React.FormEvent) {
@@ -914,13 +927,17 @@ function NewExpenseForm({ onCreated }: { onCreated: () => void }) {
     }
     setSaving(true);
     try {
+      const uploaded = receiptFile
+        ? await uploadFileToCondoOS(receiptFile, { purpose: 'receipt', visibility: 'residents' })
+        : null;
       await apiPost('/finance/expenses', {
         amount_cents: cents,
         category: form.category,
         vendor: form.vendor.trim() || null,
         description: form.description.trim(),
         spent_at: form.spent_at,
-        receipt_url: form.receipt_url.trim() || null,
+        receipt_url: uploaded ? null : form.receipt_url.trim() || null,
+        receipt_file_id: uploaded?.id || null,
       });
       toast.success(t('Despesa registrada — visível para os moradores'));
       onCreated();
@@ -1006,8 +1023,23 @@ function NewExpenseForm({ onCreated }: { onCreated: () => void }) {
             {t('Cole um link do Drive, Dropbox, ou foto hospedada. Os moradores podem clicar para conferir.')}
           </span>
         </label>
+        <label className="block text-xs text-dusk-300 font-medium md:col-span-2">
+          {t('Arquivo do recibo (opcional)')}
+          <input
+            className="input mt-1"
+            type="file"
+            accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/*"
+            onChange={(e) => setReceiptFile(e.target.files?.[0] || null)}
+          />
+          <span className="text-[11px] text-dusk-200 mt-1 block">
+            {receiptFile ? `${t('Selecionado:')} ${receiptFile.name}` : t('Use upload para guardar o recibo dentro do CondoOS.')}
+          </span>
+        </label>
         <div className="md:col-span-2 flex justify-end">
-          <Button type="submit" variant="primary" loading={saving}>{t('Registrar despesa')}</Button>
+          <Button type="submit" variant="primary" loading={saving}
+                  leftIcon={receiptFile ? <UploadCloud className="w-4 h-4" /> : undefined}>
+            {t('Registrar despesa')}
+          </Button>
         </div>
       </form>
     </GlassCard>

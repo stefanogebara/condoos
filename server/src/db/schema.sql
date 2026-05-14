@@ -515,6 +515,42 @@ CREATE TABLE IF NOT EXISTS payments (
 CREATE INDEX IF NOT EXISTS idx_payments_invoice ON payments(invoice_id);
 
 -- =====================================================================
+-- File storage registry — uploaded evidence and document vault files.
+-- =====================================================================
+
+CREATE TABLE IF NOT EXISTS files (
+  id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+  condominium_id      INTEGER NOT NULL REFERENCES condominiums(id) ON DELETE CASCADE,
+  uploaded_by_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  original_filename   TEXT NOT NULL,
+  content_type        TEXT NOT NULL,
+  size_bytes          INTEGER NOT NULL,
+  storage_driver      TEXT NOT NULL,
+  storage_key         TEXT NOT NULL,
+  public_url          TEXT,
+  purpose             TEXT NOT NULL
+    CHECK(purpose IN ('document','receipt','ticket_attachment','work_order','payment_proof','other')),
+  visibility          TEXT NOT NULL DEFAULT 'board_only'
+    CHECK(visibility IN ('residents','board_only','operations','guard_only')),
+  target_type         TEXT,
+  target_id           INTEGER,
+  status              TEXT NOT NULL DEFAULT 'pending'
+    CHECK(status IN ('pending','uploaded','ready','deleted','failed')),
+  created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  uploaded_at         TEXT,
+  deleted_at          TEXT
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_files_storage_key
+  ON files(storage_driver, storage_key);
+CREATE INDEX IF NOT EXISTS idx_files_condo_status
+  ON files(condominium_id, status, created_at);
+CREATE INDEX IF NOT EXISTS idx_files_target
+  ON files(target_type, target_id, status);
+CREATE INDEX IF NOT EXISTS idx_files_uploader
+  ON files(uploaded_by_user_id, status, created_at);
+
+-- =====================================================================
 -- Document vault — rules, minutes, contracts, insurance, warranties.
 -- =====================================================================
 
@@ -527,6 +563,7 @@ CREATE TABLE IF NOT EXISTS building_documents (
     CHECK(category IN ('rules','minutes','contracts','insurance','warranties','receipts','vendors','notices','other')),
   description         TEXT,
   file_url            TEXT NOT NULL,
+  file_id             INTEGER REFERENCES files(id) ON DELETE SET NULL,
   document_date       TEXT,
   visibility          TEXT NOT NULL DEFAULT 'residents'
     CHECK(visibility IN ('residents','board_only')),
@@ -646,6 +683,7 @@ CREATE TABLE IF NOT EXISTS ticket_attachments (
   ticket_id           INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
   uploaded_by_user_id INTEGER NOT NULL REFERENCES users(id),
   url                 TEXT NOT NULL,
+  file_id             INTEGER REFERENCES files(id) ON DELETE SET NULL,
   filename            TEXT,
   content_type        TEXT,
   created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -665,7 +703,9 @@ CREATE TABLE IF NOT EXISTS ticket_work_orders (
   started_at              TEXT,
   completed_at            TEXT,
   invoice_url             TEXT,
+  invoice_file_id         INTEGER REFERENCES files(id) ON DELETE SET NULL,
   photo_url               TEXT,
+  photo_file_id           INTEGER REFERENCES files(id) ON DELETE SET NULL,
   completion_note         TEXT,
   created_by_user_id      INTEGER REFERENCES users(id),
   updated_by_user_id      INTEGER REFERENCES users(id),

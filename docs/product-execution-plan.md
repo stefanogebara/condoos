@@ -168,15 +168,14 @@ The first implementation slice focuses on Phase 1:
 - Add guard search and faster front-desk filtering.
 - Run build and targeted language checks.
 
-## Current Execution Slice: Phase 2 Work Orders
+## Current Execution Slice: Payment Proofs And Budget Trust
 
-The next implementation slice turns verified issues into operational work orders:
+The next implementation slice should use the upload foundation to make money workflows real:
 
-- Add a ticket work-order record tied to the existing vendor network.
-- Let admins schedule the repair, record scope, estimate, approved amount, invoice URL, photo URL, and completion note.
-- Show work-order status and evidence on the admin ticket page.
-- Show residents a clear work-order timeline so they know whether the issue is scheduled, in progress, or completed.
-- Keep the existing AI/vendor dispatch flow intact and layer this after vendor response.
+- Let residents upload payment receipts/proofs against open invoices.
+- Add an admin review queue for approving or rejecting payment proofs.
+- Convert approved proofs into payment records without allowing overpayment.
+- Add monthly budget vs actual and receipt coverage so the board can explain money clearly.
 
 ## Completed Slice: Phase 2 Money, Work Orders, And Documents
 
@@ -186,6 +185,16 @@ The second implementation wave made the operating core more buyer-ready:
 - Added resident statements inside Transparency so residents can see what they owe.
 - Turned verified tickets into work orders with vendor assignment, schedule, estimates, approved cost, invoice/photo links, completion notes, and resident-visible status.
 - Added a document vault for rules, minutes, contracts, insurance, warranties, receipts, vendor docs, and resident-visible notices.
+
+## Completed Slice: Real Upload Foundation
+
+The document vault is no longer link-only:
+
+- Added a `files` registry with purpose, visibility, original filename, content type, size, storage key, uploader, status, and soft-delete metadata.
+- Added upload endpoints for local/dev storage and Cloudflare R2 presigned uploads.
+- Kept external HTTPS links working while allowing uploaded documents, expense receipts, and ticket evidence.
+- Added authenticated download checks so residents, guards, and admins only open files appropriate to their role and condo.
+- Documented R2 secrets and release checks before production pilots depend on uploaded files.
 
 ## Completed Slice: Building Memory
 

@@ -391,6 +391,44 @@ export function initSchema() {
       ON in_app_notifications(condominium_id, created_at);
   `);
 
+  // File storage registry. This is intentionally provider-agnostic: local
+  // development can store bytes on disk, while production uses Cloudflare R2's
+  // S3-compatible API behind the same file IDs.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS files (
+      id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+      condominium_id      INTEGER NOT NULL REFERENCES condominiums(id) ON DELETE CASCADE,
+      uploaded_by_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      original_filename   TEXT NOT NULL,
+      content_type        TEXT NOT NULL,
+      size_bytes          INTEGER NOT NULL,
+      storage_driver      TEXT NOT NULL,
+      storage_key         TEXT NOT NULL,
+      public_url          TEXT,
+      purpose             TEXT NOT NULL
+        CHECK(purpose IN ('document','receipt','ticket_attachment','work_order','payment_proof','other')),
+      visibility          TEXT NOT NULL DEFAULT 'board_only'
+        CHECK(visibility IN ('residents','board_only','operations','guard_only')),
+      target_type         TEXT,
+      target_id           INTEGER,
+      status              TEXT NOT NULL DEFAULT 'pending'
+        CHECK(status IN ('pending','uploaded','ready','deleted','failed')),
+      created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      uploaded_at         TEXT,
+      deleted_at          TEXT
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_files_storage_key
+      ON files(storage_driver, storage_key);
+    CREATE INDEX IF NOT EXISTS idx_files_condo_status
+      ON files(condominium_id, status, created_at);
+    CREATE INDEX IF NOT EXISTS idx_files_target
+      ON files(target_type, target_id, status);
+    CREATE INDEX IF NOT EXISTS idx_files_uploader
+      ON files(uploaded_by_user_id, status, created_at);
+  `);
+
+  addColumnIfMissing('expenses', 'receipt_file_id', `INTEGER REFERENCES files(id) ON DELETE SET NULL`);
+
   migrateLegacyUnits();
 
   // Incident Loop (Phase 1) — community-verified tickets that auto-route to
@@ -478,6 +516,7 @@ export function initSchema() {
   addColumnIfMissing('ticket_attachments', 'ai_signals',        `TEXT`);
   addColumnIfMissing('ticket_attachments', 'ai_analyzed_at',    `TEXT`);
   addColumnIfMissing('ticket_attachments', 'ai_analysis_error', `TEXT`);
+  addColumnIfMissing('ticket_attachments', 'file_id',           `INTEGER REFERENCES files(id) ON DELETE SET NULL`);
 
   // Phase 2 operations — once a vendor responds, the admin needs a real
   // work order: scheduled visit, estimate, invoice/photo evidence, and
@@ -498,7 +537,9 @@ export function initSchema() {
       started_at              TEXT,
       completed_at            TEXT,
       invoice_url             TEXT,
+      invoice_file_id         INTEGER REFERENCES files(id) ON DELETE SET NULL,
       photo_url               TEXT,
+      photo_file_id           INTEGER REFERENCES files(id) ON DELETE SET NULL,
       completion_note         TEXT,
       created_by_user_id      INTEGER REFERENCES users(id),
       updated_by_user_id      INTEGER REFERENCES users(id),
@@ -508,6 +549,8 @@ export function initSchema() {
   `).run();
   db.prepare(`CREATE INDEX IF NOT EXISTS idx_ticket_work_orders_ticket ON ticket_work_orders(ticket_id, status)`).run();
   db.prepare(`CREATE INDEX IF NOT EXISTS idx_ticket_work_orders_vendor ON ticket_work_orders(service_contact_id, status)`).run();
+  addColumnIfMissing('ticket_work_orders', 'invoice_file_id', `INTEGER REFERENCES files(id) ON DELETE SET NULL`);
+  addColumnIfMissing('ticket_work_orders', 'photo_file_id',   `INTEGER REFERENCES files(id) ON DELETE SET NULL`);
 
   // Document Vault — a lightweight, storage-provider-agnostic registry for
   // bylaws, meeting minutes, contracts, insurance, warranties, receipts, and
@@ -523,6 +566,7 @@ export function initSchema() {
         CHECK(category IN ('rules','minutes','contracts','insurance','warranties','receipts','vendors','notices','other')),
       description         TEXT,
       file_url            TEXT NOT NULL,
+      file_id             INTEGER REFERENCES files(id) ON DELETE SET NULL,
       document_date       TEXT,
       visibility          TEXT NOT NULL DEFAULT 'residents'
         CHECK(visibility IN ('residents','board_only')),
@@ -535,6 +579,7 @@ export function initSchema() {
     ON building_documents(condominium_id, active, category, document_date)`).run();
   db.prepare(`CREATE INDEX IF NOT EXISTS idx_building_documents_condo_visibility
     ON building_documents(condominium_id, visibility, active, updated_at)`).run();
+  addColumnIfMissing('building_documents', 'file_id', `INTEGER REFERENCES files(id) ON DELETE SET NULL`);
 
   // Roadmap item 2 — conversational thread. The agent workbench was
   // single-shot: every query was a fresh agent call with no memory of

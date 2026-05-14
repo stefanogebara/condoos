@@ -11,6 +11,7 @@ import Button from '../../components/Button';
 import Badge from '../../components/Badge';
 import { apiGet, apiPost } from '../../lib/api';
 import { formatCurrency, formatDateTime, formatRelativeTime, t as translate, useLocale } from '../../lib/i18n';
+import { openUploadedFile } from '../../lib/uploads';
 
 type WorkOrderStatus = 'draft' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
 
@@ -74,9 +75,18 @@ interface ResponseTarget {
 interface TicketDetail extends Ticket {
   description: string;
   agent_plan: AgentPlan | null;
+  attachments: TicketAttachment[];
   verifications: Array<{ id: number; vote: string; comment: string | null; first_name: string; last_name: string; unit_number: string | null }>;
   dispatches: Dispatch[];
   work_order: WorkOrder | null;
+}
+
+interface TicketAttachment {
+  id: number;
+  url: string;
+  file_id: number | null;
+  filename: string | null;
+  content_type: string | null;
 }
 
 interface ServiceContact {
@@ -709,6 +719,36 @@ function AdminCard({
       {expanded && (
         <div className="mt-4 pt-4 border-t border-white/50 space-y-3">
           <p className="text-sm text-dusk-400 whitespace-pre-line">{ticket.description}</p>
+
+          {detail?.attachments && detail.attachments.length > 0 && (
+            <div>
+              <div className="text-xs uppercase tracking-wider text-dusk-200 mb-2">{tr('Anexos')}</div>
+              <div className="flex flex-wrap gap-2">
+                {detail.attachments.map((attachment) => (
+                  attachment.file_id ? (
+                    <button
+                      key={attachment.id}
+                      type="button"
+                      onClick={() => openUploadedFile(attachment.file_id!, attachment.filename || 'attachment')}
+                      className="inline-flex items-center gap-1 rounded-2xl border border-white/70 bg-white/55 px-3 py-2 text-xs font-medium text-dusk-400 hover:bg-white/80"
+                    >
+                      <FileText className="w-3.5 h-3.5" /> {attachment.filename || tr('anexo')}
+                    </button>
+                  ) : (
+                    <a
+                      key={attachment.id}
+                      href={attachment.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 rounded-2xl border border-white/70 bg-white/55 px-3 py-2 text-xs font-medium text-dusk-400 hover:bg-white/80"
+                    >
+                      <FileText className="w-3.5 h-3.5" /> {attachment.filename || tr('anexo')}
+                    </a>
+                  )
+                ))}
+              </div>
+            </div>
+          )}
 
           {isBlocked && detail?.blocked_reason && (
             <GlassCard variant="clay" className="p-3 border border-peach-300/50 bg-peach-100/40">

@@ -95,6 +95,31 @@ flyctl secrets set -a condoos-api RATE_LIMIT_BYPASS_SECRET='<long-random-secret>
 gh secret set E2E_RATE_LIMIT_BYPASS_SECRET --repo stefanogebara/condoos
 ```
 
+## File Upload Storage
+
+CONDOS supports uploaded documents, receipts, and ticket evidence through a
+provider-neutral `files` registry. Local development stores files on disk under
+`./data/uploads` when R2 secrets are absent. Production should use Cloudflare R2
+so files survive deploys and Fly machine restarts.
+
+Required production R2 secrets:
+
+```bash
+flyctl secrets set -a condoos-api FILE_STORAGE_DRIVER=r2
+flyctl secrets set -a condoos-api FILE_UPLOAD_MAX_MB=25
+flyctl secrets set -a condoos-api R2_BUCKET=condoos-uploads
+flyctl secrets set -a condoos-api R2_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
+flyctl secrets set -a condoos-api R2_ACCESS_KEY_ID=...
+flyctl secrets set -a condoos-api R2_SECRET_ACCESS_KEY=...
+flyctl secrets set -a condoos-api R2_REGION=auto
+```
+
+The frontend uploads directly to the presigned R2 URL, so the R2 bucket also
+needs CORS allowing `PUT` from the Vercel app origin and any pilot/staging
+origins. Keep uploaded files private; residents and admins open files through
+the API, which redirects to a short-lived signed R2 download URL after checking
+role, condo, and visibility.
+
 ## Production E2E Against Vercel
 
 Vercel Deployment Protection can show the Security Checkpoint to automated

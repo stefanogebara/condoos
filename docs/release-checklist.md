@@ -12,6 +12,12 @@ npm run build
 npm run test:e2e:desktop -- e2e/dashboard-actions.spec.ts
 ```
 
+Run when a slice touches uploads, documents, receipts, or ticket evidence:
+
+```bash
+npm run test:e2e:desktop -- e2e/documents.spec.ts e2e/tickets.spec.ts
+```
+
 Run when a slice touches language, navigation, dashboards, onboarding, or public pages:
 
 ```bash
@@ -47,6 +53,7 @@ Do not add a new page or workflow unless it strengthens one of those promises.
 - No secrets are committed.
 - Demo credentials remain disabled in real production unless the deployment is intentionally disposable.
 - New env vars are documented in `.env.example` and `docs/ops.md`.
+- Upload/storage changes work without committing secrets and fail safely when R2 is not configured.
 - New data writes are scoped by `condominium_id`.
 - Residents, guards, and admins see only role-appropriate data.
 
@@ -58,5 +65,5 @@ Before showing a buyer:
 - Resident can see what needs action from `/app`.
 - Guard can search unit/resident/visitor/package/party from `/board/concierge`.
 - Finance transparency shows dues, payments, expenses, receipts, and reports.
-- Document vault limitations are stated honestly if real uploads are not configured.
+- Document vault can use uploaded files or the buyer understands that production R2 secrets are not configured yet.
 - WhatsApp/email/Google/AI status is either configured or gracefully hidden/degraded.

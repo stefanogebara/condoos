@@ -3,7 +3,7 @@
 // confirms → admin dispatches AI agent (Phase 2 will auto-dispatch).
 import React, { useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
-import { AlertTriangle, Bot, CalendarClock, Check, CheckCircle2, ClipboardCheck, FileText, Image as ImageIcon, Megaphone, MessageCircle, Plus, Send, ShieldAlert, Sparkles, ThumbsDown, ThumbsUp, Users, X } from 'lucide-react';
+import { AlertTriangle, Bot, CalendarClock, Check, CheckCircle2, ClipboardCheck, FileText, Image as ImageIcon, Megaphone, MessageCircle, Plus, Send, ShieldAlert, Sparkles, ThumbsDown, ThumbsUp, UploadCloud, Users, X } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 import GlassCard from '../../components/GlassCard';
 import Button from '../../components/Button';
@@ -11,6 +11,7 @@ import Badge from '../../components/Badge';
 import { apiGet, apiPost } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { formatCurrency, formatDateTime, formatRelativeTime, t } from '../../lib/i18n';
+import { openUploadedFile, uploadFileToCondoOS } from '../../lib/uploads';
 
 type WorkOrderStatus = 'draft' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
 
@@ -62,9 +63,18 @@ interface ResidentDispatch {
 
 interface TicketDetail extends Ticket {
   verifications: Verification[];
+  attachments: TicketAttachment[];
   dispatches?: ResidentDispatch[];
   work_order: WorkOrder | null;
   my_vote: 'confirm' | 'deny' | null;
+}
+
+interface TicketAttachment {
+  id: number;
+  url: string;
+  file_id: number | null;
+  filename: string | null;
+  content_type: string | null;
 }
 
 interface WorkOrder {
@@ -345,6 +355,36 @@ function TicketCard({
 
           {detail && <TicketTimeline ticket={ticket} detail={detail} />}
 
+          {detail && detail.attachments.length > 0 && (
+            <div>
+              <div className="text-xs uppercase tracking-wider text-dusk-200 mb-2">{t('Anexos')}</div>
+              <div className="flex flex-wrap gap-2">
+                {detail.attachments.map((attachment) => (
+                  attachment.file_id ? (
+                    <button
+                      key={attachment.id}
+                      type="button"
+                      onClick={() => openUploadedFile(attachment.file_id!, attachment.filename || 'evidence')}
+                      className="inline-flex items-center gap-1 rounded-2xl border border-white/70 bg-white/55 px-3 py-2 text-xs font-medium text-dusk-400 hover:bg-white/80"
+                    >
+                      <FileText className="w-3.5 h-3.5" /> {attachment.filename || t('anexo')}
+                    </button>
+                  ) : (
+                    <a
+                      key={attachment.id}
+                      href={attachment.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 rounded-2xl border border-white/70 bg-white/55 px-3 py-2 text-xs font-medium text-dusk-400 hover:bg-white/80"
+                    >
+                      <FileText className="w-3.5 h-3.5" /> {attachment.filename || t('anexo')}
+                    </a>
+                  )
+                ))}
+              </div>
+            </div>
+          )}
+
           {detail?.work_order && <ResidentWorkOrderSummary workOrder={detail.work_order} />}
 
           {detail && detail.verifications.length > 0 && (
@@ -603,6 +643,7 @@ function ReportForm({ onCreated }: { onCreated: () => void }) {
     priority: 'normal' as Ticket['priority'],
     community: true,
   });
+  const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
 
   async function submit(e: React.FormEvent) {
@@ -612,13 +653,28 @@ function ReportForm({ onCreated }: { onCreated: () => void }) {
     try {
       // Default community threshold = 3 confirmations. Admins can override
       // per-condo later; for the demo a low N keeps the loop testable.
-      await apiPost('/tickets', {
+      const created = await apiPost<{ id: number }>('/tickets', {
         title: form.title.trim(),
         description: form.description.trim(),
         category: form.category,
         priority: form.priority,
         verification_threshold: form.community ? 3 : 0,
       });
+      if (evidenceFile) {
+        try {
+          const uploaded = await uploadFileToCondoOS(evidenceFile, {
+            purpose: 'ticket_attachment',
+            visibility: form.community ? 'residents' : 'board_only',
+          });
+          await apiPost(`/tickets/${created.id}/attachments`, {
+            file_id: uploaded.id,
+            filename: uploaded.original_filename,
+            content_type: uploaded.content_type,
+          });
+        } catch {
+          toast.error(t('O problema foi reportado, mas o arquivo não subiu. Tente anexar novamente depois.'));
+        }
+      }
       toast.success(t('Problema reportado'));
       onCreated();
     } catch (err: any) {
@@ -669,9 +725,22 @@ function ReportForm({ onCreated }: { onCreated: () => void }) {
             </span>
           </span>
         </label>
+        <label className="block text-xs text-dusk-300 font-medium">
+          {t('Foto ou arquivo de evidência (opcional)')}
+          <input
+            className="input mt-1"
+            type="file"
+            accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/*"
+            onChange={(e) => setEvidenceFile(e.target.files?.[0] || null)}
+          />
+          <span className="text-[11px] text-dusk-200 mt-1 block">
+            {evidenceFile ? `${t('Selecionado:')} ${evidenceFile.name}` : t('Ajuda o síndico e fornecedores a entenderem o problema mais rápido.')}
+          </span>
+        </label>
         <div className="flex justify-end gap-2 pt-1">
           <Button type="submit" variant="primary" loading={saving}
-                  disabled={!form.title.trim() || !form.description.trim()}>
+                  disabled={!form.title.trim() || !form.description.trim()}
+                  leftIcon={evidenceFile ? <UploadCloud className="w-4 h-4" /> : undefined}>
             {t('Reportar problema')}
           </Button>
         </div>

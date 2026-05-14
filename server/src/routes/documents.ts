@@ -4,6 +4,7 @@ import db from '../db';
 import { requireAuth, requireRole, getActiveCondoId, AuthedRequest } from '../lib/auth';
 import { ok, fail } from '../lib/respond';
 import { audit } from '../lib/audit';
+import { assertFileReadyForUse, attachFileToTarget, fileDownloadPath } from '../lib/files';
 
 const router = Router();
 
@@ -27,10 +28,14 @@ const documentSchema = z.object({
   description: z.string().max(1_000).optional().nullable(),
   file_url: z.string().url().max(2_048).refine((url) => url.startsWith('https://'), {
     message: 'must_be_https_url',
-  }),
+  }).optional().nullable(),
+  file_id: z.number().int().positive().optional().nullable(),
   document_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
   visibility: z.enum(DOCUMENT_VISIBILITIES).default('residents'),
   active: z.boolean().optional().default(true),
+}).refine((body) => !!body.file_id || !!body.file_url, {
+  message: 'file_required',
+  path: ['file_url'],
 });
 
 function cleanText(value: string | null | undefined) {
@@ -58,8 +63,12 @@ router.get('/', requireAuth, (req: AuthedRequest, res) => {
 
   const rows = db.prepare(
     `SELECT d.*,
+            f.original_filename AS file_name,
+            f.content_type AS file_content_type,
+            f.size_bytes AS file_size_bytes,
             TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '')) AS uploaded_by_name
      FROM building_documents d
+     LEFT JOIN files f ON f.id = d.file_id
      LEFT JOIN users u ON u.id = d.uploaded_by_user_id
      WHERE ${conditions.join(' AND ')}
      ORDER BY
@@ -78,24 +87,33 @@ router.post('/', requireAuth, requireRole('board_admin'), (req: AuthedRequest, r
 
   const condoId = getActiveCondoId(req);
   const body = parsed.data;
+  const file = body.file_id
+    ? assertFileReadyForUse({ fileId: body.file_id, condoId, purpose: 'document' })
+    : null;
+  if (body.file_id && !file) return fail(res, 'invalid_file', 400);
+  if (file && file.visibility !== body.visibility) return fail(res, 'file_visibility_mismatch', 400);
+  const fileUrl = file ? fileDownloadPath(file.id) : body.file_url!.trim();
+
   const result = db.prepare(
     `INSERT INTO building_documents (
       condominium_id, uploaded_by_user_id, title, category, description,
-      file_url, document_date, visibility, active
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      file_url, file_id, document_date, visibility, active
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     condoId,
     req.user!.id,
     body.title.trim(),
     body.category,
     cleanText(body.description),
-    body.file_url.trim(),
+    fileUrl,
+    file?.id || null,
     body.document_date || null,
     body.visibility,
     body.active ? 1 : 0,
   );
 
   const id = Number(result.lastInsertRowid);
+  if (file) attachFileToTarget(file.id, 'building_document', id);
   audit(req, {
     action: 'document.create',
     target_type: 'building_document',
@@ -121,22 +139,31 @@ router.patch('/:id', requireAuth, requireRole('board_admin'), (req: AuthedReques
   if (!existing) return fail(res, 'not_found', 404);
 
   const body = parsed.data;
+  const file = body.file_id
+    ? assertFileReadyForUse({ fileId: body.file_id, condoId, purpose: 'document' })
+    : null;
+  if (body.file_id && !file) return fail(res, 'invalid_file', 400);
+  if (file && file.visibility !== body.visibility) return fail(res, 'file_visibility_mismatch', 400);
+  const fileUrl = file ? fileDownloadPath(file.id) : body.file_url!.trim();
+
   db.prepare(
     `UPDATE building_documents
-     SET title = ?, category = ?, description = ?, file_url = ?, document_date = ?,
+     SET title = ?, category = ?, description = ?, file_url = ?, file_id = ?, document_date = ?,
          visibility = ?, active = ?, updated_at = CURRENT_TIMESTAMP
      WHERE id = ? AND condominium_id = ?`
   ).run(
     body.title.trim(),
     body.category,
     cleanText(body.description),
-    body.file_url.trim(),
+    fileUrl,
+    file?.id || null,
     body.document_date || null,
     body.visibility,
     body.active ? 1 : 0,
     id,
     condoId,
   );
+  if (file) attachFileToTarget(file.id, 'building_document', id);
 
   audit(req, {
     action: 'document.update',

@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
-import { ExternalLink, FileText, FolderOpen, Lock, Pencil, Plus, Save, Trash2, Users, X } from 'lucide-react';
+import { ExternalLink, FileText, FolderOpen, Lock, Pencil, Plus, Save, Trash2, UploadCloud, Users, X } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 import GlassCard from '../../components/GlassCard';
 import Badge from '../../components/Badge';
 import Button from '../../components/Button';
 import { apiDelete, apiGet, apiPatch, apiPost } from '../../lib/api';
 import { formatDate, t, type AppLocale, useLocale } from '../../lib/i18n';
+import { openUploadedFile, uploadFileToCondoOS } from '../../lib/uploads';
 
 export interface BuildingDocument {
   id: number;
@@ -14,6 +15,10 @@ export interface BuildingDocument {
   category: string;
   description: string | null;
   file_url: string;
+  file_id: number | null;
+  file_name: string | null;
+  file_content_type: string | null;
+  file_size_bytes: number | null;
   document_date: string | null;
   visibility: 'residents' | 'board_only';
   active: number;
@@ -27,6 +32,7 @@ type DocumentForm = {
   category: string;
   description: string;
   file_url: string;
+  file_id: number | null;
   document_date: string;
   visibility: 'residents' | 'board_only';
   active: boolean;
@@ -49,6 +55,7 @@ const blankForm: DocumentForm = {
   category: 'rules',
   description: '',
   file_url: '',
+  file_id: null,
   document_date: new Date().toISOString().slice(0, 10),
   visibility: 'residents',
   active: true,
@@ -70,7 +77,8 @@ function normalize(form: DocumentForm) {
     title: form.title.trim(),
     category: form.category,
     description: form.description.trim() || null,
-    file_url: form.file_url.trim(),
+    file_url: form.file_url.trim() || null,
+    file_id: form.file_id,
     document_date: form.document_date || null,
     visibility: form.visibility,
     active: form.active,
@@ -218,6 +226,7 @@ function DocumentRow({ doc, onChanged }: { doc: BuildingDocument; onChanged: () 
           category: doc.category,
           description: doc.description || '',
           file_url: doc.file_url,
+          file_id: doc.file_id || null,
           document_date: doc.document_date ? doc.document_date.slice(0, 10) : '',
           visibility: doc.visibility,
           active: !!doc.active,
@@ -248,14 +257,24 @@ function DocumentRow({ doc, onChanged }: { doc: BuildingDocument; onChanged: () 
           <div className="mt-3 flex flex-wrap gap-2 text-xs text-dusk-300">
             {doc.document_date && <span className="rounded-full bg-white/60 px-3 py-1">{formatDate(doc.document_date)}</span>}
             {doc.uploaded_by_name && <span className="rounded-full bg-white/60 px-3 py-1">{tr('Enviado por')} {doc.uploaded_by_name}</span>}
-            <a
-              className="inline-flex items-center gap-1 rounded-full bg-white/60 px-3 py-1 hover:text-dusk-500"
-              href={doc.file_url}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <ExternalLink className="w-3 h-3" /> {tr('abrir documento')}
-            </a>
+            {doc.file_id ? (
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 rounded-full bg-white/60 px-3 py-1 hover:text-dusk-500"
+                onClick={() => openUploadedFile(doc.file_id!, doc.file_name || doc.title)}
+              >
+                <ExternalLink className="w-3 h-3" /> {tr('abrir documento')}
+              </button>
+            ) : (
+              <a
+                className="inline-flex items-center gap-1 rounded-full bg-white/60 px-3 py-1 hover:text-dusk-500"
+                href={doc.file_url}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <ExternalLink className="w-3 h-3" /> {tr('abrir documento')}
+              </a>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -289,6 +308,7 @@ function DocumentEditor({
   const { locale } = useLocale();
   const tr = (key: string) => t(key, locale);
   const [form, setForm] = useState<DocumentForm>(initial);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
 
   async function submit(e: React.FormEvent) {
@@ -297,14 +317,23 @@ function DocumentEditor({
       toast.error(tr('Informe o título do documento.'));
       return;
     }
-    if (!isHttpsUrl(form.file_url)) {
-      toast.error(tr('Use um link seguro começando com https://.'));
+    if (!selectedFile && !form.file_id && !isHttpsUrl(form.file_url)) {
+      toast.error(tr('Envie um arquivo ou use um link seguro começando com https://.'));
       return;
     }
 
     setSaving(true);
     try {
-      const body = normalize(form);
+      let body = normalize(form);
+      if (selectedFile) {
+        const uploaded = await uploadFileToCondoOS(selectedFile, {
+          purpose: 'document',
+          visibility: form.visibility,
+        });
+        body = { ...body, file_id: uploaded.id, file_url: null };
+      } else if (body.file_url) {
+        body = { ...body, file_id: null };
+      }
       if (mode === 'create') {
         await apiPost<{ id: number }>('/documents', body);
       } else {
@@ -376,16 +405,32 @@ function DocumentEditor({
           </select>
         </label>
         <label className="block text-xs text-dusk-300 font-medium md:col-span-2">
+          {tr('Arquivo do documento')}
+          <input
+            className="input mt-1"
+            data-testid="document-file"
+            type="file"
+            accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx,text/plain,application/pdf,image/*"
+            onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+          />
+          <span className="text-[11px] text-dusk-200 mt-1 block">
+            {selectedFile
+              ? `${tr('Selecionado:')} ${selectedFile.name}`
+              : form.file_id
+                ? tr('Arquivo já armazenado no CondoOS.')
+                : tr('Envie um PDF, imagem ou documento, ou cole um link seguro abaixo.')}
+          </span>
+        </label>
+        <label className="block text-xs text-dusk-300 font-medium md:col-span-2">
           {tr('Link seguro (https://)')}
           <input
             className="input mt-1"
             data-testid="document-url"
             type="url"
             value={form.file_url}
-            onChange={(e) => setForm({ ...form, file_url: e.target.value })}
+            onChange={(e) => setForm({ ...form, file_url: e.target.value, file_id: e.target.value.trim() ? null : form.file_id })}
             placeholder="https://..."
             maxLength={2048}
-            required
           />
         </label>
         <label className="block text-xs text-dusk-300 font-medium md:col-span-2">
@@ -410,7 +455,7 @@ function DocumentEditor({
         )}
         <div className="md:col-span-2 flex justify-end gap-2">
           <Button type="button" variant="ghost" onClick={onCancel}>{tr('Cancelar')}</Button>
-          <Button type="submit" variant="primary" loading={saving} leftIcon={<Save className="w-4 h-4" />}>{tr('Salvar')}</Button>
+          <Button type="submit" variant="primary" loading={saving} leftIcon={selectedFile ? <UploadCloud className="w-4 h-4" /> : <Save className="w-4 h-4" />}>{tr('Salvar')}</Button>
         </div>
       </form>
     </GlassCard>

@@ -35,6 +35,7 @@ import { getBoardPacket } from '../src/lib/board-packet';
 import { researchExternalVendors } from '../src/ai/web-research';
 import { getDashboardActions } from '../src/lib/dashboard-actions';
 import { createInAppNotification, markInAppNotificationRead } from '../src/lib/in-app-notifications';
+import { assertFileReadyForUse, canAccessFile, createPendingFile, markFileReady } from '../src/lib/files';
 
 function resetDb() {
   const tables = [
@@ -49,6 +50,7 @@ function resetDb() {
     'tickets',
     'building_documents',
     'expenses',
+    'files',
     'payments',
     'invoices',
     'dues_schedules',
@@ -942,6 +944,44 @@ test('dashboard actions are role-scoped and backed by in-app notifications', () 
   const read = markInAppNotificationRead(residentId, notificationId);
   assert.equal(read?.status, 'read');
   assert.equal(getDashboardActions(resident, condoId).unread_count, 0);
+});
+
+test('files: uploaded evidence is condo-scoped and permissioned by visibility', () => {
+  resetDb();
+  const { condoId, unit101 } = createCondoFixture();
+  const residentId = createUser('files-resident@example.com');
+  const adminId = createUser('files-admin@example.com', 'board_admin');
+  db.prepare(`UPDATE users SET condominium_id = ? WHERE id IN (?, ?)`).run(condoId, residentId, adminId);
+  db.prepare(
+    `INSERT INTO user_unit (user_id, unit_id, relationship, status, primary_contact, voting_weight)
+     VALUES (?, ?, 'owner', 'active', 1, 1.0)`
+  ).run(residentId, unit101);
+
+  const file = createPendingFile({
+    condominiumId: condoId,
+    uploadedByUserId: residentId,
+    originalFilename: 'leak-photo.jpg',
+    contentType: 'image/jpeg',
+    sizeBytes: 42_000,
+    purpose: 'ticket_attachment',
+    visibility: 'residents',
+    storageDriver: 'local',
+    storageKey: 'condos/1/ticket_attachment/leak-photo.jpg',
+  });
+  markFileReady(file.id);
+
+  const resident = db.prepare(`SELECT * FROM users WHERE id = ?`).get(residentId) as any;
+  const admin = db.prepare(`SELECT * FROM users WHERE id = ?`).get(adminId) as any;
+
+  assert.equal(canAccessFile(resident, file.id, condoId), true);
+  assert.equal(canAccessFile(admin, file.id, condoId), true);
+  assert.equal(assertFileReadyForUse({ fileId: file.id, condoId, purpose: 'ticket_attachment' })?.id, file.id);
+
+  const otherCondoId = Number(db.prepare(
+    `INSERT INTO condominiums (name, address, invite_code) VALUES ('Other Files Condo', '9 Main', 'FILES2')`
+  ).run().lastInsertRowid);
+  assert.equal(canAccessFile(resident, file.id, otherCondoId), false);
+  assert.equal(assertFileReadyForUse({ fileId: file.id, condoId: otherCondoId, purpose: 'ticket_attachment' }), null);
 });
 
 test('building memory searches operational records without leaking admin-only sources to residents', () => {

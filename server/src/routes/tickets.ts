@@ -10,6 +10,7 @@ import { buildVendorPortalUrl } from '../lib/vendor-tokens';
 import { evaluateAgentAutoDispatch, isSafetyCriticalUrgent } from '../lib/agent-auto-dispatch';
 import { runAdminAgent } from '../ai/admin-agent-runner';
 import { notifyUsers } from '../lib/whatsapp';
+import { assertFileReadyForUse, attachFileToTarget, fileDownloadPath } from '../lib/files';
 
 const router = Router();
 
@@ -289,9 +290,13 @@ const attachmentSchema = z.object({
   url: z.string().url().max(1_000).refine(
     (u) => u.startsWith('https://'),
     { message: 'must_be_https_url' },
-  ),
+  ).optional().nullable(),
+  file_id: z.number().int().positive().optional().nullable(),
   filename: z.string().max(240).optional(),
   content_type: z.string().max(120).optional(),
+}).refine((body) => !!body.file_id || !!body.url, {
+  message: 'attachment_required',
+  path: ['url'],
 });
 
 function unitInCondo(unitId: number, condoId: number): boolean {
@@ -1303,19 +1308,29 @@ router.post('/:id/attachments', requireAuth, (req: AuthedRequest, res) => {
   if (!ticket) return fail(res, 'not_found', 404);
   if (!canSeeTicket(req, ticket)) return fail(res, 'forbidden', 403);
 
+  const file = parsed.data.file_id
+    ? assertFileReadyForUse({ fileId: parsed.data.file_id, condoId, purpose: 'ticket_attachment' })
+    : null;
+  if (parsed.data.file_id && !file) return fail(res, 'invalid_file', 400);
+  const url = file ? fileDownloadPath(file.id) : parsed.data.url!;
+  const filename = parsed.data.filename || file?.original_filename || null;
+  const contentType = parsed.data.content_type || file?.content_type || null;
+
   const result = db.prepare(
-    `INSERT INTO ticket_attachments (ticket_id, uploaded_by_user_id, url, filename, content_type)
-     VALUES (?, ?, ?, ?, ?)`
-  ).run(id, req.user!.id, parsed.data.url, parsed.data.filename || null, parsed.data.content_type || null);
+    `INSERT INTO ticket_attachments (ticket_id, uploaded_by_user_id, url, file_id, filename, content_type)
+     VALUES (?, ?, ?, ?, ?, ?)`
+  ).run(id, req.user!.id, url, file?.id || null, filename, contentType);
+  const attachmentId = Number(result.lastInsertRowid);
+  if (file) attachFileToTarget(file.id, 'ticket_attachment', attachmentId);
   db.prepare(`UPDATE tickets SET updated_at=CURRENT_TIMESTAMP WHERE id = ?`).run(id);
   audit(req, {
     action: 'ticket.attachment_create',
     target_type: 'ticket_attachment',
-    target_id: Number(result.lastInsertRowid),
+    target_id: attachmentId,
     condominium_id: condoId,
     metadata: { ticket_id: id },
   });
-  return ok(res, { id: Number(result.lastInsertRowid) }, 201);
+  return ok(res, { id: attachmentId }, 201);
 });
 
 router.delete('/:id/attachments/:attachmentId', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {

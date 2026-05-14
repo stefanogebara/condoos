@@ -61,10 +61,10 @@ Every shipped feature must improve at least one promise:
 
 ## Current Slice
 
-Week 1 is focused on Phase 0 and Phase 1:
+Week 2 is focused on Phase 2:
 
-- Add `/api/dashboard/actions` as the role-scoped source for resident/admin/guard command centers.
-- Add in-app notification records and `/api/notifications/:id/read`.
-- Wire resident, admin, and guard home screens to the shared action feed.
-- Add release and pilot-readiness docs.
-- Verify with server tests, production build, and focused E2E.
+- Add a provider-agnostic `files` registry with soft-delete and visibility metadata.
+- Add upload endpoints for local/dev storage and Cloudflare R2 presigned uploads.
+- Keep external links working while allowing real uploaded documents, receipts, and ticket evidence.
+- Verify resident/admin visibility so board-only files do not leak across roles or condos.
+- Document the R2 env vars needed before production pilots rely on uploads.

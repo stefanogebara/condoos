@@ -5,6 +5,7 @@ import { requireAuth, requireRole, requireActiveMembership, getActiveCondoId, Au
 import { ok, fail } from '../lib/respond';
 import { audit } from '../lib/audit';
 import { generateInvoices, recordPayment, unitInCondo, userCanSeeUnit } from '../lib/finance';
+import { assertFileReadyForUse, attachFileToTarget, fileDownloadPath } from '../lib/files';
 
 const router = Router();
 
@@ -54,6 +55,7 @@ const expenseSchema = z.object({
     (u) => u.startsWith('https://'),
     { message: 'must_be_https_url' },
   ).optional().nullable(),
+  receipt_file_id: z.number().int().positive().optional().nullable(),
   related_proposal_id: z.number().int().positive().optional().nullable(),
 });
 
@@ -283,9 +285,13 @@ router.get('/expenses', requireAuth, requireActiveMembership, (req: AuthedReques
   })();
 
   const rows = db.prepare(
-    `SELECT e.*, p.title AS related_proposal_title
+    `SELECT e.*, p.title AS related_proposal_title,
+            f.original_filename AS receipt_file_name,
+            f.content_type AS receipt_content_type,
+            f.size_bytes AS receipt_size_bytes
      FROM expenses e
      LEFT JOIN proposals p ON p.id = e.related_proposal_id
+     LEFT JOIN files f ON f.id = e.receipt_file_id
      WHERE e.condominium_id = ?
        AND e.spent_at >= ?
      ORDER BY e.spent_at DESC, e.id DESC`
@@ -332,6 +338,13 @@ router.post('/expenses', requireAuth, requireRole('board_admin'), (req: AuthedRe
     if (!ok) return fail(res, 'related_proposal_not_in_condo', 400);
   }
 
+  const receiptFile = body.receipt_file_id
+    ? assertFileReadyForUse({ fileId: body.receipt_file_id, condoId, purpose: 'receipt' })
+    : null;
+  if (body.receipt_file_id && !receiptFile) return fail(res, 'invalid_receipt_file', 400);
+  if (receiptFile && receiptFile.visibility !== 'residents') return fail(res, 'file_visibility_mismatch', 400);
+  const receiptUrl = receiptFile ? fileDownloadPath(receiptFile.id) : body.receipt_url || null;
+
   // Audit H-N2 — POST was non-idempotent. A double-click or a network retry
   // booked duplicate expenses (this happened during the audit itself: two
   // identical "audit dup test" rows). Dedupe within a 60s window on the
@@ -358,14 +371,15 @@ router.post('/expenses', requireAuth, requireRole('board_admin'), (req: AuthedRe
   const result = db.prepare(
     `INSERT INTO expenses (
       condominium_id, amount_cents, currency, category, vendor,
-      description, spent_at, receipt_url, related_proposal_id, created_by_user_id
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      description, spent_at, receipt_url, receipt_file_id, related_proposal_id, created_by_user_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     condoId, body.amount_cents, body.currency, body.category, body.vendor || null,
-    body.description, spentAt, body.receipt_url || null, body.related_proposal_id || null,
+    body.description, spentAt, receiptUrl, receiptFile?.id || null, body.related_proposal_id || null,
     req.user!.id,
   );
   const id = Number(result.lastInsertRowid);
+  if (receiptFile) attachFileToTarget(receiptFile.id, 'expense', id);
   audit(req, {
     action: 'finance.expense_create',
     target_type: 'expense',

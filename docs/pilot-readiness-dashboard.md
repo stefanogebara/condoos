@@ -11,10 +11,11 @@ This document separates what is real today from what still needs production wiri
 - Admin residents, pending approvals, proposals, assemblies, meetings, announcements, amenities, building layout, services, tickets, finance, documents, Building Memory, reports, and concierge staff.
 - Manual dues/invoices/payments, expense transparency, vendor scorecards, work orders, audit log, and monthly board packet Markdown export.
 - In-app dashboard actions for resident/admin/guard command centers.
+- File upload registry with local/dev storage and Cloudflare R2-compatible presigned upload support for documents, receipts, and ticket evidence.
 
 ## Demo-Only Or Partially Wired
 
-- Document vault currently supports external links. Real uploads need storage provider wiring.
+- Document vault supports both external HTTPS links and uploaded files. Production needs Cloudflare R2 env secrets before relying on durable storage.
 - Payments are manual. Live payment providers are deferred.
 - WhatsApp/email/Google/AI depend on environment secrets and must degrade gracefully when missing.
 - Board packet PDF export is not implemented yet; Markdown copy/download/print exists.
@@ -28,11 +29,12 @@ This document separates what is real today from what still needs production wiri
 - `OPENROUTER_API_KEY`
 - `SENTRY_DSN`
 - `VITE_POSTHOG_KEY`
-- Future storage env vars for Cloudflare R2
+- `FILE_STORAGE_DRIVER`, `FILE_UPLOAD_MAX_MB`
+- `R2_BUCKET`, `R2_ENDPOINT`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_REGION`
 
 ## Not Production-Ready Yet
 
-- Real file uploads and permissioned storage.
+- Production R2 bucket/CORS/secrets must be configured and tested against Fly/Vercel before a real building uses uploads.
 - Resident payment-proof upload/approval.
 - Full ticket timeline events and vendor quote comparison.
 - Building-level Brazil/Ecuador country, currency, timezone, locale, and governance mode.
@@ -41,4 +43,4 @@ This document separates what is real today from what still needs production wiri
 
 ## Next Pilot Upgrade
 
-The next buyer-visible upgrade after the Week 1 command center should be Cloudflare R2 file storage, because documents, receipts, ticket photos, work-order proof, and payment proofs all depend on it.
+The next buyer-visible upgrade after the upload foundation should be resident payment-proof submission and admin approval, because payment receipts now have a real place to live.
