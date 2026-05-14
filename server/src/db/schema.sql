@@ -538,6 +538,24 @@ CREATE INDEX IF NOT EXISTS idx_expenses_condo_category
 CREATE INDEX IF NOT EXISTS idx_expenses_condo_vendor_spent
   ON expenses(condominium_id, vendor, spent_at);
 
+CREATE TABLE IF NOT EXISTS ai_usage (
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  created_at        TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  caller            TEXT NOT NULL,
+  model             TEXT NOT NULL,
+  prompt_tokens     INTEGER NOT NULL DEFAULT 0,
+  completion_tokens INTEGER NOT NULL DEFAULT 0,
+  total_tokens      INTEGER NOT NULL DEFAULT 0,
+  est_cost_usd      REAL NOT NULL DEFAULT 0,
+  outcome           TEXT NOT NULL DEFAULT 'ok',
+  condominium_id    INTEGER,
+  iterations        INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_usage_created ON ai_usage(created_at);
+CREATE INDEX IF NOT EXISTS idx_ai_usage_caller
+  ON ai_usage(created_at, caller);
+
 CREATE TABLE IF NOT EXISTS budget_targets (
   id               INTEGER PRIMARY KEY AUTOINCREMENT,
   condominium_id   INTEGER NOT NULL REFERENCES condominiums(id) ON DELETE CASCADE,

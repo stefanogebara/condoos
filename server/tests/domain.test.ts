@@ -4,7 +4,7 @@ import db from '../src/db';
 import { claimPendingInvitesForUser } from '../src/lib/invites';
 import { canVote, getProposalVoteTally, resolveVoteOutcome, computeQuorum, countEligibleVoters } from '../src/lib/proposal-tally';
 import { parseJsonLoose, classifyStatus, OpenRouterError, aiBreakerState } from '../src/ai/openrouter';
-import { estimateCostUsd } from '../src/lib/ai-usage';
+import { estimateCostUsd, getAiUsageSummary, recordAiUsage } from '../src/lib/ai-usage';
 import { fallbackAdminAgent, sanitizeAdminAgentOutput } from '../src/ai/admin-agent';
 import { tickVoteCloser } from '../src/lib/vote-closer';
 import {
@@ -49,6 +49,7 @@ import { assertFileReadyForUse, canAccessFile, createPendingFile, markFileReady 
 
 function resetDb() {
   const tables = [
+    'ai_usage',
     'agent_runs',
     'agent_turns',
     'agent_threads',
@@ -2393,4 +2394,47 @@ test('ai-usage: estimateCostUsd uses per-model rates', () => {
   assert.equal(estimateCostUsd('some/unknown-model', 1_000_000, 0), 0.8);
   // Zero tokens → zero cost.
   assert.equal(estimateCostUsd('anthropic/claude-3.5-haiku', 0, 0), 0);
+});
+
+test('ai-usage: summaries are condo-scoped and resettable', () => {
+  resetDb();
+  const { condoId } = createCondoFixture();
+  const otherCondoId = Number(db.prepare(
+    `INSERT INTO condominiums (name, address) VALUES ('Other Condo', '2 Side St')`
+  ).run().lastInsertRowid);
+
+  recordAiUsage({
+    caller: 'admin-agent',
+    model: 'anthropic/claude-3.5-haiku',
+    promptTokens: 1_000,
+    completionTokens: 100,
+    outcome: 'ok',
+    condoId,
+  });
+  recordAiUsage({
+    caller: 'admin-agent',
+    model: 'anthropic/claude-3.5-haiku',
+    promptTokens: 999_000,
+    completionTokens: 100,
+    outcome: 'ok',
+    condoId: otherCondoId,
+  });
+  recordAiUsage({
+    caller: 'global-task',
+    model: 'deepseek/deepseek-chat',
+    promptTokens: 500,
+    completionTokens: 0,
+    outcome: 'ok',
+  });
+
+  const scoped = getAiUsageSummary(7, condoId);
+  assert.equal(scoped.total_calls, 1);
+  assert.equal(scoped.by_caller.length, 1);
+  assert.equal(scoped.by_caller[0].caller, 'admin-agent');
+
+  const global = getAiUsageSummary(7);
+  assert.equal(global.total_calls, 3);
+
+  resetDb();
+  assert.equal(getAiUsageSummary(7).total_calls, 0);
 });

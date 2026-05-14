@@ -70,19 +70,23 @@ export interface AiUsageSummary {
 }
 
 // 7-day (or custom-window) rollup for the spend-visibility endpoint (1.6).
-export function getAiUsageSummary(days = 7): AiUsageSummary {
-  const since = new Date(Date.now() - days * 86_400_000).toISOString().replace('T', ' ').slice(0, 19);
+export function getAiUsageSummary(days = 7, condoId?: number | null): AiUsageSummary {
+  const safeDays = Math.min(365, Math.max(1, Math.round(days || 7)));
+  const since = new Date(Date.now() - safeDays * 86_400_000).toISOString().replace('T', ' ').slice(0, 19);
+  const scoped = typeof condoId === 'number' && Number.isFinite(condoId);
+  const where = scoped ? 'created_at >= ? AND condominium_id = ?' : 'created_at >= ?';
+  const params = scoped ? [since, condoId] : [since];
   const totals = db.prepare(
     `SELECT COUNT(*) AS calls, COALESCE(SUM(total_tokens), 0) AS tokens,
             COALESCE(SUM(est_cost_usd), 0) AS cost
-     FROM ai_usage WHERE created_at >= ?`
-  ).get(since) as { calls: number; tokens: number; cost: number };
+     FROM ai_usage WHERE ${where}`
+  ).get(...params) as { calls: number; tokens: number; cost: number };
   const byCaller = db.prepare(
     `SELECT caller, COUNT(*) AS calls, COALESCE(SUM(total_tokens), 0) AS total_tokens,
             COALESCE(SUM(est_cost_usd), 0) AS est_cost_usd
-     FROM ai_usage WHERE created_at >= ?
+     FROM ai_usage WHERE ${where}
      GROUP BY caller ORDER BY est_cost_usd DESC`
-  ).all(since) as AiUsageSummary['by_caller'];
+  ).all(...params) as AiUsageSummary['by_caller'];
   return {
     since,
     total_calls: totals.calls,

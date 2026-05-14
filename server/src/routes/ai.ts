@@ -5,7 +5,7 @@ import { ok, fail, asyncHandler } from '../lib/respond';
 import { createRateLimit } from '../lib/rate-limit';
 import { audit } from '../lib/audit';
 import { computeQuorum, getProposalVoteTally, resolveFinalOutcome } from '../lib/proposal-tally';
-import { chat, parseJsonLoose } from '../ai/openrouter';
+import { aiBreakerState, chat, parseJsonLoose } from '../ai/openrouter';
 import {
   PROPOSAL_DRAFT_SYS,
   PROPOSAL_CLASSIFY_SYS,
@@ -30,6 +30,7 @@ import {
 } from '../ai/fallbacks';
 import { runAdminAgent } from '../ai/admin-agent-runner';
 import { getAgentRunSnapshot } from '../lib/agent-runs';
+import { getAiUsageSummary } from '../lib/ai-usage';
 
 const router = Router();
 const aiRateLimit = createRateLimit({
@@ -58,7 +59,7 @@ function optionalText(value: unknown, max: number): string {
 async function tryAI<T>(
   messages: any[],
   fallback: () => T,
-  opts?: { jsonMode?: boolean; maxTokens?: number; label?: string; tier?: 'quality' | 'cheap' }
+  opts?: { jsonMode?: boolean; maxTokens?: number; label?: string; tier?: 'quality' | 'cheap'; condoId?: number | null }
 ): Promise<T> {
   const label = opts?.label || 'ai';
   try {
@@ -67,6 +68,7 @@ async function tryAI<T>(
       maxTokens: opts?.maxTokens,
       tier: opts?.tier,
       caller: `ai:${label}`,
+      condoId: opts?.condoId,
     });
     if (opts?.jsonMode) {
       const parsed = parseJsonLoose<T>(raw);
@@ -94,6 +96,7 @@ const LOCALE_NAMES: Record<string, string> = {
   'fr-FR': 'French',
 };
 router.post('/proposal-draft', requireAuth, aiRateLimit, asyncHandler(async (req: AuthedRequest, res) => {
+  const condoId = getActiveCondoId(req);
   const input = boundedText(req.body?.text, 4_000);
   if (!input.ok) return fail(res, input.error, input.error === 'text_too_long' ? 413 : 400);
   const text = input.text;
@@ -108,7 +111,7 @@ router.post('/proposal-draft', requireAuth, aiRateLimit, asyncHandler(async (req
       { role: 'user', content: text },
     ],
     () => fallbackProposalDraft(text),
-    { jsonMode: true, maxTokens: 600, label: 'proposal-draft' }
+    { jsonMode: true, maxTokens: 600, label: 'proposal-draft', condoId }
   );
   return ok(res, out);
 }));
@@ -134,6 +137,7 @@ function fallbackClassify(text: string): { category: string; confidence: number;
 }
 
 router.post('/proposal-classify', requireAuth, aiRateLimit, asyncHandler(async (req: AuthedRequest, res) => {
+  const condoId = getActiveCondoId(req);
   const text = typeof req.body?.text === 'string'
     ? req.body.text
     : [req.body?.title, req.body?.description].filter(Boolean).join('\n\n');
@@ -147,7 +151,7 @@ router.post('/proposal-classify', requireAuth, aiRateLimit, asyncHandler(async (
       { role: 'user', content: trimmed },
     ],
     () => fallbackClassify(trimmed),
-    { jsonMode: true, maxTokens: 150, tier: 'cheap', label: 'proposal-classify' }
+    { jsonMode: true, maxTokens: 150, tier: 'cheap', label: 'proposal-classify', condoId }
   );
 
   // Guard against model hallucinating a new category
@@ -228,6 +232,16 @@ router.post('/admin-agent', requireAuth, aiRateLimit, requireRole('board_admin')
   });
   return ok(res, { ...plan, _fallback: fallback || plan._fallback, thread_id: threadId, turn_index, agent_run_id });
 }));
+
+// Board-admin AI operations status: credit-breaker state + condo-scoped spend.
+router.get('/usage', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+  const condoId = getActiveCondoId(req);
+  const days = Math.min(365, Math.max(1, Number(req.query.days || 7)));
+  return ok(res, {
+    breaker: aiBreakerState(),
+    usage: getAiUsageSummary(days, condoId),
+  });
+});
 
 // Recent durable agent runs. This is the operational audit trail for the
 // workbench and background ticket agent without requiring log access.
@@ -438,7 +452,7 @@ router.post('/cluster-suggestions', requireAuth, aiRateLimit, requireRole('board
         { role: 'user', content: `Here are the open suggestions:\n\n${payload}` },
       ],
       () => fallbackCluster(rows),
-      { jsonMode: true, maxTokens: 1200, tier: 'cheap', label: 'cluster-suggestions' }
+      { jsonMode: true, maxTokens: 1200, tier: 'cheap', label: 'cluster-suggestions', condoId: u.condominium_id }
     );
 
     // Persist clusters
@@ -506,7 +520,7 @@ router.post('/proposals/:id/summarize-thread', requireAuth, aiRateLimit, asyncHa
       { role: 'user', content: `Proposal: ${clip(prop.title, 300)}\n\nDescription: ${clip(prop.description, 4_000)}\n\nDiscussion:\n${formatted}` },
     ],
     () => fallbackThreadSummary(comments.length),
-    { jsonMode: true, maxTokens: 800, label: 'summarize-thread' }
+    { jsonMode: true, maxTokens: 800, label: 'summarize-thread', condoId: u.condominium_id }
   );
 
   db.prepare(`UPDATE proposals SET ai_summary=? WHERE id=?`).run(JSON.stringify(out), id);
@@ -536,7 +550,7 @@ router.post('/meetings/:id/summarize', requireAuth, aiRateLimit, requireRole('bo
       { role: 'user', content: `Meeting: ${clip(m.title, 300)}\nAgenda: ${clip(m.agenda || '(none)', 2_000)}\n\nRaw notes:\n${clip(m.raw_notes, 12_000)}` },
     ],
     () => fallbackMeetingSummary(clip(m.raw_notes, 12_000)),
-    { jsonMode: true, maxTokens: 1800, label: 'meetings/summarize' }
+    { jsonMode: true, maxTokens: 1800, label: 'meetings/summarize', condoId: u.condominium_id }
   );
 
   db.prepare(`UPDATE meetings SET ai_summary=?, status='completed' WHERE id=?`).run(JSON.stringify(out), id);
@@ -592,7 +606,7 @@ router.post('/proposals/:id/analyze-cost', requireAuth, aiRateLimit, requireRole
       { role: 'user', content: `Title: ${clip(p.title, 300)}\nCategoria: ${p.category || 'não definida'}\n\nDescription:\n${clip(p.description, 4_000)}` },
     ],
     fallbackCostAnalysis,
-    { jsonMode: true, maxTokens: 600, label: 'analyze-cost', tier: 'quality' }
+    { jsonMode: true, maxTokens: 600, label: 'analyze-cost', tier: 'quality', condoId: u.condominium_id }
   );
 
   // Sanitize: clamp cost into a reasonable range, trim long fields.
@@ -630,7 +644,7 @@ router.post('/proposals/:id/explain', requireAuth, aiRateLimit, asyncHandler(asy
       { role: 'user', content: `Title: ${clip(p.title, 300)}\n\nDescription: ${clip(p.description, 4_000)}` },
     ],
     () => fallbackExplain(p.title, p.description),
-    { maxTokens: 500, label: 'explain' }
+    { maxTokens: 500, label: 'explain', condoId: u.condominium_id }
   );
 
   db.prepare(`UPDATE proposals SET ai_explainer=? WHERE id=?`).run(text, id);
@@ -668,7 +682,7 @@ router.post('/proposals/:id/decision-summary', requireAuth, aiRateLimit, require
       },
     ],
     () => fallbackDecisionSummary(p.title, outcome, votes),
-    { jsonMode: true, maxTokens: 800, label: 'decision-summary' }
+    { jsonMode: true, maxTokens: 800, label: 'decision-summary', condoId: u.condominium_id }
   );
 
   db.prepare(
@@ -736,7 +750,7 @@ router.post('/assemblies/:id/suggest-agenda', requireAuth, aiRateLimit, requireR
         { title: 'Assuntos gerais', description: 'Open discussion on any remaining topic raised by residents.', item_type: 'other', required_majority: 'simple' },
       ],
     }),
-    { jsonMode: true, maxTokens: 800, label: 'assembly-agenda' }
+    { jsonMode: true, maxTokens: 800, label: 'assembly-agenda', condoId }
   );
   return ok(res, out);
 }));
@@ -758,7 +772,7 @@ router.post('/assemblies/:id/draft-ata', requireAuth, aiRateLimit, requireRole('
       { role: 'user', content: clip(rawAta, 12_000) },
     ],
     () => rawAta,
-    { jsonMode: false, maxTokens: 1500, label: 'assembly-ata' }
+    { jsonMode: false, maxTokens: 1500, label: 'assembly-ata', condoId }
   );
   db.prepare(`UPDATE assemblies SET ata_markdown = ? WHERE id = ?`).run(polished, id);
   audit(req, {
