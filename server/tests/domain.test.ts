@@ -937,26 +937,27 @@ test('dashboard actions are role-scoped and backed by in-app notifications', () 
   const resident = db.prepare(`SELECT * FROM users WHERE id = ?`).get(residentId) as any;
   const admin = db.prepare(`SELECT * FROM users WHERE id = ?`).get(adminId) as any;
   const concierge = db.prepare(`SELECT * FROM users WHERE id = ?`).get(conciergeId) as any;
+  const dashboardNow = new Date('2026-05-14T12:00:00.000Z');
 
-  const residentPayload = getDashboardActions(resident, condoId);
+  const residentPayload = getDashboardActions(resident, condoId, dashboardNow);
   assert.equal(residentPayload.unread_count, 1);
   assert.ok(residentPayload.actions.some((action) => action.id === `visitor-${visitorId}`));
   assert.ok(residentPayload.actions.some((action) => action.id === `package-${packageId}`));
   assert.ok(residentPayload.actions.some((action) => action.source === 'finance'));
   assert.doesNotMatch(JSON.stringify(residentPayload), /Leaky Other Carrier/);
 
-  const adminPayload = getDashboardActions(admin, condoId);
+  const adminPayload = getDashboardActions(admin, condoId, dashboardNow);
   assert.ok(adminPayload.actions.some((action) => action.source === 'finance'));
   assert.ok(adminPayload.actions.some((action) => action.source === 'proposal'));
   assert.ok(adminPayload.actions.some((action) => action.source === 'meeting'));
 
-  const conciergePayload = getDashboardActions(concierge, condoId);
+  const conciergePayload = getDashboardActions(concierge, condoId, dashboardNow);
   assert.ok(conciergePayload.actions.some((action) => action.id === `visitor-${visitorId}`));
   assert.ok(conciergePayload.actions.some((action) => action.id === `package-${packageId}`));
 
   const read = markInAppNotificationRead(residentId, notificationId);
   assert.equal(read?.status, 'read');
-  assert.equal(getDashboardActions(resident, condoId).unread_count, 0);
+  assert.equal(getDashboardActions(resident, condoId, dashboardNow).unread_count, 0);
 });
 
 test('files: uploaded evidence is condo-scoped and permissioned by visibility', () => {

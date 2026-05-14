@@ -38,8 +38,8 @@ export interface DashboardActionPayload {
   counts: Record<string, number>;
 }
 
-function nowIso() {
-  return new Date().toISOString();
+function nowIso(now = new Date()) {
+  return now.toISOString();
 }
 
 function dayBounds(now = new Date()) {
@@ -77,10 +77,10 @@ function activeUnitIds(userId: number, condoId: number): number[] {
   return rows.map((row) => row.unit_id);
 }
 
-function residentActions(user: AuthUser, condoId: number): { actions: DashboardAction[]; counts: Record<string, number> } {
+function residentActions(user: AuthUser, condoId: number, generatedAt = new Date()): { actions: DashboardAction[]; counts: Record<string, number> } {
   const actions: DashboardAction[] = [];
   const counts: Record<string, number> = {};
-  const now = nowIso();
+  const now = nowIso(generatedAt);
 
   const pendingVisitor = db.prepare(
     `SELECT id, visitor_name, visitor_type, expected_at
@@ -178,7 +178,7 @@ function residentActions(user: AuthUser, condoId: number): { actions: DashboardA
         id: `invoice-${invoice.id}`,
         role: 'resident',
         source: 'finance',
-        priority: new Date(invoice.due_date).getTime() < Date.now() ? 'urgent' : 'high',
+        priority: new Date(invoice.due_date).getTime() < generatedAt.getTime() ? 'urgent' : 'high',
         title: 'Payment due',
         detail: `${money(invoice.remaining_cents, invoice.currency)} · due ${invoice.due_date.slice(0, 10)}`,
         href: '/app/transparencia',
@@ -212,7 +212,7 @@ function residentActions(user: AuthUser, condoId: number): { actions: DashboardA
     now,
   );
   if (reservation) {
-    const isToday = new Date(reservation.starts_at).toDateString() === new Date().toDateString();
+    const isToday = new Date(reservation.starts_at).toDateString() === generatedAt.toDateString();
     if (isToday) {
       actions.push({
         id: `reservation-${reservation.id}`,
@@ -303,10 +303,10 @@ function residentActions(user: AuthUser, condoId: number): { actions: DashboardA
   return { actions: actions.slice(0, 8), counts };
 }
 
-function boardActions(user: AuthUser, condoId: number): { actions: DashboardAction[]; counts: Record<string, number> } {
+function boardActions(user: AuthUser, condoId: number, generatedAt = new Date()): { actions: DashboardAction[]; counts: Record<string, number> } {
   const actions: DashboardAction[] = [];
   const counts: Record<string, number> = {};
-  const now = nowIso();
+  const now = nowIso(generatedAt);
 
   const pendingResidents = db.prepare(
     `SELECT uu.id, u.first_name, u.last_name, units.number AS unit_number
@@ -541,8 +541,8 @@ function boardActions(user: AuthUser, condoId: number): { actions: DashboardActi
   return { actions: actions.slice(0, 10), counts };
 }
 
-function conciergeActions(user: AuthUser, condoId: number): { actions: DashboardAction[]; counts: Record<string, number> } {
-  const { start, end, weekday } = dayBounds();
+function conciergeActions(user: AuthUser, condoId: number, generatedAt = new Date()): { actions: DashboardAction[]; counts: Record<string, number> } {
+  const { start, end, weekday } = dayBounds(generatedAt);
   const actions: DashboardAction[] = [];
   const counts: Record<string, number> = {};
 
@@ -689,16 +689,16 @@ function conciergeActions(user: AuthUser, condoId: number): { actions: Dashboard
   return { actions, counts };
 }
 
-export function getDashboardActions(user: AuthUser, condoId: number): DashboardActionPayload {
+export function getDashboardActions(user: AuthUser, condoId: number, generatedAt = new Date()): DashboardActionPayload {
   const result = user.role === 'resident'
-    ? residentActions(user, condoId)
+    ? residentActions(user, condoId, generatedAt)
     : user.role === 'concierge'
-      ? conciergeActions(user, condoId)
-      : boardActions(user, condoId);
+      ? conciergeActions(user, condoId, generatedAt)
+      : boardActions(user, condoId, generatedAt);
 
   return {
     role: user.role,
-    generated_at: nowIso(),
+    generated_at: nowIso(generatedAt),
     unread_count: unreadInAppNotificationCount(user.id),
     notifications: listInAppNotifications(user.id, 5),
     actions: result.actions,
