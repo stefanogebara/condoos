@@ -280,7 +280,7 @@ function likelyPortuguese(input: AdminAgentInput): boolean {
 
 type AgentLanguage = 'pt' | 'en' | 'es' | 'fr';
 
-function agentLanguage(input: AdminAgentInput): AgentLanguage {
+export function agentLanguage(input: AdminAgentInput): AgentLanguage {
   const locale = String(input.locale || '').toLowerCase();
   if (locale.startsWith('es')) return 'es';
   if (locale.startsWith('fr')) return 'fr';

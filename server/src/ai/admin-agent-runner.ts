@@ -13,6 +13,7 @@ import {
   fallbackAdminAgent,
   normalizeAdminAgentMode,
   sanitizeAdminAgentOutput,
+  agentLanguage,
   type AdminAgentInput,
   type AdminAgentMode,
 } from './admin-agent';
@@ -421,6 +422,15 @@ async function runAdminAgentInner(args: RunAdminAgentArgs): Promise<RunAdminAgen
     service_contacts: serviceContacts,
   };
 
+  // Output-language enforcement. The in-prompt rule ("use the dominant
+  // language of the task") proved unreliable — the live eval caught PT
+  // tasks coming back in English. agentLanguage() resolves the locale (or
+  // detects from the task text), and we append a hard directive to the
+  // END of the system prompt — the most recent instruction wins.
+  const LANG_NAMES = { pt: 'Brazilian Portuguese', en: 'English', es: 'Spanish', fr: 'French' } as const;
+  const outputLanguage = LANG_NAMES[agentLanguage(adminInput)];
+  const languageDirective = `\n\n## OUTPUT LANGUAGE — HARD RULE\nWrite EVERY field of your JSON response — summary, recommended_next_step, options, risks, resident_update, action_plan, all of it — in ${outputLanguage}. Do not switch languages mid-response. The board admin reads in ${outputLanguage}.`;
+
   const context = {
     generated_at: new Date().toISOString(),
     request: {
@@ -593,7 +603,7 @@ async function runAdminAgentInner(args: RunAdminAgentArgs): Promise<RunAdminAgen
       };
       const result = await chatWithTools(
         [
-          { role: 'system', content: ADMIN_AGENT_REACT_SYS },
+          { role: 'system', content: ADMIN_AGENT_REACT_SYS + languageDirective },
           { role: 'user', content: JSON.stringify(reactContext) },
         ],
         ADMIN_AGENT_TOOLS,
@@ -635,7 +645,7 @@ async function runAdminAgentInner(args: RunAdminAgentArgs): Promise<RunAdminAgen
     try {
       const text = await chat(
         [
-          { role: 'system', content: ADMIN_AGENT_SYS },
+          { role: 'system', content: ADMIN_AGENT_SYS + languageDirective },
           { role: 'user', content: JSON.stringify(context) },
         ],
         { jsonMode: true, maxTokens: 2_000, caller: 'admin-agent', condoId: args.condoId }
