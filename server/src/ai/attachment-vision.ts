@@ -16,7 +16,13 @@
 //    deterministically. We sanitize on the way in.
 
 import db from '../db';
-import { chatWithImage } from './openrouter';
+import { chatWithImage, OpenRouterError } from './openrouter';
+
+// Failure kinds where retrying later WILL work — the problem is the AI
+// service (no credits, throttled, server blip, timed out, key missing),
+// not the image. These must never be cached as "analyzed", or the
+// attachment is silently skipped forever once the outage clears.
+const TRANSIENT_VISION_ERROR_KINDS = new Set(['credits', 'rate_limit', 'server', 'timeout', 'auth']);
 
 interface AttachmentRow {
   id: number;
@@ -95,8 +101,10 @@ function isImageContentType(ct: string | null | undefined): boolean {
 
 // Analyze one attachment. Returns the cached result on subsequent calls.
 // Idempotent + safe to retry — we only call the model when ai_analyzed_at
-// is null. Failures are stored too (with a code in ai_analysis_error) so
-// we don't burn budget retrying a permanently-broken URL.
+// is null. PERMANENT failures (bad image, unparseable response) are cached
+// so we don't burn budget retrying a broken URL forever. TRANSIENT failures
+// (out of credits, rate-limited, server blip) are NOT cached — the row
+// stays retryable so it self-heals once the AI service recovers.
 export async function analyzeAttachment(attachmentId: number, locale = 'pt-BR'): Promise<VisionResult | null> {
   const row = db.prepare(
     `SELECT id, ticket_id, url, filename, content_type,
@@ -144,6 +152,16 @@ export async function analyzeAttachment(attachmentId: number, locale = 'pt-BR'):
     ).run(parsed.description, JSON.stringify(parsed.signals), attachmentId);
     return parsed;
   } catch (err) {
+    // Transient AI-service failure → leave ai_analyzed_at NULL so the next
+    // run retries. Record a breadcrumb in ai_analysis_error only.
+    if (err instanceof OpenRouterError && TRANSIENT_VISION_ERROR_KINDS.has(err.kind)) {
+      db.prepare(
+        `UPDATE ticket_attachments SET ai_analysis_error = ? WHERE id = ?`
+      ).run(`transient:${err.kind}`, attachmentId);
+      return null;
+    }
+    // Permanent failure (broken URL, image the provider rejected, etc.) →
+    // cache it so we don't keep paying to retry a genuinely bad attachment.
     const code = (err as Error)?.message || 'vision_failed';
     db.prepare(
       `UPDATE ticket_attachments
