@@ -350,7 +350,20 @@ export async function chatWithTools(
       try {
         output = await toolHandler(name, input);
       } catch (err) {
-        output = { error: (err as Error)?.message || 'tool_handler_failed' };
+        // Distinguish infrastructure failure from clean "no result". If
+        // we just stuff the exception into `{error: ...}` the model
+        // happily reads it as "no past tickets matched" — a DB outage on
+        // search_past_tickets becomes an honest-looking answer with the
+        // model saying "no history available". Tell the model EXPLICITLY
+        // that this is a server-side failure and not a domain result.
+        const errMsg = (err as Error)?.message || 'tool_handler_failed';
+        console.error(`[ai] tool ${name} threw: ${errMsg}`);
+        output = {
+          error: 'tool_infrastructure_failure',
+          tool: name,
+          detail: errMsg.slice(0, 200),
+          guidance: "This is a SERVER-SIDE FAILURE, not a domain result. Do NOT interpret as 'no data exists'. Acknowledge the lookup failed in your reasoning and proceed conservatively (lower confidence, recommend manual verification).",
+        };
       }
       toolCalls.push({ name, input, output });
       messages.push({

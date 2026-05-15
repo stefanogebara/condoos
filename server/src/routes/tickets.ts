@@ -115,7 +115,16 @@ function shouldSkipVetoWindow(priority: string, category: string): boolean {
   return isSafetyCriticalUrgent(priority, category);
 }
 
-export function dispatchAgentInBackground(ticketId: number, condoId: number, locale: string | undefined): void {
+export function dispatchAgentInBackground(
+  ticketId: number,
+  condoId: number,
+  locale: string | undefined,
+  // Audit-trail completeness — when the agent run is triggered by a
+  // verification, we know who triggered it. Threading the id lets the
+  // agent_runs row attribute the run to the verifier instead of leaving
+  // admin_user_id null on the auto-dispatch path.
+  triggeredByUserId?: number,
+): void {
   void (async () => {
     try {
       const ticket = db.prepare(
@@ -129,6 +138,7 @@ export function dispatchAgentInBackground(ticketId: number, condoId: number, loc
         task: `${ticket.title}\n\n${ticket.description}`,
         mode: ticket.priority === 'urgent' ? 'repair' : 'general',
         ticketId,
+        adminUserId: triggeredByUserId,
       });
 
       // If the model can't find any matching vendor in the condo's saved
@@ -648,7 +658,7 @@ router.post('/:id/verify', requireAuth, (req: AuthedRequest, res) => {
   // Phase 2 — kick off the AI agent the moment verification lands. The
   // background helper updates the ticket row when the model returns; we
   // don't block the HTTP response on the LLM call.
-  if (verified) dispatchAgentInBackground(id, condoId, locale);
+  if (verified) dispatchAgentInBackground(id, condoId, locale, req.user!.id);
   return ok(res, { id, verified, confirms, denies, threshold: ticket.verification_threshold });
 });
 

@@ -171,6 +171,12 @@ function agentModelLabel(): string {
 // to 4 LLM calls. A burst of verifications could pile dozens of calls onto
 // the OpenRouter bill. Cap concurrent runs per condo — excess runs serve
 // the deterministic fallback (free, instant, still a usable plan).
+//
+// ⚠️  Per-PROCESS counter. CondoOS runs on a single Fly machine today, so
+// this is effectively per-deployment. The moment we scale horizontally
+// (multiple machines, PM2 cluster mode, etc.) this becomes meaningless —
+// each process holds its own counter and the global concurrency is
+// MAX × N. Move to Redis (or any shared store) before scaling out.
 const MAX_CONCURRENT_AGENT_RUNS_PER_CONDO = Number(process.env.AGENT_MAX_CONCURRENT_PER_CONDO || 2);
 const inFlightByCondo = new Map<number, number>();
 
@@ -231,7 +237,7 @@ export async function runAdminAgent(args: RunAdminAgentArgs): Promise<RunAdminAg
 async function runAdminAgentInner(args: RunAdminAgentArgs): Promise<RunAdminAgentResult> {
   const mode = normalizeAdminAgentMode(args.mode);
 
-  const condo = db.prepare(`SELECT id, name, address FROM condominiums WHERE id = ?`).get(args.condoId) as any;
+  const condo = db.prepare(`SELECT id, name, address, timezone FROM condominiums WHERE id = ?`).get(args.condoId) as any;
   const footprint = db.prepare(
     `SELECT COUNT(DISTINCT b.id) AS buildings, COUNT(u.id) AS units
      FROM buildings b
@@ -396,13 +402,23 @@ async function runAdminAgentInner(args: RunAdminAgentArgs): Promise<RunAdminAgen
     ).get(args.condoId, inferredCategory) as { n: number }).n;
   }
 
-  // Time-of-day context. The local hour comes from the condo's timezone if
-  // we ever attach one to condominiums; for now we use UTC + a default of
-  // 9-18 business hours. The intent is to stop "ligar agora" at 22h.
+  // Time-of-day context. Uses the condo's IANA timezone (default
+  // America/Sao_Paulo) — Intl.DateTimeFormat handles DST automatically,
+  // so an admin in any zone gets the right "is it after hours?" signal.
+  // The intent is to stop the agent recommending "ligar agora" at 22h.
   const now = new Date();
-  const localHour = now.getUTCHours() - 3; // approx BRT (UTC-3) until tz-per-condo lands
-  const normalizedHour = ((localHour % 24) + 24) % 24;
-  const isOutsideBusinessHours = normalizedHour < 8 || normalizedHour >= 19;
+  const tz = (condo?.timezone as string | null) || 'America/Sao_Paulo';
+  let localHour: number;
+  try {
+    localHour = Number(new Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12: false, timeZone: tz }).format(now));
+    if (!Number.isFinite(localHour)) throw new Error('invalid hour');
+  } catch {
+    // Unknown timezone string → fall back to BRT so the runner doesn't
+    // throw. Logged so a bad condo.timezone gets noticed.
+    console.warn(`[agent] invalid condo timezone "${tz}" — falling back to UTC-3`);
+    localHour = ((now.getUTCHours() - 3) % 24 + 24) % 24;
+  }
+  const isOutsideBusinessHours = localHour < 8 || localHour >= 19;
 
   const buildingMemory = {
     similar_resolved_tickets: similarResolved.map((t) => {
@@ -425,7 +441,7 @@ async function runAdminAgentInner(args: RunAdminAgentArgs): Promise<RunAdminAgen
     open_similar_count: openSimilarCount,
     inferred_category: inferredCategory,
     current_local_time: now.toISOString(),
-    local_hour: normalizedHour,
+    local_hour: localHour,
     is_outside_business_hours: isOutsideBusinessHours,
   };
 

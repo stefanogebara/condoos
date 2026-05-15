@@ -245,6 +245,11 @@ export function initSchema() {
   addColumnIfMissing('condominiums', 'voting_model',       `TEXT NOT NULL DEFAULT 'one_per_unit'`);
   addColumnIfMissing('condominiums', 'require_approval',   `INTEGER NOT NULL DEFAULT 1`);
   addColumnIfMissing('condominiums', 'created_by_user_id', `INTEGER REFERENCES users(id)`);
+  // IANA timezone for the building. Used by the agent's after-hours
+  // detection so an admin in Acre (UTC-5) doesn't get a 21h-is-late
+  // warning at 19h local. Default to São Paulo because the product is
+  // Brazil-first, but it's per-condo so a Miami building can override.
+  addColumnIfMissing('condominiums', 'timezone',           `TEXT NOT NULL DEFAULT 'America/Sao_Paulo'`);
   // Voter eligibility on proposals: 'all' (residents + owners), 'owners_only', 'primary_contact_only'
   addColumnIfMissing('proposals',    'voter_eligibility',  `TEXT NOT NULL DEFAULT 'all'`);
   addColumnIfMissing('invites',      'relationship',       `TEXT NOT NULL DEFAULT 'tenant'`);
