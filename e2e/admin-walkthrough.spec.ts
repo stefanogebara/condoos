@@ -87,19 +87,14 @@ test('admin: AI agent generates an operational plan', async ({ page, request }) 
   await adminLogin(page, request);
   await page.goto('/board/agent');
   await expect(page.getByRole('heading', { name: /AI agent|Agente IA/i })).toBeVisible();
-  await expect(page.getByText(/AI available|IA disponível/i).first()).toBeVisible();
-  await expect(page.getByText(/Usage over the last 7 days|Uso dos últimos 7 dias/i).first()).toBeVisible();
+  await expect(page.getByText(/Operations agent|Agente operacional/i).first()).toBeVisible();
   await page.getByRole('textbox', { name: /What do you want to solve|O que você quer resolver/i }).fill('Compare options to repair the gym treadmill and find maintenance vendors.');
   await page.getByRole('button', { name: /Generate plan|Gerar plano/i }).click();
   const aiTimeout = process.env.E2E_HAS_LLM ? 60_000 : 20_000;
-  await expect(page.getByText(/^(Next step|Próximo passo)$/i)).toBeVisible({ timeout: aiTimeout });
-  // The agent legitimately returns one option for vendor-search-flavored
-  // tasks ("find maintenance vendors"); the workbench then renders a single
-  // "Recommendation" card instead of the multi-option "Options" grid. Both
-  // are valid plan shapes — assert on either rather than forcing >=2 options.
+  await expect(page.getByText(/Recommended action|Ação recomendada/i)).toBeVisible({ timeout: aiTimeout });
+  await page.getByText(/Plan details|Detalhes do plano/i).click();
   await expect(page.getByRole('heading', { name: /^(Options|Opções|Recommendation|Recomendação)$/i })).toBeVisible();
   await expect(page.getByRole('heading', { name: /^(Research plan|Plano de pesquisa)$/i })).toBeVisible();
-  await expect(page.getByRole('heading', { name: /^(Resident notice|Comunicado aos moradores)$/i })).toBeVisible();
 });
 
 test('admin: AI agent renders server-derived evidence cards', async ({ page, request }) => {
@@ -157,17 +152,16 @@ test('admin: AI agent renders server-derived evidence cards', async ({ page, req
   await page.goto('/board/agent');
   await page.getByRole('textbox', { name: /What do you want to solve|O que você quer resolver/i }).fill('Consertar o elevador A com ruído recorrente.');
   await page.getByRole('button', { name: /Generate plan|Gerar plano/i }).click();
-  await page.getByText(/Why this plan|Por que esse plano/i).click();
+  await page.locator('summary').filter({ hasText: /Technical diagnostics|Diagnóstico técnico/i }).click();
   await expect(page.getByRole('heading', { name: /Evidence used|Evidências usadas/i })).toBeVisible();
   await expect(page.getByText('Chamado anterior')).toBeVisible();
   await expect(page.getByText('Citação web')).toBeVisible();
   await expect(page.getByText('Elevador A com ruído')).toBeVisible();
   const source = page.getByRole('link', { name: /Open source|Abrir fonte/i });
   await expect(source).toHaveAttribute('href', 'https://example.com/vendor');
-  await expect(page.getByText(/No blocker|Sem bloqueio/i)).toBeVisible();
   await expect(page.getByRole('link', { name: /Search vendors|Buscar fornecedores/i })).toHaveAttribute('href', /google\.com\/search/);
-  await expect(page.getByRole('button', { name: /View plan|Ver plano/i })).toBeVisible();
-  await expect(page.getByRole('button', { name: /Save vendor|Cadastrar fornecedor/i })).toBeVisible();
+  await page.getByText(/Plan details|Detalhes do plano/i).click();
+  await expect(page.getByRole('button', { name: /Save vendor|Cadastrar fornecedor/i }).first()).toBeVisible();
 });
 
 test('admin: AI fallback state stays actionable without false credit copy', async ({ page, request }) => {

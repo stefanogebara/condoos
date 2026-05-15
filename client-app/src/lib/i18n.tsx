@@ -2715,6 +2715,21 @@ const phrases: Copy[] = [
   c('is_receipt', 'receipt', 'recibo', 'reçu'),
   c('urgency_high', 'high urgency', 'alta urgencia', 'urgence élevée'),
   c('urgency_low', 'low urgency', 'baja urgencia', 'urgence faible'),
+  // Admin agent simplified operator flow.
+  c('Agente operacional', 'Operations agent', 'Agente operativo', 'Agent opérationnel'),
+  c('Descreva o problema ou decisão. O agente devolve um próximo passo, uma mensagem pronta e os detalhes só quando você quiser abrir.', 'Describe the problem or decision. The agent returns one next step, a ready message, and details only when you choose to open them.', 'Describe el problema o la decisión. El agente devuelve un siguiente paso, un mensaje listo y los detalles solo cuando quieras abrirlos.', 'Décrivez le problème ou la décision. L’agent renvoie une prochaine étape, un message prêt et les détails seulement si vous les ouvrez.'),
+  c('Ação recomendada', 'Recommended action', 'Acción recomendada', 'Action recommandée'),
+  c('Copiar plano', 'Copy plan', 'Copiar plan', 'Copier le plan'),
+  c('Fornecedor sugerido', 'Suggested vendor', 'Proveedor sugerido', 'Prestataire suggéré'),
+  c('Mensagem pronta', 'Ready message', 'Mensaje listo', 'Message prêt'),
+  c('Detalhes do plano', 'Plan details', 'Detalles del plan', 'Détails du plan'),
+  c('Fornecedores salvos', 'Saved vendors', 'Proveedores guardados', 'Prestataires enregistrés'),
+  c('Encontrar fornecedor', 'Find a vendor', 'Encontrar proveedor', 'Trouver un prestataire'),
+  c('Nenhum fornecedor salvo combina com esse pedido. Use a busca pronta e cadastre o escolhido para a próxima vez.', 'No saved vendor matches this request. Use the prepared search and save the chosen vendor for next time.', 'Ningún proveedor guardado coincide con este pedido. Usa la búsqueda preparada y guarda el proveedor elegido para la próxima vez.', 'Aucun prestataire enregistré ne correspond à cette demande. Utilisez la recherche prête et enregistrez le prestataire choisi pour la prochaine fois.'),
+  c('Buscar alternativa', 'Search alternative', 'Buscar alternativa', 'Chercher une alternative'),
+  c('Diagnóstico técnico', 'Technical diagnostics', 'Diagnóstico técnico', 'Diagnostic technique'),
+  c('Confiança técnica', 'Technical confidence', 'Confianza técnica', 'Confiance technique'),
+  c('Detalhes de auditoria disponíveis apenas quando o modo debug é solicitado pela API.', 'Audit details are available only when debug mode is requested from the API.', 'Los detalles de auditoría solo están disponibles cuando se solicita el modo debug desde la API.', 'Les détails d’audit ne sont disponibles que lorsque le mode debug est demandé à l’API.'),
 ];
 
 function c(pt: string, en: string, es: string, fr: string): Copy {

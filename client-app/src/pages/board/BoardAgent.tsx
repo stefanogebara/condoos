@@ -120,6 +120,22 @@ interface AgentResult {
   turn_index?: number;
   agent_run_id?: number;
   ai_status?: 'ok' | 'degraded' | 'unavailable';
+  diagnostics_available?: boolean;
+  debug_view?: {
+    building_memory?: BuildingMemory | null;
+    agent_trace?: AgentTraceStep[];
+    evidence_sources?: AgentEvidenceSource[];
+    attachment_analysis?: Array<{
+      id: number;
+      description: string;
+      signals: string[];
+    }>;
+    confidence?: {
+      score: number;
+      tier: 'high' | 'medium' | 'low';
+      reasoning: string[];
+    };
+  };
   _fallback?: boolean;
 }
 
@@ -242,6 +258,26 @@ function formatAgentPlanForCopy(result: AgentResult, tr: (key: string) => string
   }
 
   return lines.filter((line, idx, all) => line !== '' || all[idx - 1] !== '').join('\n');
+}
+
+function getAgentDebugView(result: AgentResult | null): AgentResult['debug_view'] | null {
+  if (!result) return null;
+  if (result.debug_view) return result.debug_view;
+  const fallbackDebug = {
+    building_memory: result.building_memory,
+    agent_trace: result.agent_trace,
+    evidence_sources: result.evidence_sources,
+    attachment_analysis: result.attachment_analysis,
+    confidence: result.confidence,
+  };
+  const hasFallbackDebug = !!(
+    fallbackDebug.building_memory ||
+    fallbackDebug.confidence ||
+    (fallbackDebug.agent_trace && fallbackDebug.agent_trace.length > 0) ||
+    (fallbackDebug.evidence_sources && fallbackDebug.evidence_sources.length > 0) ||
+    (fallbackDebug.attachment_analysis && fallbackDebug.attachment_analysis.length > 0)
+  );
+  return hasFallbackDebug ? fallbackDebug : null;
 }
 
 export default function BoardAgent() {
@@ -474,16 +510,29 @@ export default function BoardAgent() {
     result.vendor_search_plan.shortlisting_criteria.length > 0 ||
     !!result.vendor_search_plan.outreach_message
   );
-  const shouldShowServiceNetwork = !!result && (
-    result.existing_network_fit.length > 0 ||
-    hasVendorSearchPlan ||
-    result.task_type !== 'general'
-  );
   const hasResidentUpdate = !!result && !!(
     result.resident_update.title.trim() ||
     result.resident_update.body.trim()
   );
   const canCreateProposal = !!result?.proposal_draft && (mode === 'install' || mode === 'policy');
+  const debugView = getAgentDebugView(result);
+  const hasTechnicalDiagnostics = !!(debugView || aiUsage);
+  const primaryFit = result?.existing_network_fit?.[0] || null;
+  const primaryVendor = primaryFit
+    ? vendors.find((v) => v.company_name === primaryFit.company_name) || null
+    : null;
+  const primaryVendorCanSend = !!primaryVendor && (!!primaryVendor.whatsapp || !!primaryVendor.email);
+  const primarySearchQuery = result?.vendor_search_plan?.search_queries?.[0] || '';
+  const hasPlanDetails = !!result && (
+    result.existing_network_fit.length > 1 ||
+    result.options.length > 0 ||
+    hasVendorSearchPlan ||
+    result.action_plan.length > 0 ||
+    hasResidentUpdate ||
+    canCreateProposal ||
+    result.risks.length > 0 ||
+    result.assumptions.length > 0
+  );
 
   return (
     <>
@@ -557,64 +606,22 @@ export default function BoardAgent() {
         </GlassCard>
       )}
 
-      <GlassCard variant="clay-sage" className="p-5 mb-5 overflow-hidden relative">
-        <div className="absolute -right-10 -top-10 w-36 h-36 rounded-full bg-sage-200/60 blur-2xl" />
-        <div className="relative flex items-start gap-4">
-          <div className="w-12 h-12 rounded-3xl bg-dusk-400 text-cream-50 flex items-center justify-center shrink-0 shadow-clay">
-            <Bot className="w-6 h-6" />
-          </div>
-          <div>
-            <h2 className="font-display text-2xl text-dusk-500">{tr('Workbench operacional')}</h2>
-            <p className="text-sm text-dusk-400 mt-1 max-w-3xl">
-              {tr('Usa a rede de serviços, áreas comuns e propostas do condomínio para sugerir o próximo passo — e te dá um botão para enviar a mensagem ao fornecedor certo direto pelo WhatsApp.')}
-            </p>
-            <p className="text-xs text-dusk-300 mt-3">
-              {tr('Pesquisa externa só aparece com fontes; sem provedor configurado, o agente mostra buscas manuais e não inventa fornecedores ou preços.')}
-            </p>
-          </div>
-        </div>
-      </GlassCard>
-
-      <GlassCard className="p-4 mb-5">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <Badge tone={aiUsage?.ai_available === false ? 'warning' : 'sage'}>
-                {aiUsage?.ai_available === false ? tr('IA indisponível') : tr('IA disponível')}
-              </Badge>
-              <span className="text-xs uppercase tracking-[0.18em] text-dusk-300">
-                {tr('Uso dos últimos 7 dias')}
-              </span>
+      {!result && (
+        <GlassCard variant="clay-sage" className="p-5 mb-5 overflow-hidden relative">
+          <div className="absolute -right-10 -top-10 w-36 h-36 rounded-full bg-sage-200/60 blur-2xl" />
+          <div className="relative flex items-start gap-4">
+            <div className="w-12 h-12 rounded-3xl bg-dusk-400 text-cream-50 flex items-center justify-center shrink-0 shadow-clay">
+              <Bot className="w-6 h-6" />
             </div>
-            <p className="text-sm text-dusk-400 mt-2">
-              {aiUsage?.ai_available === false && aiUsage.breaker_open_until
-                ? `${tr('Circuito de créditos aberto até')} ${new Date(aiUsage.breaker_open_until).toLocaleString(locale)}`
-                : tr('Mostra chamadas reais ao modelo, tokens e custo estimado para o condomínio ativo.')}
-            </p>
-          </div>
-          <div className="grid grid-cols-3 gap-2 min-w-full lg:min-w-[360px]">
-            <div className="rounded-2xl border border-white/70 bg-white/60 p-3">
-              <p className="text-[10px] uppercase tracking-[0.16em] text-dusk-300">{tr('Chamadas')}</p>
-              <p className="font-display text-xl text-dusk-500 mt-1">{aiUsage ? aiUsage.total_calls : '—'}</p>
-            </div>
-            <div className="rounded-2xl border border-white/70 bg-white/60 p-3">
-              <p className="text-[10px] uppercase tracking-[0.16em] text-dusk-300">{tr('Tokens')}</p>
-              <p className="font-display text-xl text-dusk-500 mt-1">{aiUsage ? formatCompactNumber(aiUsage.total_tokens, locale) : '—'}</p>
-            </div>
-            <div className="rounded-2xl border border-white/70 bg-white/60 p-3">
-              <p className="text-[10px] uppercase tracking-[0.16em] text-dusk-300">{tr('Custo est.')}</p>
-              <p className="font-display text-xl text-dusk-500 mt-1">{aiUsage ? formatUsd(aiUsage.est_cost_usd, locale) : '—'}</p>
+            <div>
+              <h2 className="font-display text-2xl text-dusk-500">{tr('Agente operacional')}</h2>
+              <p className="text-sm text-dusk-400 mt-1 max-w-3xl">
+                {tr('Descreva o problema ou decisão. O agente devolve um próximo passo, uma mensagem pronta e os detalhes só quando você quiser abrir.')}
+              </p>
             </div>
           </div>
-        </div>
-        {aiUsage?.by_caller?.[0] && (
-          <div className="mt-3 text-xs text-dusk-300">
-            {tr('Maior uso')}: <span className="text-dusk-500 font-medium">{aiUsage.by_caller[0].caller}</span>
-            {' · '}
-            {formatCompactNumber(aiUsage.by_caller[0].total_tokens, locale)} {tr('tokens')}
-          </div>
-        )}
-      </GlassCard>
+        </GlassCard>
+      )}
 
       {/* Live progress while a request is in flight. Renders each crumb
           the runner emits so the 30-55s ReAct wait becomes legible. The
@@ -650,6 +657,7 @@ export default function BoardAgent() {
         </GlassCard>
       )}
 
+      {!result && (
       <form onSubmit={submit} className="grid lg:grid-cols-[1.2fr_0.8fr] gap-5 mb-6">
         <GlassCard className="p-5">
           <label className="block text-xs text-dusk-300 font-medium">
@@ -700,6 +708,7 @@ export default function BoardAgent() {
           </Button>
         </GlassCard>
       </form>
+      )}
 
       {/* Prior turns ribbon — collapsed cards above the latest result so
           the admin sees what they've already asked. Only renders when
@@ -731,53 +740,21 @@ export default function BoardAgent() {
       )}
 
       {result && (
-        <div className="space-y-5 animate-fade-up">
-          {/* Echo the latest user task above the agent card so the admin
-              has visual anchor — especially helpful on the second+ turn
-              when there's a stack of replies and questions. */}
+        <div className="space-y-4 animate-fade-up">
           {latestTurn && turns.length > 1 && (
             <div className="rounded-3xl bg-dusk-200/40 border border-dusk-200/60 p-3 text-sm text-dusk-500">
               <span className="text-xs uppercase tracking-wider text-dusk-400 mr-2">{tr('Você')}</span>
               {latestTurn.user_task}
             </div>
           )}
-          {/* Tool-use trace — only renders on ReAct path. Shows what the
-              agent looked up before answering. Builds trust ("it actually
-              checked the past tickets, didn't just make this up") and
-              doubles as a debugging surface when output looks off. */}
-          {result.agent_trace && result.agent_trace.length > 0 && (
-            <details className="rounded-3xl bg-white/60 border border-white/70 px-4 py-3 text-sm">
-              <summary className="cursor-pointer text-dusk-400 inline-flex items-center gap-2">
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>{tr('Como o agente pesquisou')} ({result.agent_trace.length})</span>
-              </summary>
-              <ol className="mt-3 space-y-1.5 text-xs text-dusk-400">
-                {result.agent_trace.map((step, idx) => (
-                  <li key={idx} className="flex items-start gap-2">
-                    <span className="font-semibold text-sage-700 shrink-0">{idx + 1}.</span>
-                    <div className="min-w-0">
-                      <div className="font-medium text-dusk-500">{tr(step.tool)}</div>
-                      {step.output_summary && (
-                        <div className="text-dusk-300 mt-0.5">{step.output_summary}</div>
-                      )}
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            </details>
-          )}
 
-          {/* Fallback mode is not a tailored plan — say so loudly. A small
-              badge alone lets an admin mistake the generic checklist for
-              real AI output. This fires when the run degraded for credits,
-              throttling, concurrency, or a non-converged model response. */}
           {result._fallback && (
             <div className="rounded-3xl border border-peach-200 bg-peach-50/80 p-4">
               {(() => {
                 const copy = agentFallbackCopy(result.ai_status, tr);
                 return (
                   <>
-                    <p className="text-sm font-medium text-peach-500">⚠ {copy.title}</p>
+                    <p className="text-sm font-medium text-peach-500">! {copy.title}</p>
                     <p className="text-xs text-dusk-400 mt-1">{copy.detail}</p>
                   </>
                 );
@@ -785,376 +762,391 @@ export default function BoardAgent() {
             </div>
           )}
 
-          <GlassCard variant="clay" className="p-5">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Badge tone="sage">{tr('Plano gerado')}</Badge>
-                  {result._fallback ? <Badge tone="warning">{tr('Fallback seguro')}</Badge> : null}
-                  <Badge tone="neutral">{agentTaskTypeLabel(result.task_type, tr)}</Badge>
-                  {turns.length > 1 && <Badge tone="neutral">{tr('Turno')} {turns.length}</Badge>}
-                  {result.confidence && <ConfidenceChip confidence={result.confidence} tr={tr} />}
+          <GlassCard variant="clay" className="p-5 overflow-hidden relative">
+            <div className="absolute -right-16 -top-16 w-44 h-44 rounded-full bg-sage-200/50 blur-3xl" />
+            <div className="relative">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Badge tone="sage">{tr('Ação recomendada')}</Badge>
+                    {result._fallback ? <Badge tone="warning">{tr('Fallback seguro')}</Badge> : null}
+                    <Badge tone="neutral">{agentTaskTypeLabel(result.task_type, tr)}</Badge>
+                    {turns.length > 1 && <Badge tone="neutral">{tr('Turno')} {turns.length}</Badge>}
+                  </div>
+                  <h2 className="font-display text-3xl text-dusk-500 mt-3">{result.recommended_next_step}</h2>
+                  <p className="text-sm text-dusk-400 mt-3 max-w-3xl whitespace-pre-line">{result.summary}</p>
                 </div>
-                <h2 className="font-display text-2xl text-dusk-500 mt-3">{tr('Resumo')}</h2>
-                <p className="text-sm text-dusk-400 mt-1 whitespace-pre-line">{result.summary}</p>
-              </div>
-              <Button type="button" variant="ghost" size="sm" onClick={() => copyText(formatAgentPlanForCopy(result, tr))} leftIcon={<Copy className="w-4 h-4" />}>
-                {tr('Copiar')}
-              </Button>
-            </div>
-            <div className="mt-4 p-4 rounded-3xl bg-white/60 border border-white/70">
-              <p className="text-xs uppercase tracking-[0.18em] text-dusk-300">{tr('Próximo passo')}</p>
-              <p className="text-sm text-dusk-500 mt-1">{result.recommended_next_step}</p>
-            </div>
-            {/* Data-wall rescue chips — when the agent couldn't fully
-                answer (no vendor, no cost data, unclear scope), it
-                surfaces follow-up questions the admin can click to
-                pre-fill the composer. Turns a wall into a conversation
-                pivot. Renders nothing when there's nothing to suggest. */}
-            {result.follow_up_suggestions && result.follow_up_suggestions.length > 0 && (
-              <div className="mt-4">
-                <p className="text-xs uppercase tracking-[0.18em] text-dusk-300 mb-2">{tr('Sugestões para continuar')}</p>
-                <div className="flex flex-wrap gap-2">
-                  {result.follow_up_suggestions.map((s, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => {
-                        setFollowUpTask(s);
-                        // Scroll the composer into view so the admin sees
-                        // the prefill landed.
-                        setTimeout(() => {
-                          const ta = Array.from(document.querySelectorAll('textarea')).find((t) => /Ricardo/.test((t as HTMLTextAreaElement).placeholder || ''));
-                          ta?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                          (ta as HTMLTextAreaElement | undefined)?.focus();
-                        }, 100);
-                      }}
-                      className="text-xs text-left rounded-full px-3 py-1.5 bg-white/70 border border-white/80 text-dusk-500 hover:bg-sage-100/60 hover:border-sage-300/60 transition"
-                    >
-                      {s}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </GlassCard>
-
-          {/* Justification — the "why" behind the plan. These three blocks
-              (cited evidence, building memory, photo analysis) explain the
-              reasoning but aren't what the admin acts on, so they're
-              collapsed by default to keep the answer + actions above the
-              fold instead of walling them off behind a long scroll. */}
-          {(
-            (result.evidence_sources && result.evidence_sources.length > 0) ||
-            result.building_memory ||
-            (result.attachment_analysis && result.attachment_analysis.length > 0)
-          ) && (
-            <details className="group">
-              <summary className="cursor-pointer list-none flex items-center gap-2 rounded-3xl bg-white/50 border border-white/70 px-4 py-3 text-sm text-dusk-400 hover:bg-white/70 transition-colors">
-                <Sparkles className="w-4 h-4 shrink-0" />
-                <span>{tr('Por que esse plano — evidências e memória do prédio')}</span>
-                <ChevronDown className="w-4 h-4 ml-auto shrink-0 transition-transform group-open:rotate-180" />
-              </summary>
-              <div className="mt-3 space-y-5">
-                {result.evidence_sources && result.evidence_sources.length > 0 && (
-                  <EvidenceSourcesSection sources={result.evidence_sources} tr={tr} />
-                )}
-                {result.building_memory && <BuildingMemorySection memory={result.building_memory} locale={locale} tr={tr} />}
-                {result.attachment_analysis && result.attachment_analysis.length > 0 && (
-                  <VisualEvidenceSection items={result.attachment_analysis} tr={tr} />
-                )}
-              </div>
-            </details>
-          )}
-
-          {/* Hero: the only block in the result panel with a write action.
-              Each existing-network-fit card lets the admin send the agent's
-              outreach_message to that exact saved vendor via WhatsApp in
-              one click. Without this, the workbench is a glorified notes
-              app — with it, the agent's plan becomes a real outbound
-              message. When `existing_network_fit` is empty, render an
-              honest empty state pointing to /board/services so the admin
-              can add the missing vendor (vendor-add auto-rewires blocked
-              tickets, so this isn't a dead-end). */}
-          {shouldShowServiceNetwork && (
-          <GlassCard className="p-5">
-            <div className="flex items-center justify-between gap-3 mb-3">
-              <h2 className="font-display text-xl text-dusk-500">{tr('Sua rede cadastrada')}</h2>
-              {result.vendor_search_plan?.outreach_message && (
-                <Button type="button" variant="ghost" size="sm" onClick={() => copyText(result.vendor_search_plan.outreach_message)} leftIcon={<Copy className="w-4 h-4" />}>
-                  {tr('Copiar mensagem genérica')}
+                <Button type="button" variant="ghost" size="sm" onClick={() => copyText(formatAgentPlanForCopy(result, tr))} leftIcon={<Copy className="w-4 h-4" />}>
+                  {tr('Copiar plano')}
                 </Button>
+              </div>
+
+              <div className="mt-5 flex flex-wrap gap-2">
+                {primaryFit ? (
+                  <Button
+                    type="button"
+                    variant="primary"
+                    disabled={!primaryVendorCanSend}
+                    onClick={() => primaryVendor && setOutreachTarget({ vendor: primaryVendor, initialMessage: result.vendor_search_plan?.outreach_message || '' })}
+                    leftIcon={<MessageCircle className="w-4 h-4" />}
+                  >
+                    {primaryVendorCanSend ? tr('Enviar mensagem') : tr('Sem contato no cadastro')}
+                  </Button>
+                ) : primarySearchQuery ? (
+                  <a
+                    href={`https://www.google.com/search?q=${encodeURIComponent(primarySearchQuery)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 rounded-full bg-sage-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-sage-700 transition-colors"
+                  >
+                    {tr('Buscar fornecedores')} <ExternalLink className="w-4 h-4" />
+                  </a>
+                ) : canCreateProposal ? (
+                  <Button type="button" variant="primary" loading={creatingProposal} onClick={createProposal} leftIcon={<Send className="w-4 h-4" />}>
+                    {tr('Criar proposta')}
+                  </Button>
+                ) : hasResidentUpdate ? (
+                  <Button type="button" variant="primary" onClick={() => copyText(`${result.resident_update.title}\n\n${result.resident_update.body}`)} leftIcon={<Copy className="w-4 h-4" />}>
+                    {tr('Copiar comunicado')}
+                  </Button>
+                ) : null}
+
+                {result.vendor_search_plan?.outreach_message && (
+                  <Button type="button" variant="ghost" onClick={() => copyText(result.vendor_search_plan.outreach_message)} leftIcon={<Copy className="w-4 h-4" />}>
+                    {tr('Copiar mensagem')}
+                  </Button>
+                )}
+                {primaryFit && primarySearchQuery && (
+                  <a
+                    href={`https://www.google.com/search?q=${encodeURIComponent(primarySearchQuery)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 rounded-full bg-white/65 border border-white/80 px-4 py-2 text-sm font-semibold text-dusk-500 hover:bg-white/85 transition-colors"
+                  >
+                    {tr('Buscar alternativa')} <ExternalLink className="w-4 h-4" />
+                  </a>
+                )}
+                {!primaryFit && hasVendorSearchPlan && (
+                  <Button type="button" variant="ghost" onClick={() => navigate('/board/services')}>
+                    {tr('Cadastrar fornecedor')}
+                  </Button>
+                )}
+              </div>
+
+              {primaryFit && (
+                <div className="mt-5 rounded-3xl bg-white/60 border border-white/70 p-4">
+                  <p className="text-xs uppercase tracking-[0.18em] text-dusk-300">{tr('Fornecedor sugerido')}</p>
+                  <div className="mt-2 flex items-center gap-2 flex-wrap">
+                    <h3 className="font-semibold text-dusk-500">{primaryFit.company_name}</h3>
+                    <Badge tone="neutral">{primaryFit.category}</Badge>
+                  </div>
+                  <p className="text-sm text-dusk-400 mt-1">{primaryFit.reason}</p>
+                  <p className="text-xs text-dusk-300 mt-1">{primaryFit.contact_method}</p>
+                </div>
+              )}
+
+              {result.vendor_search_plan?.outreach_message && (
+                <div className="mt-5 rounded-3xl bg-cream-50/75 border border-white/80 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-xs uppercase tracking-[0.16em] text-dusk-300">{tr('Mensagem pronta')}</h3>
+                    <Button type="button" variant="ghost" size="sm" onClick={() => copyText(result.vendor_search_plan.outreach_message)} leftIcon={<Copy className="w-4 h-4" />}>
+                      {tr('Copiar')}
+                    </Button>
+                  </div>
+                  <p className="text-sm text-dusk-500 mt-2 whitespace-pre-line">{result.vendor_search_plan.outreach_message}</p>
+                </div>
+              )}
+
+              {result.follow_up_suggestions && result.follow_up_suggestions.length > 0 && (
+                <div className="mt-5">
+                  <p className="text-xs uppercase tracking-[0.18em] text-dusk-300 mb-2">{tr('Sugestões para continuar')}</p>
+                  <div className="flex flex-wrap gap-2">
+                    {result.follow_up_suggestions.map((s, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => {
+                          setFollowUpTask(s);
+                          setTimeout(() => {
+                            const ta = Array.from(document.querySelectorAll('textarea')).find((t) => /Ricardo/.test((t as HTMLTextAreaElement).placeholder || ''));
+                            ta?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            (ta as HTMLTextAreaElement | undefined)?.focus();
+                          }, 100);
+                        }}
+                        className="text-xs text-left rounded-full px-3 py-1.5 bg-white/70 border border-white/80 text-dusk-500 hover:bg-sage-100/60 hover:border-sage-300/60 transition"
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               )}
             </div>
-            {result.existing_network_fit.length > 0 ? (
-              <div className="grid md:grid-cols-2 gap-3">
-                {result.existing_network_fit.map((fit) => {
-                  const vendor = vendors.find((v) => v.company_name === fit.company_name);
-                  const canSend = !!vendor?.whatsapp || !!vendor?.email;
-                  const cost = fit.cost_history;
-                  return (
-                    <div key={fit.company_name} className="rounded-3xl bg-white/60 border border-white/70 p-4">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="font-semibold text-dusk-500">{fit.company_name}</h3>
-                        <Badge tone="neutral">{fit.category}</Badge>
+          </GlassCard>
+
+          {hasPlanDetails && (
+            <details className="group">
+              <summary className="cursor-pointer list-none flex items-center gap-2 rounded-3xl bg-white/55 border border-white/70 px-4 py-3 text-sm text-dusk-500 hover:bg-white/75 transition-colors">
+                <ClipboardList className="w-4 h-4 shrink-0 text-sage-700" />
+                <span>{tr('Detalhes do plano')}</span>
+                <ChevronDown className="w-4 h-4 ml-auto shrink-0 transition-transform group-open:rotate-180" />
+              </summary>
+              <GlassCard className="mt-3 p-5 space-y-5">
+                {result.existing_network_fit.length > 0 && (
+                  <section>
+                    <h3 className="font-display text-xl text-dusk-500 mb-3">{tr('Fornecedores salvos')}</h3>
+                    <div className="grid md:grid-cols-2 gap-3">
+                      {result.existing_network_fit.map((fit) => {
+                        const vendor = vendors.find((v) => v.company_name === fit.company_name);
+                        const canSend = !!vendor?.whatsapp || !!vendor?.email;
+                        const cost = fit.cost_history;
+                        return (
+                          <div key={fit.company_name} className="rounded-3xl bg-white/60 border border-white/70 p-4">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h4 className="font-semibold text-dusk-500">{fit.company_name}</h4>
+                              <Badge tone="neutral">{fit.category}</Badge>
+                            </div>
+                            <p className="text-sm text-dusk-400 mt-2">{fit.reason}</p>
+                            <p className="text-xs text-dusk-300 mt-2">{fit.contact_method}</p>
+                            {cost && cost.expense_count > 0 && (
+                              <div className={`mt-3 rounded-2xl p-2.5 text-xs text-dusk-400 ${cost.confidence === 'high' ? 'bg-sage-100/60 border border-sage-200/60' : 'bg-white/60 border border-white/70'}`}>
+                                <span className="font-semibold text-dusk-500">
+                                  {cost.confidence === 'high' ? tr('Histórico') : tr('Valor de referência')}:
+                                </span>
+                                {cost.last_amount_brl != null && (
+                                  <span> {formatEstimatedCost(cost.last_amount_brl, locale)}</span>
+                                )}
+                                {cost.avg_brl != null && (
+                                  <span className="text-dusk-300"> · {tr('média')} {formatEstimatedCost(cost.avg_brl, locale)} ({cost.expense_count}x)</span>
+                                )}
+                              </div>
+                            )}
+                            <div className="mt-3">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                disabled={!canSend}
+                                onClick={() => vendor && setOutreachTarget({ vendor, initialMessage: result.vendor_search_plan?.outreach_message || '' })}
+                                leftIcon={<MessageCircle className="w-4 h-4" />}
+                              >
+                                {canSend ? tr('Enviar mensagem') : tr('Sem contato no cadastro')}
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+                )}
+
+                {result.existing_network_fit.length === 0 && hasVendorSearchPlan && (
+                  <section className="rounded-3xl bg-white/50 border border-white/70 p-4">
+                    <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+                      <div>
+                        <h3 className="font-display text-xl text-dusk-500">{tr('Encontrar fornecedor')}</h3>
+                        <p className="text-sm text-dusk-400 mt-1">{tr('Nenhum fornecedor salvo combina com esse pedido. Use a busca pronta e cadastre o escolhido para a próxima vez.')}</p>
                       </div>
-                      <p className="text-sm text-dusk-400 mt-2">{fit.reason}</p>
-                      <p className="text-xs text-dusk-300 mt-2">{fit.contact_method}</p>
-                      {cost && cost.expense_count > 0 && (
-                        // High confidence (3+ past expenses) → sage chip,
-                        // "Histórico". Low confidence (1-2) → neutral chip,
-                        // "Valor de referência" + explicit caveat. One
-                        // past invoice ≠ a reliable estimate.
-                        cost.confidence === 'high' ? (
-                          <div className="mt-3 rounded-2xl bg-sage-100/60 border border-sage-200/60 p-2.5 text-xs text-dusk-400">
-                            <div className="flex items-baseline gap-2 flex-wrap">
-                              <span className="font-semibold text-sage-700">{tr('Histórico')}:</span>
-                              {cost.last_amount_brl != null && (
-                                <span>
-                                  {tr('última vez')} <span className="font-semibold text-dusk-500">{formatEstimatedCost(cost.last_amount_brl, locale)}</span>
-                                </span>
-                              )}
-                              {cost.avg_brl != null && (
-                                <span className="text-dusk-300">
-                                  · {tr('média')} {formatEstimatedCost(cost.avg_brl, locale)} ({cost.expense_count}×)
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="mt-3 rounded-2xl bg-white/60 border border-white/70 p-2.5 text-xs text-dusk-400">
-                            <div className="flex items-baseline gap-2 flex-wrap">
-                              <span className="font-semibold text-dusk-400">{tr('Valor de referência')}:</span>
-                              {cost.last_amount_brl != null && (
-                                <span>
-                                  <span className="font-semibold text-dusk-500">{formatEstimatedCost(cost.last_amount_brl, locale)}</span>
-                                </span>
-                              )}
-                              <span className="text-dusk-300">
-                                · {cost.expense_count === 1 ? tr('1 cobrança anterior') : `${cost.expense_count} ${tr('cobranças anteriores')}`}
-                              </span>
-                            </div>
-                            <div className="text-[11px] text-dusk-300 mt-0.5">{tr('Peça orçamento atualizado.')}</div>
-                          </div>
-                        )
-                      )}
-                      <div className="mt-3">
-                        <Button
-                          type="button"
-                          variant="primary"
-                          size="sm"
-                          disabled={!canSend}
-                          onClick={() => vendor && setOutreachTarget({ vendor, initialMessage: result.vendor_search_plan?.outreach_message || '' })}
-                          leftIcon={<MessageCircle className="w-4 h-4" />}
-                        >
-                          {canSend ? tr('Enviar mensagem') : tr('Sem contato no cadastro')}
+                      <div className="flex flex-wrap gap-2 shrink-0">
+                        {primarySearchQuery && (
+                          <a
+                            href={`https://www.google.com/search?q=${encodeURIComponent(primarySearchQuery)}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 rounded-full bg-sage-100/70 border border-sage-300/60 px-3 py-1.5 text-xs font-semibold text-sage-800 hover:bg-sage-200/70"
+                          >
+                            {tr('Buscar fornecedores')} <ExternalLink className="w-3 h-3" />
+                          </a>
+                        )}
+                        <Button type="button" variant="ghost" size="sm" onClick={() => navigate('/board/services')}>
+                          {tr('Cadastrar fornecedor')}
                         </Button>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="rounded-3xl bg-white/40 border border-white/60 p-4 text-sm text-dusk-400">
-                <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
-                  <div>
-                    <p className="font-medium text-dusk-500">{tr('Nenhum fornecedor da sua rede combina com essa categoria.')}</p>
-                    <p className="text-xs text-dusk-300 mt-1">
-                      {tr('Sem bloqueio: use o plano de pesquisa abaixo para procurar opções agora, ou cadastre o fornecedor escolhido para a próxima vez.')}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-2 shrink-0">
-                    {result.vendor_search_plan?.search_queries?.[0] && (
-                      <a
-                        href={`https://www.google.com/search?q=${encodeURIComponent(result.vendor_search_plan.search_queries[0])}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1 rounded-full bg-sage-100/70 border border-sage-300/60 px-3 py-1.5 text-xs font-semibold text-sage-800 hover:bg-sage-200/70"
-                      >
-                        {tr('Buscar fornecedores')} <ExternalLink className="w-3 h-3" />
-                      </a>
-                    )}
-                    {result.vendor_search_plan?.outreach_message && (
-                      <Button type="button" variant="ghost" size="sm" onClick={() => copyText(result.vendor_search_plan.outreach_message)}>
-                        {tr('Copiar mensagem')}
-                      </Button>
-                    )}
-                    {hasVendorSearchPlan && (
-                      <Button type="button" variant="ghost" size="sm" onClick={openResearchPlan}>
-                        {tr('Ver plano')}
-                      </Button>
-                    )}
-                    <Button type="button" variant="ghost" size="sm" onClick={() => navigate('/board/services')}>
-                      {tr('Cadastrar fornecedor')}
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </GlassCard>
-          )}
+                  </section>
+                )}
 
-          {/* Options: collapse to a single "Recommendation" card when the
-              model only returned one. The pros/cons/timeline grid makes
-              sense for comparison, not for a single item. */}
-          {result.options.length >= 2 ? (
-            <GlassCard className="p-5">
-              <h2 className="font-display text-xl text-dusk-500 mb-3">{tr('Opções')}</h2>
-              <div className="grid md:grid-cols-2 gap-4">
-                {result.options.map((option) => (
-                  <div key={option.title} className="rounded-[2rem] bg-white/60 border border-white/70 p-5">
-                    <h3 className="font-display text-xl text-dusk-500">{option.title}</h3>
-                    <p className="text-sm text-dusk-400 mt-1">{option.fit}</p>
-                    <div className="grid sm:grid-cols-2 gap-3 mt-4">
-                      <MiniList icon={<CheckCircle2 className="w-4 h-4" />} title={tr('Prós')} items={option.pros} />
-                      <MiniList icon={<AlertTriangle className="w-4 h-4" />} title={tr('Contras')} items={option.cons} />
+                {result.options.length > 0 && (
+                  <section>
+                    <h3 className="font-display text-xl text-dusk-500 mb-3">{tr(result.options.length >= 2 ? 'Opções' : 'Recomendação')}</h3>
+                    <div className="grid md:grid-cols-2 gap-3">
+                      {result.options.map((option) => (
+                        <div key={option.title} className="rounded-3xl bg-white/60 border border-white/70 p-4">
+                          <h4 className="font-semibold text-dusk-500">{option.title}</h4>
+                          <p className="text-sm text-dusk-400 mt-1">{option.fit}</p>
+                          <div className="mt-3 flex flex-wrap gap-2 text-xs text-dusk-300">
+                            <span className="rounded-full bg-cream-50/80 px-3 py-1">{tr('Custo')}: {option.estimated_cost_range}</span>
+                            <span className="rounded-full bg-cream-50/80 px-3 py-1">{tr('Prazo')}: {option.timeline}</span>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                    <div className="mt-4 flex flex-wrap gap-2 text-xs text-dusk-300">
-                      <span className="rounded-full bg-cream-50/80 px-3 py-1">{tr('Custo')}: {option.estimated_cost_range}</span>
-                      <span className="rounded-full bg-cream-50/80 px-3 py-1">{tr('Prazo')}: {option.timeline}</span>
-                    </div>
-                    <div className="grid sm:grid-cols-2 gap-3 mt-4">
-                      <MiniList title={tr('Perguntas para fornecedor')} items={option.questions_for_vendor} />
-                      <MiniList title={tr('Critérios')} items={option.evaluation_criteria} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </GlassCard>
-          ) : result.options.length === 1 ? (
-            <GlassCard className="p-5">
-              <h2 className="font-display text-xl text-dusk-500 mb-3">{tr('Recomendação')}</h2>
-              <div className="rounded-[2rem] bg-white/60 border border-white/70 p-5">
-                <h3 className="font-display text-xl text-dusk-500">{result.options[0].title}</h3>
-                <p className="text-sm text-dusk-400 mt-1">{result.options[0].fit}</p>
-                <div className="mt-4 flex flex-wrap gap-2 text-xs text-dusk-300">
-                  <span className="rounded-full bg-cream-50/80 px-3 py-1">{tr('Custo')}: {result.options[0].estimated_cost_range}</span>
-                  <span className="rounded-full bg-cream-50/80 px-3 py-1">{tr('Prazo')}: {result.options[0].timeline}</span>
-                </div>
-                <div className="grid sm:grid-cols-2 gap-3 mt-4">
-                  <MiniList title={tr('Perguntas para fornecedor')} items={result.options[0].questions_for_vendor} />
-                  <MiniList title={tr('Critérios')} items={result.options[0].evaluation_criteria} />
-                </div>
-              </div>
-            </GlassCard>
-          ) : null}
+                  </section>
+                )}
 
-          {result.vendor_search_plan && (
-            (result.vendor_search_plan.search_queries.length > 0 ||
-              result.vendor_search_plan.shortlisting_criteria.length > 0 ||
-              !!result.vendor_search_plan.outreach_message) && (
-              <GlassCard className="p-5" id="agent-research-plan">
-                <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
-                  <h2 className="font-display text-xl text-dusk-500 flex items-center gap-2">
-                    <ClipboardList className="w-5 h-5 text-sage-700" />
-                    {tr('Plano de pesquisa')}
-                  </h2>
-                  {result.vendor_search_plan.outreach_message && (
-                    <Button type="button" variant="ghost" size="sm" onClick={() => copyText(result.vendor_search_plan.outreach_message)} leftIcon={<Copy className="w-4 h-4" />}>
-                      {tr('Copiar mensagem')}
-                    </Button>
-                  )}
-                </div>
-                <div className="grid md:grid-cols-2 gap-4">
-                  {result.vendor_search_plan.search_queries.length > 0 && (
-                    <div className="rounded-3xl bg-white/60 border border-white/70 p-4">
-                      <MiniList title={tr('Buscas prontas')} items={result.vendor_search_plan.search_queries} />
+                {hasVendorSearchPlan && (
+                  <section id="agent-research-plan">
+                    <h3 className="font-display text-xl text-dusk-500 mb-3">{tr('Plano de pesquisa')}</h3>
+                    <div className="grid md:grid-cols-2 gap-3">
+                      {result.vendor_search_plan.search_queries.length > 0 && (
+                        <div className="rounded-3xl bg-white/60 border border-white/70 p-4">
+                          <MiniList title={tr('Buscas prontas')} items={result.vendor_search_plan.search_queries} />
+                        </div>
+                      )}
+                      {result.vendor_search_plan.shortlisting_criteria.length > 0 && (
+                        <div className="rounded-3xl bg-white/60 border border-white/70 p-4">
+                          <MiniList title={tr('Critérios de seleção')} items={result.vendor_search_plan.shortlisting_criteria} />
+                        </div>
+                      )}
                     </div>
-                  )}
-                  {result.vendor_search_plan.shortlisting_criteria.length > 0 && (
-                    <div className="rounded-3xl bg-white/60 border border-white/70 p-4">
-                      <MiniList title={tr('Critérios de seleção')} items={result.vendor_search_plan.shortlisting_criteria} />
+                  </section>
+                )}
+
+                {result.action_plan.length > 0 && (
+                  <section>
+                    <h3 className="font-display text-xl text-dusk-500 mb-3">{tr('Próximos passos manuais')}</h3>
+                    <div className="space-y-3">
+                      {result.action_plan.map((action, idx) => (
+                        <div key={`${action.step}-${idx}`} className="rounded-3xl bg-white/60 border border-white/70 p-4 grid md:grid-cols-[1fr_150px_110px] gap-3">
+                          <div>
+                            <h4 className="font-semibold text-dusk-500">{action.step}</h4>
+                            <p className="text-sm text-dusk-400 mt-1">{action.details}</p>
+                          </div>
+                          <div className="text-xs text-dusk-300"><span className="font-semibold text-dusk-400">{tr('Responsável')}:</span> {action.owner}</div>
+                          <div className="text-xs text-dusk-300"><span className="font-semibold text-dusk-400">{tr('Quando')}:</span> {action.due}</div>
+                        </div>
+                      ))}
                     </div>
-                  )}
-                </div>
-                {result.vendor_search_plan.outreach_message && (
-                  <div className="mt-4 rounded-3xl bg-cream-50/70 border border-white/70 p-4">
-                    <h3 className="text-xs uppercase tracking-[0.16em] text-dusk-300 mb-2">{tr('Mensagem para fornecedores')}</h3>
-                    <p className="text-sm text-dusk-500">{result.vendor_search_plan.outreach_message}</p>
-                  </div>
+                  </section>
+                )}
+
+                {(hasResidentUpdate || canCreateProposal) && (
+                  <section className="grid lg:grid-cols-2 gap-3">
+                    {hasResidentUpdate && (
+                      <div className="rounded-3xl bg-sage-100/45 border border-sage-200/60 p-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <h3 className="font-display text-xl text-dusk-500">{tr('Comunicado aos moradores')}</h3>
+                          <Button type="button" variant="ghost" size="sm" onClick={() => copyText(`${result.resident_update.title}\n\n${result.resident_update.body}`)} leftIcon={<Copy className="w-4 h-4" />}>
+                            {tr('Copiar')}
+                          </Button>
+                        </div>
+                        <h4 className="font-semibold text-dusk-500 mt-3">{result.resident_update.title}</h4>
+                        <p className="text-sm text-dusk-400 mt-2 whitespace-pre-line">{result.resident_update.body}</p>
+                      </div>
+                    )}
+                    {canCreateProposal ? (
+                      <div className="rounded-3xl bg-peach-100/45 border border-peach-200/60 p-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <h3 className="font-display text-xl text-dusk-500">{tr('Proposta pronta')}</h3>
+                          <Button type="button" variant="primary" size="sm" loading={creatingProposal} onClick={createProposal} leftIcon={<Send className="w-4 h-4" />}>
+                            {tr('Criar proposta')}
+                          </Button>
+                        </div>
+                        <div className="mt-3 flex gap-2 flex-wrap">
+                          <Badge tone="neutral">{tr(result.proposal_draft!.category)}</Badge>
+                          {result.proposal_draft!.estimated_cost !== null ? <Badge tone="sage">{formatEstimatedCost(result.proposal_draft!.estimated_cost, locale)}</Badge> : null}
+                        </div>
+                        <h4 className="font-semibold text-dusk-500 mt-3">{result.proposal_draft!.title}</h4>
+                        <p className="text-sm text-dusk-400 mt-2 whitespace-pre-line">{result.proposal_draft!.description}</p>
+                      </div>
+                    ) : null}
+                  </section>
+                )}
+
+                {(result.risks.length > 0 || result.assumptions.length > 0) && (
+                  <section className="grid lg:grid-cols-2 gap-3">
+                    {result.risks.length > 0 && (
+                      <div className="rounded-3xl bg-white/60 border border-white/70 p-4">
+                        <h3 className="font-display text-xl text-dusk-500 flex items-center gap-2"><AlertTriangle className="w-5 h-5" /> {tr('Riscos')}</h3>
+                        <MiniList items={result.risks} />
+                      </div>
+                    )}
+                    {result.assumptions.length > 0 && (
+                      <div className="rounded-3xl bg-white/60 border border-white/70 p-4">
+                        <h3 className="font-display text-xl text-dusk-500 flex items-center gap-2"><ClipboardList className="w-5 h-5" /> {tr('Premissas')}</h3>
+                        <MiniList items={result.assumptions} />
+                      </div>
+                    )}
+                  </section>
                 )}
               </GlassCard>
-            )
+            </details>
           )}
 
-          {/* Action plan only renders when the server's denylist filter
-              kept at least one item. Empty plan = nothing the platform
-              can't already do, which is the honest answer for most
-              repair cases. */}
-          {result.action_plan.length > 0 && (
-            <GlassCard className="p-5">
-              <h2 className="font-display text-xl text-dusk-500 mb-3">{tr('Próximos passos manuais')}</h2>
-              <div className="space-y-3">
-                {result.action_plan.map((action, idx) => (
-                  <div key={`${action.step}-${idx}`} className="rounded-3xl bg-white/60 border border-white/70 p-4 grid md:grid-cols-[1fr_160px_120px] gap-3">
-                    <div>
-                      <h3 className="font-semibold text-dusk-500">{action.step}</h3>
-                      <p className="text-sm text-dusk-400 mt-1">{action.details}</p>
+          {hasTechnicalDiagnostics && (
+            <details className="group">
+              <summary className="cursor-pointer list-none flex items-center gap-2 rounded-3xl bg-white/40 border border-white/60 px-4 py-3 text-sm text-dusk-400 hover:bg-white/65 transition-colors">
+                <Sparkles className="w-4 h-4 shrink-0" />
+                <span>{tr('Diagnóstico técnico')}</span>
+                <ChevronDown className="w-4 h-4 ml-auto shrink-0 transition-transform group-open:rotate-180" />
+              </summary>
+              <GlassCard className="mt-3 p-5 space-y-5">
+                {aiUsage && (
+                  <section>
+                    <div className="flex items-center gap-2 flex-wrap mb-3">
+                      <Badge tone={aiUsage.ai_available === false ? 'warning' : 'sage'}>
+                        {aiUsage.ai_available === false ? tr('IA indisponível') : tr('IA disponível')}
+                      </Badge>
+                      <span className="text-xs uppercase tracking-[0.18em] text-dusk-300">{tr('Uso dos últimos 7 dias')}</span>
                     </div>
-                    <div className="text-xs text-dusk-300"><span className="font-semibold text-dusk-400">{tr('Responsável')}:</span> {action.owner}</div>
-                    <div className="text-xs text-dusk-300"><span className="font-semibold text-dusk-400">{tr('Quando')}:</span> {action.due}</div>
-                  </div>
-                ))}
-              </div>
-            </GlassCard>
-          )}
+                    <div className="grid sm:grid-cols-3 gap-2">
+                      <div className="rounded-2xl border border-white/70 bg-white/60 p-3">
+                        <p className="text-[10px] uppercase tracking-[0.16em] text-dusk-300">{tr('Chamadas')}</p>
+                        <p className="font-display text-xl text-dusk-500 mt-1">{aiUsage.total_calls}</p>
+                      </div>
+                      <div className="rounded-2xl border border-white/70 bg-white/60 p-3">
+                        <p className="text-[10px] uppercase tracking-[0.16em] text-dusk-300">{tr('Tokens')}</p>
+                        <p className="font-display text-xl text-dusk-500 mt-1">{formatCompactNumber(aiUsage.total_tokens, locale)}</p>
+                      </div>
+                      <div className="rounded-2xl border border-white/70 bg-white/60 p-3">
+                        <p className="text-[10px] uppercase tracking-[0.16em] text-dusk-300">{tr('Custo est.')}</p>
+                        <p className="font-display text-xl text-dusk-500 mt-1">{formatUsd(aiUsage.est_cost_usd, locale)}</p>
+                      </div>
+                    </div>
+                    {aiUsage.ai_available === false && aiUsage.breaker_open_until && (
+                      <p className="text-xs text-peach-700 mt-2">
+                        {tr('Circuito de créditos aberto até')} {new Date(aiUsage.breaker_open_until).toLocaleString(locale)}
+                      </p>
+                    )}
+                  </section>
+                )}
 
-          {(hasResidentUpdate || canCreateProposal) && (
-          <div className="grid lg:grid-cols-2 gap-5">
-            {hasResidentUpdate && (
-            <GlassCard variant="clay-sage" className="p-5">
-              <div className="flex items-center justify-between gap-3">
-                <h2 className="font-display text-xl text-dusk-500">{tr('Comunicado aos moradores')}</h2>
-                <Button type="button" variant="ghost" size="sm" onClick={() => copyText(`${result.resident_update.title}\n\n${result.resident_update.body}`)} leftIcon={<Copy className="w-4 h-4" />}>
-                  {tr('Copiar comunicado')}
-                </Button>
-              </div>
-              <h3 className="font-semibold text-dusk-500 mt-4">{result.resident_update.title}</h3>
-              <p className="text-sm text-dusk-400 mt-2 whitespace-pre-line">{result.resident_update.body}</p>
-            </GlassCard>
-            )}
-
-            {/* Proposal draft is gated by mode: 'repair' is operational
-                triage (no resident vote required), 'general' is too vague.
-                Only show the "Criar proposta" path when the request is
-                explicitly about an install or a policy change — those are
-                the contexts where a residents-vote makes sense.  Avoids
-                the "vote on whether to fix the elevator" anti-pattern. */}
-            {canCreateProposal ? (
-              <GlassCard variant="clay-peach" className="p-5">
-                <div className="flex items-center justify-between gap-3">
-                  <h2 className="font-display text-xl text-dusk-500">{tr('Proposta pronta')}</h2>
-                  <Button type="button" variant="primary" size="sm" loading={creatingProposal} onClick={createProposal} leftIcon={<Send className="w-4 h-4" />}>
-                    {tr('Criar proposta')}
-                  </Button>
-                </div>
-                <div className="mt-3 flex gap-2 flex-wrap">
-                  <Badge tone="neutral">{tr(result.proposal_draft!.category)}</Badge>
-                  {result.proposal_draft!.estimated_cost !== null ? <Badge tone="sage">{formatEstimatedCost(result.proposal_draft!.estimated_cost, locale)}</Badge> : null}
-                </div>
-                <h3 className="font-semibold text-dusk-500 mt-4">{result.proposal_draft!.title}</h3>
-                <p className="text-sm text-dusk-400 mt-2 whitespace-pre-line">{result.proposal_draft!.description}</p>
+                {debugView?.confidence && (
+                  <section>
+                    <h3 className="text-xs uppercase tracking-[0.16em] text-dusk-300 mb-2">{tr('Confiança técnica')}</h3>
+                    <ConfidenceChip confidence={debugView.confidence} tr={tr} />
+                  </section>
+                )}
+                {debugView?.agent_trace && debugView.agent_trace.length > 0 && (
+                  <section>
+                    <h3 className="text-xs uppercase tracking-[0.16em] text-dusk-300 mb-2">{tr('Como o agente pesquisou')}</h3>
+                    <ol className="space-y-1.5 text-xs text-dusk-400">
+                      {debugView.agent_trace.map((step, idx) => (
+                        <li key={idx} className="flex items-start gap-2">
+                          <span className="font-semibold text-sage-700 shrink-0">{idx + 1}.</span>
+                          <div className="min-w-0">
+                            <div className="font-medium text-dusk-500">{tr(step.tool)}</div>
+                            {step.output_summary && <div className="text-dusk-300 mt-0.5">{step.output_summary}</div>}
+                          </div>
+                        </li>
+                      ))}
+                    </ol>
+                  </section>
+                )}
+                {debugView?.evidence_sources && debugView.evidence_sources.length > 0 && (
+                  <EvidenceSourcesSection sources={debugView.evidence_sources} tr={tr} />
+                )}
+                {debugView?.building_memory && <BuildingMemorySection memory={debugView.building_memory} locale={locale} tr={tr} />}
+                {debugView?.attachment_analysis && debugView.attachment_analysis.length > 0 && (
+                  <VisualEvidenceSection items={debugView.attachment_analysis} tr={tr} />
+                )}
+                {!debugView && result.diagnostics_available && (
+                  <p className="text-xs text-dusk-300">{tr('Detalhes de auditoria disponíveis apenas quando o modo debug é solicitado pela API.')}</p>
+                )}
               </GlassCard>
-            ) : null}
-          </div>
+            </details>
           )}
 
-          <div className="grid lg:grid-cols-2 gap-5">
-            <GlassCard className="p-5">
-              <h2 className="font-display text-xl text-dusk-500 flex items-center gap-2"><AlertTriangle className="w-5 h-5" /> {tr('Riscos')}</h2>
-              <MiniList items={result.risks} />
-            </GlassCard>
-            <GlassCard className="p-5">
-              <h2 className="font-display text-xl text-dusk-500 flex items-center gap-2"><ClipboardList className="w-5 h-5" /> {tr('Premissas')}</h2>
-              <MiniList items={result.assumptions} />
-            </GlassCard>
-          </div>
-
-          {/* Follow-up composer — only renders when a result exists, so
-              the admin's mental model is "first plan above → ask a
-              follow-up here." Smaller than the main form: just a textarea
-              + send. Mode/budget/urgency carry over from the parent
-              state so the admin doesn't reconfigure for follow-ups. */}
           <GlassCard variant="clay-sage" className="p-4">
             <div className="flex items-center gap-2 mb-2">
               <Bot className="w-4 h-4 text-dusk-400" />

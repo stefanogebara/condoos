@@ -29,6 +29,7 @@ import {
   fallbackDecisionSummary,
 } from '../ai/fallbacks';
 import { runAdminAgent } from '../ai/admin-agent-runner';
+import { presentAdminAgentForOperator } from '../ai/admin-agent';
 import { getAgentRunSnapshot } from '../lib/agent-runs';
 import { getAiUsageSummary } from '../lib/ai-usage';
 
@@ -53,6 +54,13 @@ function clip(value: unknown, max: number): string {
 
 function optionalText(value: unknown, max: number): string {
   return String(value || '').trim().slice(0, max);
+}
+
+function wantsAdminAgentDebug(req: AuthedRequest): boolean {
+  return req.query.include_debug === '1' ||
+    req.query.debug === '1' ||
+    req.body?.include_debug === true ||
+    req.body?.debug === true;
 }
 
 // Helper to try AI, fall back silently on any error.
@@ -249,14 +257,14 @@ router.post('/admin-agent', requireAuth, aiRateLimit, requireRole('board_admin')
   const ai_status: 'ok' | 'degraded' | 'unavailable' = isFallback
     ? (aiBreakerState().open ? 'unavailable' : 'degraded')
     : 'ok';
-  return ok(res, {
-    ...plan,
-    _fallback: isFallback,
+  return ok(res, presentAdminAgentForOperator(plan, {
+    includeDebug: wantsAdminAgentDebug(req),
+    fallback: isFallback,
     ai_status,
     thread_id: threadId,
     turn_index,
     agent_run_id,
-  });
+  }));
 }));
 
 // Board-admin AI operations status: credit-breaker state + condo-scoped spend.
@@ -317,8 +325,8 @@ router.get('/admin-agent/threads', requireAuth, requireRole('board_admin'), (req
 });
 
 // Full thread — used when the admin opens a past conversation from the
-// sidebar. Returns every turn including the persisted plan JSON, so the
-// UI can re-render the conversation without re-running the agent.
+// sidebar. Persisted plans stay raw for audit, but the normal API response
+// strips diagnostics unless include_debug=1 is explicitly set.
 router.get('/admin-agent/threads/:id', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const adminUserId = req.user!.id;
@@ -343,7 +351,11 @@ router.get('/admin-agent/threads/:id', requireAuth, requireRole('board_admin'), 
       agent_summary: t.agent_summary,
       created_at: t.created_at,
       fallback: !!t.fallback,
-      plan,
+      plan: plan ? presentAdminAgentForOperator(plan, {
+        includeDebug: wantsAdminAgentDebug(req),
+        fallback: !!t.fallback,
+        turn_index: t.turn_index,
+      }) : null,
     };
   });
   return ok(res, { ...thread, turns: hydrated });

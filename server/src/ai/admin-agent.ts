@@ -231,6 +231,77 @@ export interface AdminAgentOutput {
   _fallback?: boolean;
 }
 
+export interface AdminAgentDebugView {
+  confidence?: AdminAgentOutput['confidence'];
+  building_memory?: AdminAgentOutput['building_memory'];
+  attachment_analysis?: AdminAgentOutput['attachment_analysis'];
+  agent_trace?: AdminAgentOutput['agent_trace'];
+  evidence_sources?: AdminAgentOutput['evidence_sources'];
+}
+
+export interface AdminAgentClientOutput extends Omit<
+  AdminAgentOutput,
+  'confidence' | 'building_memory' | 'attachment_analysis' | 'agent_trace' | 'evidence_sources'
+> {
+  diagnostics_available: boolean;
+  debug_view?: AdminAgentDebugView;
+  ai_status?: 'ok' | 'degraded' | 'unavailable';
+  thread_id?: number;
+  turn_index?: number;
+  agent_run_id?: number;
+}
+
+export function presentAdminAgentForOperator(
+  plan: AdminAgentOutput,
+  opts: {
+    includeDebug?: boolean;
+    fallback?: boolean;
+    ai_status?: 'ok' | 'degraded' | 'unavailable';
+    thread_id?: number;
+    turn_index?: number;
+    agent_run_id?: number;
+  } = {}
+): AdminAgentClientOutput {
+  const {
+    confidence,
+    building_memory,
+    attachment_analysis,
+    agent_trace,
+    evidence_sources,
+    ...operatorPlan
+  } = plan;
+  const debugView: AdminAgentDebugView = {
+    confidence,
+    building_memory,
+    attachment_analysis,
+    agent_trace,
+    evidence_sources,
+  };
+  const diagnosticsAvailable = !!(
+    confidence ||
+    building_memory ||
+    (attachment_analysis && attachment_analysis.length > 0) ||
+    (agent_trace && agent_trace.length > 0) ||
+    (evidence_sources && evidence_sources.length > 0)
+  );
+
+  const out: AdminAgentClientOutput = {
+    ...operatorPlan,
+    _fallback: opts.fallback ?? operatorPlan._fallback,
+    diagnostics_available: diagnosticsAvailable,
+    ai_status: opts.ai_status,
+    thread_id: opts.thread_id,
+    turn_index: opts.turn_index,
+    agent_run_id: opts.agent_run_id,
+  };
+
+  if (opts.includeDebug && diagnosticsAvailable) {
+    out.debug_view = debugView;
+  }
+
+  return out;
+}
+
 const MODES: AdminAgentMode[] = ['general', 'repair', 'install', 'vendor_options', 'policy'];
 const TASK_TYPES: AdminAgentTaskType[] = ['repair', 'install', 'vendor_research', 'policy', 'general'];
 const PROPOSAL_CATEGORIES: AdminAgentProposalDraft['category'][] = [

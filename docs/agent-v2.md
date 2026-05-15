@@ -6,7 +6,8 @@ The admin agent is an operations copilot. It can recommend, draft, and prepare a
 
 - Every agent invocation writes an `agent_runs` row with status, model, fallback flag, duration, plan JSON, trace JSON, and errors.
 - The ReAct path has a cited `research_external_vendors` tool for competitor/vendor research.
-- Agent responses include `evidence_sources[]` derived server-side from building memory, vendor history, attachment vision, and web citations. The model cannot invent these cards.
+- Raw agent plans can include `evidence_sources[]` derived server-side from building memory, vendor history, attachment vision, and web citations. The model cannot invent these cards.
+- The normal admin API response is operator-first: summary, next action, vendors, message drafts, plan details. Diagnostics (`confidence`, `building_memory`, `agent_trace`, `evidence_sources`, attachment analysis) are stripped unless `include_debug=1` is sent.
 - Web research is provider-neutral. Configure a provider in the server env; otherwise the tool returns manual search URLs and must not claim live research.
 - `npm run agent:eval` runs a deterministic local harness against `./data/agent-evals.sqlite`.
 
@@ -28,6 +29,7 @@ Keep `AGENT_USE_REACT=0` until evals pass in the target environment. The single-
 - External vendors can only be named when `research_external_vendors` returns `configured=true` with URLs.
 - When search is not configured, the agent may return the fallback search URLs as manual next steps only.
 - Every outbound WhatsApp/email still flows through existing outreach or ticket dispatch endpoints and is auditable.
+- Do not expose model traces, token/cost telemetry, or confidence percentages in the default operator flow. Keep those in diagnostics/debug only.
 
 ## Validation
 

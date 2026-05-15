@@ -5,7 +5,7 @@ import { claimPendingInvitesForUser } from '../src/lib/invites';
 import { canVote, getProposalVoteTally, resolveVoteOutcome, computeQuorum, countEligibleVoters } from '../src/lib/proposal-tally';
 import { parseJsonLoose, classifyStatus, OpenRouterError, aiBreakerState } from '../src/ai/openrouter';
 import { estimateCostUsd, getAiUsageSummary, recordAiUsage } from '../src/lib/ai-usage';
-import { agentLanguage, fallbackAdminAgent, sanitizeAdminAgentOutput } from '../src/ai/admin-agent';
+import { agentLanguage, fallbackAdminAgent, presentAdminAgentForOperator, sanitizeAdminAgentOutput } from '../src/ai/admin-agent';
 import { tickVoteCloser } from '../src/lib/vote-closer';
 import {
   canVoteInAssembly,
@@ -2400,6 +2400,46 @@ test('admin agent sanitizer derives confidence tier and clamps fallback ceiling'
   }, input);
   assert.equal(fallback.confidence?.tier, 'medium');  // capped from high
   assert.ok(fallback.confidence!.score <= 0.65);
+});
+
+test('admin agent presentation strips diagnostics unless debug is requested', () => {
+  const plan = fallbackAdminAgent({
+    task: 'Consertar portão da garagem',
+    service_contacts: [],
+  });
+  plan.confidence = { score: 0.72, tier: 'medium', reasoning: ['network fit missing'] };
+  plan.building_memory = {
+    similar_resolved_tickets: [],
+    open_similar_count: 1,
+    inferred_category: 'gate',
+    is_outside_business_hours: false,
+    local_hour: 14,
+  };
+  plan.agent_trace = [{ tool: 'search_past_tickets', input_keys: ['query'], output_summary: '1 aberto' }];
+  plan.evidence_sources = [{ type: 'pattern', title: 'Chamados parecidos', detail: '1 chamado aberto.' }];
+
+  const normal = presentAdminAgentForOperator(plan, {
+    fallback: false,
+    ai_status: 'ok',
+    thread_id: 7,
+    turn_index: 2,
+    agent_run_id: 99,
+  }) as any;
+  assert.equal(normal.summary, plan.summary);
+  assert.equal(normal.diagnostics_available, true);
+  assert.equal(normal.ai_status, 'ok');
+  assert.equal(normal.thread_id, 7);
+  assert.equal('confidence' in normal, false);
+  assert.equal('building_memory' in normal, false);
+  assert.equal('agent_trace' in normal, false);
+  assert.equal('evidence_sources' in normal, false);
+  assert.equal(normal.debug_view, undefined);
+
+  const debug = presentAdminAgentForOperator(plan, { includeDebug: true }) as any;
+  assert.equal(debug.diagnostics_available, true);
+  assert.equal(debug.debug_view.confidence.tier, 'medium');
+  assert.equal(debug.debug_view.agent_trace[0].tool, 'search_past_tickets');
+  assert.equal('agent_trace' in debug, false);
 });
 
 test('openrouter: classifyStatus maps HTTP codes to error kinds', () => {
