@@ -71,7 +71,7 @@ export default function Sidebar({ items, title, subtitle, headerSlot }: Props) {
   const body = (
     <>
       <div className={clsx('flex items-center', compact ? 'justify-center' : 'justify-between')}>
-        <Logo size={compact ? 22 : 26} />
+        <Logo size={compact ? 22 : 26} withText={!compact} />
         <button
           onClick={() => setOpen(false)}
           className="lg:hidden w-10 h-10 rounded-2xl bg-white/60 text-dusk-500 flex items-center justify-center hover:bg-white/80 transition"
