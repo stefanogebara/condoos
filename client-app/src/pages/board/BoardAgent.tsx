@@ -469,6 +469,22 @@ export default function BoardAgent() {
     section?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
+  const hasVendorSearchPlan = !!result && (
+    result.vendor_search_plan.search_queries.length > 0 ||
+    result.vendor_search_plan.shortlisting_criteria.length > 0 ||
+    !!result.vendor_search_plan.outreach_message
+  );
+  const shouldShowServiceNetwork = !!result && (
+    result.existing_network_fit.length > 0 ||
+    hasVendorSearchPlan ||
+    result.task_type !== 'general'
+  );
+  const hasResidentUpdate = !!result && !!(
+    result.resident_update.title.trim() ||
+    result.resident_update.body.trim()
+  );
+  const canCreateProposal = !!result?.proposal_draft && (mode === 'install' || mode === 'policy');
+
   return (
     <>
       <PageHeader
@@ -860,6 +876,7 @@ export default function BoardAgent() {
               honest empty state pointing to /board/services so the admin
               can add the missing vendor (vendor-add auto-rewires blocked
               tickets, so this isn't a dead-end). */}
+          {shouldShowServiceNetwork && (
           <GlassCard className="p-5">
             <div className="flex items-center justify-between gap-3 mb-3">
               <h2 className="font-display text-xl text-dusk-500">{tr('Sua rede cadastrada')}</h2>
@@ -962,9 +979,11 @@ export default function BoardAgent() {
                         {tr('Copiar mensagem')}
                       </Button>
                     )}
-                    <Button type="button" variant="ghost" size="sm" onClick={openResearchPlan}>
-                      {tr('Ver plano')}
-                    </Button>
+                    {hasVendorSearchPlan && (
+                      <Button type="button" variant="ghost" size="sm" onClick={openResearchPlan}>
+                        {tr('Ver plano')}
+                      </Button>
+                    )}
                     <Button type="button" variant="ghost" size="sm" onClick={() => navigate('/board/services')}>
                       {tr('Cadastrar fornecedor')}
                     </Button>
@@ -973,6 +992,7 @@ export default function BoardAgent() {
               </div>
             )}
           </GlassCard>
+          )}
 
           {/* Options: collapse to a single "Recommendation" card when the
               model only returned one. The pros/cons/timeline grid makes
@@ -1079,7 +1099,9 @@ export default function BoardAgent() {
             </GlassCard>
           )}
 
+          {(hasResidentUpdate || canCreateProposal) && (
           <div className="grid lg:grid-cols-2 gap-5">
+            {hasResidentUpdate && (
             <GlassCard variant="clay-sage" className="p-5">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="font-display text-xl text-dusk-500">{tr('Comunicado aos moradores')}</h2>
@@ -1090,6 +1112,7 @@ export default function BoardAgent() {
               <h3 className="font-semibold text-dusk-500 mt-4">{result.resident_update.title}</h3>
               <p className="text-sm text-dusk-400 mt-2 whitespace-pre-line">{result.resident_update.body}</p>
             </GlassCard>
+            )}
 
             {/* Proposal draft is gated by mode: 'repair' is operational
                 triage (no resident vote required), 'general' is too vague.
@@ -1097,7 +1120,7 @@ export default function BoardAgent() {
                 explicitly about an install or a policy change — those are
                 the contexts where a residents-vote makes sense.  Avoids
                 the "vote on whether to fix the elevator" anti-pattern. */}
-            {result.proposal_draft && (mode === 'install' || mode === 'policy') ? (
+            {canCreateProposal ? (
               <GlassCard variant="clay-peach" className="p-5">
                 <div className="flex items-center justify-between gap-3">
                   <h2 className="font-display text-xl text-dusk-500">{tr('Proposta pronta')}</h2>
@@ -1106,14 +1129,15 @@ export default function BoardAgent() {
                   </Button>
                 </div>
                 <div className="mt-3 flex gap-2 flex-wrap">
-                  <Badge tone="neutral">{tr(result.proposal_draft.category)}</Badge>
-                  {result.proposal_draft.estimated_cost !== null ? <Badge tone="sage">{formatEstimatedCost(result.proposal_draft.estimated_cost, locale)}</Badge> : null}
+                  <Badge tone="neutral">{tr(result.proposal_draft!.category)}</Badge>
+                  {result.proposal_draft!.estimated_cost !== null ? <Badge tone="sage">{formatEstimatedCost(result.proposal_draft!.estimated_cost, locale)}</Badge> : null}
                 </div>
-                <h3 className="font-semibold text-dusk-500 mt-4">{result.proposal_draft.title}</h3>
-                <p className="text-sm text-dusk-400 mt-2 whitespace-pre-line">{result.proposal_draft.description}</p>
+                <h3 className="font-semibold text-dusk-500 mt-4">{result.proposal_draft!.title}</h3>
+                <p className="text-sm text-dusk-400 mt-2 whitespace-pre-line">{result.proposal_draft!.description}</p>
               </GlassCard>
             ) : null}
           </div>
+          )}
 
           <div className="grid lg:grid-cols-2 gap-5">
             <GlassCard className="p-5">

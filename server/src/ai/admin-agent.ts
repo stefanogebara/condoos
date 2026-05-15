@@ -819,6 +819,80 @@ function looksOutOfScope(task: string): boolean {
   return OUT_OF_SCOPE_PATTERNS.some((re) => re.test(t));
 }
 
+const OPERATIONAL_SIGNAL_RE =
+  /\b(elevador|ascensor|elevator|port[aã]o|gate|garagem|garage|bomba|pump|[aá]gua|water|g[áa]s|gas|vazamento|leak|infiltra|l[âa]mpada|lamp|light|hall|c[âa]mera|camera|cctv|seguran[çc]a|security|limpeza|cleaning|dedetiza|pest|barata|rato|academia|gym|piscina|pool|fachada|fa[çc]ade|interfone|intercom|telhado|roof|el[ée]tric|plumb|hidraulic|hidráulic|manuten[çc][ãa]o|maintenance|reparo|repair|conserto|broken|quebrad|ru[íi]do|noise|barulho|cheiro|smell|inc[êe]ndio|fire)\b/i;
+const VAGUE_INPUT_RE =
+  /\b(ajuda|help|coisas|things|stuff|problemas?|issues?|algumas coisas|some things|urgente com|não sei|nao sei|algo errado|something wrong|v[áa]rias coisas|several things)\b/i;
+const GIBBERISH_TOKEN_RE = /^(asdf|qwerty|zxcv|lorem|ipsum|foo|bar|baz)$/i;
+const STOP_WORDS = new Set([
+  'o', 'a', 'os', 'as', 'um', 'uma', 'uns', 'umas', 'de', 'do', 'da', 'dos', 'das', 'para', 'com', 'por', 'em', 'no', 'na', 'nos', 'nas',
+  'the', 'a', 'an', 'of', 'to', 'for', 'with', 'in', 'on', 'at', 'and', 'or',
+]);
+
+function looksTooUnclear(task: string): boolean {
+  const normalized = String(task || '').toLowerCase();
+  const tokens = normalized.match(/[\p{L}\p{N}]+/gu) || [];
+  const meaningful = tokens.filter((token) => token.length > 2 && !STOP_WORDS.has(token));
+  const gibberishCount = meaningful.filter((token) => GIBBERISH_TOKEN_RE.test(token)).length;
+  if (gibberishCount >= 2) return true;
+  const hasOperationalSignal = OPERATIONAL_SIGNAL_RE.test(normalized);
+  if (!hasOperationalSignal && VAGUE_INPUT_RE.test(normalized)) return true;
+  return false;
+}
+
+const CLARIFICATION_COPY: Record<AgentLanguage, {
+  summary: string;
+  next_step: string;
+  risk: string;
+  reasoning: string;
+  suggestions: string[];
+}> = {
+  pt: {
+    summary: 'Ainda faltam detalhes para eu recomendar fornecedor, custo ou plano de ação sem inventar contexto.',
+    next_step: 'Informe o problema específico, local exato, urgência, impacto nos moradores e qualquer foto, orçamento ou fornecedor já acionado.',
+    risk: 'Escopo insuficiente — recomendar agora pode acionar o fornecedor errado.',
+    reasoning: 'A solicitação não tem sinal operacional suficiente para uma recomendação segura.',
+    suggestions: [
+      'Qual é o problema específico e em qual área do prédio acontece?',
+      'Existe risco imediato de segurança, água, gás, elevador ou acesso?',
+      'Você já tem foto, orçamento ou fornecedor acionado para eu comparar?',
+    ],
+  },
+  en: {
+    summary: 'I need more detail before recommending a vendor, cost, or action plan without inventing context.',
+    next_step: 'Share the specific issue, exact location, urgency, resident impact, and any photo, quote, or vendor already contacted.',
+    risk: 'Insufficient scope — acting now could route the work to the wrong vendor.',
+    reasoning: 'The request does not include enough operational signal for a safe recommendation.',
+    suggestions: [
+      'What is the specific issue and where in the building is it happening?',
+      'Is there an immediate safety, water, gas, elevator, or access risk?',
+      'Do you already have a photo, quote, or vendor response I should compare?',
+    ],
+  },
+  es: {
+    summary: 'Faltan detalles para recomendar proveedor, costo o plan de acción sin inventar contexto.',
+    next_step: 'Indica el problema específico, ubicación exacta, urgencia, impacto en residentes y cualquier foto, presupuesto o proveedor ya contactado.',
+    risk: 'Alcance insuficiente — actuar ahora puede derivar el trabajo al proveedor equivocado.',
+    reasoning: 'La solicitud no tiene suficiente señal operativa para una recomendación segura.',
+    suggestions: [
+      '¿Cuál es el problema específico y en qué área del edificio ocurre?',
+      '¿Hay riesgo inmediato de seguridad, agua, gas, ascensor o acceso?',
+      '¿Ya tienes foto, presupuesto o respuesta de proveedor para comparar?',
+    ],
+  },
+  fr: {
+    summary: 'Il manque des détails pour recommander un prestataire, un coût ou un plan d’action sans inventer le contexte.',
+    next_step: 'Précisez le problème, le lieu exact, l’urgence, l’impact résidents et toute photo, devis ou réponse de prestataire déjà disponible.',
+    risk: 'Périmètre insuffisant — agir maintenant peut orienter vers le mauvais prestataire.',
+    reasoning: 'La demande ne contient pas assez de signal opérationnel pour une recommandation sûre.',
+    suggestions: [
+      'Quel est le problème précis et où se produit-il dans l’immeuble ?',
+      'Y a-t-il un risque immédiat de sécurité, eau, gaz, ascenseur ou accès ?',
+      'Avez-vous déjà une photo, un devis ou une réponse de prestataire à comparer ?',
+    ],
+  },
+};
+
 function looksLikeInventedCost(costRange: string, networkFitCount: number): boolean {
   if (!costRange) return false;
   // Cheap detector: any decimal-grouped number that suggests currency.
@@ -976,7 +1050,9 @@ export function sanitizeAdminAgentOutput(raw: unknown, input: AdminAgentInput): 
     output.recommended_next_step = refusal.next_step;
     output.existing_network_fit = [];
     output.options = [];
+    output.vendor_search_plan = { search_queries: [], shortlisting_criteria: [], outreach_message: '' };
     output.action_plan = [];
+    output.resident_update = { title: '', body: '' };
     output.proposal_draft = null;
     output.risks = [refusal.risk];
     output.confidence = {
@@ -984,6 +1060,25 @@ export function sanitizeAdminAgentOutput(raw: unknown, input: AdminAgentInput): 
       tier: 'high',
       reasoning: [refusal.reasoning],
     };
+  } else if (looksTooUnclear(input.task || '')) {
+    const clarification = CLARIFICATION_COPY[agentLanguage(input)] || CLARIFICATION_COPY.pt;
+    output.summary = clarification.summary;
+    output.task_type = 'general';
+    output.assumptions = [];
+    output.recommended_next_step = clarification.next_step;
+    output.existing_network_fit = [];
+    output.options = [];
+    output.vendor_search_plan = { search_queries: [], shortlisting_criteria: [], outreach_message: '' };
+    output.action_plan = [];
+    output.resident_update = { title: '', body: '' };
+    output.proposal_draft = null;
+    output.risks = [clarification.risk];
+    output.confidence = {
+      score: 0.3,
+      tier: 'low',
+      reasoning: [clarification.reasoning],
+    };
+    output.follow_up_suggestions = clarification.suggestions;
   }
 
   // Consistency: if the category gate dropped every saved vendor but the

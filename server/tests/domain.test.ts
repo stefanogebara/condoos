@@ -585,7 +585,10 @@ test('admin agent sanitizer forces refusal on out-of-scope tasks', () => {
   assert.match(out.summary, /escopo|reformule/i);
   assert.equal(out.existing_network_fit.length, 0);
   assert.equal(out.options.length, 0);
+  assert.equal(out.vendor_search_plan.search_queries.length, 0);
+  assert.equal(out.vendor_search_plan.outreach_message, '');
   assert.equal(out.action_plan.length, 0);
+  assert.equal(out.resident_update.title, '');
   assert.equal(out.proposal_draft, null);
   assert.equal(out.confidence?.tier, 'high'); // high confidence we're refusing
   // In-scope task should NOT be refused — sanity check the negative.
@@ -594,6 +597,40 @@ test('admin agent sanitizer forces refusal on out-of-scope tasks', () => {
     options: [{ title: 'X', fit: 'y', pros: [], cons: [], estimated_cost_range: 'a', timeline: 'b', questions_for_vendor: [], evaluation_criteria: [] }],
   }, { task: 'Elevador A com ruído', service_contacts: [] });
   assert.doesNotMatch(inScope.summary, /escopo|reformule/i);
+});
+
+test('admin agent sanitizer turns unclear input into clarification instead of invented work', () => {
+  const vague = sanitizeAdminAgentOutput({
+    summary: 'Priorizar elevadores e manutenção geral com base no histórico.',
+    task_type: 'general',
+    existing_network_fit: [{ company_name: 'Otis', category: 'elevator', reason: 'histórico', contact_method: 'wa' }],
+    options: [{ title: 'Vistoria geral', fit: 'ampla', pros: [], cons: [], estimated_cost_range: 'R$ 2.000-10.000', timeline: 'esta semana', questions_for_vendor: [], evaluation_criteria: [] }],
+    vendor_search_plan: { search_queries: ['empresa manutenção predial'], shortlisting_criteria: ['plantão'], outreach_message: 'Pode atender?' },
+    confidence: { score: 0.8, tier: 'medium', reasoning: ['histórico'] },
+  }, {
+    task: 'O prédio precisa de ajuda urgente com algumas coisas.',
+    service_contacts: [{ company_name: 'Otis', category: 'elevator' }],
+  });
+
+  assert.match(vague.summary, /faltam detalhes|more detail/i);
+  assert.equal(vague.task_type, 'general');
+  assert.equal(vague.existing_network_fit.length, 0);
+  assert.equal(vague.options.length, 0);
+  assert.equal(vague.vendor_search_plan.search_queries.length, 0);
+  assert.equal(vague.resident_update.title, '');
+  assert.equal(vague.confidence?.tier, 'low');
+  assert.ok((vague.follow_up_suggestions?.length || 0) >= 2);
+
+  const gibberish = sanitizeAdminAgentOutput({
+    summary: 'Plano para elevador.',
+    task_type: 'repair',
+    options: [{ title: 'Acionar elevador', fit: 'sinal', pros: [], cons: [], estimated_cost_range: 'A confirmar', timeline: 'hoje', questions_for_vendor: [], evaluation_criteria: [] }],
+  }, {
+    task: 'asdf qwerty 123 elevador zxcv barulho 456.',
+    service_contacts: [],
+  });
+  assert.match(gibberish.summary, /faltam detalhes|more detail/i);
+  assert.equal(gibberish.options.length, 0);
 });
 
 test('admin agent sanitizer drops vendors whose category does not match the task', () => {

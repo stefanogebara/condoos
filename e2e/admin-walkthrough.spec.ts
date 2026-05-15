@@ -211,6 +211,46 @@ test('admin: AI fallback state stays actionable without false credit copy', asyn
   await expect(page.getByRole('button', { name: /Copy message|Copiar mensagem/i }).first()).toBeVisible();
 });
 
+test('admin: AI unclear input asks for detail without showing vendor dead ends', async ({ page, request }) => {
+  await adminLogin(page, request);
+  await page.route('**/api/ai/admin-agent', async (route) => {
+    if (route.request().method() !== 'POST') return route.continue();
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          summary: 'Ainda faltam detalhes para eu recomendar fornecedor, custo ou plano de ação sem inventar contexto.',
+          task_type: 'general',
+          assumptions: [],
+          recommended_next_step: 'Informe o problema específico, local exato, urgência e qualquer foto, orçamento ou fornecedor já acionado.',
+          existing_network_fit: [],
+          options: [],
+          vendor_search_plan: { search_queries: [], shortlisting_criteria: [], outreach_message: '' },
+          action_plan: [],
+          resident_update: { title: '', body: '' },
+          proposal_draft: null,
+          risks: ['Escopo insuficiente.'],
+          confidence: { score: 0.3, tier: 'low', reasoning: ['Faltam detalhes.'] },
+          follow_up_suggestions: [
+            'Qual é o problema específico e em qual área do prédio acontece?',
+            'Existe risco imediato de segurança, água, gás, elevador ou acesso?',
+          ],
+        },
+      }),
+    });
+  });
+
+  await page.goto('/board/agent');
+  await page.getByRole('textbox', { name: /What do you want to solve|O que você quer resolver/i }).fill('O prédio precisa de ajuda urgente com algumas coisas.');
+  await page.getByRole('button', { name: /Generate plan|Gerar plano/i }).click();
+  await expect(page.getByText(/faltam detalhes|more detail/i)).toBeVisible();
+  await expect(page.getByRole('button', { name: /problema específico|specific issue/i })).toBeVisible();
+  await expect(page.getByText(/Sua rede cadastrada|Saved network/i)).toHaveCount(0);
+  await expect(page.getByText(/Comunicado aos moradores|Resident update/i)).toHaveCount(0);
+  await expect(page.getByRole('link', { name: /Search vendors|Buscar fornecedores/i })).toHaveCount(0);
+});
+
 // ---------------------------------------------------------------------------
 // /board/proposals — list + click into detail + voting compliance editor
 // ---------------------------------------------------------------------------
