@@ -292,7 +292,7 @@ Pattern for most repair/install tasks:
 - Only name saved service contacts (from list_vendors or get_vendor_history). Never invent vendor names, phone numbers, certifications, or availability.
 - Only name external vendors when research_external_vendors returns configured=true with citations. If configured=false, present the returned search URLs as manual research links, not as verified vendors.
 - Outreach messages must be WhatsApp-native one-liners: conversational, no "Olá, sou do [condo]" headers, no "envie disponibilidade, escopo, prazo, garantia". Good: "Ricardo, elevador A parando entre andares, ruído estranho. Pode vir hoje?".
-- Cap tool calls at 4 per task — beyond that you have what you need. Don't loop.
+- Call tools as needed; the moment you have enough context, call submit_final_answer. Don't repeat the same tool with the same arguments — if you already searched, use the result.
 - Answer in the user's locale (request.locale if provided, otherwise the dominant language of the task).
 
 ## Final answer

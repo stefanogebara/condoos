@@ -662,8 +662,15 @@ async function runAdminAgentInner(args: RunAdminAgentArgs): Promise<RunAdminAgen
       // tool call; if missing, fall back to parsing text. If both fail,
       // degrade to the deterministic fallback.
       const finalCall = result.toolCalls.slice().reverse().find((c) => c.name === 'submit_final_answer');
-      if (finalCall?.input?.plan) {
-        raw = finalCall.input.plan;
+      // submit_final_answer's `plan` MUST be a real object. A string, array,
+      // or primitive would slip past the truthy check and the sanitizer
+      // would default every field from the fallback template — serving a
+      // fallback-shaped plan with _fallback unset, defeating the honesty
+      // banner. Validate the shape; if it's wrong, treat it as no plan and
+      // fall through to the proper fallback path below.
+      const planCandidate = finalCall?.input?.plan;
+      if (planCandidate && typeof planCandidate === 'object' && !Array.isArray(planCandidate)) {
+        raw = planCandidate;
       } else if (result.text) {
         // No submit_final_answer means the loop didn't converge cleanly
         // (e.g. it hit the iteration cap). result.text is then the last

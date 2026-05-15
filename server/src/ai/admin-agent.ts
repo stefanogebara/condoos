@@ -767,6 +767,33 @@ function categoryCompatible(taskCategory: string, vendorCategory: string): boole
 // so the admin doesn't get a generic marketing/legal/investment plan
 // from a tool that should only operate the building. Borderline cases
 // (anything about the building, anything ending in a vendor call) pass.
+const SCOPE_REFUSAL_COPY: Record<AgentLanguage, { summary: string; next_step: string; risk: string; reasoning: string }> = {
+  pt: {
+    summary: 'Não está no escopo desse copiloto (opera apenas operações do condomínio: reparos, instalações, fornecedores, comunicação aos moradores e propostas para decisões do conselho). Reformule como uma decisão operacional ou consulte outro recurso.',
+    next_step: 'Reformule a pergunta como uma decisão operacional do condomínio.',
+    risk: 'Pergunta fora do escopo — recusa explícita.',
+    reasoning: 'Pergunta fora do escopo operacional do condomínio.',
+  },
+  en: {
+    summary: "This isn't in scope for the copilot (only condo operations: repairs, installations, vendors, resident communication, and proposals for board decisions). Reframe it as an operational decision or use a different resource.",
+    next_step: 'Reframe the question as an operational condo decision.',
+    risk: 'Question outside scope — explicit refusal.',
+    reasoning: 'Question outside the condo operational scope.',
+  },
+  es: {
+    summary: 'No está en el alcance de este copiloto (solo opera operaciones del condominio: reparaciones, instalaciones, proveedores, comunicación a residentes y propuestas para decisiones del consejo). Reformule como una decisión operativa o consulte otro recurso.',
+    next_step: 'Reformule la pregunta como una decisión operativa del condominio.',
+    risk: 'Pregunta fuera de alcance — rechazo explícito.',
+    reasoning: 'Pregunta fuera del alcance operativo del condominio.',
+  },
+  fr: {
+    summary: "Hors du périmètre de ce copilote (opérations de copropriété uniquement : réparations, installations, fournisseurs, communication aux résidents, propositions pour les décisions du conseil). Reformulez en décision opérationnelle ou consultez une autre ressource.",
+    next_step: "Reformulez la question comme une décision opérationnelle de copropriété.",
+    risk: 'Question hors périmètre — refus explicite.',
+    reasoning: "Question hors du périmètre opérationnel de la copropriété.",
+  },
+};
+
 const OUT_OF_SCOPE_PATTERNS: RegExp[] = [
   // Marketing / promotion / branding
   /\b(marketing|promo[çc][ãa]o|publicidade|propaganda|m[íi]dia social|redes sociais|branding|posicionamento de marca|estrat[ée]gia (digital|de m[íi]dia))\b/i,
@@ -780,6 +807,12 @@ const OUT_OF_SCOPE_PATTERNS: RegExp[] = [
   // Political / opinion
   /\b(presidente|eleicao|elei[çc][ãa]o|partido pol[íi]tico|governo federal|impeachment)\b/i,
   /\b(election|president|political party|government)\b/i,
+  // Inter-resident civil disputes — the live eval caught "processar o
+  // vizinho por barulho" coming back with three invented vendor names
+  // and an R$ 3-10k cost range. Lawsuits between neighbors aren't
+  // operational; refer the admin to mediation channels.
+  /\b(processar (o |a )?(vizinho|morador|condômino|condomino)|a[çc][ãa]o judicial contra (o |a )?(vizinho|morador|condômino|condomino))\b/i,
+  /\b(sue (the |my )?(neighbor|neighbour|resident|tenant))\b/i,
 ];
 function looksOutOfScope(task: string): boolean {
   const t = String(task || '');
@@ -935,18 +968,21 @@ export function sanitizeAdminAgentOutput(raw: unknown, input: AdminAgentInput): 
   // Detection is keyword-based against the task text (admin-agent.ts is
   // the only place that scopes condo operations, so we can be opinionated).
   if (looksOutOfScope(input.task || '')) {
-    output.summary = 'Não está no escopo desse copiloto (opera apenas operações do condomínio: reparos, instalações, fornecedores, comunicação aos moradores e propostas para decisões do conselho). Reformule como uma decisão operacional ou consulte outro recurso.';
+    // Localise the refusal — an English-locale admin shouldn't get a
+    // Portuguese refusal just because we hardcoded the strings here.
+    const refusal = SCOPE_REFUSAL_COPY[agentLanguage(input)] || SCOPE_REFUSAL_COPY.pt;
+    output.summary = refusal.summary;
     output.task_type = 'general';
-    output.recommended_next_step = 'Reformule a pergunta como uma decisão operacional do condomínio.';
+    output.recommended_next_step = refusal.next_step;
     output.existing_network_fit = [];
     output.options = [];
     output.action_plan = [];
     output.proposal_draft = null;
-    output.risks = ['Pergunta fora do escopo — recusa explícita.'];
+    output.risks = [refusal.risk];
     output.confidence = {
       score: 0.95,
       tier: 'high',
-      reasoning: ['Pergunta fora do escopo operacional do condomínio.'],
+      reasoning: [refusal.reasoning],
     };
   }
 
