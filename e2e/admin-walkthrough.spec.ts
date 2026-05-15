@@ -164,6 +164,51 @@ test('admin: AI agent renders server-derived evidence cards', async ({ page, req
   await expect(page.getByText('Elevador A com ruído')).toBeVisible();
   const source = page.getByRole('link', { name: /Open source|Abrir fonte/i });
   await expect(source).toHaveAttribute('href', 'https://example.com/vendor');
+  await expect(page.getByText(/No blocker|Sem bloqueio/i)).toBeVisible();
+  await expect(page.getByRole('link', { name: /Search vendors|Buscar fornecedores/i })).toHaveAttribute('href', /google\.com\/search/);
+  await expect(page.getByRole('button', { name: /View plan|Ver plano/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Save vendor|Cadastrar fornecedor/i })).toBeVisible();
+});
+
+test('admin: AI fallback state stays actionable without false credit copy', async ({ page, request }) => {
+  await adminLogin(page, request);
+  await page.route('**/api/ai/admin-agent', async (route) => {
+    if (route.request().method() !== 'POST') return route.continue();
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          summary: 'Checklist seguro para triagem operacional.',
+          task_type: 'repair',
+          assumptions: ['Resposta degradada.'],
+          recommended_next_step: 'Pedir diagnóstico técnico por escrito.',
+          existing_network_fit: [],
+          options: [],
+          vendor_search_plan: {
+            search_queries: ['assistência portão garagem condomínio São Paulo'],
+            shortlisting_criteria: ['Atende condomínio', 'Tem plantão'],
+            outreach_message: 'Olá, preciso avaliar o portão da garagem. Pode atender hoje?',
+          },
+          action_plan: [],
+          resident_update: { title: 'Portão em avaliação', body: 'A administração está avaliando o reparo.' },
+          proposal_draft: null,
+          risks: ['Sem diagnóstico ainda.'],
+          _fallback: true,
+          ai_status: 'degraded',
+        },
+      }),
+    });
+  });
+
+  await page.goto('/board/agent');
+  await page.getByRole('textbox', { name: /What do you want to solve|O que você quer resolver/i }).fill('Consertar portão da garagem que está travando.');
+  await page.getByRole('button', { name: /Generate plan|Gerar plano/i }).click();
+  await expect(page.getByText(/AI incomplete|IA incompleta/i)).toBeVisible();
+  await expect(page.getByText(/copy messages|copiar mensagens/i)).toBeVisible();
+  await expect(page.getByText(/out of credits|sem créditos/i)).toHaveCount(0);
+  await expect(page.getByRole('link', { name: /Search vendors|Buscar fornecedores/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Copy message|Copiar mensagem/i }).first()).toBeVisible();
 });
 
 // ---------------------------------------------------------------------------

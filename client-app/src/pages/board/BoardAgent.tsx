@@ -192,6 +192,58 @@ function formatUsd(value: number, locale: string) {
   }).format(value || 0);
 }
 
+function agentFallbackCopy(status: AgentResult['ai_status'] | undefined, tr: (key: string) => string) {
+  if (status === 'unavailable') {
+    return {
+      title: tr('IA indisponível — checklist seguro'),
+      detail: tr('O serviço de IA não está disponível agora. Este checklist é operacional, mas não foi personalizado pelo modelo; use-o como triagem e tente gerar novamente quando a IA voltar.'),
+    };
+  }
+  return {
+    title: tr('IA incompleta — checklist seguro'),
+    detail: tr('O agente não conseguiu concluir uma resposta sob medida, então mostramos um checklist seguro para não travar o fluxo. Você ainda pode copiar mensagens, procurar fornecedores e continuar a conversa.'),
+  };
+}
+
+function formatAgentPlanForCopy(result: AgentResult, tr: (key: string) => string) {
+  const lines: string[] = [
+    `${tr('Resumo')}:`,
+    result.summary,
+    '',
+    `${tr('Próximo passo')}:`,
+    result.recommended_next_step,
+  ];
+
+  if (result.existing_network_fit.length > 0) {
+    lines.push('', `${tr('Sua rede cadastrada')}:`);
+    for (const fit of result.existing_network_fit) {
+      lines.push(`- ${fit.company_name}: ${fit.reason}`);
+    }
+  }
+
+  if (result.options.length > 0) {
+    lines.push('', `${tr(result.options.length >= 2 ? 'Opções' : 'Recomendação')}:`);
+    for (const option of result.options) {
+      lines.push(`- ${option.title}: ${option.fit}`);
+      lines.push(`  ${tr('Custo')}: ${option.estimated_cost_range}; ${tr('Prazo')}: ${option.timeline}`);
+    }
+  }
+
+  if (result.vendor_search_plan?.outreach_message) {
+    lines.push('', `${tr('Mensagem para fornecedores')}:`, result.vendor_search_plan.outreach_message);
+  }
+
+  if (result.resident_update?.title || result.resident_update?.body) {
+    lines.push('', `${tr('Comunicado aos moradores')}:`, result.resident_update.title, result.resident_update.body);
+  }
+
+  if (result.risks.length > 0) {
+    lines.push('', `${tr('Riscos')}:`, ...result.risks.map((risk) => `- ${risk}`));
+  }
+
+  return lines.filter((line, idx, all) => line !== '' || all[idx - 1] !== '').join('\n');
+}
+
 export default function BoardAgent() {
   const { locale } = useLocale();
   const tr = (key: string) => t(key, locale);
@@ -412,6 +464,11 @@ export default function BoardAgent() {
     }
   }
 
+  function openResearchPlan() {
+    const section = document.getElementById('agent-research-plan');
+    section?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
   return (
     <>
       <PageHeader
@@ -565,7 +622,7 @@ export default function BoardAgent() {
                     <CheckCircle2 className="w-3.5 h-3.5 text-sage-700 shrink-0" />
                   )}
                   <span className={isLast ? 'text-dusk-500 font-medium' : 'text-dusk-400'}>
-                    {step.label}
+                    {tr(step.label)}
                   </span>
                   {step.detail && (
                     <span className="text-xs text-dusk-300 truncate">— {step.detail}</span>
@@ -696,13 +753,19 @@ export default function BoardAgent() {
 
           {/* Fallback mode is not a tailored plan — say so loudly. A small
               badge alone lets an admin mistake the generic checklist for
-              real AI output. This fires when the LLM call failed (e.g.
-              OpenRouter out of credits) and the deterministic template
-              was served instead. */}
+              real AI output. This fires when the run degraded for credits,
+              throttling, concurrency, or a non-converged model response. */}
           {result._fallback && (
             <div className="rounded-3xl border border-peach-200 bg-peach-50/80 p-4">
-              <p className="text-sm font-medium text-peach-500">⚠ {tr('A IA não rodou — checklist genérico')}</p>
-              <p className="text-xs text-dusk-400 mt-1">{tr('O serviço de IA está indisponível (sem créditos). Este é um checklist padrão, não um plano sob medida para o seu prédio. Para reativar a IA, recarregue os créditos do OpenRouter.')}</p>
+              {(() => {
+                const copy = agentFallbackCopy(result.ai_status, tr);
+                return (
+                  <>
+                    <p className="text-sm font-medium text-peach-500">⚠ {copy.title}</p>
+                    <p className="text-xs text-dusk-400 mt-1">{copy.detail}</p>
+                  </>
+                );
+              })()}
             </div>
           )}
 
@@ -719,7 +782,7 @@ export default function BoardAgent() {
                 <h2 className="font-display text-2xl text-dusk-500 mt-3">{tr('Resumo')}</h2>
                 <p className="text-sm text-dusk-400 mt-1 whitespace-pre-line">{result.summary}</p>
               </div>
-              <Button type="button" variant="ghost" size="sm" onClick={() => copyText(JSON.stringify(result, null, 2))} leftIcon={<Copy className="w-4 h-4" />}>
+              <Button type="button" variant="ghost" size="sm" onClick={() => copyText(formatAgentPlanForCopy(result, tr))} leftIcon={<Copy className="w-4 h-4" />}>
                 {tr('Copiar')}
               </Button>
             </div>
@@ -876,13 +939,37 @@ export default function BoardAgent() {
               </div>
             ) : (
               <div className="rounded-3xl bg-white/40 border border-white/60 p-4 text-sm text-dusk-400">
-                <p>{tr('Nenhum fornecedor da sua rede combina com essa categoria.')}</p>
-                <p className="text-xs text-dusk-300 mt-1">
-                  {tr('Adicione um em Operação para que o agente possa acioná-lo automaticamente em chamados futuros.')}
-                </p>
-                <Button type="button" variant="ghost" size="sm" className="mt-3" onClick={() => navigate('/board/services')}>
-                  {tr('Ir para Operação')}
-                </Button>
+                <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+                  <div>
+                    <p className="font-medium text-dusk-500">{tr('Nenhum fornecedor da sua rede combina com essa categoria.')}</p>
+                    <p className="text-xs text-dusk-300 mt-1">
+                      {tr('Sem bloqueio: use o plano de pesquisa abaixo para procurar opções agora, ou cadastre o fornecedor escolhido para a próxima vez.')}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2 shrink-0">
+                    {result.vendor_search_plan?.search_queries?.[0] && (
+                      <a
+                        href={`https://www.google.com/search?q=${encodeURIComponent(result.vendor_search_plan.search_queries[0])}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 rounded-full bg-sage-100/70 border border-sage-300/60 px-3 py-1.5 text-xs font-semibold text-sage-800 hover:bg-sage-200/70"
+                      >
+                        {tr('Buscar fornecedores')} <ExternalLink className="w-3 h-3" />
+                      </a>
+                    )}
+                    {result.vendor_search_plan?.outreach_message && (
+                      <Button type="button" variant="ghost" size="sm" onClick={() => copyText(result.vendor_search_plan.outreach_message)}>
+                        {tr('Copiar mensagem')}
+                      </Button>
+                    )}
+                    <Button type="button" variant="ghost" size="sm" onClick={openResearchPlan}>
+                      {tr('Ver plano')}
+                    </Button>
+                    <Button type="button" variant="ghost" size="sm" onClick={() => navigate('/board/services')}>
+                      {tr('Cadastrar fornecedor')}
+                    </Button>
+                  </div>
+                </div>
               </div>
             )}
           </GlassCard>
@@ -936,7 +1023,7 @@ export default function BoardAgent() {
             (result.vendor_search_plan.search_queries.length > 0 ||
               result.vendor_search_plan.shortlisting_criteria.length > 0 ||
               !!result.vendor_search_plan.outreach_message) && (
-              <GlassCard className="p-5">
+              <GlassCard className="p-5" id="agent-research-plan">
                 <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
                   <h2 className="font-display text-xl text-dusk-500 flex items-center gap-2">
                     <ClipboardList className="w-5 h-5 text-sage-700" />

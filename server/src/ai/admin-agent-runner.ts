@@ -569,7 +569,7 @@ async function runAdminAgentInner(args: RunAdminAgentArgs): Promise<RunAdminAgen
           };
         })
       : [],
-    tool_limitations: 'This route does not perform live web browsing, vendor calls, purchases, bookings, or installation work. It produces a decision-ready plan, search queries, outreach copy, and a proposal draft.',
+    tool_limitations: 'This route can use saved building data and, when the research tool is configured, cited external vendor research. It does not perform vendor calls, purchases, bookings, or installation work. It produces a decision-ready plan, search queries, outreach copy, and a proposal draft.',
   };
 
   let usedFallback = false;
@@ -585,6 +585,18 @@ async function runAdminAgentInner(args: RunAdminAgentArgs): Promise<RunAdminAgen
   // deterministic plan. Still useful, just not model-quality, and the
   // _fallback flag + UI banner already make that honest to the admin.
   const useReact = !args.forceFallback && process.env.AGENT_USE_REACT === '1';
+  const runSingleShot = async () => {
+    const text = await chat(
+      [
+        { role: 'system', content: ADMIN_AGENT_SYS + languageDirective },
+        { role: 'user', content: JSON.stringify(context) },
+      ],
+      { jsonMode: true, maxTokens: 2_000, caller: 'admin-agent', condoId: args.condoId }
+    );
+    const parsed = parseJsonLoose<any>(text);
+    if (!parsed) throw new Error('single_shot_parse_failed');
+    return parsed;
+  };
 
   if (args.forceFallback) {
     raw = fallbackAdminAgent(adminInput);
@@ -686,24 +698,21 @@ async function runAdminAgentInner(args: RunAdminAgentArgs): Promise<RunAdminAgen
         usedFallback = true;
       }
     } catch (err) {
-      console.warn('[agent-react] failed, falling back to single-shot:', (err as Error)?.message || err);
-      raw = fallbackAdminAgent(adminInput);
-      usedFallback = true;
-    }
-  } else {
-    try {
-      const text = await chat(
-        [
-          { role: 'system', content: ADMIN_AGENT_SYS + languageDirective },
-          { role: 'user', content: JSON.stringify(context) },
-        ],
-        { jsonMode: true, maxTokens: 2_000, caller: 'admin-agent', condoId: args.condoId }
-      );
-      raw = parseJsonLoose<any>(text);
-      if (!raw) {
+      console.warn('[agent-react] failed, trying single-shot:', (err as Error)?.message || err);
+      if (args.agentRunId) {
+        appendAgentRunProgress(args.agentRunId, { label: 'Ferramentas falharam — gerando plano direto' });
+      }
+      try {
+        raw = await runSingleShot();
+      } catch (singleShotErr) {
+        console.warn('[agent-single-shot] failed, using fallback:', (singleShotErr as Error)?.message || singleShotErr);
         raw = fallbackAdminAgent(adminInput);
         usedFallback = true;
       }
+    }
+  } else {
+    try {
+      raw = await runSingleShot();
     } catch {
       raw = fallbackAdminAgent(adminInput);
       usedFallback = true;
