@@ -499,7 +499,9 @@ router.get('/', requireAuth, (req: AuthedRequest, res) => {
   const callerId = req.user!.id;
   const safeRows = isAdmin ? rows : rows.map((r) => {
     const isOwn = r.reporter_id === callerId;
-    if (isOwn || !r.community_visible) return r;
+    // verification_threshold > 0 ⇔ community-visible ticket; private
+    // tickets (threshold 0) only reach their reporter or staff anyway.
+    if (isOwn || !(r.verification_threshold > 0)) return r;
     return { ...r, reporter_last: null, reporter_unit_number: null };
   });
   return ok(res, safeRows);
@@ -1185,10 +1187,12 @@ router.get('/:id', requireAuth, (req: AuthedRequest, res) => {
 
   // Privacy gate (mirrors GET /): redact reporter's unit + last name on
   // community-visible tickets when viewed by a non-admin who isn't the
-  // reporter. Same map-of-the-condo risk as the list view.
+  // reporter. verification_threshold > 0 marks community-visible
+  // tickets in this schema.
   const viewerIsAdmin = req.user!.role === 'board_admin';
   const viewerIsReporter = ticket.reporter_id === req.user!.id;
-  if (!viewerIsAdmin && !viewerIsReporter && (ticket as any).community_visible) {
+  const isCommunityTicket = (ticket as any).verification_threshold > 0;
+  if (!viewerIsAdmin && !viewerIsReporter && isCommunityTicket) {
     (ticket as any).reporter_last = null;
     (ticket as any).reporter_unit_number = null;
   }
