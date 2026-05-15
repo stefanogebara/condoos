@@ -226,6 +226,8 @@ const phrases: Copy[] = [
   c('Loading...', 'Loading...', 'Cargando...', 'Chargement...'),
   c('Fechar menu', 'Close menu', 'Cerrar menú', 'Fermer le menu'),
   c('Abrir menu', 'Open menu', 'Abrir menú', 'Ouvrir le menu'),
+  c('Recolher menu', 'Collapse menu', 'Contraer menú', 'Réduire le menu'),
+  c('Expandir menu', 'Expand menu', 'Expandir menú', 'Déplier le menu'),
   c('Sair', 'Sign out', 'Cerrar sesión', 'Se déconnecter'),
   c('Morador', 'Resident', 'Residente', 'Résident'),
   c('Síndico', 'Board admin', 'Administrador', 'Syndic'),
