@@ -1,30 +1,31 @@
-import React, { useEffect, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AlertTriangle, Bot, Home, Inbox, Vote, Calendar, Megaphone, Users, UserCheck, Gavel, Building2, Wallet, Waves, Wrench, ShieldCheck, FileText, BookOpenText, ClipboardList } from 'lucide-react';
 import Sidebar, { NavItem } from '../../components/Sidebar';
 import WhatsAppHealthPill from '../../components/WhatsAppHealthPill';
-import BoardOverview from './BoardOverview';
-import Suggestions from './Suggestions';
-import BoardProposals from './BoardProposals';
-import BoardProposalDetail from './BoardProposalDetail';
-import BoardMeetings from './BoardMeetings';
-import BoardMeetingDetail from './BoardMeetingDetail';
-import BoardAnnouncements from './BoardAnnouncements';
-import Residents from './Residents';
-import Pending from './Pending';
-import BoardAssemblies from './BoardAssemblies';
-import BoardAssemblyDetail from './BoardAssemblyDetail';
-import BoardEdificio from './BoardEdificio';
-import BoardFinancas from './BoardFinancas';
-import BoardAmenities from './BoardAmenities';
-import BoardServices from './BoardServices';
-import BoardAgent from './BoardAgent';
-import BoardTickets from './BoardTickets';
-import BoardConciergeStaff from './BoardConciergeStaff';
-import BoardDocuments from './BoardDocuments';
-import BoardMemory from './BoardMemory';
-import BoardReports from './BoardReports';
 import { apiGet } from '../../lib/api';
+
+const BoardOverview = lazy(() => import('./BoardOverview'));
+const Suggestions = lazy(() => import('./Suggestions'));
+const BoardProposals = lazy(() => import('./BoardProposals'));
+const BoardProposalDetail = lazy(() => import('./BoardProposalDetail'));
+const BoardMeetings = lazy(() => import('./BoardMeetings'));
+const BoardMeetingDetail = lazy(() => import('./BoardMeetingDetail'));
+const BoardAnnouncements = lazy(() => import('./BoardAnnouncements'));
+const Residents = lazy(() => import('./Residents'));
+const Pending = lazy(() => import('./Pending'));
+const BoardAssemblies = lazy(() => import('./BoardAssemblies'));
+const BoardAssemblyDetail = lazy(() => import('./BoardAssemblyDetail'));
+const BoardEdificio = lazy(() => import('./BoardEdificio'));
+const BoardFinancas = lazy(() => import('./BoardFinancas'));
+const BoardAmenities = lazy(() => import('./BoardAmenities'));
+const BoardServices = lazy(() => import('./BoardServices'));
+const BoardAgent = lazy(() => import('./BoardAgent'));
+const BoardTickets = lazy(() => import('./BoardTickets'));
+const BoardConciergeStaff = lazy(() => import('./BoardConciergeStaff'));
+const BoardDocuments = lazy(() => import('./BoardDocuments'));
+const BoardMemory = lazy(() => import('./BoardMemory'));
+const BoardReports = lazy(() => import('./BoardReports'));
 
 interface TicketSummary {
   needs_admin: number;
@@ -87,30 +88,32 @@ export default function BoardApp() {
     <div className="min-h-screen lg:flex">
       <Sidebar items={nav} title="Síndico" headerSlot={<WhatsAppHealthPill />} />
       <main className="w-full min-w-0 flex-1 px-4 sm:px-6 lg:px-10 py-8 max-w-6xl animate-fade-up">
-        <Routes>
-          <Route index                   element={<BoardOverview />} />
-          <Route path="suggestions"      element={<Suggestions />} />
-          <Route path="agent"            element={<BoardAgent />} />
-          <Route path="memory"           element={<BoardMemory />} />
-          <Route path="reports"          element={<BoardReports />} />
-          <Route path="pending"          element={<Pending />} />
-          <Route path="proposals"        element={<BoardProposals />} />
-          <Route path="proposals/:id"    element={<BoardProposalDetail />} />
-          <Route path="meetings"         element={<BoardMeetings />} />
-          <Route path="meetings/:id"     element={<BoardMeetingDetail />} />
-          <Route path="assemblies"       element={<BoardAssemblies />} />
-          <Route path="assemblies/:id"   element={<BoardAssemblyDetail />} />
-          <Route path="announcements"    element={<BoardAnnouncements />} />
-          <Route path="residents"        element={<Residents />} />
-          <Route path="concierge"        element={<BoardConciergeStaff />} />
-          <Route path="amenities"        element={<BoardAmenities />} />
-          <Route path="documents"        element={<BoardDocuments />} />
-          <Route path="edificio"         element={<BoardEdificio />} />
-          <Route path="services"         element={<BoardServices />} />
-          <Route path="tickets"          element={<BoardTickets />} />
-          <Route path="financas"         element={<BoardFinancas />} />
-          <Route path="*"                element={<Navigate to="/board" replace />} />
-        </Routes>
+        <Suspense fallback={<div className="py-16 text-center text-sm text-dusk-300">Carregando...</div>}>
+          <Routes>
+            <Route index                   element={<BoardOverview />} />
+            <Route path="suggestions"      element={<Suggestions />} />
+            <Route path="agent"            element={<BoardAgent />} />
+            <Route path="memory"           element={<BoardMemory />} />
+            <Route path="reports"          element={<BoardReports />} />
+            <Route path="pending"          element={<Pending />} />
+            <Route path="proposals"        element={<BoardProposals />} />
+            <Route path="proposals/:id"    element={<BoardProposalDetail />} />
+            <Route path="meetings"         element={<BoardMeetings />} />
+            <Route path="meetings/:id"     element={<BoardMeetingDetail />} />
+            <Route path="assemblies"       element={<BoardAssemblies />} />
+            <Route path="assemblies/:id"   element={<BoardAssemblyDetail />} />
+            <Route path="announcements"    element={<BoardAnnouncements />} />
+            <Route path="residents"        element={<Residents />} />
+            <Route path="concierge"        element={<BoardConciergeStaff />} />
+            <Route path="amenities"        element={<BoardAmenities />} />
+            <Route path="documents"        element={<BoardDocuments />} />
+            <Route path="edificio"         element={<BoardEdificio />} />
+            <Route path="services"         element={<BoardServices />} />
+            <Route path="tickets"          element={<BoardTickets />} />
+            <Route path="financas"         element={<BoardFinancas />} />
+            <Route path="*"                element={<Navigate to="/board" replace />} />
+          </Routes>
+        </Suspense>
       </main>
     </div>
   );

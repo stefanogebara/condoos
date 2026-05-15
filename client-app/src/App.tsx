@@ -1,20 +1,25 @@
-import React from 'react';
+import React, { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './lib/auth';
-import LandingPage from './pages/Landing';
-import LoginPage from './pages/Login';
-import SignupPage from './pages/Signup';
-import DesignSystemPage from './pages/DesignSystem';
-import LogosPage from './pages/Logos';
-import OnboardingHome from './pages/onboarding/Onboarding';
-import OnboardingCreate from './pages/onboarding/Create';
-import OnboardingJoin from './pages/onboarding/Join';
-import ResidentApp from './pages/resident/ResidentApp';
-import BoardApp from './pages/board/BoardApp';
-import ConciergeApp from './pages/concierge/ConciergeApp';
 import { exposeInternalPages } from './lib/appConfig';
 
 type Role = 'resident' | 'board_admin' | 'concierge';
+
+const LandingPage = lazy(() => import('./pages/Landing'));
+const LoginPage = lazy(() => import('./pages/Login'));
+const SignupPage = lazy(() => import('./pages/Signup'));
+const DesignSystemPage = lazy(() => import('./pages/DesignSystem'));
+const LogosPage = lazy(() => import('./pages/Logos'));
+const OnboardingHome = lazy(() => import('./pages/onboarding/Onboarding'));
+const OnboardingCreate = lazy(() => import('./pages/onboarding/Create'));
+const OnboardingJoin = lazy(() => import('./pages/onboarding/Join'));
+const ResidentApp = lazy(() => import('./pages/resident/ResidentApp'));
+const BoardApp = lazy(() => import('./pages/board/BoardApp'));
+const ConciergeApp = lazy(() => import('./pages/concierge/ConciergeApp'));
+
+function PageFallback() {
+  return <div className="min-h-screen flex items-center justify-center text-dusk-300">Carregando...</div>;
+}
 
 // Staff users (board_admin, concierge) don't have user_unit rows, so the
 // hasActiveMembership check would always fail and bounce them to onboarding.
@@ -31,7 +36,7 @@ function landingPath(role: string): string {
 
 function RequireAuth({ role, children }: { role?: Role; children: React.ReactNode }) {
   const { user, loading, hasActiveMembership } = useAuth();
-  if (loading || (user && hasActiveMembership === null)) return <div className="min-h-screen flex items-center justify-center text-dusk-300">Carregando…</div>;
+  if (loading || (user && hasActiveMembership === null)) return <PageFallback />;
   if (!user) return <Navigate to="/login" replace />;
   if (!hasActiveMembership && !isStaffRole(user.role)) return <Navigate to="/onboarding" replace />;
   if (role && user.role !== role) {
@@ -58,22 +63,24 @@ function RootRoute() {
 export default function App() {
   return (
     <AuthProvider>
-      <Routes>
-        <Route path="/" element={<RootRoute />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/signup" element={<SignupPage />} />
-        {exposeInternalPages && <Route path="/design" element={<DesignSystemPage />} />}
-        {exposeInternalPages && <Route path="/logos"  element={<LogosPage />} />}
+      <Suspense fallback={<PageFallback />}>
+        <Routes>
+          <Route path="/" element={<RootRoute />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/signup" element={<SignupPage />} />
+          {exposeInternalPages && <Route path="/design" element={<DesignSystemPage />} />}
+          {exposeInternalPages && <Route path="/logos"  element={<LogosPage />} />}
 
-        <Route path="/onboarding"        element={<RequireSignedIn><OnboardingHome /></RequireSignedIn>} />
-        <Route path="/onboarding/create" element={<RequireSignedIn><OnboardingCreate /></RequireSignedIn>} />
-        <Route path="/onboarding/join"   element={<RequireSignedIn><OnboardingJoin /></RequireSignedIn>} />
+          <Route path="/onboarding"        element={<RequireSignedIn><OnboardingHome /></RequireSignedIn>} />
+          <Route path="/onboarding/create" element={<RequireSignedIn><OnboardingCreate /></RequireSignedIn>} />
+          <Route path="/onboarding/join"   element={<RequireSignedIn><OnboardingJoin /></RequireSignedIn>} />
 
-        <Route path="/app/*" element={<RequireAuth role="resident"><ResidentApp /></RequireAuth>} />
-        <Route path="/board/*" element={<RequireAuth role="board_admin"><BoardApp /></RequireAuth>} />
-        <Route path="/concierge/*" element={<RequireAuth role="concierge"><ConciergeApp /></RequireAuth>} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+          <Route path="/app/*" element={<RequireAuth role="resident"><ResidentApp /></RequireAuth>} />
+          <Route path="/board/*" element={<RequireAuth role="board_admin"><BoardApp /></RequireAuth>} />
+          <Route path="/concierge/*" element={<RequireAuth role="concierge"><ConciergeApp /></RequireAuth>} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
     </AuthProvider>
   );
 }
