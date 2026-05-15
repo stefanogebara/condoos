@@ -7,7 +7,7 @@
 // auth + rate-limit + audit shell.
 
 import db from '../db';
-import { chat, chatWithTools, parseJsonLoose } from './openrouter';
+import { chat, chatWithTools, parseJsonLoose, aiBreakerState } from './openrouter';
 import { ADMIN_AGENT_SYS, ADMIN_AGENT_REACT_SYS } from './prompts';
 import {
   fallbackAdminAgent,
@@ -189,8 +189,17 @@ export async function runAdminAgent(args: RunAdminAgentArgs): Promise<RunAdminAg
 
   const condoInFlight = inFlightByCondo.get(args.condoId) || 0;
   const overloaded = condoInFlight >= MAX_CONCURRENT_AGENT_RUNS_PER_CONDO;
+  // Hoist the credit-breaker check up here too. The breaker also fires
+  // inside fetchOpenRouter — but by that point we've built the full context
+  // (DB queries + vision analysis) just to short-circuit at the API edge.
+  // For dispatchAgentInBackground bursts during an outage, that's still a
+  // lot of wasted DB work. Bail to the deterministic fallback at entry.
+  const breakerOpen = aiBreakerState().open;
+  const forceFallback = overloaded || breakerOpen;
   if (overloaded) {
     console.warn(`[agent] condo ${args.condoId} at concurrency cap (${condoInFlight} in flight) — serving deterministic fallback`);
+  } else if (breakerOpen) {
+    console.warn(`[agent] credit breaker open — serving deterministic fallback for condo ${args.condoId}`);
   }
   inFlightByCondo.set(args.condoId, condoInFlight + 1);
 
@@ -198,7 +207,7 @@ export async function runAdminAgent(args: RunAdminAgentArgs): Promise<RunAdminAg
   // even before the slow model call begins.
   appendAgentRunProgress(runId, { label: 'Iniciando análise', detail: args.task.slice(0, 60) });
   try {
-    const result = await runAdminAgentInner({ ...args, agentRunId: runId, forceFallback: overloaded } as RunAdminAgentArgs);
+    const result = await runAdminAgentInner({ ...args, agentRunId: runId, forceFallback } as RunAdminAgentArgs);
     finishAgentRunSuccess(runId, {
       fallback: result.fallback,
       plan: result.plan,
@@ -779,6 +788,35 @@ async function runAdminAgentInner(args: RunAdminAgentArgs): Promise<RunAdminAgen
   // First-class evidence cards. The trace tells the admin what the agent
   // looked up; evidence_sources shows the concrete facts/citations used.
   plan.evidence_sources = buildAgentEvidenceSources(plan, toolTrace, args.locale);
+
+  // Confidence-inflation cross-check. A "high" rating triggers the
+  // platform's auto-execute path (see prompts.ts confidence rules + the
+  // veto window in tickets.ts). If the model claims high but produced
+  // NEITHER a saved-vendor citation NOR a past_ticket evidence source,
+  // it's rating itself on vibes — cap to medium so auto-dispatch can't
+  // fire on a forged score. Scope refusal (looksOutOfScope) explicitly
+  // sets high with no fit/options; honour that case.
+  if (
+    plan.confidence
+    && plan.confidence.tier === 'high'
+    && !usedFallback
+    && plan.task_type !== 'general'
+  ) {
+    const hasNamedVendor = (plan.existing_network_fit?.length || 0) > 0;
+    const hasPastTicket = Array.isArray(plan.evidence_sources)
+      && plan.evidence_sources.some((e) => e?.type === 'past_ticket');
+    if (!hasNamedVendor && !hasPastTicket) {
+      console.warn(`[agent] capping high→medium confidence: no vendor + no past ticket cited (task_type=${plan.task_type})`);
+      plan.confidence.score = Math.min(plan.confidence.score, 0.7);
+      plan.confidence.tier = 'medium';
+      plan.confidence.reasoning = [
+        agentLanguage(adminInput) === 'pt'
+          ? 'Sem fornecedor citado nem ticket resolvido — confiança rebaixada para medium.'
+          : 'No vendor cited and no past ticket — confidence capped at medium.',
+        ...(plan.confidence.reasoning || []),
+      ].slice(0, 4);
+    }
+  }
 
   // Persist the turn to agent_turns when we have a thread + admin. The
   // route is responsible for creating the thread row before calling this
