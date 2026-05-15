@@ -69,15 +69,22 @@ router.patch('/me', requireAuth, (req: AuthedRequest, res) => {
 
 router.get('/residents', requireAuth, (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
-  const includeEmail = req.user?.role === 'board_admin';
-  const includeContact = req.user?.role === 'board_admin' || req.user?.role === 'concierge';
+  const isAdmin = req.user?.role === 'board_admin';
+  const isStaff = isAdmin || req.user?.role === 'concierge';
+  // Privacy gate: any authenticated resident used to get a full unit
+  // directory (first + last + unit + role for every neighbour) — a
+  // perfect "who lives where" map. Residents now get NAME ONLY for
+  // assembly proxy / mention pickers; staff + admin keep full info.
+  const includeUnitAndRole = isStaff;
+  const includeEmail = isAdmin;
+  const includeContact = isStaff;
   const rows = db.prepare(
     `SELECT
        usr.id,
        usr.first_name,
-       usr.last_name,
+       usr.last_name${includeUnitAndRole ? `,
        GROUP_CONCAT(DISTINCT un.number) AS unit_number,
-       usr.role
+       usr.role` : ''}
        ${includeEmail ? ', usr.email' : ''}
        ${includeContact ? ', usr.mobile_phone, usr.home_phone, usr.phone' : ''}
      FROM user_unit uu

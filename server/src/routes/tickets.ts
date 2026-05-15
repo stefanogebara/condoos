@@ -490,8 +490,19 @@ router.get('/', requireAuth, (req: AuthedRequest, res) => {
      ORDER BY
        CASE t.priority WHEN 'urgent' THEN 1 WHEN 'high' THEN 2 WHEN 'normal' THEN 3 ELSE 4 END,
        t.updated_at DESC`
-  ).all(...params);
-  return ok(res, rows);
+  ).all(...params) as any[];
+  // Privacy gate: on community-visible tickets, a non-admin viewer used
+  // to see the reporter's unit number — turning the community list into
+  // a "who lives where" map. Strip unit + last_name from the reporter
+  // byline unless the caller is the reporter themselves or an admin.
+  const isAdmin = req.user!.role === 'board_admin';
+  const callerId = req.user!.id;
+  const safeRows = isAdmin ? rows : rows.map((r) => {
+    const isOwn = r.reporter_id === callerId;
+    if (isOwn || !r.community_visible) return r;
+    return { ...r, reporter_last: null, reporter_unit_number: null };
+  });
+  return ok(res, safeRows);
 });
 
 router.post('/', requireAuth, (req: AuthedRequest, res) => {
@@ -1172,6 +1183,16 @@ router.get('/:id', requireAuth, (req: AuthedRequest, res) => {
   ).get(ticket.reporter_id) as { reporter_first: string; reporter_last: string; reporter_unit_number: string | null } | undefined;
   if (reporter) Object.assign(ticket, reporter);
 
+  // Privacy gate (mirrors GET /): redact reporter's unit + last name on
+  // community-visible tickets when viewed by a non-admin who isn't the
+  // reporter. Same map-of-the-condo risk as the list view.
+  const viewerIsAdmin = req.user!.role === 'board_admin';
+  const viewerIsReporter = ticket.reporter_id === req.user!.id;
+  if (!viewerIsAdmin && !viewerIsReporter && (ticket as any).community_visible) {
+    (ticket as any).reporter_last = null;
+    (ticket as any).reporter_unit_number = null;
+  }
+
   const comments = db.prepare(
     `SELECT c.*, u.first_name, u.last_name
      FROM ticket_comments c
@@ -1183,18 +1204,22 @@ router.get('/:id', requireAuth, (req: AuthedRequest, res) => {
   const attachments = db.prepare(
     `SELECT * FROM ticket_attachments WHERE ticket_id = ? ORDER BY created_at ASC`
   ).all(id);
-  // Verifications: only include if the ticket is community-visible. Each row
-  // exposes the voter's display name + unit so residents can see who else
-  // confirmed the report. Comment text is kept short by the schema cap.
+  // Verifications: only include if the ticket is community-visible.
+  // Privacy gate: a verifier who voted "deny" on a contested community
+  // ticket shouldn't be publicly named + located. Non-admin viewers see
+  // first names only and no unit numbers; admins get the full row.
   const verifications = ticket.verification_threshold > 0
-    ? db.prepare(
-        `SELECT v.id, v.vote, v.comment, v.created_at,
+    ? (db.prepare(
+        `SELECT v.id, v.vote, v.comment, v.created_at, v.user_id,
                 u.first_name, u.last_name, u.unit_number
          FROM ticket_verifications v
          JOIN users u ON u.id = v.user_id
          WHERE v.ticket_id = ?
          ORDER BY v.created_at ASC`
-      ).all(id)
+      ).all(id) as any[]).map((v) => {
+        if (viewerIsAdmin || v.user_id === req.user!.id) return v;
+        return { ...v, last_name: null, unit_number: null };
+      })
     : [];
   // The viewer's own vote (if any) — handy so the UI can pre-select the
   // confirm/deny pill without a separate fetch.

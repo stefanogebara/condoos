@@ -198,8 +198,29 @@ router.get('/reservations', requireAuth, (req: AuthedRequest, res) => {
      JOIN users usr ON usr.id = r.user_id
      WHERE a.condominium_id = ?
      ORDER BY r.starts_at ASC`
-  ).all(u.condominium_id);
-  return ok(res, rows);
+  ).all(u.condominium_id) as any[];
+  // Privacy gate: residents used to see every neighbour's full name,
+  // unit, party guest count, and free-text cancellation reason — a
+  // public schedule that doubled as a social map. For non-owner
+  // residents we now show first-name-only and strip the sensitive
+  // fields; the owner of the reservation + staff see their own
+  // full row.
+  const isStaff = u.role === 'board_admin' || u.role === 'concierge';
+  const safeRows = isStaff
+    ? rows
+    : rows.map((r) => {
+      if (r.user_id === u.id) return r;
+      return {
+        ...r,
+        last_name: null,
+        unit_number: null,
+        expected_guests: null,
+        guest_list: null,
+        cancel_reason: null,
+        notes: null,
+      };
+    });
+  return ok(res, safeRows);
 });
 
 router.get('/:id/slots', requireAuth, (req: AuthedRequest, res) => {

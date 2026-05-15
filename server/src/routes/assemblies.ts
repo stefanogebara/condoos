@@ -70,10 +70,17 @@ router.get('/:id', requireAuth, (req: AuthedRequest, res) => {
   if (!a) return fail(res, 'not_found', 404);
   const isBoard = req.user!.role === 'board_admin';
 
+  // Ballot secrecy: residents used to see the live running tally while
+  // the vote was OPEN — they could see "yes: 4, no: 2, abstain: 1" and
+  // change their behaviour. For non-admin viewers, hide the tally until
+  // the item closes (decided/rejected/inconclusive). Admins always see
+  // it so they can monitor quorum / progress.
   const agenda = getAgendaItems(id).map((item) => {
     const tally = getAgendaTally(item.id);
     const outcome = resolveAgendaOutcome(tally, item.required_majority);
-    return { ...item, tally, outcome };
+    const closed = item.status !== 'active';
+    const safeTally = isBoard || closed ? tally : null;
+    return { ...item, tally: safeTally, outcome: closed ? outcome : null };
   });
   const attendance = db.prepare(
     `SELECT att.*, u.first_name, u.last_name, gu.first_name AS proxy_first, gu.last_name AS proxy_last
