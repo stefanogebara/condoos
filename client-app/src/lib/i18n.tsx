@@ -761,6 +761,11 @@ const phrases: Copy[] = [
   // Board app
   c('Tudo que precisa da sua atenção.', 'Everything that needs your attention.', 'Todo lo que necesita tu atención.', 'Tout ce qui demande votre attention.'),
   c('Não foi possível carregar parte dos dados. Atualize a página ou entre novamente.', 'Some data could not load. Refresh the page or sign in again.', 'No se pudo cargar parte de los datos. Actualiza o entra de nuevo.', 'Certaines données n’ont pas pu charger. Actualisez ou reconnectez-vous.'),
+  c('Não foi possível carregar as propostas', 'Could not load proposals', 'No se pudieron cargar las propuestas', 'Impossible de charger les propositions'),
+  c('Não foi possível carregar as encomendas', 'Could not load packages', 'No se pudieron cargar los paquetes', 'Impossible de charger les colis'),
+  c('Verifique sua conexão e tente recarregar a página.', 'Check your connection and try reloading the page.', 'Verifica tu conexión y vuelve a cargar la página.', 'Vérifiez votre connexion et rechargez la page.'),
+  c('Nenhuma proposta no momento.', 'No proposals right now.', 'Ninguna propuesta por ahora.', 'Aucune proposition pour le moment.'),
+  c('Proposta criada! Agora fica em discussão — vizinhos podem comentar e o síndico abre a votação quando estiver pronto.', 'Proposal created! It will now be in discussion — neighbours can comment and the board opens voting when ready.', '¡Propuesta creada! Ahora queda en discusión — los vecinos pueden comentar y el síndico abre la votación cuando esté listo.', 'Proposition créée ! Elle est en discussion — les voisins peuvent commenter et le syndic ouvre le vote quand prêt.'),
   c('em votação', 'voting', 'en votación', 'en vote'),
   c('em discussão', 'discussion', 'en discusión', 'en discussion'),
   c('aprovada', 'approved', 'aprobada', 'approuvée'),

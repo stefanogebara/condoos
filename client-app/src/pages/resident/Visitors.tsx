@@ -335,7 +335,7 @@ export default function Visitors() {
                   {form.recurring && (
                     <div className="mt-3 grid md:grid-cols-[1fr_180px] gap-3">
                       <div className="flex flex-wrap gap-2">
-                        {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'].map((label, day) => (
+                        {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((label, day) => (
                           <button
                             key={label}
                             type="button"
@@ -504,7 +504,7 @@ export default function Visitors() {
               {v.recurring_days && (
                 <div className="text-xs text-dusk-300 mt-2 flex items-center gap-1">
                   <CalendarDays className="w-3 h-3" />
-                  {v.recurring_days.split(',').map((d) => ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'][Number(d)]).filter(Boolean).join(', ')}
+                  {v.recurring_days.split(',').map((d) => ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'][Number(d)]).filter(Boolean).join(', ')}
                   {v.recurring_until ? ` · ${t('Até').toLowerCase()} ${formatDateTime(v.recurring_until).split(',')[0]}` : ''}
                 </div>
               )}

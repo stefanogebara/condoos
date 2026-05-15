@@ -20,8 +20,16 @@ interface Pkg {
 
 export default function Packages() {
   const [rows, setRows] = useState<Pkg[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
-  const load = () => apiGet<Pkg[]>('/packages').then(setRows).catch(() => {});
+  const load = () => {
+    setLoading(true); setError(false);
+    apiGet<Pkg[]>('/packages')
+      .then((r) => setRows(r || []))
+      .catch(() => setError(true))
+      .finally(() => setLoading(false));
+  };
   useEffect(() => { load(); }, []);
 
   async function pickup(id: number) {
@@ -35,13 +43,22 @@ export default function Packages() {
 
   return (
     <>
-      <PageHeader title="Encomendas" subtitle="Tudo aguardando você na portaria." />
+      <PageHeader title={t('Encomendas')} subtitle={t('Tudo aguardando você na portaria.')} />
 
-      {rows.length === 0 && <EmptyState title="Nenhuma encomenda ainda" body="As entregas aparecem aqui no momento que chegam." image="/images/clay-mail.png" />}
+      {loading && <p className="text-sm text-dusk-300">{t('Carregando...')}</p>}
+      {!loading && error && (
+        <div className="rounded-3xl border border-peach-200 bg-peach-50/80 p-4 text-sm">
+          <p className="font-medium text-peach-500">{t('Não foi possível carregar as encomendas')}</p>
+          <p className="text-xs text-dusk-400 mt-1">{t('Verifique sua conexão e tente recarregar a página.')}</p>
+        </div>
+      )}
+      {!loading && !error && rows.length === 0 && (
+        <EmptyState title={t('Nenhuma encomenda ainda')} body={t('As entregas aparecem aqui no momento que chegam.')} image="/images/clay-mail.png" />
+      )}
 
       {waiting.length > 0 && (
         <>
-          <h2 className="font-display text-xl text-dusk-500 mb-4">Aguardando retirada</h2>
+          <h2 className="font-display text-xl text-dusk-500 mb-4">{t('Aguardando retirada')}</h2>
           <div className="grid md:grid-cols-2 gap-4 mb-10">
             {waiting.map((p) => (
               <GlassCard key={p.id} variant="clay" className="p-5 flex items-start gap-4">
@@ -51,13 +68,13 @@ export default function Packages() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-dusk-500">{p.carrier}</span>
-                    <Badge tone="peach">aguardando</Badge>
+                    <Badge tone="peach">{t('aguardando')}</Badge>
                   </div>
                   <div className="text-sm text-dusk-300">{p.description || '—'}</div>
-                  <div className="text-xs text-dusk-200 mt-1">Chegou em {formatDate(p.arrived_at)}</div>
+                  <div className="text-xs text-dusk-200 mt-1">{t('Chegou em')} {formatDate(p.arrived_at)}</div>
                 </div>
                 <Button size="sm" variant="sage" onClick={() => pickup(p.id)} leftIcon={<CheckCircle2 className="w-4 h-4" />}>
-                  Retirei
+                  {t('Retirei')}
                 </Button>
               </GlassCard>
             ))}
@@ -67,7 +84,7 @@ export default function Packages() {
 
       {collected.length > 0 && (
         <>
-          <h2 className="font-display text-xl text-dusk-500 mb-4">Retiradas recentes</h2>
+          <h2 className="font-display text-xl text-dusk-500 mb-4">{t('Retiradas recentes')}</h2>
           <div className="grid md:grid-cols-2 gap-3">
             {collected.map((p) => (
               <GlassCard key={p.id} className="p-4 flex items-center gap-3 opacity-70">

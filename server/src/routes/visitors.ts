@@ -90,6 +90,26 @@ router.post('/', requireAuth, (req: AuthedRequest, res) => {
   return ok(res, { id: row.lastInsertRowid, status });
 });
 
+// Does the caller share at least one active unit with the visitor host?
+// Lets a partner / tenant on the same user_unit decide or confirm arrivals
+// when the original host isn't reachable — the realistic family case.
+function callerSharesUnitWithHost(hostId: number, callerId: number, condoId: number | null): boolean {
+  if (!condoId) return false;
+  if (hostId === callerId) return true;
+  const row = db.prepare(
+    `SELECT 1 AS hit
+     FROM user_unit a
+     JOIN user_unit b ON a.unit_id = b.unit_id
+     JOIN units un ON un.id = a.unit_id
+     JOIN buildings bld ON bld.id = un.building_id
+     WHERE a.user_id = ? AND b.user_id = ?
+       AND a.status = 'active' AND b.status = 'active'
+       AND bld.condominium_id = ?
+     LIMIT 1`
+  ).get(hostId, callerId, condoId);
+  return !!row;
+}
+
 router.post('/:id/decide', requireAuth, (req: AuthedRequest, res) => {
   const u = req.user!;
   const id = Number(req.params.id);
@@ -99,7 +119,7 @@ router.post('/:id/decide', requireAuth, (req: AuthedRequest, res) => {
     | { id: number; host_id: number; condominium_id: number }
     | undefined;
   if (!v) return fail(res, 'not_found', 404);
-  const canDecide = u.role === 'board_admin' || v.host_id === u.id;
+  const canDecide = u.role === 'board_admin' || callerSharesUnitWithHost(v.host_id, u.id, u.condominium_id);
   if (!canDecide) return fail(res, 'forbidden', 403);
   db.prepare(`UPDATE visitors SET status=?, decided_at=CURRENT_TIMESTAMP WHERE id=?`).run(decision, id);
   audit(req, {
@@ -125,7 +145,11 @@ router.post('/:id/arrived', requireAuth, (req: AuthedRequest, res) => {
   ).get(id, u.condominium_id) as { id: number; host_id: number } | undefined;
   if (!v) return fail(res, 'not_found', 404);
   const isStaff = u.role === 'board_admin' || u.role === 'concierge';
-  if (!isStaff && v.host_id !== u.id) return fail(res, 'forbidden', 403);
+  // Unit co-occupants (partner/tenant on the same active user_unit) can
+  // confirm arrival when the host isn't reachable — same family unit.
+  if (!isStaff && !callerSharesUnitWithHost(v.host_id, u.id, u.condominium_id)) {
+    return fail(res, 'forbidden', 403);
+  }
   db.prepare(`UPDATE visitors SET status='arrived' WHERE id=?`).run(id);
   audit(req, {
     action: 'visitor.arrived',

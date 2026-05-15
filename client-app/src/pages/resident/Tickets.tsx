@@ -293,16 +293,18 @@ function TicketCard({
               {ticket.remediation_status === 'blocked_needs_admin' && <Badge tone="dark">{t('síndico vai resolver')}</Badge>}
               {ticket.remediation_status === 'resolved' && <Badge tone="sage"><CheckCircle2 className="w-3 h-3" /> {t('resolvido')}</Badge>}
             </div>
-            <div className="text-xs text-dusk-300 mt-1">
-              {/* Use reporter_unit_number (their home unit) not unit_number
-                  (the ticket's affected unit, which is rarely set on
-                  community reports). formatRelativeTime keeps fresh reports
-                  reading "há 5 min" instead of the full datestamp. */}
-              {[
-                `${t('Reportado por')} ${ticket.reporter_first || ''}`.trim(),
-                ticket.reporter_unit_number ? `${t('Apto')} ${ticket.reporter_unit_number}` : null,
-                formatRelativeTime(ticket.created_at),
-              ].filter(Boolean).join(' · ')}
+            {/* Byline used to be one flex row that overflowed cards at
+                375px (long PT names + Apto N + relative time). Truncate
+                the name half + drop the unit chip onto its own line on
+                very narrow screens so the card never bleeds. */}
+            <div className="text-xs text-dusk-300 mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+              <span className="truncate max-w-[60%]">
+                {`${t('Reportado por')} ${ticket.reporter_first || ''}`.trim()}
+              </span>
+              {ticket.reporter_unit_number && (
+                <span className="text-dusk-200">· {t('Apto')} {ticket.reporter_unit_number}</span>
+              )}
+              <span className="text-dusk-200">· {formatRelativeTime(ticket.created_at)}</span>
             </div>
             <div className="mt-2 flex items-center gap-2 text-xs">
               <span className="text-sage-700 font-semibold">{ticket.verification_count} {t('confirmações')}</span>

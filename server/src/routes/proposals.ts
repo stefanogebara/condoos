@@ -98,6 +98,19 @@ router.post('/', requireAuth, (req: AuthedRequest, res) => {
     if (!s || s.condominium_id !== condoId) return fail(res, 'forbidden', 403);
   }
 
+  // Idempotency window — a double-click or network retry from the
+  // suggest → promote flow used to create duplicate proposals. Dedupe
+  // within 60s on (condo, author, title). Same pattern as POST /tickets.
+  const recent = db.prepare(
+    `SELECT id FROM proposals
+     WHERE condominium_id = ?
+       AND author_id = ?
+       AND title = ?
+       AND datetime(created_at) >= datetime('now', '-60 seconds')
+     LIMIT 1`
+  ).get(condoId, u.id, title) as { id: number } | undefined;
+  if (recent) return ok(res, { id: recent.id, deduped: true });
+
   const row = db.prepare(
     `INSERT INTO proposals (condominium_id, author_id, title, description, category, estimated_cost, ai_drafted, source_suggestion_id, voter_eligibility, status)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'discussion')`

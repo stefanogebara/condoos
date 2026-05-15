@@ -61,7 +61,13 @@ export default function Suggest() {
         source_suggestion_id: suggestionId,
       });
       track('proposal_published', { proposal_id: res.id, category: draft.category, ai_drafted: true });
-      toast.success(t('Proposta criada — em discussão'));
+      // Wider trust signal than the bare "Proposta criada" toast — tell
+      // the resident exactly what happens next so they don't wonder when
+      // others see it. Duration is long enough to actually read.
+      toast.success(
+        t('Proposta criada! Agora fica em discussão — vizinhos podem comentar e o síndico abre a votação quando estiver pronto.'),
+        { duration: 8000 },
+      );
       navigate(`/app/proposals/${res.id}`);
     } finally { setSaving(false); }
   }

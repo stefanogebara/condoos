@@ -108,7 +108,7 @@ export default function AssemblyDetail() {
   return (
     <>
       <Link to="/app/assemblies" className="inline-flex items-center gap-1 text-sm text-dusk-300 hover:text-dusk-500 mb-4">
-        <ArrowLeft className="w-4 h-4" /> Back
+        <ArrowLeft className="w-4 h-4" /> {t('Voltar')}
       </Link>
       <PageHeader
         title={a.title}

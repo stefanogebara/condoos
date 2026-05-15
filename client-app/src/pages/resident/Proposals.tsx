@@ -39,11 +39,29 @@ const TONE: Record<string, any> = {
 
 export default function Proposals() {
   const [rows, setRows] = useState<Proposal[]>([]);
-  useEffect(() => { apiGet<Proposal[]>('/proposals').then(setRows).catch(() => {}); }, []);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  useEffect(() => {
+    setLoading(true); setError(false);
+    apiGet<Proposal[]>('/proposals')
+      .then((r) => { setRows(r || []); })
+      .catch(() => setError(true))
+      .finally(() => setLoading(false));
+  }, []);
 
   return (
     <>
       <PageHeader title={t('Propostas')} subtitle={t('Todas as decisões do seu prédio — passadas, atuais e em andamento.')} />
+      {loading && <p className="text-sm text-dusk-300">{t('Carregando...')}</p>}
+      {!loading && error && (
+        <div className="rounded-3xl border border-peach-200 bg-peach-50/80 p-4 text-sm">
+          <p className="font-medium text-peach-500">{t('Não foi possível carregar as propostas')}</p>
+          <p className="text-xs text-dusk-400 mt-1">{t('Verifique sua conexão e tente recarregar a página.')}</p>
+        </div>
+      )}
+      {!loading && !error && rows.length === 0 && (
+        <p className="text-sm text-dusk-300">{t('Nenhuma proposta no momento.')}</p>
+      )}
       <div className="grid md:grid-cols-2 gap-4">
         {rows.map((p) => (
           <Link key={p.id} to={`/app/proposals/${p.id}`}>

@@ -52,14 +52,25 @@ router.patch('/me', requireAuth, (req: AuthedRequest, res) => {
   if (first_name !== undefined) { sets.push('first_name = ?'); vals.push(String(first_name).trim()); }
   if (last_name  !== undefined) { sets.push('last_name = ?');  vals.push(String(last_name).trim()); }
   if (sets.length === 0) return fail(res, 'nothing_to_update');
+  // Capture before/after snapshot of the fields we're touching so the
+  // audit log has a recovery signal — e.g. if a resident renames
+  // themselves to impersonate a neighbour during a vote, we have the
+  // original name + a timestamped operator id.
+  const changedFields = sets.map((set) => set.split(' = ')[0]);
+  const before = db.prepare(
+    `SELECT ${changedFields.join(', ')} FROM users WHERE id = ?`
+  ).get(req.user!.id) as Record<string, unknown>;
   vals.push(req.user!.id);
   db.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`).run(...vals);
+  const after = db.prepare(
+    `SELECT ${changedFields.join(', ')} FROM users WHERE id = ?`
+  ).get(req.user!.id) as Record<string, unknown>;
   audit(req, {
     action: 'user.profile_update',
     target_type: 'user',
     target_id: req.user!.id,
     condominium_id: req.user!.condominium_id,
-    metadata: { fields: sets.map((set) => set.split(' = ')[0]) },
+    metadata: { fields: changedFields, before, after },
   });
   const row = db.prepare(
     `SELECT id, email, first_name, last_name, role, phone, mobile_phone, home_phone, whatsapp_opt_in FROM users WHERE id = ?`
