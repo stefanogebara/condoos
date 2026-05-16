@@ -61,11 +61,23 @@ interface ResidentDispatch {
   vendor_name: string | null;
 }
 
+interface TicketTimelineEntry {
+  id: number;
+  event_type: string;
+  title: string;
+  body: string | null;
+  visibility: 'resident' | 'admin';
+  created_at: string;
+  actor_first: string | null;
+  actor_last: string | null;
+}
+
 interface TicketDetail extends Ticket {
   verifications: Verification[];
   attachments: TicketAttachment[];
   dispatches?: ResidentDispatch[];
   work_order: WorkOrder | null;
+  timeline?: TicketTimelineEntry[];
   my_vote: 'confirm' | 'deny' | null;
 }
 
@@ -419,7 +431,7 @@ function TicketCard({
 // array off the ticket detail and renders a single chronological strip so
 // the resident has the same situational awareness the admin does — minus
 // any vendor PII (just the company name and event timestamps).
-type TimelineEvent = {
+type RenderedTimelineEvent = {
   key: string;
   at: string;
   icon: React.ReactNode;
@@ -427,137 +439,155 @@ type TimelineEvent = {
 };
 
 function TicketTimeline({ ticket, detail }: { ticket: Ticket; detail: TicketDetail }) {
-  const events: TimelineEvent[] = [];
+  const events: RenderedTimelineEvent[] = [];
 
-  events.push({
-    key: 'reported',
-    at: ticket.created_at,
-    icon: <Megaphone className="w-3.5 h-3.5 text-dusk-300" />,
-    text: (
-      <>
-        {t('Reportado por')} <span className="font-medium text-dusk-500">
-          {ticket.reporter_first || t('vizinho')}
-        </span>
-      </>
-    ),
-  });
-
-  if (ticket.verified_at) {
-    events.push({
-      key: 'verified',
-      at: ticket.verified_at,
-      icon: <Users className="w-3.5 h-3.5 text-sage-700" />,
-      text: <>{t('Vizinhos confirmaram o problema')}</>,
-    });
+  if (detail.timeline && detail.timeline.length > 0) {
+    for (const event of detail.timeline) {
+      events.push({
+        key: `event-${event.id}`,
+        at: event.created_at,
+        icon: timelineIcon(event.event_type),
+        text: (
+          <>
+            {t(event.title)}
+            {event.body ? <span className="text-dusk-300"> · {event.body}</span> : null}
+          </>
+        ),
+      });
+    }
   }
 
-  if (ticket.agent_run_at) {
+  if (events.length === 0) {
     events.push({
-      key: 'agent',
-      at: ticket.agent_run_at,
-      icon: <Sparkles className="w-3.5 h-3.5 text-peach-500" />,
-      text: <>{t('IA gerou plano de remediação')}</>,
-    });
-  }
-
-  for (const dispatch of detail.dispatches || []) {
-    events.push({
-      key: `dispatch-${dispatch.id}`,
-      at: dispatch.created_at,
-      icon: <Send className="w-3.5 h-3.5 text-peach-500" />,
+      key: 'reported',
+      at: ticket.created_at,
+      icon: <Megaphone className="w-3.5 h-3.5 text-dusk-300" />,
       text: (
         <>
-          {t('Síndico acionou')}{' '}
-          <span className="font-medium text-dusk-500">
-            {dispatch.vendor_name || t('fornecedor')}
+          {t('Reportado por')} <span className="font-medium text-dusk-500">
+            {ticket.reporter_first || t('vizinho')}
           </span>
         </>
       ),
     });
-    if (dispatch.responded_at) {
+
+    if (ticket.verified_at) {
       events.push({
-        key: `responded-${dispatch.id}`,
-        at: dispatch.responded_at,
-        icon: <MessageCircle className="w-3.5 h-3.5 text-sage-700" />,
+        key: 'verified',
+        at: ticket.verified_at,
+        icon: <Users className="w-3.5 h-3.5 text-sage-700" />,
+        text: <>{t('Vizinhos confirmaram o problema')}</>,
+      });
+    }
+
+    if (ticket.agent_run_at) {
+      events.push({
+        key: 'agent',
+        at: ticket.agent_run_at,
+        icon: <Sparkles className="w-3.5 h-3.5 text-peach-500" />,
+        text: <>{t('IA gerou plano de remediação')}</>,
+      });
+    }
+
+    for (const dispatch of detail.dispatches || []) {
+      events.push({
+        key: `dispatch-${dispatch.id}`,
+        at: dispatch.created_at,
+        icon: <Send className="w-3.5 h-3.5 text-peach-500" />,
         text: (
           <>
+            {t('Síndico acionou')}{' '}
             <span className="font-medium text-dusk-500">
               {dispatch.vendor_name || t('fornecedor')}
-            </span>{' '}
-            {t('respondeu')}
+            </span>
           </>
         ),
       });
+      if (dispatch.responded_at) {
+        events.push({
+          key: `responded-${dispatch.id}`,
+          at: dispatch.responded_at,
+          icon: <MessageCircle className="w-3.5 h-3.5 text-sage-700" />,
+          text: (
+            <>
+              <span className="font-medium text-dusk-500">
+                {dispatch.vendor_name || t('fornecedor')}
+              </span>{' '}
+              {t('respondeu')}
+            </>
+          ),
+        });
+      }
     }
-  }
 
-  if (detail.work_order) {
-    events.push({
-      key: `work-order-${detail.work_order.id}`,
-      at: detail.work_order.created_at,
-      icon: <ClipboardCheck className="w-3.5 h-3.5 text-peach-500" />,
-      text: <>{t('Ordem de serviço aberta')}</>,
-    });
-    if (detail.work_order.scheduled_for) {
+    if (detail.work_order) {
       events.push({
-        key: `work-order-scheduled-${detail.work_order.id}`,
-        at: detail.work_order.scheduled_for,
-        icon: <CalendarClock className="w-3.5 h-3.5 text-dusk-300" />,
-        text: (
-          <>
-            {t('Visita técnica agendada')}
-            {detail.work_order.vendor_name ? <> · {detail.work_order.vendor_name}</> : null}
-          </>
-        ),
+        key: `work-order-${detail.work_order.id}`,
+        at: detail.work_order.created_at,
+        icon: <ClipboardCheck className="w-3.5 h-3.5 text-peach-500" />,
+        text: <>{t('Ordem de serviço aberta')}</>,
+      });
+      if (detail.work_order.scheduled_for) {
+        events.push({
+          key: `work-order-scheduled-${detail.work_order.id}`,
+          at: detail.work_order.scheduled_for,
+          icon: <CalendarClock className="w-3.5 h-3.5 text-dusk-300" />,
+          text: (
+            <>
+              {t('Visita técnica agendada')}
+              {detail.work_order.vendor_name ? <> · {detail.work_order.vendor_name}</> : null}
+            </>
+          ),
+        });
+      }
+      if (detail.work_order.started_at) {
+        events.push({
+          key: `work-order-started-${detail.work_order.id}`,
+          at: detail.work_order.started_at,
+          icon: <WrenchTimelineIcon />,
+          text: <>{t('Reparo em execução')}</>,
+        });
+      }
+      if (detail.work_order.completed_at) {
+        events.push({
+          key: `work-order-completed-${detail.work_order.id}`,
+          at: detail.work_order.completed_at,
+          icon: <CheckCircle2 className="w-3.5 h-3.5 text-sage-700" />,
+          text: <>{t('Ordem de serviço concluída')}</>,
+        });
+      }
+    }
+
+    if (ticket.blocked_reason && ticket.remediation_status === 'blocked_needs_admin') {
+      // Three distinct blocked reasons, three distinct messages so the
+      // resident knows what's actually happening:
+      //   vendor_no_response — vendor was contacted but went silent
+      //   vendor_declined    — vendor explicitly said no via the link
+      //   (default)          — no vendor in the network for this category
+      let blockedText: string;
+      if (ticket.blocked_reason === 'vendor_no_response') {
+        blockedText = t('Sem resposta do fornecedor — síndico vai retomar');
+      } else if (ticket.blocked_reason === 'vendor_declined') {
+        blockedText = t('Fornecedor não pôde atender — síndico vai acionar outro');
+      } else {
+        blockedText = t('Aguardando síndico — sem fornecedor disponível');
+      }
+      events.push({
+        key: 'blocked',
+        at: ticket.agent_run_at || ticket.created_at,
+        icon: <ShieldAlert className="w-3.5 h-3.5 text-dusk-400" />,
+        text: <>{blockedText}</>,
       });
     }
-    if (detail.work_order.started_at) {
+
+    if (ticket.resolved_at) {
       events.push({
-        key: `work-order-started-${detail.work_order.id}`,
-        at: detail.work_order.started_at,
-        icon: <WrenchTimelineIcon />,
-        text: <>{t('Reparo em execução')}</>,
-      });
-    }
-    if (detail.work_order.completed_at) {
-      events.push({
-        key: `work-order-completed-${detail.work_order.id}`,
-        at: detail.work_order.completed_at,
+        key: 'resolved',
+        at: ticket.resolved_at,
         icon: <CheckCircle2 className="w-3.5 h-3.5 text-sage-700" />,
-        text: <>{t('Ordem de serviço concluída')}</>,
+        text: <>{t('Problema resolvido')}</>,
       });
     }
-  }
-
-  if (ticket.blocked_reason && ticket.remediation_status === 'blocked_needs_admin') {
-    // Three distinct blocked reasons, three distinct messages so the
-    // resident knows what's actually happening:
-    //   vendor_no_response — vendor was contacted but went silent
-    //   vendor_declined    — vendor explicitly said no via the link
-    //   (default)          — no vendor in the network for this category
-    let blockedText: string;
-    if (ticket.blocked_reason === 'vendor_no_response') {
-      blockedText = t('Sem resposta do fornecedor — síndico vai retomar');
-    } else if (ticket.blocked_reason === 'vendor_declined') {
-      blockedText = t('Fornecedor não pôde atender — síndico vai acionar outro');
-    } else {
-      blockedText = t('Aguardando síndico — sem fornecedor disponível');
-    }
-    events.push({
-      key: 'blocked',
-      at: ticket.agent_run_at || ticket.created_at,
-      icon: <ShieldAlert className="w-3.5 h-3.5 text-dusk-400" />,
-      text: <>{blockedText}</>,
-    });
-  }
-
-  if (ticket.resolved_at) {
-    events.push({
-      key: 'resolved',
-      at: ticket.resolved_at,
-      icon: <CheckCircle2 className="w-3.5 h-3.5 text-sage-700" />,
-      text: <>{t('Problema resolvido')}</>,
-    });
   }
 
   // Sort chronologically. Lexicographic compare on the SQLite
@@ -587,6 +617,18 @@ function TicketTimeline({ ticket, detail }: { ticket: Ticket; detail: TicketDeta
       </ol>
     </div>
   );
+}
+
+function timelineIcon(eventType: string) {
+  if (eventType.includes('verified')) return <Users className="w-3.5 h-3.5 text-sage-700" />;
+  if (eventType.includes('ai.')) return <Sparkles className="w-3.5 h-3.5 text-peach-500" />;
+  if (eventType.includes('vendor.dispatched')) return <Send className="w-3.5 h-3.5 text-peach-500" />;
+  if (eventType.includes('vendor.responded')) return <MessageCircle className="w-3.5 h-3.5 text-sage-700" />;
+  if (eventType.includes('work_order')) return <ClipboardCheck className="w-3.5 h-3.5 text-peach-500" />;
+  if (eventType.includes('resolved')) return <CheckCircle2 className="w-3.5 h-3.5 text-sage-700" />;
+  if (eventType.includes('blocked') || eventType.includes('cancelled')) return <ShieldAlert className="w-3.5 h-3.5 text-dusk-400" />;
+  if (eventType.includes('attachment')) return <FileText className="w-3.5 h-3.5 text-dusk-300" />;
+  return <Megaphone className="w-3.5 h-3.5 text-dusk-300" />;
 }
 
 function WrenchTimelineIcon() {

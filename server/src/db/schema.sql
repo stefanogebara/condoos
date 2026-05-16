@@ -779,6 +779,25 @@ CREATE TABLE IF NOT EXISTS ticket_attachments (
   created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS ticket_events (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  ticket_id        INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+  condominium_id   INTEGER NOT NULL REFERENCES condominiums(id) ON DELETE CASCADE,
+  actor_user_id    INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  event_type       TEXT NOT NULL,
+  title            TEXT NOT NULL,
+  body             TEXT,
+  metadata_json    TEXT,
+  visibility       TEXT NOT NULL DEFAULT 'resident'
+    CHECK(visibility IN ('resident','admin')),
+  created_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_ticket_events_ticket
+  ON ticket_events(ticket_id, created_at, id);
+CREATE INDEX IF NOT EXISTS idx_ticket_events_condo
+  ON ticket_events(condominium_id, created_at, id);
+
 CREATE TABLE IF NOT EXISTS ticket_work_orders (
   id                      INTEGER PRIMARY KEY AUTOINCREMENT,
   ticket_id               INTEGER NOT NULL UNIQUE REFERENCES tickets(id) ON DELETE CASCADE,

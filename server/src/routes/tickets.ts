@@ -4,7 +4,7 @@ import db from '../db';
 import { requireAuth, requireRole, getActiveCondoId, AuthedRequest } from '../lib/auth';
 import { ok, fail, asyncHandler } from '../lib/respond';
 import { audit } from '../lib/audit';
-import { canAssignTicketToUser, markTicketAgentFailed } from '../lib/tickets';
+import { canAssignTicketToUser, listTicketTimeline, markTicketAgentFailed, recordTicketEvent } from '../lib/tickets';
 import { categoryMatches } from '../lib/category-aliases';
 import { buildVendorPortalUrl } from '../lib/vendor-tokens';
 import { evaluateAgentAutoDispatch, isSafetyCriticalUrgent } from '../lib/agent-auto-dispatch';
@@ -237,6 +237,15 @@ export function dispatchAgentInBackground(
          VALUES (?, ?, 'whatsapp', NULL, ?, 'queued', ?)`
       ).run(ticketId, vendor.id, baseMessage, sendAfter);
       const dispatchId = Number(dispatch.lastInsertRowid);
+      recordTicketEvent({
+        ticketId,
+        condoId,
+        eventType: 'vendor.dispatched',
+        title: 'Fornecedor acionado',
+        body: vendor.company_name,
+        metadata: { dispatch_id: dispatchId, vendor_id: vendor.id, channel: 'whatsapp', auto: true },
+        visibility: 'resident',
+      });
 
       // Build the magic-link URL + the final message body the vendor
       // will receive. The link lets them respond directly via a tiny
@@ -560,6 +569,21 @@ router.post('/', requireAuth, (req: AuthedRequest, res) => {
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(condoId, body.unit_id || null, req.user!.id, body.title, body.description, body.category, body.priority, effectiveThreshold);
   const id = Number(result.lastInsertRowid);
+  recordTicketEvent({
+    ticketId: id,
+    condoId,
+    actorUserId: req.user!.id,
+    eventType: 'ticket.created',
+    title: 'Chamado criado',
+    body: body.title,
+    metadata: {
+      priority: body.priority,
+      category: body.category,
+      verification_threshold: effectiveThreshold,
+      fast_track: fastTrack,
+    },
+    visibility: 'resident',
+  });
   audit(req, {
     action: 'ticket.create',
     target_type: 'ticket',
@@ -653,6 +677,16 @@ router.post('/:id/verify', requireAuth, (req: AuthedRequest, res) => {
        WHERE id = ?`
     ).run(confirms, denies, isAdmin ? req.user!.id : null, id);
     verified = true;
+    recordTicketEvent({
+      ticketId: id,
+      condoId,
+      actorUserId: req.user!.id,
+      eventType: 'ticket.verified',
+      title: 'Verificado pela comunidade',
+      body: null,
+      metadata: { confirms, denies, threshold: ticket.verification_threshold, by_admin: isAdmin },
+      visibility: 'resident',
+    });
   } else {
     db.prepare(
       `UPDATE tickets
@@ -720,6 +754,15 @@ router.post('/:id/dispatch', requireAuth, requireRole('board_admin'), (req: Auth
     db.prepare(
       `UPDATE tickets SET remediation_status='blocked_needs_admin', blocked_reason='no_vendor_in_category', updated_at=CURRENT_TIMESTAMP WHERE id = ?`
     ).run(id);
+    recordTicketEvent({
+      ticketId: id,
+      condoId,
+      actorUserId: req.user!.id,
+      eventType: 'ticket.blocked',
+      title: 'Aguardando síndico — sem fornecedor disponível',
+      metadata: { reason: 'no_vendor_in_category' },
+      visibility: 'resident',
+    });
     return fail(res, 'no_vendor_available', 400);
   }
 
@@ -754,6 +797,16 @@ router.post('/:id/dispatch', requireAuth, requireRole('board_admin'), (req: Auth
        (ticket_id, service_contact_id, channel, outbox_id, message_body, status, dispatched_by_user_id)
      VALUES (?, ?, ?, ?, ?, ?, ?)`
   ).run(id, vendor.id, channel, outboxId, message, outboxId ? 'queued' : 'sent', req.user!.id);
+  recordTicketEvent({
+    ticketId: id,
+    condoId,
+    actorUserId: req.user!.id,
+    eventType: 'vendor.dispatched',
+    title: 'Fornecedor acionado',
+    body: vendor.company_name,
+    metadata: { dispatch_id: Number(dispatch.lastInsertRowid), vendor_id: vendor.id, channel, manual: channel === 'manual' },
+    visibility: 'resident',
+  });
 
   db.prepare(
     `UPDATE tickets
@@ -808,6 +861,16 @@ router.post('/:id/resolve', requireAuth, requireRole('board_admin'), (req: Authe
            updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`
     ).run(id);
+    recordTicketEvent({
+      ticketId: id,
+      condoId,
+      actorUserId: req.user!.id,
+      eventType: 'ticket.resolved',
+      title: 'Problema resolvido',
+      body: parsed.data.resolution,
+      metadata: { announced: announce },
+      visibility: 'resident',
+    });
 
     let announcementId: number | null = null;
     if (announce) {
@@ -919,6 +982,16 @@ router.post('/:id/dispatches/:dispatchId/cancel', requireAuth, requireRole('boar
        SET remediation_status = 'agent_dispatched', updated_at = CURRENT_TIMESTAMP
        WHERE id = ? AND remediation_status = 'awaiting_vendor'`
     ).run(id);
+    recordTicketEvent({
+      ticketId: id,
+      condoId,
+      actorUserId: req.user!.id,
+      eventType: 'vendor.dispatch_cancelled',
+      title: 'Acionamento cancelado',
+      body: reason,
+      metadata: { dispatch_id: dispatchId },
+      visibility: 'admin',
+    });
   });
   tx();
 
@@ -979,6 +1052,22 @@ router.post('/:id/dispatches/:dispatchId/responded', requireAuth, requireRole('b
          updated_at = CURRENT_TIMESTAMP
      WHERE id = ?`
   ).run(id);
+  const dispatchRow = db.prepare(
+    `SELECT d.service_contact_id, sc.company_name AS vendor_name
+     FROM ticket_dispatches d
+     LEFT JOIN service_contacts sc ON sc.id = d.service_contact_id
+     WHERE d.id = ? AND d.ticket_id = ?`
+  ).get(dispatchId, id) as { service_contact_id: number | null; vendor_name: string | null } | undefined;
+  recordTicketEvent({
+    ticketId: id,
+    condoId,
+    actorUserId: req.user!.id,
+    eventType: 'vendor.responded',
+    title: 'Fornecedor respondeu',
+    body: dispatchRow?.vendor_name || null,
+    metadata: { dispatch_id: dispatchId, vendor_id: dispatchRow?.service_contact_id || null },
+    visibility: 'resident',
+  });
 
   audit(req, {
     action: 'ticket.dispatch_responded',
@@ -1022,6 +1111,15 @@ router.post('/:id/run-agent', requireAuth, requireRole('board_admin'), asyncHand
          updated_at = CURRENT_TIMESTAMP
      WHERE id = ?`
   ).run(JSON.stringify(result.plan), id);
+  recordTicketEvent({
+    ticketId: id,
+    condoId,
+    actorUserId: req.user!.id,
+    eventType: 'ai.plan_generated',
+    title: 'IA gerou plano',
+    metadata: { fallback: result.fallback, options: result.plan?.options?.length || 0 },
+    visibility: 'resident',
+  });
 
   audit(req, {
     action: 'ticket.run_agent',
@@ -1068,6 +1166,16 @@ router.post('/:id/work-order', requireAuth, requireRole('board_admin'), (req: Au
     vals.push(req.user!.id, existing.id);
     db.prepare(`UPDATE ticket_work_orders SET ${sets.join(', ')} WHERE id = ?`).run(...vals);
     if (body.status) syncTicketFromWorkOrder(id, body.status);
+    recordTicketEvent({
+      ticketId: id,
+      condoId,
+      actorUserId: req.user!.id,
+      eventType: 'work_order.updated',
+      title: 'Ordem de serviço atualizada',
+      body: body.title || null,
+      metadata: { work_order_id: existing.id, status: body.status || null },
+      visibility: 'resident',
+    });
     audit(req, {
       action: 'ticket.work_order_update',
       target_type: 'ticket_work_order',
@@ -1106,6 +1214,16 @@ router.post('/:id/work-order', requireAuth, requireRole('board_admin'), (req: Au
     req.user!.id,
   );
   syncTicketFromWorkOrder(id, status);
+  recordTicketEvent({
+    ticketId: id,
+    condoId,
+    actorUserId: req.user!.id,
+    eventType: 'work_order.created',
+    title: 'Ordem de serviço aberta',
+    body: (body.title?.trim() || `Ordem de serviço: ${ticket.title}`).slice(0, 160),
+    metadata: { work_order_id: Number(result.lastInsertRowid), service_contact_id: body.service_contact_id || null, status },
+    visibility: 'resident',
+  });
   audit(req, {
     action: 'ticket.work_order_create',
     target_type: 'ticket_work_order',
@@ -1155,6 +1273,16 @@ router.patch('/:id/work-order/:workOrderId', requireAuth, requireRole('board_adm
   vals.push(req.user!.id, workOrderId);
   db.prepare(`UPDATE ticket_work_orders SET ${sets.join(', ')} WHERE id = ?`).run(...vals);
   if (body.status) syncTicketFromWorkOrder(id, body.status);
+  recordTicketEvent({
+    ticketId: id,
+    condoId,
+    actorUserId: req.user!.id,
+    eventType: 'work_order.updated',
+    title: 'Ordem de serviço atualizada',
+    body: body.title || null,
+    metadata: { work_order_id: workOrderId, status: body.status || null },
+    visibility: 'resident',
+  });
   audit(req, {
     action: 'ticket.work_order_update',
     target_type: 'ticket_work_order',
@@ -1266,6 +1394,7 @@ router.get('/:id', requireAuth, (req: AuthedRequest, res) => {
         vendor_name: d.vendor_name,
       }));
   const workOrder = getTicketWorkOrder(id);
+  const timeline = listTicketTimeline({ ticketId: id, condoId, role: req.user!.role });
   return ok(res, {
     ...ticket,
     agent_plan,
@@ -1274,6 +1403,7 @@ router.get('/:id', requireAuth, (req: AuthedRequest, res) => {
     verifications,
     dispatches,
     work_order: workOrder || null,
+    timeline,
     my_vote: myVoteRow?.vote || null,
   });
 });
@@ -1304,6 +1434,15 @@ router.patch('/:id', requireAuth, requireRole('board_admin'), (req: AuthedReques
   sets.push('updated_at = CURRENT_TIMESTAMP');
   vals.push(id);
   db.prepare(`UPDATE tickets SET ${sets.join(', ')} WHERE id = ?`).run(...vals);
+  recordTicketEvent({
+    ticketId: id,
+    condoId,
+    actorUserId: req.user!.id,
+    eventType: 'ticket.updated',
+    title: 'Chamado atualizado',
+    metadata: { fields: Object.keys(fields) },
+    visibility: 'admin',
+  });
   audit(req, {
     action: 'ticket.update',
     target_type: 'ticket',
@@ -1328,6 +1467,16 @@ router.post('/:id/comments', requireAuth, (req: AuthedRequest, res) => {
     `INSERT INTO ticket_comments (ticket_id, author_id, body, internal) VALUES (?, ?, ?, ?)`
   ).run(id, req.user!.id, parsed.data.body, parsed.data.internal ? 1 : 0);
   db.prepare(`UPDATE tickets SET updated_at=CURRENT_TIMESTAMP WHERE id = ?`).run(id);
+  recordTicketEvent({
+    ticketId: id,
+    condoId,
+    actorUserId: req.user!.id,
+    eventType: parsed.data.internal ? 'comment.internal_created' : 'comment.created',
+    title: parsed.data.internal ? 'Nota interna adicionada' : 'Comentário adicionado',
+    body: parsed.data.internal ? null : parsed.data.body,
+    metadata: { comment_id: Number(result.lastInsertRowid), internal: parsed.data.internal },
+    visibility: parsed.data.internal ? 'admin' : 'resident',
+  });
   audit(req, {
     action: 'ticket.comment',
     target_type: 'ticket_comment',
@@ -1362,6 +1511,16 @@ router.post('/:id/attachments', requireAuth, (req: AuthedRequest, res) => {
   const attachmentId = Number(result.lastInsertRowid);
   if (file) attachFileToTarget(file.id, 'ticket_attachment', attachmentId);
   db.prepare(`UPDATE tickets SET updated_at=CURRENT_TIMESTAMP WHERE id = ?`).run(id);
+  recordTicketEvent({
+    ticketId: id,
+    condoId,
+    actorUserId: req.user!.id,
+    eventType: 'attachment.created',
+    title: 'Anexo adicionado',
+    body: filename || null,
+    metadata: { attachment_id: attachmentId, file_id: file?.id || null },
+    visibility: 'resident',
+  });
   audit(req, {
     action: 'ticket.attachment_create',
     target_type: 'ticket_attachment',

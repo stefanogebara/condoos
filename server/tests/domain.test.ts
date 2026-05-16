@@ -34,7 +34,7 @@ import {
   upsertBudgetTargets,
 } from '../src/lib/finance';
 import { requireAuth, revokeUserTokens, signToken } from '../src/lib/auth';
-import { canAssignTicketToUser, markTicketAgentFailed } from '../src/lib/tickets';
+import { canAssignTicketToUser, listTicketTimeline, markTicketAgentFailed, recordTicketEvent } from '../src/lib/tickets';
 import { createAgentRun, finishAgentRunFailure, finishAgentRunSuccess } from '../src/lib/agent-runs';
 import { buildAgentEvidenceSources } from '../src/lib/agent-evidence';
 import { evaluateAgentAutoDispatch } from '../src/lib/agent-auto-dispatch';
@@ -53,6 +53,7 @@ function resetDb() {
     'agent_runs',
     'agent_turns',
     'agent_threads',
+    'ticket_events',
     'ticket_attachments',
     'ticket_comments',
     'ticket_work_orders',
@@ -850,6 +851,75 @@ test('service contact scorecards aggregate vendor operations without cross-condo
   assert.equal(scorecard.expense_currency, 'USD');
 });
 
+test('ticket timeline orders events and hides admin-only entries from residents', () => {
+  resetDb();
+  const { condoId } = createCondoFixture();
+  const adminId = createUser('timeline-admin@example.com', 'board_admin');
+  const residentId = createUser('timeline-resident@example.com');
+  db.prepare(`UPDATE users SET condominium_id = ? WHERE id IN (?, ?)`).run(condoId, adminId, residentId);
+
+  const ticketId = Number(db.prepare(
+    `INSERT INTO tickets (
+      condominium_id, reporter_id, title, description, category, priority, verification_threshold
+    ) VALUES (?, ?, 'Timeline leak', 'Water leak near elevator.', 'plumbing', 'normal', 3)`
+  ).run(condoId, residentId).lastInsertRowid);
+
+  recordTicketEvent({
+    ticketId,
+    condoId,
+    actorUserId: residentId,
+    eventType: 'ticket.created',
+    title: 'Ticket created',
+    body: 'Resident reported a leak.',
+    metadata: { priority: 'normal' },
+    visibility: 'resident',
+  });
+  recordTicketEvent({
+    ticketId,
+    condoId,
+    actorUserId: adminId,
+    eventType: 'vendor.private_note',
+    title: 'Internal vendor note',
+    body: 'Vendor gave private pricing guidance.',
+    metadata: { quoteFloorCents: 50000 },
+    visibility: 'admin',
+  });
+  recordTicketEvent({
+    ticketId,
+    condoId,
+    actorUserId: adminId,
+    eventType: 'work_order.created',
+    title: 'Work order opened',
+    body: 'Repair was scheduled.',
+    metadata: { status: 'scheduled' },
+    visibility: 'resident',
+  });
+
+  const adminTimeline = listTicketTimeline({ ticketId, condoId, role: 'board_admin' });
+  assert.equal(adminTimeline.length, 3);
+  assert.deepEqual(adminTimeline.map((event) => event.event_type), [
+    'ticket.created',
+    'vendor.private_note',
+    'work_order.created',
+  ]);
+  assert.deepEqual(adminTimeline[0].metadata, { priority: 'normal' });
+  assert.deepEqual(adminTimeline[1].metadata, { quoteFloorCents: 50000 });
+  assert.equal(adminTimeline[1].visibility, 'admin');
+
+  const residentTimeline = listTicketTimeline({ ticketId, condoId, role: 'resident' });
+  assert.equal(residentTimeline.length, 2);
+  assert.deepEqual(residentTimeline.map((event) => event.event_type), [
+    'ticket.created',
+    'work_order.created',
+  ]);
+  assert.doesNotMatch(JSON.stringify(residentTimeline), /private pricing/);
+
+  const otherCondoId = Number(db.prepare(
+    `INSERT INTO condominiums (name, address, invite_code) VALUES ('Other Timeline Condo', '2 Main', 'TLINE2')`
+  ).run().lastInsertRowid);
+  assert.equal(listTicketTimeline({ ticketId, condoId: otherCondoId, role: 'board_admin' }).length, 0);
+});
+
 test('board packet aggregates monthly operations without cross-condo leakage', () => {
   resetDb();
   const { condoId, unit101 } = createCondoFixture();
@@ -938,10 +1008,13 @@ test('dashboard actions are role-scoped and backed by in-app notifications', () 
      VALUES (?, ?, 'owner', 'active', 1, 1.0)`
   ).run(residentId, unit101);
 
+  const dashboardNow = new Date('2026-05-14T12:00:00.000Z');
+  const todayVisitorAt = new Date(dashboardNow);
+  todayVisitorAt.setHours(14, 0, 0, 0);
   const visitorId = Number(db.prepare(
     `INSERT INTO visitors (condominium_id, host_id, visitor_name, visitor_type, expected_at, status)
-     VALUES (?, ?, 'Ana Visitor', 'guest', '2026-05-14T14:00:00.000Z', 'pending')`
-  ).run(condoId, residentId).lastInsertRowid);
+     VALUES (?, ?, 'Ana Visitor', 'guest', ?, 'pending')`
+  ).run(condoId, residentId, todayVisitorAt.toISOString()).lastInsertRowid);
   const packageId = Number(db.prepare(
     `INSERT INTO packages (condominium_id, recipient_id, carrier, description, status)
      VALUES (?, ?, 'DHL', 'Keys', 'waiting')`
@@ -983,8 +1056,6 @@ test('dashboard actions are role-scoped and backed by in-app notifications', () 
   const resident = db.prepare(`SELECT * FROM users WHERE id = ?`).get(residentId) as any;
   const admin = db.prepare(`SELECT * FROM users WHERE id = ?`).get(adminId) as any;
   const concierge = db.prepare(`SELECT * FROM users WHERE id = ?`).get(conciergeId) as any;
-  const dashboardNow = new Date('2026-05-14T12:00:00.000Z');
-
   const residentPayload = getDashboardActions(resident, condoId, dashboardNow);
   assert.equal(residentPayload.unread_count, 1);
   assert.ok(residentPayload.actions.some((action) => action.id === `visitor-${visitorId}`));

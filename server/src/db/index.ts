@@ -541,6 +541,29 @@ export function initSchema() {
     )
   `).run();
   db.prepare(`CREATE INDEX IF NOT EXISTS idx_ticket_verifications_ticket ON ticket_verifications(ticket_id)`).run();
+  // Phase 4 operations — canonical ticket timeline. Older UI synthesized
+  // progress from tickets/dispatches/work_orders; this table becomes the
+  // durable audit trail residents and admins can read without leaking
+  // admin-only vendor notes.
+  db.prepare(`
+    CREATE TABLE IF NOT EXISTS ticket_events (
+      id               INTEGER PRIMARY KEY AUTOINCREMENT,
+      ticket_id        INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+      condominium_id   INTEGER NOT NULL REFERENCES condominiums(id) ON DELETE CASCADE,
+      actor_user_id    INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      event_type       TEXT NOT NULL,
+      title            TEXT NOT NULL,
+      body             TEXT,
+      metadata_json    TEXT,
+      visibility       TEXT NOT NULL DEFAULT 'resident'
+        CHECK(visibility IN ('resident','admin')),
+      created_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `).run();
+  db.prepare(`CREATE INDEX IF NOT EXISTS idx_ticket_events_ticket
+    ON ticket_events(ticket_id, created_at, id)`).run();
+  db.prepare(`CREATE INDEX IF NOT EXISTS idx_ticket_events_condo
+    ON ticket_events(condominium_id, created_at, id)`).run();
   // Phase 2 — audit trail of every vendor contact attempt the AI agent or
   // an admin makes on behalf of a verified ticket. outbox_id ties back to
   // the actual queued notification (whatsapp/email) so we can follow up on

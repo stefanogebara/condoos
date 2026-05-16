@@ -79,6 +79,7 @@ interface TicketDetail extends Ticket {
   verifications: Array<{ id: number; vote: string; comment: string | null; first_name: string; last_name: string; unit_number: string | null }>;
   dispatches: Dispatch[];
   work_order: WorkOrder | null;
+  timeline?: TicketTimelineEntry[];
 }
 
 interface TicketAttachment {
@@ -135,6 +136,17 @@ interface WorkOrder {
   vendor_contact: string | null;
   created_at: string;
   updated_at: string;
+}
+
+interface TicketTimelineEntry {
+  id: number;
+  event_type: string;
+  title: string;
+  body: string | null;
+  visibility: 'resident' | 'admin';
+  created_at: string;
+  actor_first: string | null;
+  actor_last: string | null;
 }
 
 type WorkOrderPayload = {
@@ -720,6 +732,10 @@ function AdminCard({
         <div className="mt-4 pt-4 border-t border-white/50 space-y-3">
           <p className="text-sm text-dusk-400 whitespace-pre-line">{ticket.description}</p>
 
+          {detail?.timeline && detail.timeline.length > 0 && (
+            <TicketTimelinePanel timeline={detail.timeline} />
+          )}
+
           {detail?.attachments && detail.attachments.length > 0 && (
             <div>
               <div className="text-xs uppercase tracking-wider text-dusk-200 mb-2">{tr('Anexos')}</div>
@@ -1000,6 +1016,45 @@ function WorkOrderPanel({ workOrder }: { workOrder: WorkOrder }) {
       )}
     </GlassCard>
   );
+}
+
+function TicketTimelinePanel({ timeline }: { timeline: TicketTimelineEntry[] }) {
+  const tr = useTicketTranslator();
+  return (
+    <div>
+      <div className="text-xs uppercase tracking-wider text-dusk-200 mb-2">{tr('Linha do tempo')}</div>
+      <ol className="relative border-l border-white/60 pl-4 space-y-2">
+        {timeline.map((event) => (
+          <li key={event.id} className="relative">
+            <span className="absolute -left-[1.4rem] top-0.5 flex items-center justify-center w-5 h-5 rounded-full bg-white/70 border border-white/80">
+              {adminTimelineIcon(event.event_type)}
+            </span>
+            <div className="flex flex-wrap items-center gap-1.5 text-xs text-dusk-400 leading-snug">
+              <span className="font-medium text-dusk-500">{tr(event.title)}</span>
+              {event.body && <span className="text-dusk-300">· {event.body}</span>}
+              {event.visibility === 'admin' && <Badge tone="dark">{tr('interno')}</Badge>}
+            </div>
+            <div className="text-[10px] uppercase tracking-wider text-dusk-200 mt-0.5">
+              {formatRelativeTime(event.created_at)}
+              {event.actor_first ? ` · ${event.actor_first} ${event.actor_last || ''}` : ''}
+            </div>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+function adminTimelineIcon(eventType: string) {
+  if (eventType.includes('verified')) return <CheckCircle2 className="w-3.5 h-3.5 text-sage-700" />;
+  if (eventType.includes('ai.')) return <Bot className="w-3.5 h-3.5 text-peach-500" />;
+  if (eventType.includes('vendor.dispatched')) return <Send className="w-3.5 h-3.5 text-peach-500" />;
+  if (eventType.includes('vendor.responded')) return <MessageCircle className="w-3.5 h-3.5 text-sage-700" />;
+  if (eventType.includes('work_order')) return <ClipboardCheck className="w-3.5 h-3.5 text-peach-500" />;
+  if (eventType.includes('resolved')) return <CheckCircle2 className="w-3.5 h-3.5 text-sage-700" />;
+  if (eventType.includes('blocked') || eventType.includes('cancelled')) return <ShieldAlert className="w-3.5 h-3.5 text-dusk-400" />;
+  if (eventType.includes('attachment')) return <FileText className="w-3.5 h-3.5 text-dusk-300" />;
+  return <AlertTriangle className="w-3.5 h-3.5 text-dusk-300" />;
 }
 
 function WorkOrderModal({
