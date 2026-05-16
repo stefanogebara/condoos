@@ -5,6 +5,7 @@ import { requireAuth, requireRole, getActiveCondoId, AuthedRequest } from '../li
 import { ok, fail, asyncHandler } from '../lib/respond';
 import { audit } from '../lib/audit';
 import { canAssignTicketToUser, listTicketTimeline, markTicketAgentFailed, recordTicketEvent } from '../lib/tickets';
+import { createTicketQuote, listTicketQuotes } from '../lib/ticket-quotes';
 import { categoryMatches } from '../lib/category-aliases';
 import { buildVendorPortalUrl } from '../lib/vendor-tokens';
 import { evaluateAgentAutoDispatch, isSafetyCriticalUrgent } from '../lib/agent-auto-dispatch';
@@ -74,6 +75,7 @@ const resolveSchema = z.object({
 });
 
 const workOrderStatusSchema = z.enum(['draft', 'scheduled', 'in_progress', 'completed', 'cancelled']);
+const quoteStatusSchema = z.enum(['received', 'shortlisted', 'selected', 'rejected']);
 
 const nullableHttpsUrlSchema = z.preprocess(
   (value) => (value === '' ? null : value),
@@ -97,6 +99,22 @@ const workOrderCreateSchema = z.object({
 });
 
 const workOrderUpdateSchema = workOrderCreateSchema.partial();
+
+const ticketQuoteCreateSchema = z.object({
+  service_contact_id: z.number().int().positive().nullable().optional(),
+  vendor_name: z.string().max(200).nullable().optional(),
+  quote_amount_cents: z.number().int().min(0).max(1_000_000_000).nullable().optional(),
+  currency: z.string().min(2).max(12).optional().default('BRL'),
+  availability: z.string().max(500).nullable().optional(),
+  warranty: z.string().max(500).nullable().optional(),
+  notes: z.string().max(2_000).nullable().optional(),
+  attachment_url: nullableHttpsUrlSchema,
+  attachment_file_id: z.number().int().positive().nullable().optional(),
+  status: quoteStatusSchema.optional().default('received'),
+}).refine((body) => !!body.service_contact_id || !!String(body.vendor_name || '').trim(), {
+  message: 'vendor_required',
+  path: ['vendor_name'],
+});
 
 // Phase 2 — fire-and-forget agent invocation triggered the moment a ticket
 // flips to remediation_status='verified'. We can't block the verify HTTP
@@ -1131,6 +1149,48 @@ router.post('/:id/run-agent', requireAuth, requireRole('board_admin'), asyncHand
   return ok(res, { id, plan: result.plan, fallback: result.fallback });
 }));
 
+router.post('/:id/quotes', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+  const parsed = ticketQuoteCreateSchema.safeParse(req.body);
+  if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
+  const condoId = getActiveCondoId(req);
+  const id = Number(req.params.id);
+  const ticket = getScopedTicket(id, condoId);
+  if (!ticket) return fail(res, 'not_found', 404);
+
+  let attachmentFileId = parsed.data.attachment_file_id || null;
+  if (attachmentFileId) {
+    const file = assertFileReadyForUse({ fileId: attachmentFileId, condoId, purpose: 'work_order' });
+    if (!file) return fail(res, 'file_not_ready', 400);
+  }
+
+  const quote = createTicketQuote({
+    condoId,
+    ticketId: id,
+    actorUserId: req.user!.id,
+    serviceContactId: parsed.data.service_contact_id || null,
+    vendorName: parsed.data.vendor_name || null,
+    quoteAmountCents: parsed.data.quote_amount_cents ?? null,
+    currency: parsed.data.currency,
+    availability: parsed.data.availability || null,
+    warranty: parsed.data.warranty || null,
+    notes: parsed.data.notes || null,
+    attachmentUrl: parsed.data.attachment_url || null,
+    attachmentFileId,
+    status: parsed.data.status,
+  });
+  if (!quote.ok) return fail(res, quote.error, quote.error === 'ticket_not_found' ? 404 : 400);
+
+  if (attachmentFileId) attachFileToTarget(attachmentFileId, 'ticket_vendor_quote', quote.id);
+  audit(req, {
+    action: 'ticket.quote_create',
+    target_type: 'ticket_vendor_quote',
+    target_id: quote.id,
+    condominium_id: condoId,
+    metadata: { ticket_id: id, service_contact_id: quote.service_contact_id, status: quote.status },
+  });
+  return ok(res, quote, 201);
+});
+
 router.post('/:id/work-order', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
   const parsed = workOrderCreateSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
@@ -1395,6 +1455,7 @@ router.get('/:id', requireAuth, (req: AuthedRequest, res) => {
       }));
   const workOrder = getTicketWorkOrder(id);
   const timeline = listTicketTimeline({ ticketId: id, condoId, role: req.user!.role });
+  const quotes = listTicketQuotes({ ticketId: id, condoId, role: req.user!.role });
   return ok(res, {
     ...ticket,
     agent_plan,
@@ -1403,6 +1464,7 @@ router.get('/:id', requireAuth, (req: AuthedRequest, res) => {
     verifications,
     dispatches,
     work_order: workOrder || null,
+    quotes,
     timeline,
     my_vote: myVoteRow?.vote || null,
   });

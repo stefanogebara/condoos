@@ -798,6 +798,31 @@ CREATE INDEX IF NOT EXISTS idx_ticket_events_ticket
 CREATE INDEX IF NOT EXISTS idx_ticket_events_condo
   ON ticket_events(condominium_id, created_at, id);
 
+CREATE TABLE IF NOT EXISTS ticket_vendor_quotes (
+  id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+  ticket_id               INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+  condominium_id          INTEGER NOT NULL REFERENCES condominiums(id) ON DELETE CASCADE,
+  service_contact_id      INTEGER REFERENCES service_contacts(id) ON DELETE SET NULL,
+  vendor_name             TEXT NOT NULL,
+  quote_amount_cents      INTEGER,
+  currency                TEXT NOT NULL DEFAULT 'BRL',
+  availability            TEXT,
+  warranty                TEXT,
+  notes                   TEXT,
+  attachment_url          TEXT,
+  attachment_file_id      INTEGER REFERENCES files(id) ON DELETE SET NULL,
+  status                  TEXT NOT NULL DEFAULT 'received'
+    CHECK(status IN ('received','shortlisted','selected','rejected')),
+  created_by_user_id      INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at              TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at              TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_ticket_vendor_quotes_ticket
+  ON ticket_vendor_quotes(ticket_id, status, quote_amount_cents);
+CREATE INDEX IF NOT EXISTS idx_ticket_vendor_quotes_condo
+  ON ticket_vendor_quotes(condominium_id, created_at);
+
 CREATE TABLE IF NOT EXISTS ticket_work_orders (
   id                      INTEGER PRIMARY KEY AUTOINCREMENT,
   ticket_id               INTEGER NOT NULL UNIQUE REFERENCES tickets(id) ON DELETE CASCADE,

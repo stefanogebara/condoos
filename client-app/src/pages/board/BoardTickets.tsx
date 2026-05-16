@@ -14,6 +14,7 @@ import { formatCurrency, formatDateTime, formatRelativeTime, t as translate, use
 import { openUploadedFile } from '../../lib/uploads';
 
 type WorkOrderStatus = 'draft' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
+type QuoteStatus = 'received' | 'shortlisted' | 'selected' | 'rejected';
 
 interface Ticket {
   id: number;
@@ -79,6 +80,7 @@ interface TicketDetail extends Ticket {
   verifications: Array<{ id: number; vote: string; comment: string | null; first_name: string; last_name: string; unit_number: string | null }>;
   dispatches: Dispatch[];
   work_order: WorkOrder | null;
+  quotes: TicketQuote[];
   timeline?: TicketTimelineEntry[];
 }
 
@@ -138,6 +140,26 @@ interface WorkOrder {
   updated_at: string;
 }
 
+interface TicketQuote {
+  id: number;
+  ticket_id: number;
+  service_contact_id: number | null;
+  vendor_name: string;
+  vendor_category: string | null;
+  vendor_contact: string | null;
+  quote_amount_cents: number | null;
+  currency: string;
+  availability: string | null;
+  warranty: string | null;
+  notes: string | null;
+  attachment_url: string | null;
+  attachment_file_id: number | null;
+  attachment_filename: string | null;
+  status: QuoteStatus;
+  created_at: string;
+  updated_at: string;
+}
+
 interface TicketTimelineEntry {
   id: number;
   event_type: string;
@@ -160,6 +182,18 @@ type WorkOrderPayload = {
   invoice_url?: string | null;
   photo_url?: string | null;
   completion_note?: string | null;
+};
+
+type QuotePayload = {
+  service_contact_id?: number | null;
+  vendor_name?: string | null;
+  quote_amount_cents?: number | null;
+  currency?: string;
+  availability?: string | null;
+  warranty?: string | null;
+  notes?: string | null;
+  attachment_url?: string | null;
+  status?: QuoteStatus;
 };
 
 const PRIORITY_TONE: Record<Ticket['priority'], 'sage' | 'peach' | 'neutral' | 'dark'> = {
@@ -191,6 +225,13 @@ const WORK_ORDER_STATUS_LABEL: Record<WorkOrderStatus, string> = {
   in_progress: 'em execução',
   completed: 'concluída',
   cancelled: 'cancelada',
+};
+
+const QUOTE_STATUS_LABEL: Record<QuoteStatus, string> = {
+  received: 'recebida',
+  shortlisted: 'pré-selecionada',
+  selected: 'selecionada',
+  rejected: 'rejeitada',
 };
 
 // UX-H-NEW-2 — historical drift: the ticket form uses `maintenance` while
@@ -283,15 +324,17 @@ export default function BoardTickets() {
   const [pickerTicketId, setPickerTicketId] = useState<number | null>(null);
   const [resolveTicketId, setResolveTicketId] = useState<number | null>(null);
   const [workOrderTicketId, setWorkOrderTicketId] = useState<number | null>(null);
+  const [quoteTicketId, setQuoteTicketId] = useState<number | null>(null);
   const [responseTarget, setResponseTarget] = useState<ResponseTarget | null>(null);
   const [vendors, setVendors] = useState<ServiceContact[]>([]);
   const [workOrderSavingId, setWorkOrderSavingId] = useState<number | null>(null);
+  const [quoteSavingId, setQuoteSavingId] = useState<number | null>(null);
   const seenTicketIds = useRef<Set<number> | null>(null);
 
   useEffect(() => {
-    if (pickerTicketId == null && workOrderTicketId == null) return;
+    if (pickerTicketId == null && workOrderTicketId == null && quoteTicketId == null) return;
     apiGet<ServiceContact[]>('/service-contacts').then(setVendors).catch(() => setVendors([]));
-  }, [pickerTicketId, workOrderTicketId]);
+  }, [pickerTicketId, workOrderTicketId, quoteTicketId]);
 
   const load = useCallback((notify = false) => {
     apiGet<Ticket[]>('/tickets').then((next) => {
@@ -421,6 +464,26 @@ export default function BoardTickets() {
     }
   }
 
+  async function saveQuote(ticketId: number, payload: QuotePayload) {
+    setQuoteSavingId(ticketId);
+    try {
+      await apiPost<TicketQuote>(`/tickets/${ticketId}/quotes`, payload);
+      toast.success(tr('Cotação salva'));
+      apiGet<TicketDetail>(`/tickets/${ticketId}`).then(setDetail).catch(() => {});
+      load();
+      setQuoteTicketId(null);
+    } catch (err: any) {
+      const code = err?.response?.data?.error;
+      toast.error(code === 'vendor_not_in_condo'
+        ? tr('Fornecedor não pertence a este condomínio')
+        : code === 'vendor_required'
+          ? tr('Informe um fornecedor')
+          : code || tr('Falha ao salvar cotação'));
+    } finally {
+      setQuoteSavingId(null);
+    }
+  }
+
   const needsAttention = rows.filter((r) => r.verification_threshold > 0 && r.remediation_status === 'open');
   const verified = rows.filter((r) => r.remediation_status === 'verified' || r.remediation_status === 'agent_dispatched');
   const inProgress = rows.filter((r) => (
@@ -463,32 +526,38 @@ export default function BoardTickets() {
       <Section title={tr('Precisa do síndico')} tickets={escalatedSorted} openId={openId} setOpenId={setOpenId}
                detail={detail} runningId={runningId} verifyingId={verifyingId} dispatchingId={dispatchingId}
                onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={openVendorResponse}
-               onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} onOpenWorkOrder={setWorkOrderTicketId} />
+               onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} onOpenWorkOrder={setWorkOrderTicketId}
+               onOpenQuote={setQuoteTicketId} />
 
       <Section title={tr('Aguardando verificação')} tickets={needsAttention} openId={openId} setOpenId={setOpenId}
                detail={detail} runningId={runningId} verifyingId={verifyingId} dispatchingId={dispatchingId}
                onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={openVendorResponse}
-               onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} onOpenWorkOrder={setWorkOrderTicketId} />
+               onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} onOpenWorkOrder={setWorkOrderTicketId}
+               onOpenQuote={setQuoteTicketId} />
 
       <Section title={tr('Verificados — pronto para acionar a IA')} tickets={verified} openId={openId} setOpenId={setOpenId}
                detail={detail} runningId={runningId} verifyingId={verifyingId} dispatchingId={dispatchingId}
                onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={openVendorResponse}
-               onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} onOpenWorkOrder={setWorkOrderTicketId} />
+               onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} onOpenWorkOrder={setWorkOrderTicketId}
+               onOpenQuote={setQuoteTicketId} />
 
       <Section title={tr('Em andamento — fornecedor acionado')} tickets={inProgress} openId={openId} setOpenId={setOpenId}
                detail={detail} runningId={runningId} verifyingId={verifyingId} dispatchingId={dispatchingId}
                onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={openVendorResponse}
-               onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} onOpenWorkOrder={setWorkOrderTicketId} />
+               onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} onOpenWorkOrder={setWorkOrderTicketId}
+               onOpenQuote={setQuoteTicketId} />
 
       <Section title={tr('Chamados privados')} tickets={privateOpen} openId={openId} setOpenId={setOpenId}
                detail={detail} runningId={runningId} verifyingId={verifyingId} dispatchingId={dispatchingId}
                onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={openVendorResponse}
-               onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} onOpenWorkOrder={setWorkOrderTicketId} />
+               onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} onOpenWorkOrder={setWorkOrderTicketId}
+               onOpenQuote={setQuoteTicketId} />
 
       <Section title={tr('Resolvidos')} tickets={resolvedTickets} openId={openId} setOpenId={setOpenId}
                detail={detail} runningId={runningId} verifyingId={verifyingId} dispatchingId={dispatchingId}
                onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={openVendorResponse}
-               onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} onOpenWorkOrder={setWorkOrderTicketId} />
+               onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} onOpenWorkOrder={setWorkOrderTicketId}
+               onOpenQuote={setQuoteTicketId} />
 
       {pickerTicketId != null && detail && (
         <VendorPickerModal
@@ -514,6 +583,15 @@ export default function BoardTickets() {
           saving={workOrderSavingId === workOrderTicketId}
           onClose={() => setWorkOrderTicketId(null)}
           onSubmit={(payload) => saveWorkOrder(workOrderTicketId, payload)} />
+      )}
+
+      {quoteTicketId != null && detail && detail.id === quoteTicketId && (
+        <QuoteModal
+          ticket={detail}
+          vendors={vendors}
+          saving={quoteSavingId === quoteTicketId}
+          onClose={() => setQuoteTicketId(null)}
+          onSubmit={(payload) => saveQuote(quoteTicketId, payload)} />
       )}
 
       {responseTarget && (
@@ -577,7 +655,7 @@ function NeedsAttentionBanner({ total, noVendor, noResponse }: { total: number; 
 
 function Section({
   title, tickets, openId, setOpenId, detail, runningId, verifyingId, dispatchingId,
-  onRunAgent, onVerify, onDispatch, onMarkResponded, onOpenPicker, onOpenResolve, onOpenWorkOrder,
+  onRunAgent, onVerify, onDispatch, onMarkResponded, onOpenPicker, onOpenResolve, onOpenWorkOrder, onOpenQuote,
 }: {
   title: string;
   tickets: Ticket[];
@@ -594,6 +672,7 @@ function Section({
   onOpenPicker: (id: number) => void;
   onOpenResolve: (id: number) => void;
   onOpenWorkOrder: (id: number) => void;
+  onOpenQuote: (id: number) => void;
 }) {
   if (tickets.length === 0) return null;
   return (
@@ -618,7 +697,8 @@ function Section({
                      onMarkResponded={(dispatchRow) => onMarkResponded(tk.id, dispatchRow)}
                      onOpenPicker={() => onOpenPicker(tk.id)}
                      onOpenResolve={() => onOpenResolve(tk.id)}
-                     onOpenWorkOrder={() => onOpenWorkOrder(tk.id)} />
+                     onOpenWorkOrder={() => onOpenWorkOrder(tk.id)}
+                     onOpenQuote={() => onOpenQuote(tk.id)} />
         ))}
       </div>
     </>
@@ -627,7 +707,7 @@ function Section({
 
 function AdminCard({
   ticket, expanded, detail, onToggle, running, verifying, dispatching,
-  onRunAgent, onVerify, onDispatch, onMarkResponded, onOpenPicker, onOpenResolve, onOpenWorkOrder,
+  onRunAgent, onVerify, onDispatch, onMarkResponded, onOpenPicker, onOpenResolve, onOpenWorkOrder, onOpenQuote,
 }: {
   ticket: Ticket;
   expanded: boolean;
@@ -643,6 +723,7 @@ function AdminCard({
   onOpenPicker: () => void;
   onOpenResolve: () => void;
   onOpenWorkOrder: () => void;
+  onOpenQuote: () => void;
 }) {
   const tr = useTicketTranslator();
   const isCommunity = ticket.verification_threshold > 0;
@@ -652,6 +733,7 @@ function AdminCard({
   const isAwaitingVendor = ticket.remediation_status === 'awaiting_vendor';
   const vendorEngaged = ticket.remediation_status === 'vendor_engaged';
   const hasWorkOrder = !!ticket.work_order_id || !!detail?.work_order;
+  const hasQuotes = (detail?.quotes?.length || 0) > 0;
   const workOrderStatus = detail?.work_order?.status || ticket.work_order_status;
   // UX-H-NEW-1 — `hasPlan` stays true after resolve (the agent_plan column
   // never gets cleared), so the action buttons used to keep rendering on
@@ -815,6 +897,13 @@ function AdminCard({
                   {hasWorkOrder ? tr('Atualizar ordem') : tr('Criar ordem de serviço')}
                 </Button>
               )}
+              {(hasPlan || isAwaitingVendor || vendorEngaged || hasWorkOrder || hasQuotes || isBlocked) && (
+                <Button size="sm" variant="ghost"
+                        leftIcon={<FileText className="w-3.5 h-3.5" />}
+                        onClick={onOpenQuote}>
+                  {hasQuotes ? tr('Adicionar cotação') : tr('Registrar cotação')}
+                </Button>
+              )}
               {(ticket.remediation_status === 'awaiting_vendor'
                 || ticket.remediation_status === 'vendor_engaged'
                 || ticket.remediation_status === 'work_ordered'
@@ -881,6 +970,10 @@ function AdminCard({
 
           {detail?.work_order && (
             <WorkOrderPanel workOrder={detail.work_order} />
+          )}
+
+          {detail?.quotes && detail.quotes.length > 0 && (
+            <QuoteComparisonPanel quotes={detail.quotes} />
           )}
 
           {detail?.dispatches && detail.dispatches.length > 0 && (
@@ -1018,6 +1111,75 @@ function WorkOrderPanel({ workOrder }: { workOrder: WorkOrder }) {
   );
 }
 
+function QuoteComparisonPanel({ quotes }: { quotes: TicketQuote[] }) {
+  const tr = useTicketTranslator();
+  return (
+    <GlassCard variant="clay" className="p-4 border border-peach-300/35 bg-peach-100/25">
+      <div className="text-xs uppercase tracking-wider text-peach-700 mb-3 flex items-center gap-1.5">
+        <FileText className="w-3.5 h-3.5" /> {tr('Cotações de fornecedores')}
+      </div>
+      <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
+        {quotes.map((quote) => (
+          <div key={quote.id} className="rounded-2xl border border-white/65 bg-white/45 p-3 text-xs text-dusk-400">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <div className="font-semibold text-dusk-500 truncate">{quote.vendor_name}</div>
+                {quote.vendor_category && (
+                  <div className="text-[11px] text-dusk-300 mt-0.5">{tr(vendorCategoryLabel(quote.vendor_category))}</div>
+                )}
+              </div>
+              <Badge tone={quote.status === 'selected' ? 'sage' : quote.status === 'rejected' ? 'dark' : 'peach'}>
+                {tr(QUOTE_STATUS_LABEL[quote.status])}
+              </Badge>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-2 items-center">
+              {quote.quote_amount_cents != null && (
+                <span className="font-semibold text-dusk-500">
+                  {formatCurrency(quote.quote_amount_cents / 100, quote.currency || 'BRL')}
+                </span>
+              )}
+              <span className="text-dusk-300">{formatRelativeTime(quote.created_at)}</span>
+            </div>
+            {quote.availability && (
+              <div className="mt-2">
+                <span className="font-medium text-dusk-500">{tr('Disponibilidade:')}</span> {quote.availability}
+              </div>
+            )}
+            {quote.warranty && (
+              <div className="mt-1">
+                <span className="font-medium text-dusk-500">{tr('Garantia:')}</span> {quote.warranty}
+              </div>
+            )}
+            {quote.notes && (
+              <div className="mt-2 pt-2 border-t border-white/50 whitespace-pre-line">
+                <span className="font-medium text-dusk-500">{tr('Notas internas:')}</span> {quote.notes}
+              </div>
+            )}
+            {(quote.attachment_file_id || quote.attachment_url) && (
+              <div className="mt-2">
+                {quote.attachment_file_id ? (
+                  <button
+                    type="button"
+                    onClick={() => openUploadedFile(quote.attachment_file_id!, quote.attachment_filename || tr('Cotação'))}
+                    className="inline-flex items-center gap-1 rounded-2xl border border-white/70 bg-white/55 px-3 py-2 font-medium text-dusk-400 hover:bg-white/80"
+                  >
+                    <FileText className="w-3.5 h-3.5" /> {quote.attachment_filename || tr('Cotação')}
+                  </button>
+                ) : (
+                  <a href={quote.attachment_url || '#'} target="_blank" rel="noopener noreferrer"
+                     className="inline-flex items-center gap-1 rounded-2xl border border-white/70 bg-white/55 px-3 py-2 font-medium text-dusk-400 hover:bg-white/80">
+                    <FileText className="w-3.5 h-3.5" /> {tr('Abrir cotação')}
+                  </a>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </GlassCard>
+  );
+}
+
 function TicketTimelinePanel({ timeline }: { timeline: TicketTimelineEntry[] }) {
   const tr = useTicketTranslator();
   return (
@@ -1048,6 +1210,7 @@ function TicketTimelinePanel({ timeline }: { timeline: TicketTimelineEntry[] }) 
 function adminTimelineIcon(eventType: string) {
   if (eventType.includes('verified')) return <CheckCircle2 className="w-3.5 h-3.5 text-sage-700" />;
   if (eventType.includes('ai.')) return <Bot className="w-3.5 h-3.5 text-peach-500" />;
+  if (eventType.includes('vendor.quote')) return <FileText className="w-3.5 h-3.5 text-peach-500" />;
   if (eventType.includes('vendor.dispatched')) return <Send className="w-3.5 h-3.5 text-peach-500" />;
   if (eventType.includes('vendor.responded')) return <MessageCircle className="w-3.5 h-3.5 text-sage-700" />;
   if (eventType.includes('work_order')) return <ClipboardCheck className="w-3.5 h-3.5 text-peach-500" />;
@@ -1197,6 +1360,159 @@ function WorkOrderModal({
                     disabled={!title.trim()}
                     leftIcon={<ClipboardCheck className="w-4 h-4" />}>
               {tr('Salvar ordem')}
+            </Button>
+          </div>
+        </form>
+      </GlassCard>
+    </div>
+  );
+}
+
+function QuoteModal({
+  ticket, vendors, saving, onClose, onSubmit,
+}: {
+  ticket: TicketDetail;
+  vendors: ServiceContact[];
+  saving: boolean;
+  onClose: () => void;
+  onSubmit: (payload: QuotePayload) => void;
+}) {
+  useEscape(onClose);
+  const tr = useTicketTranslator();
+  const sameCategory = vendors.filter((v) => categoryMatches(ticket.category, v.category));
+  const sorted = [
+    ...sameCategory,
+    ...vendors.filter((v) => !categoryMatches(ticket.category, v.category)),
+  ];
+  const suggestedVendor = sameCategory.find((v) => v.preferred === 1) || sameCategory[0] || sorted[0] || null;
+  const [vendorId, setVendorId] = useState<string>(suggestedVendor ? String(suggestedVendor.id) : 'free');
+  const [vendorName, setVendorName] = useState('');
+  const [amount, setAmount] = useState('');
+  const [currency, setCurrency] = useState(ticket.quotes?.[0]?.currency || 'BRL');
+  const [availability, setAvailability] = useState('');
+  const [warranty, setWarranty] = useState('');
+  const [status, setStatus] = useState<QuoteStatus>('received');
+  const [attachmentUrl, setAttachmentUrl] = useState('');
+  const [notes, setNotes] = useState('');
+  const freeVendor = vendorId === 'free';
+  const canSave = freeVendor ? !!vendorName.trim() : !!vendorId;
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!canSave) return;
+    onSubmit({
+      service_contact_id: freeVendor ? null : Number(vendorId),
+      vendor_name: freeVendor ? vendorName.trim() : null,
+      quote_amount_cents: amountToCents(amount),
+      currency: currency.trim().toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3) || 'BRL',
+      availability: availability.trim() || null,
+      warranty: warranty.trim() || null,
+      notes: notes.trim() || null,
+      attachment_url: attachmentUrl.trim() || null,
+      status,
+    });
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-dusk-500/40 backdrop-blur-sm">
+      <GlassCard className="w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-start justify-between mb-3">
+          <div>
+            <h3 className="font-display text-xl text-dusk-500">{tr('Registrar cotação')}</h3>
+            <p className="text-xs text-dusk-300 mt-1">{ticket.title}</p>
+          </div>
+          <button onClick={onClose} className="w-9 h-9 rounded-2xl bg-white/50 hover:bg-white/80 flex items-center justify-center text-dusk-400">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <form onSubmit={submit} className="space-y-3">
+          <div className="grid md:grid-cols-2 gap-3">
+            <label className="block text-xs text-dusk-300 font-medium">
+              <div className="flex items-center justify-between">
+                <span>{tr('Fornecedor')}</span>
+                <a href="/board/services" target="_blank" rel="noopener noreferrer"
+                   className="text-[11px] font-normal text-sage-700 hover:text-sage-900 underline decoration-dotted underline-offset-4">
+                  + {tr('Adicionar novo fornecedor')}
+                </a>
+              </div>
+              <select className="input mt-1" value={vendorId} onChange={(e) => setVendorId(e.target.value)}>
+                <option value="free">{tr('Fornecedor livre')}</option>
+                {sorted.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.preferred === 1 ? '★ ' : ''}{v.company_name} ({tr(vendorCategoryLabel(v.category))})
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-xs text-dusk-300 font-medium">
+              {tr('Status')}
+              <select className="input mt-1" value={status} onChange={(e) => setStatus(e.target.value as QuoteStatus)}>
+                {(['received', 'shortlisted', 'selected', 'rejected'] as QuoteStatus[]).map((s) => (
+                  <option key={s} value={s}>{tr(QUOTE_STATUS_LABEL[s])}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          {freeVendor && (
+            <label className="block text-xs text-dusk-300 font-medium">
+              {tr('Nome do fornecedor')}
+              <input className="input mt-1" value={vendorName} maxLength={200}
+                     placeholder={tr('Ex: Elevadores Norte')}
+                     onChange={(e) => setVendorName(e.target.value)} required />
+            </label>
+          )}
+
+          <div className="grid md:grid-cols-[1fr_130px] gap-3">
+            <label className="block text-xs text-dusk-300 font-medium">
+              {tr('Valor cotado')}
+              <input className="input mt-1" inputMode="decimal" value={amount}
+                     placeholder="1200"
+                     onChange={(e) => setAmount(e.target.value)} />
+            </label>
+            <label className="block text-xs text-dusk-300 font-medium">
+              {tr('Moeda')}
+              <input className="input mt-1 uppercase" value={currency} maxLength={3}
+                     onChange={(e) => setCurrency(e.target.value.toUpperCase())} />
+            </label>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-3">
+            <label className="block text-xs text-dusk-300 font-medium">
+              {tr('Disponibilidade')}
+              <input className="input mt-1" value={availability} maxLength={500}
+                     placeholder={tr('Ex: Amanhã de manhã')}
+                     onChange={(e) => setAvailability(e.target.value)} />
+            </label>
+            <label className="block text-xs text-dusk-300 font-medium">
+              {tr('Garantia')}
+              <input className="input mt-1" value={warranty} maxLength={500}
+                     placeholder={tr('Ex: 90 dias')}
+                     onChange={(e) => setWarranty(e.target.value)} />
+            </label>
+          </div>
+
+          <label className="block text-xs text-dusk-300 font-medium">
+            {tr('URL do anexo da cotação')}
+            <input className="input mt-1" type="url" value={attachmentUrl}
+                   placeholder="https://..."
+                   onChange={(e) => setAttachmentUrl(e.target.value)} />
+          </label>
+
+          <label className="block text-xs text-dusk-300 font-medium">
+            {tr('Notas internas')}
+            <textarea className="input mt-1 min-h-[100px]" value={notes} maxLength={2000}
+                      placeholder={tr('Ex: Inclui materiais, visita técnica e limpeza final.')}
+                      onChange={(e) => setNotes(e.target.value)} />
+          </label>
+
+          <div className="flex gap-2 justify-end pt-2">
+            <Button type="button" variant="ghost" onClick={onClose}>{tr('Cancelar')}</Button>
+            <Button type="submit" variant="primary" loading={saving}
+                    disabled={!canSave}
+                    leftIcon={<FileText className="w-4 h-4" />}>
+              {tr('Salvar cotação')}
             </Button>
           </div>
         </form>

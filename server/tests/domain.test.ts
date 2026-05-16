@@ -35,6 +35,7 @@ import {
 } from '../src/lib/finance';
 import { requireAuth, revokeUserTokens, signToken } from '../src/lib/auth';
 import { canAssignTicketToUser, listTicketTimeline, markTicketAgentFailed, recordTicketEvent } from '../src/lib/tickets';
+import { createTicketQuote, listTicketQuotes } from '../src/lib/ticket-quotes';
 import { createAgentRun, finishAgentRunFailure, finishAgentRunSuccess } from '../src/lib/agent-runs';
 import { buildAgentEvidenceSources } from '../src/lib/agent-evidence';
 import { evaluateAgentAutoDispatch } from '../src/lib/agent-auto-dispatch';
@@ -54,6 +55,7 @@ function resetDb() {
     'agent_turns',
     'agent_threads',
     'ticket_events',
+    'ticket_vendor_quotes',
     'ticket_attachments',
     'ticket_comments',
     'ticket_work_orders',
@@ -918,6 +920,74 @@ test('ticket timeline orders events and hides admin-only entries from residents'
     `INSERT INTO condominiums (name, address, invite_code) VALUES ('Other Timeline Condo', '2 Main', 'TLINE2')`
   ).run().lastInsertRowid);
   assert.equal(listTicketTimeline({ ticketId, condoId: otherCondoId, role: 'board_admin' }).length, 0);
+});
+
+test('ticket vendor quotes are condo-scoped and hidden from residents', () => {
+  resetDb();
+  const { condoId, unit101 } = createCondoFixture();
+  const adminId = createUser('quotes-admin@example.com', 'board_admin');
+  const residentId = createUser('quotes-resident@example.com');
+  db.prepare(`UPDATE users SET condominium_id = ? WHERE id IN (?, ?)`).run(condoId, adminId, residentId);
+  db.prepare(
+    `INSERT INTO user_unit (user_id, unit_id, relationship, status, primary_contact, voting_weight)
+     VALUES (?, ?, 'owner', 'active', 1, 1.0)`
+  ).run(residentId, unit101);
+
+  const vendorId = Number(db.prepare(
+    `INSERT INTO service_contacts (condominium_id, category, company_name, contact_name, phone, active, preferred)
+     VALUES (?, 'general_maintenance', 'FixFast', 'Nora', '+15551231234', 1, 1)`
+  ).run(condoId).lastInsertRowid);
+  const otherCondoId = Number(db.prepare(
+    `INSERT INTO condominiums (name, address, invite_code) VALUES ('Quote Leak Condo', '4 Main', 'QUOTE2')`
+  ).run().lastInsertRowid);
+  const otherVendorId = Number(db.prepare(
+    `INSERT INTO service_contacts (condominium_id, category, company_name, active)
+     VALUES (?, 'general_maintenance', 'Other Vendor', 1)`
+  ).run(otherCondoId).lastInsertRowid);
+  const ticketId = Number(db.prepare(
+    `INSERT INTO tickets (condominium_id, unit_id, reporter_id, title, description, category, priority, verification_threshold)
+     VALUES (?, ?, ?, 'Lobby repair', 'Need quotes.', 'maintenance', 'normal', 1)`
+  ).run(condoId, unit101, residentId).lastInsertRowid);
+
+  const quote = createTicketQuote({
+    condoId,
+    ticketId,
+    actorUserId: adminId,
+    serviceContactId: vendorId,
+    quoteAmountCents: 125000,
+    currency: 'USD',
+    availability: 'Tomorrow morning',
+    warranty: '90 days',
+    notes: 'Admin-only price detail and internal negotiation notes.',
+  });
+  assert.equal(quote.ok, true);
+
+  const wrongVendor = createTicketQuote({
+    condoId,
+    ticketId,
+    actorUserId: adminId,
+    serviceContactId: otherVendorId,
+    vendorName: 'Other Vendor',
+  });
+  assert.equal(wrongVendor.ok, false);
+  assert.equal((wrongVendor as any).error, 'vendor_not_in_condo');
+
+  const adminQuotes = listTicketQuotes({ condoId, ticketId, role: 'board_admin' });
+  assert.equal(adminQuotes.length, 1);
+  assert.equal(adminQuotes[0].vendor_name, 'FixFast');
+  assert.equal(adminQuotes[0].quote_amount_cents, 125000);
+  assert.match(adminQuotes[0].notes || '', /Admin-only price detail/);
+
+  const residentQuotes = listTicketQuotes({ condoId, ticketId, role: 'resident' });
+  assert.equal(residentQuotes.length, 0);
+
+  const crossCondo = listTicketQuotes({ condoId: otherCondoId, ticketId, role: 'board_admin' });
+  assert.equal(crossCondo.length, 0);
+
+  const adminTimeline = listTicketTimeline({ ticketId, condoId, role: 'board_admin' });
+  assert.ok(adminTimeline.some((event) => event.event_type === 'vendor.quote_added'));
+  const residentTimeline = listTicketTimeline({ ticketId, condoId, role: 'resident' });
+  assert.ok(!residentTimeline.some((event) => event.event_type === 'vendor.quote_added'));
 });
 
 test('board packet aggregates monthly operations without cross-condo leakage', () => {
