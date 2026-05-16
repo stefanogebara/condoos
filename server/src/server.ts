@@ -10,6 +10,7 @@ import morgan from 'morgan';
 import { requireAuth, requireActiveMembership } from './lib/auth';
 import { startVoteCloser } from './lib/vote-closer';
 import { startSlaEscalator } from './lib/sla-escalator';
+import { startBackupScheduler } from './lib/backup';
 import { getWhatsAppHealth, getWhatsAppStatus } from './lib/whatsapp';
 import { captureException, initSentry } from './lib/sentry';
 import authRoutes from './routes/auth';
@@ -22,6 +23,7 @@ import proposalsRoutes from './routes/proposals';
 import meetingsRoutes from './routes/meetings';
 import usersRoutes from './routes/users';
 import aiRoutes from './routes/ai';
+import adminOpsRoutes from './routes/admin-ops';
 import onboardingRoutes from './routes/onboarding';
 import membershipsRoutes from './routes/memberships';
 import assembliesRoutes from './routes/assemblies';
@@ -154,6 +156,7 @@ app.use('/api/proposals',     scoped, proposalsRoutes);
 app.use('/api/meetings',      scoped, meetingsRoutes);
 app.use('/api/users',         scoped, usersRoutes);
 app.use('/api/ai',            scoped, aiRoutes);
+app.use('/api/admin',         scoped, adminOpsRoutes);
 app.use('/api/memberships',   scoped, membershipsRoutes);
 app.use('/api/assemblies',    scoped, assembliesRoutes);
 app.use('/api/audit',         scoped, auditRoutes);
@@ -198,6 +201,7 @@ app.listen(PORT, () => {
     // delay is one interval. Cheaper than 60s on Fly's GB-hour billing while
     // still well under the smallest (urgent=2h) window.
     startSlaEscalator(5 * 60_000);
+    startBackupScheduler();
     console.log('[vote-closer] started (60s interval)');
     console.log('[finance] scheduled invoice generator started (6h interval)');
     console.log('[notification-outbox] retry loop started (60s interval)');

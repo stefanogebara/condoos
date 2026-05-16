@@ -2690,3 +2690,32 @@ test('finance: userCanSeeUnit rejects cross-unit reads from non-admin residents'
   db.prepare(`UPDATE users SET condominium_id = ? WHERE id = ?`).run(condoId, admin);
   assert.equal(userCanSeeUnit(admin, 'board_admin', unit102, condoId), true);
 });
+
+test('backup: returns not_configured when S3 env vars are absent', async () => {
+  const { runBackup, backupConfigured } = await import('../src/lib/backup');
+  // Test env never sets BACKUP_S3_*; confirm graceful no-op rather than crash.
+  assert.equal(backupConfigured(), false);
+  const r = await runBackup();
+  assert.equal(r.ok, false);
+  assert.equal(r.error, 'not_configured');
+});
+
+test('backup: db.backup() produces a readable consistent snapshot', async () => {
+  // Don't go through runBackup() (it needs S3). Just prove the underlying
+  // snapshot mechanism works end-to-end: write data, snapshot, reopen,
+  // count rows. This is the bit that breaks silently if better-sqlite3
+  // ever changes its backup() shape.
+  const fs = await import('fs');
+  const os = await import('os');
+  const path = await import('path');
+  const Database = (await import('better-sqlite3')).default;
+  resetDb();
+  const { condoId } = createCondoFixture();
+  const tmp = path.join(os.tmpdir(), `condoos-test-${Date.now()}.sqlite`);
+  await (db as any).backup(tmp);
+  const snap = new Database(tmp, { readonly: true });
+  const condos = snap.prepare('SELECT id FROM condominiums').all() as Array<{ id: number }>;
+  snap.close();
+  fs.unlinkSync(tmp);
+  assert.ok(condos.some((c) => c.id === condoId), 'snapshot contains the condo we just inserted');
+});
