@@ -765,18 +765,18 @@ export default function BoardAgent() {
           <GlassCard variant="clay" className="p-5 overflow-hidden relative">
             <div className="absolute -right-16 -top-16 w-44 h-44 rounded-full bg-sage-200/50 blur-3xl" />
             <div className="relative">
-              <div className="flex items-start justify-between gap-3">
-                <div>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <Badge tone="sage">{tr('Ação recomendada')}</Badge>
                     {result._fallback ? <Badge tone="warning">{tr('Fallback seguro')}</Badge> : null}
                     <Badge tone="neutral">{agentTaskTypeLabel(result.task_type, tr)}</Badge>
                     {turns.length > 1 && <Badge tone="neutral">{tr('Turno')} {turns.length}</Badge>}
                   </div>
-                  <h2 className="font-display text-3xl text-dusk-500 mt-3">{result.recommended_next_step}</h2>
+                  <h2 className="font-display text-2xl sm:text-3xl text-dusk-500 mt-3">{result.recommended_next_step}</h2>
                   <p className="text-sm text-dusk-400 mt-3 max-w-3xl whitespace-pre-line">{result.summary}</p>
                 </div>
-                <Button type="button" variant="ghost" size="sm" onClick={() => copyText(formatAgentPlanForCopy(result, tr))} leftIcon={<Copy className="w-4 h-4" />}>
+                <Button type="button" variant="ghost" size="sm" className="self-start sm:shrink-0" onClick={() => copyText(formatAgentPlanForCopy(result, tr))} leftIcon={<Copy className="w-4 h-4" />}>
                   {tr('Copiar plano')}
                 </Button>
               </div>
