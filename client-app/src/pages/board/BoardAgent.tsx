@@ -540,7 +540,7 @@ export default function BoardAgent() {
         title={tr('Agente IA')}
         subtitle={tr('Copiloto operacional para consertos, instalações e decisões — usa a sua rede de fornecedores cadastrada para sugerir e enviar o próximo passo.')}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               type="button"
               variant="ghost"
