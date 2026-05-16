@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import db from '../db';
-import { requireAuth, requireRole, getActiveCondoId, AuthedRequest } from '../lib/auth';
+import { requireAuth, requireActiveMembership, requireRole, getActiveCondoId, AuthedRequest } from '../lib/auth';
 import { ok, fail } from '../lib/respond';
 import { notifyUsers } from '../lib/whatsapp';
 import { audit } from '../lib/audit';
@@ -9,7 +9,7 @@ import { createInAppNotification } from '../lib/in-app-notifications';
 const router = Router();
 
 // List packages: residents see their own, board sees all for the condo
-router.get('/', requireAuth, (req: AuthedRequest, res) => {
+router.get('/', requireAuth, requireActiveMembership, (req: AuthedRequest, res) => {
   const u = req.user!;
   const rows = u.role === 'board_admin'
     ? db.prepare(
@@ -24,7 +24,7 @@ router.get('/', requireAuth, (req: AuthedRequest, res) => {
   return ok(res, rows);
 });
 
-router.post('/:id/pickup', requireAuth, (req: AuthedRequest, res) => {
+router.post('/:id/pickup', requireAuth, requireActiveMembership, (req: AuthedRequest, res) => {
   const u = req.user!;
   const id = Number(req.params.id);
   const pkg = db.prepare(
@@ -44,7 +44,7 @@ router.post('/:id/pickup', requireAuth, (req: AuthedRequest, res) => {
   return ok(res, { id, status: 'picked_up' });
 });
 
-router.post('/:id/notify-resident', requireAuth, async (req: AuthedRequest, res) => {
+router.post('/:id/notify-resident', requireAuth, requireActiveMembership, async (req: AuthedRequest, res) => {
   const u = req.user!;
   if (!['board_admin', 'concierge'].includes(u.role)) return fail(res, 'forbidden', 403);
   const id = Number(req.params.id);
@@ -81,7 +81,7 @@ router.post('/:id/notify-resident', requireAuth, async (req: AuthedRequest, res)
 });
 
 // Board logs a new package
-router.post('/', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.post('/', requireAuth, requireActiveMembership, requireRole('board_admin'), (req: AuthedRequest, res) => {
   const { recipient_id, carrier, description } = req.body || {};
   if (!recipient_id || !carrier) return fail(res, 'missing_fields');
   const u = req.user!;

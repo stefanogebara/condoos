@@ -1,13 +1,13 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import db from '../db';
-import { requireAuth, requireRole, AuthedRequest } from '../lib/auth';
+import { requireAuth, requireActiveMembership, requireRole, AuthedRequest } from '../lib/auth';
 import { ok, fail } from '../lib/respond';
 import { audit } from '../lib/audit';
 
 const router = Router();
 
-router.get('/', requireAuth, (req: AuthedRequest, res) => {
+router.get('/', requireAuth, requireActiveMembership, (req: AuthedRequest, res) => {
   const u = req.user!;
   const rows = db.prepare(
     `SELECT a.*, usr.first_name, usr.last_name
@@ -28,7 +28,7 @@ const createAnnouncementSchema = z.object({
   related_proposal_id: z.number().int().positive().optional().nullable(),
 });
 
-router.post('/', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.post('/', requireAuth, requireActiveMembership, requireRole('board_admin'), (req: AuthedRequest, res) => {
   const u = req.user!;
   const parsed = createAnnouncementSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());

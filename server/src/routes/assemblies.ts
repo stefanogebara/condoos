@@ -525,12 +525,18 @@ router.post('/:id/agenda/:itemId/vote', requireAuth, (req: AuthedRequest, res) =
     ).run(id, itemId, req.user!.id, effective_owner_id, choice, weight);
   }
   const tally = getAgendaTally(itemId);
+  // Ballot secrecy: do NOT write `choice + effective_owner_id` together
+  // into the audit log — that pair de-anonymises the vote for anyone with
+  // audit-table access. The canonical record stays in `assembly_votes`
+  // (legal challenges require it), and the audit log only records that
+  // a vote was cast (with the proxy bit so the operator timeline is
+  // still legible).
   audit(req, {
     action: 'assembly.vote',
     target_type: 'assembly_agenda_item',
     target_id: itemId,
     condominium_id: condoId,
-    metadata: { assembly_id: id, choice, effective_owner_id },
+    metadata: { assembly_id: id, via_proxy: req.user!.id !== effective_owner_id },
   });
   return ok(res, { tally });
 });

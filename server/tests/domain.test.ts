@@ -2666,3 +2666,27 @@ test('ai-usage: summaries are condo-scoped and resettable', () => {
   resetDb();
   assert.equal(getAiUsageSummary(7).total_calls, 0);
 });
+
+test('finance: userCanSeeUnit rejects cross-unit reads from non-admin residents', async () => {
+  const { userCanSeeUnit } = await import('../src/lib/finance');
+  resetDb();
+  const { condoId, unit101, unit102 } = createCondoFixture();
+  const resident = createUser('owner-101@example.com');
+  db.prepare(`UPDATE users SET condominium_id = ? WHERE id = ?`).run(condoId, resident);
+  db.prepare(
+    `INSERT INTO user_unit (user_id, unit_id, relationship, status, primary_contact, voting_weight)
+     VALUES (?, ?, 'owner', 'active', 1, 1.0)`
+  ).run(resident, unit101);
+
+  // Own unit — allowed.
+  assert.equal(userCanSeeUnit(resident, 'resident', unit101, condoId), true);
+  // Neighbour's unit — refused (the "I own 301, give me 302" attack).
+  assert.equal(userCanSeeUnit(resident, 'resident', unit102, condoId), false);
+  // Revoked membership — refused (was 'active', now lost access).
+  db.prepare(`UPDATE user_unit SET status='revoked' WHERE user_id=? AND unit_id=?`).run(resident, unit101);
+  assert.equal(userCanSeeUnit(resident, 'resident', unit101, condoId), false);
+  // Board admin — always sees every unit in the condo.
+  const admin = createUser('board@example.com', 'board_admin');
+  db.prepare(`UPDATE users SET condominium_id = ? WHERE id = ?`).run(condoId, admin);
+  assert.equal(userCanSeeUnit(admin, 'board_admin', unit102, condoId), true);
+});

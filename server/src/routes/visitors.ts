@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import db from '../db';
-import { requireAuth, AuthedRequest } from '../lib/auth';
+import { requireAuth, requireActiveMembership, AuthedRequest } from '../lib/auth';
 import { ok, fail } from '../lib/respond';
 import { audit } from '../lib/audit';
 
@@ -23,7 +23,7 @@ const createVisitorSchema = z.object({
   recurring_until: z.string().datetime().or(z.string().regex(/^\d{4}-\d{2}-\d{2}/)).optional().nullable(),
 });
 
-router.get('/', requireAuth, (req: AuthedRequest, res) => {
+router.get('/', requireAuth, requireActiveMembership, (req: AuthedRequest, res) => {
   const u = req.user!;
   const rows = u.role === 'board_admin'
     ? db.prepare(
@@ -38,7 +38,7 @@ router.get('/', requireAuth, (req: AuthedRequest, res) => {
   return ok(res, rows);
 });
 
-router.post('/', requireAuth, (req: AuthedRequest, res) => {
+router.post('/', requireAuth, requireActiveMembership, (req: AuthedRequest, res) => {
   const u = req.user!;
   const parsed = createVisitorSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
@@ -110,7 +110,7 @@ function callerSharesUnitWithHost(hostId: number, callerId: number, condoId: num
   return !!row;
 }
 
-router.post('/:id/decide', requireAuth, (req: AuthedRequest, res) => {
+router.post('/:id/decide', requireAuth, requireActiveMembership, (req: AuthedRequest, res) => {
   const u = req.user!;
   const id = Number(req.params.id);
   const decision = req.body?.decision;
@@ -132,7 +132,7 @@ router.post('/:id/decide', requireAuth, (req: AuthedRequest, res) => {
   return ok(res, { id, status: decision });
 });
 
-router.post('/:id/arrived', requireAuth, (req: AuthedRequest, res) => {
+router.post('/:id/arrived', requireAuth, requireActiveMembership, (req: AuthedRequest, res) => {
   // Audit N3 — previously any resident in the condo could mark any visitor
   // (including someone else's pending visitor) as arrived. The intended gate
   // is "the resident hosting this visitor confirms the arrival OR a staff

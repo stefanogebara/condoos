@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import db from '../db';
-import { requireAuth, requireRole, AuthedRequest } from '../lib/auth';
+import { requireAuth, requireActiveMembership, requireRole, AuthedRequest } from '../lib/auth';
 import { ok, fail } from '../lib/respond';
 import { audit } from '../lib/audit';
 import { notifyUsers } from '../lib/whatsapp';
@@ -108,7 +108,7 @@ function withinOpenReservationWeek(starts: Date) {
   return starts >= weekStart && starts < weekEnd;
 }
 
-router.get('/', requireAuth, (req: AuthedRequest, res) => {
+router.get('/', requireAuth, requireActiveMembership, (req: AuthedRequest, res) => {
   const includeInactive = req.user!.role === 'board_admin' && req.query.include_inactive === '1';
   const rows = db.prepare(
     `SELECT * FROM amenities
@@ -118,7 +118,7 @@ router.get('/', requireAuth, (req: AuthedRequest, res) => {
   return ok(res, rows);
 });
 
-router.post('/', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.post('/', requireAuth, requireActiveMembership, requireRole('board_admin'), (req: AuthedRequest, res) => {
   const cleaned = cleanAmenityInput(req.body || {});
   if ('error' in cleaned) return fail(res, String(cleaned.error), 400);
   const a = cleaned.data;
@@ -142,7 +142,7 @@ router.post('/', requireAuth, requireRole('board_admin'), (req: AuthedRequest, r
   return ok(res, { id: row.lastInsertRowid, ...a });
 });
 
-router.patch('/:id', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.patch('/:id', requireAuth, requireActiveMembership, requireRole('board_admin'), (req: AuthedRequest, res) => {
   const id = Number(req.params.id);
   const existing = db.prepare(
     `SELECT * FROM amenities WHERE id = ? AND condominium_id = ?`
@@ -171,7 +171,7 @@ router.patch('/:id', requireAuth, requireRole('board_admin'), (req: AuthedReques
   return ok(res, { id, ...a });
 });
 
-router.delete('/:id', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.delete('/:id', requireAuth, requireActiveMembership, requireRole('board_admin'), (req: AuthedRequest, res) => {
   const id = Number(req.params.id);
   const existing = db.prepare(
     `SELECT * FROM amenities WHERE id = ? AND condominium_id = ?`
@@ -188,7 +188,7 @@ router.delete('/:id', requireAuth, requireRole('board_admin'), (req: AuthedReque
   return ok(res, { id, active: 0 });
 });
 
-router.get('/reservations', requireAuth, (req: AuthedRequest, res) => {
+router.get('/reservations', requireAuth, requireActiveMembership, (req: AuthedRequest, res) => {
   const u = req.user!;
   const rows = db.prepare(
     `SELECT r.*, a.name AS amenity_name, a.icon AS amenity_icon,
@@ -223,7 +223,7 @@ router.get('/reservations', requireAuth, (req: AuthedRequest, res) => {
   return ok(res, safeRows);
 });
 
-router.get('/:id/slots', requireAuth, (req: AuthedRequest, res) => {
+router.get('/:id/slots', requireAuth, requireActiveMembership, (req: AuthedRequest, res) => {
   const id = Number(req.params.id);
   const date = typeof req.query.date === 'string' ? req.query.date : '';
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return fail(res, 'invalid_date', 400);
@@ -291,7 +291,7 @@ router.get('/:id/slots', requireAuth, (req: AuthedRequest, res) => {
   });
 });
 
-router.post('/reservations', requireAuth, (req: AuthedRequest, res) => {
+router.post('/reservations', requireAuth, requireActiveMembership, (req: AuthedRequest, res) => {
   const u = req.user!;
   const { amenity_id, starts_at, ends_at, expected_guests, guest_list, notes } = req.body || {};
   if (!amenity_id || !starts_at || !ends_at) return fail(res, 'missing_fields');
@@ -368,7 +368,7 @@ router.post('/reservations', requireAuth, (req: AuthedRequest, res) => {
   return ok(res, { id: row.lastInsertRowid, expected_guests: guests });
 });
 
-router.delete('/reservations/:id', requireAuth, (req: AuthedRequest, res) => {
+router.delete('/reservations/:id', requireAuth, requireActiveMembership, (req: AuthedRequest, res) => {
   const u = req.user!;
   const id = Number(req.params.id);
   const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim().slice(0, 300) : '';
