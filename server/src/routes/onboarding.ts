@@ -15,7 +15,13 @@ import { normalizeServiceContact, serviceContactSchema } from '../lib/service-co
 
 const router = Router();
 const lookupRateLimit = createRateLimit({ keyPrefix: 'onboarding_lookup', windowMs: 60_000, max: 60 });
+// Resident-side write (claim a unit) — residents legitimately retry on bad
+// codes, so this stays generous.
 const onboardingWriteRateLimit = createRateLimit({ keyPrefix: 'onboarding_write', windowMs: 60 * 60_000, max: 20 });
+// Condo creation — heavy DB write (default amenities + buildings + up to
+// 3,200 unit rows). 20/h per IP let one attacker spin up ~480 fake condos/
+// day. Drop to 3/h until we add an email-verification + captcha gate.
+const createBuildingRateLimit = createRateLimit({ keyPrefix: 'onboarding_create_condo', windowMs: 60 * 60_000, max: 3 });
 
 const INVITE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // avoids 0/O/1/I/L
 
@@ -27,6 +33,22 @@ function randomCode(): string {
   let out = '';
   for (let i = 0; i < 6; i++) out += INVITE_ALPHABET[bytes[i] % INVITE_ALPHABET.length];
   return out;
+}
+
+// Retry on the rare collision. 6 chars × 31-char alphabet = ~887M space,
+// so the birthday hit is years away — but a collision silently routed a
+// new condo's joiners at the OLDER condo's units (cross-tenant leak via
+// /onboarding/by-code/:code). DB now has a UNIQUE index on invite_code;
+// retry a handful of times before giving up.
+function uniqueRandomCode(maxAttempts = 8): string {
+  for (let i = 0; i < maxAttempts; i++) {
+    const code = randomCode();
+    const hit = db.prepare(`SELECT 1 FROM condominiums WHERE invite_code = ? LIMIT 1`).get(code);
+    if (!hit) return code;
+  }
+  // Astronomically unlikely; surface the failure so we can investigate
+  // rather than hand back a duplicate.
+  throw new Error('invite_code_collision');
 }
 
 const defaultAmenities = [
@@ -113,7 +135,7 @@ const createSchema = z.object({
   }
 });
 
-router.post('/create-building', onboardingWriteRateLimit, requireAuth, asyncHandler(async (req: AuthedRequest, res) => {
+router.post('/create-building', createBuildingRateLimit, requireAuth, asyncHandler(async (req: AuthedRequest, res) => {
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
   const u = req.user!;
@@ -121,7 +143,7 @@ router.post('/create-building', onboardingWriteRateLimit, requireAuth, asyncHand
 
   const tx = db.transaction(() => {
     // 1. Create condo
-    const inviteCode = randomCode();
+    const inviteCode = uniqueRandomCode();
     const condoId = Number(
       db.prepare(
         `INSERT INTO condominiums (name, address, invite_code, voting_model, require_approval, created_by_user_id)

@@ -17,6 +17,15 @@ interface PendingInvite {
   voting_weight: number;
 }
 
+// ⚠ Do NOT call this from /login or /register or any sign-up path. Matching
+// purely on email lets a hostile admin who can create invites (e.g. the
+// shared demo board_admin on prod) silently pull any future user signing
+// up with a planted email into their condo, with no audit trail and no
+// user consent. The safe path is /onboarding/join — the resident
+// explicitly types the condo invite_code and picks a unit. Auth routes
+// must NOT auto-claim. Keep this function around for the explicit-
+// redemption case (e.g. when /onboarding/join wants to also mark a
+// matching email-pre-bound invite as claimed atomically).
 export function claimPendingInvitesForUser(user: InviteClaimUser): number {
   const pendingInvites = db.prepare(
     `SELECT i.id, i.condominium_id, i.unit_id, i.relationship, i.primary_contact,

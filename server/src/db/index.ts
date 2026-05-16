@@ -241,6 +241,12 @@ export function initSchema() {
 
   // Additive column migrations that SQLite can't express in schema.sql.
   addColumnIfMissing('condominiums', 'invite_code',        `TEXT`);
+  // Defense in depth: a collision used to silently route a new condo's
+  // joiners at the OLDER condo's units. The route now retries on the
+  // application side, but the index guarantees the DB rejects a duplicate
+  // even if a future code path forgets. UNIQUE ignores NULL on SQLite,
+  // so legacy rows without a code don't conflict.
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_condominiums_invite_code ON condominiums(invite_code) WHERE invite_code IS NOT NULL`);
   addColumnIfMissing('condominiums', 'logo_url',           `TEXT`);
   addColumnIfMissing('condominiums', 'voting_model',       `TEXT NOT NULL DEFAULT 'one_per_unit'`);
   addColumnIfMissing('condominiums', 'require_approval',   `INTEGER NOT NULL DEFAULT 1`);

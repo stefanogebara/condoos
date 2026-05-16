@@ -5,7 +5,8 @@ import { z } from 'zod';
 import db from '../db';
 import { signToken, requireAuth, revokeUserTokens, AuthedRequest } from '../lib/auth';
 import { ok, fail, asyncHandler } from '../lib/respond';
-import { claimPendingInvitesForUser } from '../lib/invites';
+// claimPendingInvitesForUser intentionally NOT imported here — auto-claim
+// at signup is unsafe. See lib/invites.ts comment.
 import { GoogleAuthError, verifyGoogleCredential } from '../lib/google-auth';
 import { createRateLimit } from '../lib/rate-limit';
 import { demoAuthEnabled, isBlockedDemoCredential } from '../lib/demo-auth';
@@ -102,7 +103,9 @@ router.post('/login', authIpRateLimit, skipDemoCredentialLimit, asyncHandler(asy
   const match = await bcrypt.compare(parsed.data.password, hashToCheck);
   if (!row || !match) return fail(res, 'invalid_credentials', 401);
 
-  claimPendingInvitesForUser(row);
+  // Auto-claim used to run here — that path is unsafe (silent email-match
+  // join with no consent + no audit). The resident now goes through
+  // /onboarding/join to explicitly redeem the condo's invite_code.
   const token = signToken(row.id);
   const { password_hash, ...user } = row;
   return ok(res, { token, user });
@@ -128,7 +131,7 @@ router.post('/register', authIpRateLimit, authCredentialRateLimit, asyncHandler(
      FROM users WHERE id = ?`
   ).get(result.lastInsertRowid) as any;
 
-  claimPendingInvitesForUser(user);
+  // Auto-claim removed (see /login). Residents redeem via /onboarding/join.
   const token = signToken(user.id);
   return ok(res, { token, user }, 201);
 }));
@@ -205,7 +208,7 @@ router.post('/google', authIpRateLimit, authCredentialRateLimit, asyncHandler(as
     user.avatar_url = info.picture;
   }
 
-  claimPendingInvitesForUser(user);
+  // Auto-claim removed (see /login). Residents redeem via /onboarding/join.
 
   const token = signToken(user.id);
   return ok(res, { token, user });
@@ -271,9 +274,9 @@ router.post('/dev-register', authIpRateLimit, authCredentialRateLimit, asyncHand
      FROM users WHERE id = ?`
   ).get(result.lastInsertRowid) as any;
 
-  // Mirror /login + /google: claim any pending invites that match this email
-  // so an E2E run can exercise invite-claim flows without extra plumbing.
-  claimPendingInvitesForUser(row);
+  // Auto-claim removed. E2E tests that need invite redemption now go
+  // through /api/onboarding/join with the condo invite_code — same path
+  // as a real resident.
 
   const token = signToken(row.id);
   return ok(res, { token, user: row });
