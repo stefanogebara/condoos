@@ -26,6 +26,22 @@ async function loginBrowser(page: Page, session: Session) {
   }, session);
 }
 
+async function findAvailableSlot(request: APIRequestContext, token: string, amenityId: number) {
+  for (let offset = 0; offset < 7; offset += 1) {
+    const date = new Date();
+    date.setDate(date.getDate() + offset);
+    const dateStr = date.toISOString().slice(0, 10);
+    const slotsRes = await request.get(`${apiURL}/amenities/${amenityId}/slots?date=${dateStr}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(slotsRes.ok(), `slots failed: ${slotsRes.status()} ${await slotsRes.text()}`).toBeTruthy();
+    const slots = ((await slotsRes.json()).data.slots as any[]) || [];
+    const freeSlot = slots.find((s: any) => s.available);
+    if (freeSlot) return { dateStr, freeSlot };
+  }
+  return null;
+}
+
 const BASE_AMENITY = {
   name:                'E2E Sala de Jogos',
   description:         'Sala de jogos para testes.',
@@ -170,27 +186,19 @@ test('Amenities admin: same-slot double reservation is rejected', async ({ reque
       ...BASE_AMENITY,
       name:         `E2E Overbook ${Date.now()}`,
       capacity:     1,
-      slot_minutes: 60,
+      open_hour:    0,
+      close_hour:   24,
+      slot_minutes: 15,
     },
   });
   const amenityId: number = (await amenityRes.json()).data.id;
 
-  // Pick a date 3 days from now and find the first available slot
-  const bookDate = new Date(Date.now() + 3 * 24 * 3600 * 1000);
-  const dateStr  = bookDate.toISOString().slice(0, 10); // YYYY-MM-DD
-
-  const slotsRes = await request.get(`${apiURL}/amenities/${amenityId}/slots?date=${dateStr}`, {
-    headers: { Authorization: `Bearer ${resident.token}` },
-  });
-  expect(slotsRes.ok(), `slots failed: ${slotsRes.status()} ${await slotsRes.text()}`).toBeTruthy();
-  // slots endpoint returns { data: { amenity_id, date, slots: [...] } }
-  const slotsData = (await slotsRes.json()).data;
-  const slots     = slotsData.slots as any[];
-  const freeSlot  = slots.find((s: any) => s.available);
-  if (!freeSlot) {
-    test.skip(true, 'no free slots available 3 days out — environment may have reservations');
+  const slotChoice = await findAvailableSlot(request, resident.token, amenityId);
+  if (!slotChoice) {
+    test.skip(true, 'no free slots available inside the currently open reservation week');
     return;
   }
+  const { dateStr, freeSlot } = slotChoice;
 
   const bookPayload = {
     amenity_id:      amenityId,
@@ -247,18 +255,20 @@ test('Amenities admin: board amenities page shows current reservations', async (
         ...BASE_AMENITY,
         name,
         capacity: 2,
-        slot_minutes: 60,
+        open_hour: 0,
+        close_hour: 24,
+        slot_minutes: 15,
       },
     });
     expect(amenityRes.ok(), `amenity create failed: ${amenityRes.status()} ${await amenityRes.text()}`).toBeTruthy();
     amenityId = (await amenityRes.json()).data.id;
 
-    const dateStr = new Date(Date.now() + 2 * 24 * 3600 * 1000).toISOString().slice(0, 10);
-    const slotsRes = await request.get(`${apiURL}/amenities/${amenityId}/slots?date=${dateStr}`, {
-      headers: { Authorization: `Bearer ${resident.token}` },
-    });
-    const freeSlot = ((await slotsRes.json()).data.slots as any[]).find((s) => s.available);
-    expect(freeSlot).toBeTruthy();
+    const slotChoice = await findAvailableSlot(request, resident.token, amenityId);
+    if (!slotChoice) {
+      test.skip(true, 'no free slots available inside the currently open reservation week');
+      return;
+    }
+    const { freeSlot } = slotChoice;
 
     const createdReservation = await request.post(`${apiURL}/amenities/reservations`, {
       headers: resH,

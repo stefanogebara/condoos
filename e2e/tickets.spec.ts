@@ -335,7 +335,7 @@ test('Tickets: admin creates and completes a work order', async ({ request, page
   await installSession(page, admin);
   await page.goto('/board/tickets', { waitUntil: 'domcontentloaded' });
   await page.getByText(title).click();
-  await expect(page.getByText(`Repair order ${tag}`)).toBeVisible();
+  await expect(page.getByText(`Repair order ${tag}`, { exact: true })).toBeVisible();
 
   const completeRes = await request.patch(`${apiURL}/tickets/${ticketId}/work-order/${workOrder.id}`, {
     headers: admH,

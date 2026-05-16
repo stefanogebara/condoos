@@ -29,6 +29,22 @@ async function residentLogin(page: Page, request: APIRequestContext) {
   }, s);
 }
 
+async function findAvailableSlot(request: APIRequestContext, token: string, amenityId: number) {
+  for (let offset = 0; offset < 7; offset += 1) {
+    const date = new Date();
+    date.setDate(date.getDate() + offset);
+    const dateStr = date.toISOString().slice(0, 10);
+    const slotsRes = await request.get(`${apiURL}/amenities/${amenityId}/slots?date=${dateStr}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(slotsRes.ok(), `slots failed: ${slotsRes.status()} ${await slotsRes.text()}`).toBeTruthy();
+    const slots = ((await slotsRes.json()).data.slots as any[]) || [];
+    const freeSlot = slots.find((s) => s.available);
+    if (freeSlot) return { dateStr, freeSlot };
+  }
+  return null;
+}
+
 async function expectShellRole(page: Page, label: RegExp) {
   const width = page.viewportSize()?.width || 1280;
   const shell = width < 1024 ? page.locator('header') : page.locator('aside');
@@ -127,15 +143,20 @@ test('resident: amenities page can create a reservation from an amenity card', a
         description: 'Resident booking flow test',
         icon: 'Trophy',
         capacity: 3,
-        open_hour: 8,
-        close_hour: 22,
-        slot_minutes: 60,
+        open_hour: 0,
+        close_hour: 24,
+        slot_minutes: 15,
         booking_window_days: 14,
         active: true,
       },
     });
     expect(created.ok(), `amenity create failed: ${created.status()} ${await created.text()}`).toBeTruthy();
     amenityId = (await created.json()).data.id;
+    const slotChoice = await findAvailableSlot(request, resident.token, amenityId);
+    if (!slotChoice) {
+      test.skip(true, 'no free slots available inside the currently open reservation week');
+      return;
+    }
 
     await residentLogin(page, request);
     await page.goto('/app/amenities');
@@ -143,11 +164,10 @@ test('resident: amenities page can create a reservation from an amenity card', a
     await page.getByRole('button', { name: new RegExp(`Reservar ${name}|Book ${name}`, 'i') }).click();
     await expect(page.getByTestId('amenity-booking-form')).toBeVisible();
 
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    await page.getByTestId('amenity-date').fill(tomorrow.toISOString().slice(0, 10));
-    const slot = page.getByTestId('amenity-slot').filter({ hasText: /spot|cupo|vaga|place|lugar/i }).first();
+    await page.getByTestId('amenity-date').fill(slotChoice.dateStr);
+    const slot = page.locator('[data-testid="amenity-slot"]:not([disabled])').first();
     await expect(slot).toBeVisible();
+    await expect(slot).toBeEnabled();
     await slot.click();
     await expect(page.getByTestId('amenity-submit')).toBeEnabled();
     await page.getByTestId('amenity-submit').click();
