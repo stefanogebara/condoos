@@ -30,9 +30,15 @@ Run before a serious demo or production review:
 ```bash
 npm run test:e2e:prod:smoke
 npm run test:e2e:prod:safe:desktop
+npm run audit:prod:hardening
 npm run audit:ops:backup-restore
 npm run audit:perf:prod
 ```
+
+`audit:prod:hardening` is intentionally strict: it fails until production has
+both email verification and Turnstile captcha active for create-building. Use
+`npm run audit:prod:hardening:warn` for disposable demo environments where
+captcha keys have not been installed yet.
 
 ## Product Gate
 

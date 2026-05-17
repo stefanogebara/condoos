@@ -37,11 +37,14 @@ npm run test:e2e:pilot
 Before using live Vercel/Fly in front of someone, run:
 
 ```bash
+npm run audit:prod:hardening:warn
 npm run test:e2e:prod:smoke
 npm run test:e2e:prod:safe:desktop
 ```
 
 Use `npm run test:e2e:prod:safe` when mobile production coverage is needed too. Do not run the full mutating E2E suite against production unless the database is disposable or a cleanup plan exists.
+For a real non-demo production launch, run `npm run audit:prod:hardening`
+instead; it fails until Turnstile captcha is fully configured.
 
 ## Current Watch Items
 

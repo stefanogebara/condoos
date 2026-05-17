@@ -23,6 +23,8 @@
     "test:e2e:prod:smoke": "cross-env E2E_BASE_URL=https://condoos-ten.vercel.app E2E_API_URL=https://condoos-api.fly.dev/api E2E_WORKERS=1 E2E_HAS_LLM=1 playwright test e2e/i18n.spec.ts e2e/intent-smoke.spec.ts e2e/ui-smoke.spec.ts --project=desktop",
     "test:e2e:prod:ui": "cross-env E2E_BASE_URL=https://condoos-ten.vercel.app E2E_API_URL=https://condoos-api.fly.dev/api E2E_WORKERS=1 playwright test e2e/intent-smoke.spec.ts e2e/ui-walkthrough.spec.ts --project=desktop",
     "audit:perf:prod": "node scripts/lighthouse-budget.mjs",
+    "audit:prod:hardening": "node scripts/prod-hardening-check.mjs",
+    "audit:prod:hardening:warn": "node scripts/prod-hardening-check.mjs --warn-only-captcha",
     "audit:ops:backup-restore": "node scripts/backup-restore-dry-run.mjs",
     "test:all": "npm test && npm run build && npm run test:e2e",
     "e2e:seed": "npm --prefix server run db:reset:e2e",
