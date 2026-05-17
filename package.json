@@ -26,6 +26,8 @@
     "audit:prod:hardening": "node scripts/prod-hardening-check.mjs",
     "audit:prod:hardening:warn": "node scripts/prod-hardening-check.mjs --warn-only-captcha",
     "audit:ops:backup-restore": "node scripts/backup-restore-dry-run.mjs",
+    "ops:turnstile:setup": "node scripts/setup-turnstile.mjs",
+    "ops:turnstile:dry-run": "node scripts/setup-turnstile.mjs --dry-run",
     "test:all": "npm test && npm run build && npm run test:e2e",
     "e2e:seed": "npm --prefix server run db:reset:e2e",
     "e2e:server": "npm --prefix server run start:e2e",

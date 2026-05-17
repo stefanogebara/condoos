@@ -44,6 +44,20 @@ flyctl secrets set -a condoos-api TWILIO_AUTH_TOKEN=...
 flyctl secrets set -a condoos-api TWILIO_WHATSAPP_FROM=whatsapp:+14155238886
 ```
 
+Turnstile setup can be automated once you have a Cloudflare account ID and an
+API token with Turnstile widget write permission:
+
+```bash
+CLOUDFLARE_ACCOUNT_ID=... CLOUDFLARE_API_TOKEN=... npm run ops:turnstile:setup
+```
+
+The script creates a managed Turnstile widget for `condoos-ten.vercel.app`,
+sets `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`, and
+`CREATE_BUILDING_CAPTCHA_REQUIRED=1` on Fly, deploys the API, then runs
+`npm run audit:prod:hardening`. Use `npm run ops:turnstile:dry-run` to preview
+without creating a widget, or run `node scripts/setup-turnstile.mjs
+--domains=condoos-ten.vercel.app,example.com` to override domains.
+
 WAHA outbound alternative:
 
 ```bash
