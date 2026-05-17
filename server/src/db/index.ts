@@ -382,6 +382,22 @@ export function initSchema() {
   // Concierge role (#11) — widen the role CHECK constraint. Done AFTER
   // the columns above so the rebuilt table preserves them.
   migrateUsersRoleConcierge();
+  // Account verification for sensitive first-run actions. Added after the
+  // concierge table rebuild so legacy role migrations do not drop the columns.
+  addColumnIfMissing('users',        'email_verified_at', `TEXT`);
+  addColumnIfMissing('users',        'email_verification_sent_at', `TEXT`);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS email_verification_tokens (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token_hash  TEXT NOT NULL UNIQUE,
+      expires_at  TEXT NOT NULL,
+      used_at     TEXT,
+      created_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_email_verification_tokens_user
+      ON email_verification_tokens(user_id, used_at, expires_at);
+  `);
   // Party/event reservations: guest count + names list so the porteiro
   // can admit by name when 30 people show up for a Saturday party.
   addColumnIfMissing('amenity_reservations', 'expected_guests', `INTEGER NOT NULL DEFAULT 0`);

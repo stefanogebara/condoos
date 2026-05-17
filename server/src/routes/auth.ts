@@ -10,6 +10,12 @@ import { ok, fail, asyncHandler } from '../lib/respond';
 import { GoogleAuthError, verifyGoogleCredential } from '../lib/google-auth';
 import { createRateLimit } from '../lib/rate-limit';
 import { demoAuthEnabled, isBlockedDemoCredential } from '../lib/demo-auth';
+import { getCaptchaPublicConfig } from '../lib/captcha';
+import {
+  consumeEmailVerificationToken,
+  emailVerificationRequiredForCreateBuilding,
+  issueAndSendEmailVerification,
+} from '../lib/email-verification';
 
 const router = Router();
 const AUTH_RATE_LIMIT_WINDOW_MS = 15 * 60_000;
@@ -54,6 +60,12 @@ const authCredentialRateLimit = createRateLimit({
   max: AUTH_RATE_LIMIT_MAX,
   key: authRateLimitKey,
 });
+const emailVerificationSendRateLimit = createRateLimit({
+  keyPrefix: 'auth_email_verification_send',
+  windowMs: 60 * 60_000,
+  max: 3,
+  key: (req) => `${clientIp(req)}:${(req as AuthedRequest).user?.id || 'anon'}`,
+});
 
 function skipDemoCredentialLimit(req: Request, _res: Response, next: NextFunction) {
   const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
@@ -85,6 +97,27 @@ const registerSchema = z.object({
 // migrate stored hashes to cost 12 (OWASP 2023 floor), bump this to 12 too.
 const DUMMY_BCRYPT_HASH = bcrypt.hashSync('not-a-real-password-timing-padding', 10);
 
+async function tryIssueEmailVerification(user: {
+  id: number;
+  email: string;
+  first_name?: string | null;
+  email_verified_at?: string | null;
+}) {
+  try {
+    const issued = await issueAndSendEmailVerification(user);
+    return {
+      status: issued.delivery.status,
+      provider: issued.delivery.provider,
+      expires_at: issued.expires_at,
+      error: issued.delivery.error,
+      verification_url: issued.verification_url,
+    };
+  } catch (err) {
+    console.warn('[auth] email verification send failed', err instanceof Error ? err.message : err);
+    return { status: 'failed', provider: 'none', error: 'email_verification_send_failed' };
+  }
+}
+
 router.post('/login', authIpRateLimit, skipDemoCredentialLimit, asyncHandler(async (req, res) => {
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
@@ -93,7 +126,8 @@ router.post('/login', authIpRateLimit, skipDemoCredentialLimit, asyncHandler(asy
   }
 
   const row = db.prepare(
-    `SELECT id, email, password_hash, role, condominium_id, first_name, last_name, unit_number, mobile_phone, home_phone
+    `SELECT id, email, password_hash, role, condominium_id, first_name, last_name,
+            unit_number, avatar_url, mobile_phone, home_phone, email_verified_at
      FROM users WHERE email = ?`
   ).get(parsed.data.email) as any;
 
@@ -127,13 +161,15 @@ router.post('/register', authIpRateLimit, authCredentialRateLimit, asyncHandler(
   ).run(email, pwHash, body.first_name.trim(), body.last_name.trim());
 
   const user = db.prepare(
-    `SELECT id, email, role, condominium_id, first_name, last_name, unit_number, avatar_url, mobile_phone, home_phone
+    `SELECT id, email, role, condominium_id, first_name, last_name, unit_number,
+            avatar_url, mobile_phone, home_phone, email_verified_at
      FROM users WHERE id = ?`
   ).get(result.lastInsertRowid) as any;
 
   // Auto-claim removed (see /login). Residents redeem via /onboarding/join.
+  const emailVerification = await tryIssueEmailVerification(user);
   const token = signToken(user.id);
-  return ok(res, { token, user }, 201);
+  return ok(res, { token, user, email_verification: emailVerification }, 201);
 }));
 
 router.get('/me', requireAuth, (req: AuthedRequest, res) => {
@@ -142,7 +178,8 @@ router.get('/me', requireAuth, (req: AuthedRequest, res) => {
 
 router.post('/refresh', requireAuth, (req: AuthedRequest, res) => {
   const row = db.prepare(
-    `SELECT id, email, role, condominium_id, first_name, last_name, unit_number, avatar_url, mobile_phone, home_phone
+    `SELECT id, email, role, condominium_id, first_name, last_name, unit_number,
+            avatar_url, mobile_phone, home_phone, email_verified_at
      FROM users WHERE id = ?`
   ).get(req.user!.id) as any;
   if (!row) return fail(res, 'user_not_found', 401);
@@ -155,12 +192,51 @@ router.delete('/logout', requireAuth, (req: AuthedRequest, res) => {
   return ok(res, { revoked: true });
 });
 
+router.post('/send-verification-email', requireAuth, emailVerificationSendRateLimit, asyncHandler(async (req: AuthedRequest, res) => {
+  const user = db.prepare(
+    `SELECT id, email, first_name, email_verified_at
+     FROM users WHERE id = ?`
+  ).get(req.user!.id) as { id: number; email: string; first_name: string; email_verified_at: string | null } | undefined;
+  if (!user) return fail(res, 'user_not_found', 401);
+  if (user.email_verified_at) {
+    return ok(res, {
+      status: 'already_verified',
+      email_verified_at: user.email_verified_at,
+      verification_required: emailVerificationRequiredForCreateBuilding(user),
+    });
+  }
+
+  const issued = await tryIssueEmailVerification(user);
+  return ok(res, {
+    ...issued,
+    verification_required: emailVerificationRequiredForCreateBuilding(user),
+  });
+}));
+
+const verifyEmailSchema = z.object({
+  token: z.string().min(20).max(2048),
+});
+
+router.post('/verify-email', authIpRateLimit, asyncHandler(async (req, res) => {
+  const parsed = verifyEmailSchema.safeParse(req.body);
+  if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
+  const result = consumeEmailVerificationToken(parsed.data.token);
+  if (!result.ok) return fail(res, result.error || 'invalid_or_used_token', 400);
+  return ok(res, {
+    verified: true,
+    user_id: result.user_id,
+    email_verified_at: result.email_verified_at,
+  });
+}));
+
 // GET /api/auth/config — tells the client which sign-in methods are enabled.
 router.get('/config', (_req, res) => {
   return ok(res, {
     google_client_id: process.env.GOOGLE_CLIENT_ID || null,
     google_enabled: !!process.env.GOOGLE_CLIENT_ID,
     demo_enabled: demoAuthEnabled(),
+    email_verification_required_for_create_building: emailVerificationRequiredForCreateBuilding(null),
+    ...getCaptchaPublicConfig(),
   });
 });
 
@@ -183,7 +259,8 @@ router.post('/google', authIpRateLimit, authCredentialRateLimit, asyncHandler(as
 
   // Look up existing user
   let user = db.prepare(
-    `SELECT id, email, role, condominium_id, first_name, last_name, unit_number, avatar_url, mobile_phone, home_phone
+    `SELECT id, email, role, condominium_id, first_name, last_name, unit_number,
+            avatar_url, mobile_phone, home_phone, email_verified_at
      FROM users WHERE email = ?`
   ).get(email) as any;
 
@@ -195,17 +272,30 @@ router.post('/google', authIpRateLimit, authCredentialRateLimit, asyncHandler(as
     const pwHash = bcrypt.hashSync(Math.random().toString(36).slice(2) + Date.now(), 10);
 
     const result = db.prepare(
-      `INSERT INTO users (condominium_id, email, password_hash, first_name, last_name, role, unit_number, avatar_url)
-       VALUES (?, ?, ?, ?, ?, 'resident', NULL, ?)`
+      `INSERT INTO users (
+         condominium_id, email, password_hash, first_name, last_name, role,
+         unit_number, avatar_url, email_verified_at
+       )
+       VALUES (?, ?, ?, ?, ?, 'resident', NULL, ?, CURRENT_TIMESTAMP)`
     ).run(null, email, pwHash, first, last, info.picture || null);
 
     user = db.prepare(
-      `SELECT id, email, role, condominium_id, first_name, last_name, unit_number, avatar_url, mobile_phone, home_phone
+      `SELECT id, email, role, condominium_id, first_name, last_name, unit_number,
+              avatar_url, mobile_phone, home_phone, email_verified_at
        FROM users WHERE id = ?`
     ).get(result.lastInsertRowid);
-  } else if (info.picture && !user.avatar_url) {
-    db.prepare(`UPDATE users SET avatar_url = ? WHERE id = ?`).run(info.picture, user.id);
-    user.avatar_url = info.picture;
+  } else if ((info.picture && !user.avatar_url) || !user.email_verified_at) {
+    db.prepare(
+      `UPDATE users
+       SET avatar_url = COALESCE(?, avatar_url),
+           email_verified_at = COALESCE(email_verified_at, CURRENT_TIMESTAMP)
+       WHERE id = ?`
+    ).run(info.picture || null, user.id);
+    user = db.prepare(
+      `SELECT id, email, role, condominium_id, first_name, last_name, unit_number,
+              avatar_url, mobile_phone, home_phone, email_verified_at
+       FROM users WHERE id = ?`
+    ).get(user.id);
   }
 
   // Auto-claim removed (see /login). Residents redeem via /onboarding/join.
@@ -265,12 +355,16 @@ router.post('/dev-register', authIpRateLimit, authCredentialRateLimit, asyncHand
   // OWASP guidance for new code.
   const pwHash = await bcrypt.hash(parsed.data.password, 12);
   const result = db.prepare(
-    `INSERT INTO users (condominium_id, email, password_hash, first_name, last_name, role, unit_number)
-     VALUES (NULL, ?, ?, ?, ?, 'resident', NULL)`
+    `INSERT INTO users (
+       condominium_id, email, password_hash, first_name, last_name, role,
+       unit_number, email_verified_at
+     )
+     VALUES (NULL, ?, ?, ?, ?, 'resident', NULL, CURRENT_TIMESTAMP)`
   ).run(parsed.data.email, pwHash, parsed.data.first_name, parsed.data.last_name);
 
   const row = db.prepare(
-    `SELECT id, email, role, condominium_id, first_name, last_name, unit_number, mobile_phone, home_phone
+    `SELECT id, email, role, condominium_id, first_name, last_name, unit_number,
+            mobile_phone, home_phone, email_verified_at
      FROM users WHERE id = ?`
   ).get(result.lastInsertRowid) as any;
 

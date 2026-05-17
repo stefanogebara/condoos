@@ -84,14 +84,16 @@ export default function Signup() {
     submittingRef.current = true;
     setLoading(true);
     try {
-      await register({
+      const user = await register({
         email: email.trim().toLowerCase(),
         password,
         first_name: firstName.trim(),
         last_name: lastName.trim(),
       });
       track('signup_completed', { intent, has_code: !!code.trim() });
-      toast.success(t('Conta criada'));
+      toast.success(intent === 'create' && !user.email_verified_at
+        ? t('Conta criada. Confirme seu email para criar o prédio.')
+        : t('Conta criada'));
       navigate(nextOnboardingPath());
     } catch (err: any) {
       toast.error(signupErrorMessage(err));

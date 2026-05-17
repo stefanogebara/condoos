@@ -41,6 +41,7 @@ export interface User {
   avatar_url: string | null;
   mobile_phone?: string | null;
   home_phone?: string | null;
+  email_verified_at?: string | null;
 }
 
 interface AuthCtx {

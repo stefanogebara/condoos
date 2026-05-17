@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { ArrowLeft, ArrowRight, ArrowUp, Sparkles, Copy, Check, Plus, Trash2, Link as LinkIcon, MessageCircle, Mail, Dumbbell, Waves, Trophy, PartyPopper, Wrench, Phone, ShieldCheck } from 'lucide-react';
@@ -6,8 +6,9 @@ import Logo from '../../components/Logo';
 import GlassCard from '../../components/GlassCard';
 import Button from '../../components/Button';
 import Badge from '../../components/Badge';
-import { apiPost } from '../../lib/api';
+import { apiGet, apiPost } from '../../lib/api';
 import { track } from '../../lib/analytics';
+import { useAuth } from '../../lib/auth';
 import { t } from '../../lib/i18n';
 
 interface BuildingBlock {
@@ -42,6 +43,21 @@ interface ServiceContactDraft {
   preferred: boolean;
   active: boolean;
   last_used_at: string;
+}
+interface AuthConfig {
+  email_verification_required_for_create_building?: boolean;
+  turnstile_site_key?: string | null;
+  create_building_captcha_required?: boolean;
+}
+
+declare global {
+  interface Window {
+    turnstile?: {
+      render: (target: HTMLElement, options: Record<string, unknown>) => string;
+      reset: (widgetId?: string) => void;
+      remove?: (widgetId: string) => void;
+    };
+  }
 }
 
 const MAX_BLOCKS = 12;     // matches backend createSchema.buildings.max(12)
@@ -82,6 +98,84 @@ const SERVICE_PRESETS: Array<Pick<ServiceContactDraft, 'category' | 'service_sco
   { category: 'cleaning', service_scope: 'Equipe terceirizada, limpeza pesada, pós-obra e suprimentos.', notes: '' },
   { category: 'general_maintenance', service_scope: 'Pequenos reparos, pintura, serralheria, marcenaria e apoio de obra.', notes: '' },
 ];
+
+let turnstileScriptPromise: Promise<void> | null = null;
+
+function loadTurnstileScript() {
+  if (window.turnstile) return Promise.resolve();
+  if (turnstileScriptPromise) return turnstileScriptPromise;
+  turnstileScriptPromise = new Promise<void>((resolve, reject) => {
+    const existing = document.querySelector<HTMLScriptElement>('script[data-condoos-turnstile]');
+    if (existing) {
+      existing.addEventListener('load', () => resolve(), { once: true });
+      existing.addEventListener('error', () => {
+        turnstileScriptPromise = null;
+        reject(new Error('turnstile_load_failed'));
+      }, { once: true });
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+    script.async = true;
+    script.defer = true;
+    script.dataset.condoosTurnstile = '1';
+    script.onload = () => resolve();
+    script.onerror = () => {
+      turnstileScriptPromise = null;
+      reject(new Error('turnstile_load_failed'));
+    };
+    document.head.appendChild(script);
+  });
+  return turnstileScriptPromise;
+}
+
+function TurnstileChallenge({ siteKey, onToken }: { siteKey: string; onToken: (token: string) => void }) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const widgetIdRef = useRef<string | null>(null);
+  const [scriptError, setScriptError] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    onToken('');
+    setScriptError(false);
+    loadTurnstileScript()
+      .then(() => {
+        if (cancelled || !containerRef.current || !window.turnstile) return;
+        widgetIdRef.current = window.turnstile.render(containerRef.current, {
+          sitekey: siteKey,
+          theme: 'light',
+          size: 'flexible',
+          callback: (token: string) => onToken(token),
+          'expired-callback': () => onToken(''),
+          'error-callback': () => onToken(''),
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setScriptError(true);
+      });
+
+    return () => {
+      cancelled = true;
+      const widgetId = widgetIdRef.current;
+      if (widgetId && window.turnstile?.remove) window.turnstile.remove(widgetId);
+      else if (widgetId && window.turnstile?.reset) window.turnstile.reset(widgetId);
+      widgetIdRef.current = null;
+    };
+  }, [siteKey, onToken]);
+
+  return (
+    <div className="p-4 rounded-2xl bg-white/60 border border-white/70">
+      <div className="text-sm font-semibold text-dusk-500">Verificação humana</div>
+      <div className="text-xs text-dusk-300 mt-0.5">Protege a criação de prédios contra abuso automático.</div>
+      <div ref={containerRef} className="mt-3 min-h-[70px]" />
+      {scriptError && (
+        <div className="mt-2 text-xs text-peach-700">
+          Não foi possível carregar a verificação. Confira sua conexão e tente novamente.
+        </div>
+      )}
+    </div>
+  );
+}
 
 function clampInt(raw: number, min: number, max: number) {
   const next = Number.isFinite(raw) ? Math.trunc(raw) : min;
@@ -185,11 +279,16 @@ function normalizeServiceContact(contact: ServiceContactDraft) {
 }
 
 export default function Create() {
+  const { user } = useAuth();
   const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(1);
   const [saving, setSaving] = useState(false);
   const [inviteCode, setInviteCode] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [authConfig, setAuthConfig] = useState<AuthConfig | null>(null);
+  const [verificationSending, setVerificationSending] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState('');
+  const [captchaResetNonce, setCaptchaResetNonce] = useState(0);
 
   const [form, setForm] = useState({
     condoName: 'Vila Nova Residences',
@@ -208,6 +307,12 @@ export default function Create() {
   });
   const up = <K extends keyof typeof form>(key: K, val: typeof form[K]) =>
     setForm((f) => ({ ...f, [key]: val }));
+
+  useEffect(() => {
+    apiGet<AuthConfig>('/auth/config')
+      .then(setAuthConfig)
+      .catch(() => {});
+  }, []);
 
   function updateBlock(idx: number, patch: Partial<BuildingBlock>) {
     setForm((f) => ({
@@ -331,6 +436,33 @@ export default function Create() {
     && isHttpsUrlOrBlank(c.website)
     && isHttpsUrlOrBlank(c.contract_url)
   ));
+  const emailVerificationRequired = !!authConfig?.email_verification_required_for_create_building;
+  const emailVerified = !!user?.email_verified_at;
+  const captchaRequired = !!authConfig?.create_building_captcha_required;
+  const turnstileSiteKey = authConfig?.turnstile_site_key || null;
+  const submitBlocked = !serviceContactsValid
+    || (emailVerificationRequired && !emailVerified)
+    || (captchaRequired && (!turnstileSiteKey || !captchaToken));
+
+  async function requestVerificationEmail() {
+    setVerificationSending(true);
+    try {
+      const res = await apiPost<{ status: string; error?: string }>('/auth/send-verification-email');
+      if (res.status === 'already_verified') {
+        toast.success(t('Email já confirmado.'));
+      } else if (res.status === 'sent') {
+        toast.success(t('Enviamos o link de confirmação para seu email.'));
+      } else {
+        toast.error(t('Email de verificação ainda não está configurado. Tente novamente mais tarde.'));
+      }
+    } catch (err: any) {
+      const code = err?.response?.data?.error;
+      if (code === 'rate_limited') toast.error(t('Muitas tentativas. Aguarde um momento.'));
+      else toast.error(t('Não foi possível enviar o email de confirmação.'));
+    } finally {
+      setVerificationSending(false);
+    }
+  }
 
   async function submit() {
     setSaving(true);
@@ -362,6 +494,7 @@ export default function Create() {
         serviceContacts: serviceContactsToSave.map(normalizeServiceContact),
         requireApproval: form.requireApproval,
         votingModel: form.votingModel,
+        captchaToken: captchaToken || undefined,
       };
       const res = await apiPost<{ condoId: number; buildingId: number; inviteCode: string }>(
         '/onboarding/create-building',
@@ -381,7 +514,16 @@ export default function Create() {
       // Refresh our JWT-bound user (role is now board_admin).
       // Easiest path: force a full page reload on "Go to dashboard".
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Failed to create building');
+      const code = err?.response?.data?.error;
+      if (code === 'email_not_verified') {
+        toast.error(t('Confirme seu email antes de criar o prédio.'));
+      } else if (typeof code === 'string' && code.startsWith('captcha_')) {
+        setCaptchaToken('');
+        setCaptchaResetNonce((n) => n + 1);
+        toast.error(t('A verificação humana falhou. Tente novamente.'));
+      } else {
+        toast.error(code || 'Failed to create building');
+      }
     } finally {
       setSaving(false);
     }
@@ -432,6 +574,25 @@ export default function Create() {
 
       <main className="flex-1 flex items-center justify-center px-6 py-12">
         <div className="w-full max-w-3xl animate-fade-up">
+          {emailVerificationRequired && user && !emailVerified && (
+            <div className="mb-5 p-4 rounded-3xl bg-peach-100/80 border border-peach-200 text-peach-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold">{t('Confirme seu email para criar um prédio')}</div>
+                <div className="text-xs mt-0.5">
+                  {t('Enviaremos um link para')} <span className="font-semibold">{user.email}</span>. {t('Depois de confirmar, volte para finalizar a criação.')}
+                </div>
+              </div>
+              <Button
+                variant="sage"
+                size="sm"
+                loading={verificationSending}
+                onClick={requestVerificationEmail}
+              >
+                {t('Enviar confirmação')}
+              </Button>
+            </div>
+          )}
+
           {/* Stepper */}
           <div className="flex items-center gap-1 sm:gap-2 mb-8 text-xs min-w-0 overflow-hidden">
             {['Prédio', 'Estrutura', 'Preferências', 'Operação', 'Pronto'].map((label, i) => {
@@ -914,9 +1075,25 @@ export default function Create() {
                   </div>
                 )}
 
+                {captchaRequired && (
+                  <div className="mt-4">
+                    {turnstileSiteKey ? (
+                      <TurnstileChallenge
+                        key={`${turnstileSiteKey}-${captchaResetNonce}`}
+                        siteKey={turnstileSiteKey}
+                        onToken={setCaptchaToken}
+                      />
+                    ) : (
+                      <div className="p-4 rounded-2xl bg-peach-100/70 border border-peach-200 text-xs text-peach-700">
+                        A verificação humana está exigida, mas a chave pública do Turnstile não está configurada. Avise o suporte antes de criar o prédio.
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div className="mt-8 flex justify-between">
                   <Button variant="ghost" onClick={() => setStep(3)} leftIcon={<ArrowLeft className="w-4 h-4" />}>Voltar</Button>
-                  <Button variant="primary" onClick={submit} loading={saving} disabled={!serviceContactsValid} rightIcon={<Sparkles className="w-4 h-4" />}>Criar prédio</Button>
+                  <Button variant="primary" onClick={submit} loading={saving} disabled={submitBlocked} rightIcon={<Sparkles className="w-4 h-4" />}>Criar prédio</Button>
                 </div>
               </>
             )}

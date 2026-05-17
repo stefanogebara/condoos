@@ -1,7 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { GoogleAuthError, verifyGoogleCredential } from '../src/lib/google-auth';
-import { buildInviteEmail, sendInviteEmail } from '../src/lib/email';
+import db from '../src/db';
+import { buildInviteEmail, buildVerificationEmail, sendInviteEmail, sendVerificationEmail } from '../src/lib/email';
+import {
+  consumeEmailVerificationToken,
+  createEmailVerificationToken,
+  emailVerificationRequiredForCreateBuilding,
+  hashEmailVerificationToken,
+} from '../src/lib/email-verification';
+import { getCaptchaPublicConfig, verifyCreateBuildingCaptcha } from '../src/lib/captcha';
 import { RATE_LIMIT_BYPASS_HEADER, createRateLimit, resetRateLimits } from '../src/lib/rate-limit';
 import { demoAuthEnabled, isBlockedDemoCredential } from '../src/lib/demo-auth';
 import { authRateLimitKey } from '../src/routes/auth';
@@ -122,6 +130,114 @@ test('sendInviteEmail posts to Resend when configured', async () => {
   assert.deepEqual(payload.to, ['owner@example.com']);
   assert.match(payload.text, /Invite code: DEMO123/);
   assert.match(payload.text, /https:\/\/condoos\.example\/login/);
+});
+
+test('buildVerificationEmail creates a confirmation link without leaking secrets', () => {
+  const email = buildVerificationEmail({
+    to: 'owner@example.com',
+    firstName: 'Olivia',
+    verificationUrl: 'https://condoos.example/login?verify_email=raw-token',
+  });
+
+  assert.equal(email.subject, 'Confirm your CondoOS email');
+  assert.match(email.text, /Hi Olivia/);
+  assert.match(email.text, /https:\/\/condoos\.example\/login\?verify_email=raw-token/);
+  assert.match(email.html, /Confirm my email/);
+});
+
+test('sendVerificationEmail uses the same Resend delivery contract as invites', async () => {
+  const calls: any[] = [];
+  const delivery = await sendVerificationEmail({
+    to: 'owner@example.com',
+    firstName: 'Olivia',
+    verificationUrl: 'https://condoos.example/login?verify_email=raw-token',
+  }, {
+    RESEND_API_KEY: 're_test',
+    EMAIL_FROM: 'CondoOS <noreply@condoos.example>',
+  } as NodeJS.ProcessEnv, async (url, init) => {
+    calls.push({ url, init });
+    return { ok: true, text: async () => JSON.stringify({ id: 'email_verify_123' }) };
+  });
+
+  assert.equal(delivery.status, 'sent');
+  assert.equal(delivery.message_id, 'email_verify_123');
+  const payload = JSON.parse(calls[0].init.body);
+  assert.deepEqual(payload.to, ['owner@example.com']);
+  assert.match(payload.text, /Confirm this email before creating a condominium/);
+});
+
+test('email verification tokens are hashed, single-use, and mark the user verified', () => {
+  const email = `verify-${process.hrtime.bigint()}@example.com`;
+  const userId = Number(db.prepare(
+    `INSERT INTO users (email, password_hash, first_name, last_name, role)
+     VALUES (?, 'hash', 'Verify', 'User', 'resident')`
+  ).run(email).lastInsertRowid);
+
+  const issued = createEmailVerificationToken(userId);
+  assert.notEqual(hashEmailVerificationToken(issued.token), issued.token);
+
+  const stored = db.prepare(
+    `SELECT token_hash FROM email_verification_tokens WHERE user_id = ?`
+  ).get(userId) as { token_hash: string };
+  assert.equal(stored.token_hash, hashEmailVerificationToken(issued.token));
+
+  const consumed = consumeEmailVerificationToken(issued.token);
+  assert.equal(consumed.ok, true);
+  assert.equal(consumed.user_id, userId);
+  const user = db.prepare(
+    `SELECT email_verified_at FROM users WHERE id = ?`
+  ).get(userId) as { email_verified_at: string | null };
+  assert.ok(user.email_verified_at);
+
+  const replay = consumeEmailVerificationToken(issued.token);
+  assert.deepEqual(replay, { ok: false, error: 'invalid_or_used_token' });
+});
+
+test('email verification requirement fails closed in production and can be explicitly disabled', () => {
+  assert.equal(emailVerificationRequiredForCreateBuilding(null, { NODE_ENV: 'production' } as NodeJS.ProcessEnv), true);
+  assert.equal(emailVerificationRequiredForCreateBuilding(null, { NODE_ENV: 'development' } as NodeJS.ProcessEnv), false);
+  assert.equal(emailVerificationRequiredForCreateBuilding(null, {
+    NODE_ENV: 'production',
+    EMAIL_VERIFICATION_REQUIRED: '0',
+  } as NodeJS.ProcessEnv), false);
+});
+
+test('Turnstile config stays optional until keys are installed', async () => {
+  assert.deepEqual(getCaptchaPublicConfig({ NODE_ENV: 'production' } as NodeJS.ProcessEnv), {
+    turnstile_site_key: null,
+    create_building_captcha_required: false,
+  });
+
+  const skipped = await verifyCreateBuildingCaptcha(undefined, undefined, { NODE_ENV: 'production' } as NodeJS.ProcessEnv);
+  assert.deepEqual(skipped, { ok: true, skipped: true });
+});
+
+test('verifyCreateBuildingCaptcha validates tokens server-side with Cloudflare Siteverify', async () => {
+  const calls: any[] = [];
+  const env = {
+    NODE_ENV: 'production',
+    TURNSTILE_SITE_KEY: 'site-key',
+    TURNSTILE_SECRET_KEY: 'secret-key',
+  } as NodeJS.ProcessEnv;
+
+  const result = await verifyCreateBuildingCaptcha('client-token', '203.0.113.7', env, async (url, init) => {
+    calls.push({ url, init });
+    return { ok: true, text: async () => JSON.stringify({ success: true, hostname: 'condoos.example' }) };
+  });
+
+  assert.deepEqual(result, { ok: true });
+  assert.equal(calls[0].url, 'https://challenges.cloudflare.com/turnstile/v0/siteverify');
+  assert.equal(calls[0].init.method, 'POST');
+  assert.equal(calls[0].init.headers['Content-Type'], 'application/json');
+  const payload = JSON.parse(calls[0].init.body);
+  assert.deepEqual(payload, {
+    secret: 'secret-key',
+    response: 'client-token',
+    remoteip: '203.0.113.7',
+  });
+
+  const missing = await verifyCreateBuildingCaptcha('', '203.0.113.7', env);
+  assert.deepEqual(missing, { ok: false, status: 403, error: 'captcha_required' });
 });
 
 test('createRateLimit returns 429 after the configured allowance', () => {

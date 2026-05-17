@@ -67,7 +67,7 @@ When set, a "Continue with Google" button appears on the login page. First-time 
 
 ### Invite emails (optional)
 
-Roster imports always create pending email invites. To also send invite links from the Residents page, configure Resend:
+Roster imports always create pending email invites. Password signups also use the same channel for email confirmation before creating a new condo in production. To send those messages, configure Resend:
 
 ```bash
 APP_ORIGIN=http://localhost:3000
@@ -77,6 +77,16 @@ RESEND_API_KEY=re_...
 ```
 
 Without these values, invite creation still works and email sends return a clear `email_not_configured` error instead of silently pretending delivery happened.
+
+### Create-building abuse protection
+
+New condo creation is protected by the account email-verification gate, a tight per-IP rate limit, and optional Cloudflare Turnstile. Set both Turnstile keys on the API to enable captcha enforcement:
+
+```bash
+TURNSTILE_SITE_KEY=0x4...
+TURNSTILE_SECRET_KEY=0x4...
+CREATE_BUILDING_CAPTCHA_REQUIRED=1
+```
 
 ### Production ops (optional)
 

@@ -34,6 +34,36 @@ async function loadSession(page: Page, s: Session) {
 
 test.skip(!E2E_SECRET, 'E2E_REGISTER_SECRET not set — onboarding wizard tests need a fresh-user endpoint');
 
+test('Onboarding API: password signup must verify email before creating a building', async ({ request }) => {
+  const email = `e2e+unverified-${Date.now()}@condoos.test`;
+  const registered = await request.post(`${apiURL}/auth/register`, {
+    data: {
+      email,
+      password: 'e2ePassword123!',
+      first_name: 'Unverified',
+      last_name: 'Owner',
+    },
+  });
+  expect(registered.ok(), `register failed: ${registered.status()} ${await registered.text()}`).toBeTruthy();
+  const { token, user, email_verification } = (await registered.json()).data as any;
+  expect(user.email_verified_at).toBeFalsy();
+  expect(email_verification.status).toMatch(/sent|skipped|failed/);
+
+  const created = await request.post(`${apiURL}/onboarding/create-building`, {
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    data: {
+      condoName: `E2E Blocked ${Date.now()}`,
+      address: 'Rua Bloqueada 100',
+      buildingName: 'Torre',
+      floors: 2,
+      unitsPerFloor: 2,
+    },
+  });
+
+  expect(created.status()).toBe(403);
+  expect((await created.json()).error).toBe('email_not_verified');
+});
+
 // ---------------------------------------------------------------------------
 // 1b. Create-building API path for a no-unit admin (professional síndico)
 // ---------------------------------------------------------------------------

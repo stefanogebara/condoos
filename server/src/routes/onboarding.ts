@@ -12,6 +12,8 @@ import { ok, fail, asyncHandler } from '../lib/respond';
 import { createRateLimit } from '../lib/rate-limit';
 import { audit } from '../lib/audit';
 import { normalizeServiceContact, serviceContactSchema } from '../lib/service-contacts';
+import { verifyCreateBuildingCaptcha } from '../lib/captcha';
+import { emailVerificationRequiredForCreateBuilding, isEmailVerified } from '../lib/email-verification';
 
 const router = Router();
 const lookupRateLimit = createRateLimit({ keyPrefix: 'onboarding_lookup', windowMs: 60_000, max: 60 });
@@ -19,8 +21,8 @@ const lookupRateLimit = createRateLimit({ keyPrefix: 'onboarding_lookup', window
 // codes, so this stays generous.
 const onboardingWriteRateLimit = createRateLimit({ keyPrefix: 'onboarding_write', windowMs: 60 * 60_000, max: 20 });
 // Condo creation — heavy DB write (default amenities + buildings + up to
-// 3,200 unit rows). 20/h per IP let one attacker spin up ~480 fake condos/
-// day. Drop to 3/h until we add an email-verification + captcha gate.
+// 3,200 unit rows). Keep this tight even with email verification + Turnstile:
+// it limits accidental retries and slows scripted signup farms.
 const createBuildingRateLimit = createRateLimit({ keyPrefix: 'onboarding_create_condo', windowMs: 60 * 60_000, max: 3 });
 
 const INVITE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // avoids 0/O/1/I/L
@@ -124,6 +126,7 @@ const createSchema = z.object({
   serviceContacts: z.array(serviceContactSchema).max(40).optional(),
   requireApproval: z.boolean().default(true),
   votingModel: z.enum(['one_per_unit', 'weighted_by_sqft']).default('one_per_unit'),
+  captchaToken: z.string().max(2048).optional(),
 }).superRefine((body, ctx) => {
   if (!body.floorUnitCounts) return;
   if (body.floorUnitCounts.length !== body.floors) {
@@ -140,6 +143,24 @@ router.post('/create-building', createBuildingRateLimit, requireAuth, asyncHandl
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
   const u = req.user!;
   const body = parsed.data;
+
+  if (emailVerificationRequiredForCreateBuilding(u) && !isEmailVerified(u)) {
+    return fail(res, 'email_not_verified', 403, { action: 'send_verification_email' });
+  }
+
+  const remoteIp = (
+    req.header('cf-connecting-ip')
+    || req.header('x-forwarded-for')?.split(',')[0]?.trim()
+    || req.ip
+    || req.socket.remoteAddress
+    || undefined
+  );
+  const captcha = await verifyCreateBuildingCaptcha(body.captchaToken, remoteIp);
+  if (!captcha.ok) {
+    return fail(res, captcha.error || 'captcha_failed', captcha.status || 403, {
+      error_codes: captcha.error_codes,
+    });
+  }
 
   const tx = db.transaction(() => {
     // 1. Create condo

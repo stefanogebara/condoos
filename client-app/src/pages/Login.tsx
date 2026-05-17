@@ -4,7 +4,7 @@ import { GoogleOAuthProvider, GoogleLogin } from '@react-oauth/google';
 import toast from 'react-hot-toast';
 import { Building2, ArrowRight, Shield, User, Plus, LogIn, Sparkles, Loader2, KeyRound } from 'lucide-react';
 import { useAuth } from '../lib/auth';
-import { apiGet } from '../lib/api';
+import { apiGet, apiPost } from '../lib/api';
 import { track } from '../lib/analytics';
 import { t, useLocale } from '../lib/i18n';
 
@@ -69,12 +69,16 @@ export default function Login() {
   // Read intent + invite code from the URL once. The hero CTAs on the landing
   // forward both — so by the time we route after login we know exactly where
   // the user wants to land.
-  const { intent, inviteCode } = useMemo(() => {
-    if (typeof window === 'undefined') return { intent: null as Intent, inviteCode: '' };
+  const { intent, inviteCode, verifyEmailToken } = useMemo(() => {
+    if (typeof window === 'undefined') return { intent: null as Intent, inviteCode: '', verifyEmailToken: '' };
     const params = new URLSearchParams(window.location.search);
     const raw = params.get('intent');
     const validIntent: Intent = raw === 'create' || raw === 'join' || raw === 'demo' ? raw : null;
-    return { intent: validIntent, inviteCode: params.get('code') || '' };
+    return {
+      intent: validIntent,
+      inviteCode: params.get('code') || '',
+      verifyEmailToken: params.get('verify_email') || '',
+    };
   }, []);
 
   useEffect(() => {
@@ -91,6 +95,30 @@ export default function Login() {
       })
       .catch(() => {});
   }, [intent, inviteCode]);
+
+  useEffect(() => {
+    if (!verifyEmailToken) return;
+    let cancelled = false;
+    apiPost<{ verified: boolean }>('/auth/verify-email', { token: verifyEmailToken })
+      .then(() => {
+        if (!cancelled) toast.success(t('Email confirmado. Entre para continuar.'));
+      })
+      .catch((err) => {
+        const code = err?.response?.data?.error;
+        if (!cancelled) {
+          toast.error(code === 'expired_token'
+            ? t('Link expirado. Entre e solicite um novo email de confirmação.')
+            : t('Link de confirmação inválido ou já usado.'));
+        }
+      })
+      .finally(() => {
+        if (cancelled) return;
+        const url = new URL(window.location.href);
+        url.searchParams.delete('verify_email');
+        window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+      });
+    return () => { cancelled = true; };
+  }, [verifyEmailToken]);
 
   // Where a freshly-authenticated user lands.
   //   - If they already have an active membership → straight to their dashboard

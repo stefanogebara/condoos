@@ -71,8 +71,11 @@ function run() {
 
   const hash = (p: string) => bcrypt.hashSync(p, 10);
   const insertUser = db.prepare(
-    `INSERT INTO users (condominium_id, email, password_hash, first_name, last_name, role, unit_number, mobile_phone, home_phone, phone)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO users (
+       condominium_id, email, password_hash, first_name, last_name, role,
+       unit_number, mobile_phone, home_phone, phone, email_verified_at
+     )
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`
   );
   const insertUnit = db.prepare(
     `INSERT INTO units (building_id, floor, number) VALUES (?, ?, ?)`
