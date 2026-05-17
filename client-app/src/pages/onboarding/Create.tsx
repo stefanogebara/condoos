@@ -8,6 +8,7 @@ import Button from '../../components/Button';
 import Badge from '../../components/Badge';
 import { apiPost } from '../../lib/api';
 import { track } from '../../lib/analytics';
+import { t } from '../../lib/i18n';
 
 interface BuildingBlock {
   name: string;
@@ -399,7 +400,7 @@ export default function Create() {
     ? `${typeof window !== 'undefined' ? window.location.origin : 'https://condoos.one'}/?code=${encodeURIComponent(inviteCode)}`
     : '';
   const inviteMessage = inviteCode
-    ? `Você foi convidado(a) para ${form.condoName} no CondoOS. Entre por este link (o código já vem preenchido): ${inviteUrl}`
+    ? `${t('Você foi convidado(a) para')} ${form.condoName} ${t('no CondoOS. Entre por este link (o código já vem preenchido):')} ${inviteUrl}`
     : '';
   function copyInviteLink() {
     if (!inviteUrl) return;
@@ -416,7 +417,7 @@ export default function Create() {
   function shareEmail() {
     if (!inviteMessage || !inviteCode) return;
     track('invite_link_copied', { method: 'email' });
-    const subject = `Convite — ${form.condoName} no CondoOS`;
+    const subject = `${t('Convite')} — ${form.condoName} no CondoOS`;
     window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(inviteMessage)}`;
   }
 
@@ -921,31 +922,31 @@ export default function Create() {
             )}
 
             {step === 5 && inviteCode && (
-              <>
+              <div translate="no">
                 <div className="text-center">
                   <div className="w-14 h-14 rounded-2xl bg-sage-200 text-sage-700 flex items-center justify-center mx-auto">
                     <Check className="w-7 h-7" />
                   </div>
-                  <h1 className="font-display text-3xl text-dusk-500 tracking-tight mt-5">Tudo pronto.</h1>
+                  <h1 className="font-display text-3xl text-dusk-500 tracking-tight mt-5">{t('Tudo pronto.')}</h1>
                   <p className="text-dusk-300 mt-2 text-sm">
-                    <span className="font-semibold text-dusk-400">{form.condoName}</span> está no ar. Compartilhe este código com os moradores para entrarem:
+                    <span className="font-semibold text-dusk-400">{form.condoName}</span> {t('está no ar. Compartilhe este código com os moradores para entrarem:')}
                   </p>
                 </div>
 
                 <div className="mt-6 p-6 rounded-3xl bg-gradient-to-br from-sage-100 to-sage-200 border border-white/60 text-center">
-                  <div className="text-xs uppercase tracking-[0.16em] text-dusk-300 mb-3 font-medium">Código de convite</div>
+                  <div className="text-xs uppercase tracking-[0.16em] text-dusk-300 mb-3 font-medium">{t('Código de convite')}</div>
                   <div className="font-mono text-5xl font-bold text-dusk-500 tracking-[0.24em]">{inviteCode}</div>
                   <button
                     onClick={copyCode}
                     className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-dusk-500 hover:text-dusk-400 underline decoration-dotted underline-offset-4"
                   >
-                    {copied ? <><Check className="w-4 h-4" /> Copiado!</> : <><Copy className="w-4 h-4" /> Copiar código</>}
+                    {copied ? <><Check className="w-4 h-4" /> {t('Copiado!')}</> : <><Copy className="w-4 h-4" /> {t('Copiar código')}</>}
                   </button>
                 </div>
 
                 <div className="mt-6">
                   <div className="text-xs uppercase tracking-[0.14em] text-dusk-300 font-medium text-center mb-3">
-                    Compartilhe direto com os moradores
+                    {t('Compartilhe direto com os moradores')}
                   </div>
                   <div className="grid grid-cols-3 gap-2">
                     <button
@@ -956,7 +957,7 @@ export default function Create() {
                       {linkCopied
                         ? <Check className="w-5 h-5 text-sage-700" />
                         : <LinkIcon className="w-5 h-5" />}
-                      <span className="text-xs font-medium">{linkCopied ? 'Copiado!' : 'Copiar link'}</span>
+                      <span className="text-xs font-medium">{linkCopied ? t('Copiado!') : t('Copiar link')}</span>
                     </button>
                     <button
                       type="button"
@@ -981,15 +982,15 @@ export default function Create() {
                 </div>
 
                 <div className="mt-5 text-xs text-dusk-300 text-center">
-                  Quem clicar no link cai direto no cadastro com o código já preenchido — não precisa digitar nada.
+                  {t('Quem clicar no link cai direto no cadastro com o código já preenchido — não precisa digitar nada.')}
                 </div>
 
                 <div className="mt-8 flex justify-center">
                   <Button variant="primary" onClick={() => { window.location.href = '/board'; }} rightIcon={<ArrowUp className="w-4 h-4 rotate-45" />}>
-                    Ir ao painel do síndico
+                    {t('Ir ao painel do síndico')}
                   </Button>
                 </div>
-              </>
+              </div>
             )}
           </GlassCard>
         </div>

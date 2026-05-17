@@ -867,8 +867,8 @@ const phrases: Copy[] = [
   c('Back', 'Back', 'Volver', 'Retour'),
   c('Create building', 'Create building', 'Crear edificio', 'Créer l’immeuble'),
   c('You\'re in.', 'You\'re in.', 'Ya estás dentro.', 'Vous y êtes.'),
-  c('Copy code', 'Copy code', 'Copiar código', 'Copier le code'),
-  c('Copied!', 'Copied!', '¡Copiado!', 'Copié !'),
+  c('Copiar código', 'Copy code', 'Copiar código', 'Copier le code'),
+  c('Copiado!', 'Copied!', '¡Copiado!', 'Copié !'),
   c('Enter your invite code', 'Enter your invite code', 'Ingresa tu código de invitación', 'Entrez votre code d’invitation'),
   c('Building found', 'Building found', 'Edificio encontrado', 'Immeuble trouvé'),
   c('Request sent', 'Request sent', 'Solicitud enviada', 'Demande envoyée'),
@@ -1988,6 +1988,9 @@ const phrases: Copy[] = [
   c('Copiar link', 'Copy link', 'Copiar enlace', 'Copier le lien'),
   c('Quem clicar no link cai direto no cadastro com o código já preenchido — não precisa digitar nada.', 'Anyone who clicks the link lands on the join form with the code pre-filled — no typing needed.', 'Quien haga clic en el enlace cae directo en el formulario con el código ya rellenado — sin escribir nada.', 'Toute personne qui clique sur le lien arrive sur le formulaire avec le code pré-rempli — pas besoin de taper.'),
   c('Ir ao painel do síndico', 'Go to the board admin dashboard', 'Ir al panel del administrador', 'Aller au tableau de bord du syndic'),
+  c('Você foi convidado(a) para', 'You were invited to', 'Te invitaron a', 'Vous avez été invité(e) à'),
+  c('no CondoOS. Entre por este link (o código já vem preenchido):', 'on CondoOS. Join through this link (the code is already filled in):', 'en CondoOS. Entra por este enlace (el código ya viene rellenado):', 'sur CondoOS. Rejoignez via ce lien (le code est déjà rempli) :'),
+  c('Convite', 'Invitation', 'Invitación', 'Invitation'),
   c('Set up a building', 'Set up a building', 'Crear un edificio', 'Configurer un immeuble'),
 
   // AI-drafted proposal copy that exists in production demo data. Adding
@@ -2786,6 +2789,17 @@ const indexes: Record<AppLocale, Map<string, string>> = {
   'es-ES': new Map(),
   'fr-FR': new Map(),
 };
+
+for (const entry of phrases) {
+  for (const target of Object.keys(indexes) as AppLocale[]) {
+    // Prefer identity for strings that are already in the target locale.
+    // Without this, duplicate words across languages can collide. Example:
+    // "Copiar código" is Spanish for one older "Copy code" entry and also
+    // Portuguese for the onboarding success card; Portuguese must stay
+    // Portuguese when the selected locale is pt-BR.
+    indexes[target].set(normalize(entry[target]), entry[target]);
+  }
+}
 
 for (const entry of phrases) {
   for (const target of Object.keys(indexes) as AppLocale[]) {
