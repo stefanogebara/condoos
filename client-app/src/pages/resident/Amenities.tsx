@@ -180,6 +180,10 @@ export default function Amenities() {
     .sort((a, b) => a.starts_at.localeCompare(b.starts_at));
   const mine = future.filter((r) => r.user_id === user?.id);
   const visibleReservations = reservationView === 'mine' ? mine : future;
+  const dayFormatter = new Intl.DateTimeFormat(currentIntlLocale(), { weekday: 'short', month: 'short', day: 'numeric' });
+  const openingFormatter = new Intl.DateTimeFormat(currentIntlLocale(), { weekday: 'long', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const bookingWeekLabel = `${dayFormatter.format(new Date(`${bookingWeek.min}T00:00:00`))} - ${dayFormatter.format(new Date(`${bookingWeek.max}T00:00:00`))}`;
+  const nextOpeningLabel = openingFormatter.format(bookingWeek.nextOpen);
 
   return (
     <>
@@ -188,14 +192,29 @@ export default function Amenities() {
         subtitle={tr('Reserve a piscina, academia, churrasqueira ou salão de festas. Sem conflitos.')}
       />
 
+      <GlassCard className="p-5 mb-6 border border-sage-200/80 bg-sage-50/60">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+          <div className="w-11 h-11 rounded-2xl bg-sage-200 text-sage-700 flex items-center justify-center shrink-0">
+            <Clock className="w-5 h-5" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h2 className="font-display text-xl text-dusk-500">{tr('Quando abrem as reservas')}</h2>
+            <p className="text-sm text-dusk-300 mt-1 max-w-3xl">
+              {tr('Os horários das áreas comuns são liberados todo domingo ao meio-dia. Só é possível reservar a semana em curso; quando um horário fica cheio, ele aparece bloqueado para evitar conflitos.')}
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2 text-xs text-dusk-300">
+              <Badge tone="sage">{tr('Semana disponível')}: {bookingWeekLabel}</Badge>
+              <Badge tone="peach">{tr('Próxima abertura')}: {nextOpeningLabel}</Badge>
+            </div>
+          </div>
+        </div>
+      </GlassCard>
+
       <section className="mb-10" aria-labelledby="available-amenities">
         <div className="flex items-end justify-between gap-4 mb-4">
           <div>
             <h2 id="available-amenities" className="font-display text-xl text-dusk-500">{tr('Reservar área comum')}</h2>
             <p className="text-sm text-dusk-300 mt-1">{tr('Escolha um espaço e um horário disponível.')}</p>
-            <p className="text-xs text-dusk-200 mt-1">
-              {tr('As reservas abrem todo domingo ao meio-dia e valem apenas para a semana em curso.')}
-            </p>
           </div>
           {selected && (
             <Badge tone="sage">
