@@ -2,6 +2,7 @@ import React, { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Home, Package, DoorOpen, Waves, Megaphone, Vote, Calendar, Sparkles, Gavel, SlidersHorizontal, Wallet, AlertTriangle, FileText } from 'lucide-react';
 import Sidebar, { NavItem } from '../../components/Sidebar';
+import { t } from '../../lib/i18n';
 
 const Overview = lazy(() => import('./Overview'));
 const Packages = lazy(() => import('./Packages'));
@@ -40,7 +41,7 @@ export default function ResidentApp() {
     <div className="min-h-screen lg:flex">
       <Sidebar items={NAV} title="Morador" />
       <main className="w-full min-w-0 flex-1 px-4 sm:px-6 lg:px-10 py-8 max-w-6xl animate-fade-up">
-        <Suspense fallback={<div className="py-16 text-center text-sm text-dusk-300">Carregando...</div>}>
+        <Suspense fallback={<div className="py-16 text-center text-sm text-dusk-300">{t('Carregando...')}</div>}>
           <Routes>
             <Route index               element={<Overview />} />
             <Route path="packages"     element={<Packages />} />

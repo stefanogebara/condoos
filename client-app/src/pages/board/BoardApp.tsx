@@ -4,6 +4,7 @@ import { AlertTriangle, Bot, Home, Inbox, Vote, Calendar, Megaphone, Users, User
 import Sidebar, { NavItem } from '../../components/Sidebar';
 import WhatsAppHealthPill from '../../components/WhatsAppHealthPill';
 import { apiGet } from '../../lib/api';
+import { t } from '../../lib/i18n';
 
 const BoardOverview = lazy(() => import('./BoardOverview'));
 const Suggestions = lazy(() => import('./Suggestions'));
@@ -88,7 +89,7 @@ export default function BoardApp() {
     <div className="min-h-screen lg:flex">
       <Sidebar items={nav} title="Síndico" headerSlot={<WhatsAppHealthPill />} />
       <main className="w-full min-w-0 flex-1 px-4 sm:px-6 lg:px-10 py-8 max-w-6xl animate-fade-up">
-        <Suspense fallback={<div className="py-16 text-center text-sm text-dusk-300">Carregando...</div>}>
+        <Suspense fallback={<div className="py-16 text-center text-sm text-dusk-300">{t('Carregando...')}</div>}>
           <Routes>
             <Route index                   element={<BoardOverview />} />
             <Route path="suggestions"      element={<Suggestions />} />

@@ -2,6 +2,7 @@ import React, { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './lib/auth';
 import { exposeInternalPages } from './lib/appConfig';
+import { t } from './lib/i18n';
 
 type Role = 'resident' | 'board_admin' | 'concierge';
 
@@ -18,7 +19,7 @@ const BoardApp = lazy(() => import('./pages/board/BoardApp'));
 const ConciergeApp = lazy(() => import('./pages/concierge/ConciergeApp'));
 
 function PageFallback() {
-  return <div className="min-h-screen flex items-center justify-center text-dusk-300">Carregando...</div>;
+  return <div className="min-h-screen flex items-center justify-center text-dusk-300">{t('Carregando...')}</div>;
 }
 
 // Staff users (board_admin, concierge) don't have user_unit rows, so the
