@@ -49,7 +49,46 @@ test('Concierge staff: admin invites porteiro → staff list includes them', asy
 });
 
 // ---------------------------------------------------------------------------
-// 2. Duplicate email is rejected with 409
+// 2. Admin can reset a concierge password if the temporary password was not shared
+// ---------------------------------------------------------------------------
+
+test('Concierge staff: admin resets temporary password and new login works', async ({ request }) => {
+  const admin = await loginApi(request, 'admin@condoos.dev', 'admin123');
+  const admH  = { Authorization: `Bearer ${admin.token}`, 'Content-Type': 'application/json' };
+
+  const tag   = Date.now();
+  const email = `porteiro-reset-${tag}@condoos.dev`;
+  const originalPassword = 'porteiro12345';
+  const nextPassword = 'newPorteiro12345';
+
+  const inviteRes = await request.post(`${apiURL}/concierge/invite`, {
+    headers: admH,
+    data: { email, first_name: 'Reset', last_name: 'Guard', password: originalPassword },
+  });
+  expect(inviteRes.ok(), `invite failed: ${inviteRes.status()} ${await inviteRes.text()}`).toBeTruthy();
+  const invited = (await inviteRes.json()).data;
+
+  const resetRes = await request.post(`${apiURL}/concierge/staff/${invited.id}/password`, {
+    headers: admH,
+    data: { password: nextPassword },
+  });
+  expect(resetRes.ok(), `reset failed: ${resetRes.status()} ${await resetRes.text()}`).toBeTruthy();
+
+  const oldLogin = await request.post(`${apiURL}/auth/login`, {
+    data: { email, password: originalPassword },
+  });
+  expect(oldLogin.status()).toBe(401);
+
+  const newLogin = await request.post(`${apiURL}/auth/login`, {
+    data: { email, password: nextPassword },
+  });
+  expect(newLogin.ok(), `new login failed: ${newLogin.status()} ${await newLogin.text()}`).toBeTruthy();
+  const session = (await newLogin.json()).data;
+  expect(session.user.role).toBe('concierge');
+});
+
+// ---------------------------------------------------------------------------
+// 3. Duplicate email is rejected with 409
 // ---------------------------------------------------------------------------
 
 test('Concierge staff: duplicate email returns 409', async ({ request }) => {
@@ -72,17 +111,18 @@ test('Concierge staff: duplicate email returns 409', async ({ request }) => {
 });
 
 // ---------------------------------------------------------------------------
-// 3. Missing required fields returns 400
+// 4. Missing required fields returns 400
 // ---------------------------------------------------------------------------
 
 test('Concierge staff: missing email or password returns 400', async ({ request }) => {
   const admin = await loginApi(request, 'admin@condoos.dev', 'admin123');
   const admH  = { Authorization: `Bearer ${admin.token}`, 'Content-Type': 'application/json' };
 
-  // No email
+  // No email; the password is intentionally long enough so this fails for the
+  // missing email instead of the password floor.
   const noEmail = await request.post(`${apiURL}/concierge/invite`, {
     headers: admH,
-    data: { first_name: 'Test', password: 'porto123' },
+    data: { first_name: 'Test', password: 'porteiro12345' },
   });
   expect(noEmail.status()).toBeGreaterThanOrEqual(400);
 
@@ -95,7 +135,7 @@ test('Concierge staff: missing email or password returns 400', async ({ request 
 });
 
 // ---------------------------------------------------------------------------
-// 4. Resident cannot invite or see staff list (403)
+// 5. Resident cannot invite or see staff list (403)
 // ---------------------------------------------------------------------------
 
 test('Concierge staff: resident gets 403 on invite and staff list', async ({ request }) => {
@@ -110,4 +150,29 @@ test('Concierge staff: resident gets 403 on invite and staff list', async ({ req
 
   const staffRes = await request.get(`${apiURL}/concierge/staff`, { headers: resH });
   expect(staffRes.status()).toBe(403);
+});
+
+// ---------------------------------------------------------------------------
+// 6. Resident cannot reset concierge passwords
+// ---------------------------------------------------------------------------
+
+test('Concierge staff: resident gets 403 on password reset', async ({ request }) => {
+  const admin = await loginApi(request, 'admin@condoos.dev', 'admin123');
+  const resident = await loginApi(request, 'resident@condoos.dev', 'resident123');
+  const admH  = { Authorization: `Bearer ${admin.token}`, 'Content-Type': 'application/json' };
+  const resH  = { Authorization: `Bearer ${resident.token}`, 'Content-Type': 'application/json' };
+
+  const email = `porteiro-reset-blocked-${Date.now()}@condoos.dev`;
+  const inviteRes = await request.post(`${apiURL}/concierge/invite`, {
+    headers: admH,
+    data: { email, first_name: 'Blocked', last_name: 'Reset', password: 'porteiro12345' },
+  });
+  expect(inviteRes.ok(), `invite failed: ${inviteRes.status()} ${await inviteRes.text()}`).toBeTruthy();
+  const invited = (await inviteRes.json()).data;
+
+  const resetRes = await request.post(`${apiURL}/concierge/staff/${invited.id}/password`, {
+    headers: resH,
+    data: { password: 'residentCannot123' },
+  });
+  expect(resetRes.status()).toBe(403);
 });

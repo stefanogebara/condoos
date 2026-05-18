@@ -10,7 +10,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import db from '../db';
-import { requireAuth, requireRole, getActiveCondoId, AuthedRequest } from '../lib/auth';
+import { requireAuth, requireRole, getActiveCondoId, AuthedRequest, revokeUserTokens } from '../lib/auth';
 import { ok, fail } from '../lib/respond';
 import { audit } from '../lib/audit';
 import { notifyUsers } from '../lib/whatsapp';
@@ -260,6 +260,10 @@ const inviteSchema = z.object({
   password: z.string().min(12).max(120),
 });
 
+const resetPasswordSchema = z.object({
+  password: z.string().min(12).max(120),
+});
+
 router.post('/invite', requireAuth, requireRole('board_admin'), async (req: AuthedRequest, res) => {
   const parsed = inviteSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
@@ -298,6 +302,34 @@ router.get('/staff', requireAuth, requireRole('board_admin'), (req: AuthedReques
      ORDER BY created_at DESC`
   ).all(condoId);
   return ok(res, rows);
+});
+
+router.post('/staff/:id/password', requireAuth, requireRole('board_admin'), async (req: AuthedRequest, res) => {
+  const parsed = resetPasswordSchema.safeParse(req.body || {});
+  if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
+  const condoId = getActiveCondoId(req);
+  const staffId = Number(req.params.id);
+  if (!Number.isInteger(staffId) || staffId <= 0) return fail(res, 'invalid_staff_id', 400);
+
+  const staff = db.prepare(
+    `SELECT id, email
+     FROM users
+     WHERE id = ? AND condominium_id = ? AND role = 'concierge'`
+  ).get(staffId, condoId) as { id: number; email: string } | undefined;
+  if (!staff) return fail(res, 'staff_not_found', 404);
+
+  const bcrypt = await import('bcryptjs');
+  const pwHash = bcrypt.hashSync(parsed.data.password, 10);
+  db.prepare(`UPDATE users SET password_hash = ? WHERE id = ?`).run(pwHash, staff.id);
+  revokeUserTokens(staff.id);
+  audit(req, {
+    action: 'concierge.password_reset',
+    target_type: 'user',
+    target_id: staff.id,
+    condominium_id: condoId,
+    metadata: { email: staff.email },
+  });
+  return ok(res, { id: staff.id, email: staff.email, role: 'concierge' });
 });
 
 export default router;
