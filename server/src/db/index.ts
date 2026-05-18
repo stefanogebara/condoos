@@ -177,6 +177,65 @@ function migrateLegacyUnits() {
  * SQLite cannot alter CHECK constraints in place, so we rebuild the table.
  * Idempotent — skips if 'inconclusive' is already accepted.
  */
+// Phase 1 — make building_documents.file_url nullable + add a CHECK
+// constraint enforcing "file_url OR file_id must be set". The original
+// schema enforced file_url NOT NULL because the vault started as a
+// link-only catalog; now that admins can upload real files via R2,
+// upload-only rows need file_url=NULL (no synthesised internal path).
+//
+// Idempotent: PRAGMA table_info reports notnull=1 on the legacy
+// schema, notnull=0 once migrated. Exits early after the first run.
+function migrateDocumentsFileUrlNullable() {
+  const cols = db.prepare(`PRAGMA table_info(building_documents)`).all() as Array<{ name: string; notnull: number }>;
+  const fileUrlCol = cols.find((c) => c.name === 'file_url');
+  if (!fileUrlCol) return;            // table not created yet — initial CREATE will use the new shape
+  if (fileUrlCol.notnull === 0) return;  // already migrated
+
+  const foreignKeys = db.pragma('foreign_keys', { simple: true }) as number;
+  db.pragma('foreign_keys = OFF');
+  try {
+    db.exec(`
+      CREATE TABLE building_documents_new (
+        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+        condominium_id      INTEGER NOT NULL REFERENCES condominiums(id) ON DELETE CASCADE,
+        uploaded_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        title               TEXT NOT NULL,
+        category            TEXT NOT NULL
+          CHECK(category IN ('rules','minutes','contracts','insurance','warranties','receipts','vendors','notices','other')),
+        description         TEXT,
+        file_url            TEXT,
+        file_id             INTEGER REFERENCES files(id) ON DELETE SET NULL,
+        document_date       TEXT,
+        visibility          TEXT NOT NULL DEFAULT 'residents'
+          CHECK(visibility IN ('residents','board_only')),
+        active              INTEGER NOT NULL DEFAULT 1,
+        created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CHECK (file_url IS NOT NULL OR file_id IS NOT NULL)
+      );
+
+      INSERT INTO building_documents_new (
+        id, condominium_id, uploaded_by_user_id, title, category, description,
+        file_url, file_id, document_date, visibility, active, created_at, updated_at
+      )
+      SELECT
+        id, condominium_id, uploaded_by_user_id, title, category, description,
+        file_url, file_id, document_date, visibility, active, created_at, updated_at
+      FROM building_documents;
+
+      DROP TABLE building_documents;
+      ALTER TABLE building_documents_new RENAME TO building_documents;
+    `);
+    db.prepare(`CREATE INDEX IF NOT EXISTS idx_building_documents_condo_active_category
+      ON building_documents(condominium_id, active, category, document_date)`).run();
+    db.prepare(`CREATE INDEX IF NOT EXISTS idx_building_documents_condo_visibility
+      ON building_documents(condominium_id, visibility, active, updated_at)`).run();
+    console.log('[migrate] relaxed building_documents.file_url to nullable with file_url OR file_id CHECK');
+  } finally {
+    db.pragma(`foreign_keys = ${foreignKeys ? 'ON' : 'OFF'}`);
+  }
+}
+
 function migrateProposalsInconclusiveStatus() {
   const table = db.prepare(
     `SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'proposals'`
@@ -787,14 +846,15 @@ export function initSchema() {
       category            TEXT NOT NULL
         CHECK(category IN ('rules','minutes','contracts','insurance','warranties','receipts','vendors','notices','other')),
       description         TEXT,
-      file_url            TEXT NOT NULL,
+      file_url            TEXT,
       file_id             INTEGER REFERENCES files(id) ON DELETE SET NULL,
       document_date       TEXT,
       visibility          TEXT NOT NULL DEFAULT 'residents'
         CHECK(visibility IN ('residents','board_only')),
       active              INTEGER NOT NULL DEFAULT 1,
       created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      updated_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CHECK (file_url IS NOT NULL OR file_id IS NOT NULL)
     )
   `).run();
   db.prepare(`CREATE INDEX IF NOT EXISTS idx_building_documents_condo_active_category
@@ -802,6 +862,9 @@ export function initSchema() {
   db.prepare(`CREATE INDEX IF NOT EXISTS idx_building_documents_condo_visibility
     ON building_documents(condominium_id, visibility, active, updated_at)`).run();
   addColumnIfMissing('building_documents', 'file_id', `INTEGER REFERENCES files(id) ON DELETE SET NULL`);
+  // Phase 1 — Relax existing DBs to match the new shape (nullable
+  // file_url + CHECK). Idempotent: short-circuits when notnull=0.
+  migrateDocumentsFileUrlNullable();
 
   // Roadmap item 2 — conversational thread. The agent workbench was
   // single-shot: every query was a fresh agent call with no memory of

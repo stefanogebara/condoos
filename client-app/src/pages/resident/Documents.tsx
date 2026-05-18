@@ -88,7 +88,7 @@ export default function Documents() {
                     >
                       <ExternalLink className="w-3 h-3" /> {tr('abrir documento')}
                     </button>
-                  ) : (
+                  ) : doc.file_url ? (
                     <a
                       className="inline-flex items-center gap-1 rounded-full bg-white/60 px-3 py-1 hover:text-dusk-500"
                       href={doc.file_url}
@@ -97,7 +97,7 @@ export default function Documents() {
                     >
                       <ExternalLink className="w-3 h-3" /> {tr('abrir documento')}
                     </a>
-                  )}
+                  ) : null}
                 </div>
               </div>
             </GlassCard>

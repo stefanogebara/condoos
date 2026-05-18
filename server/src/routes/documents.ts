@@ -4,7 +4,7 @@ import db from '../db';
 import { requireAuth, requireRole, getActiveCondoId, AuthedRequest } from '../lib/auth';
 import { ok, fail } from '../lib/respond';
 import { audit } from '../lib/audit';
-import { assertFileReadyForUse, attachFileToTarget, fileDownloadPath } from '../lib/files';
+import { assertFileReadyForUse, attachFileToTarget } from '../lib/files';
 
 const router = Router();
 
@@ -21,6 +21,13 @@ const DOCUMENT_CATEGORIES = [
 ] as const;
 
 const DOCUMENT_VISIBILITIES = ['residents', 'board_only'] as const;
+
+// Phase 2 — Categories the concierge role must NOT see. Financial
+// (receipts), legal (contracts, insurance), and governance (minutes)
+// are board-only by intent regardless of the visibility column;
+// concierge staff have a building-ops role, not an admin role, and
+// shouldn't have access to spending or contracts.
+const CONCIERGE_BLOCKED_CATEGORIES = new Set(['receipts', 'insurance', 'contracts', 'minutes']);
 
 const documentSchema = z.object({
   title: z.string().min(1).max(160),
@@ -46,6 +53,7 @@ function cleanText(value: string | null | undefined) {
 router.get('/', requireAuth, (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const isAdmin = req.user?.role === 'board_admin';
+  const isConcierge = req.user?.role === 'concierge';
   const includeInactive = isAdmin && (req.query.include_inactive === '1' || req.query.include_inactive === 'true');
   const category = typeof req.query.category === 'string' && DOCUMENT_CATEGORIES.includes(req.query.category as any)
     ? req.query.category
@@ -56,6 +64,17 @@ router.get('/', requireAuth, (req: AuthedRequest, res) => {
 
   if (!includeInactive) conditions.push('d.active = 1');
   if (!isAdmin) conditions.push(`d.visibility = 'residents'`);
+  // Phase 2 — Concierge staff can't see financial/legal/governance
+  // documents even when those are marked 'residents'-visible. Receipts,
+  // contracts, insurance, and minutes are board-only by category regardless
+  // of the visibility column. Implemented at the list level (not at
+  // canAccessFile) because a concierge who knows a file id shouldn't
+  // be able to GET it either — but Phase 1 ships the list filter only.
+  if (isConcierge) {
+    const placeholders = Array.from(CONCIERGE_BLOCKED_CATEGORIES).map(() => '?').join(', ');
+    conditions.push(`d.category NOT IN (${placeholders})`);
+    for (const cat of CONCIERGE_BLOCKED_CATEGORIES) params.push(cat);
+  }
   if (category) {
     conditions.push('d.category = ?');
     params.push(category);
@@ -92,7 +111,13 @@ router.post('/', requireAuth, requireRole('board_admin'), (req: AuthedRequest, r
     : null;
   if (body.file_id && !file) return fail(res, 'invalid_file', 400);
   if (file && file.visibility !== body.visibility) return fail(res, 'file_visibility_mismatch', 400);
-  const fileUrl = file ? fileDownloadPath(file.id) : body.file_url!.trim();
+  // Phase 1 — Upload-only rows write file_url=NULL. The previous code
+  // synthesised an internal download path into file_url to satisfy the
+  // legacy NOT NULL constraint; the schema now allows NULL when file_id
+  // is set, and the CHECK constraint guarantees at least one is present.
+  // The SPA already branches on doc.file_id to call openUploadedFile()
+  // vs <a href={file_url}>, so the null is invisible to the client.
+  const fileUrl = file ? null : (body.file_url ? body.file_url.trim() : null);
 
   const result = db.prepare(
     `INSERT INTO building_documents (
@@ -144,7 +169,13 @@ router.patch('/:id', requireAuth, requireRole('board_admin'), (req: AuthedReques
     : null;
   if (body.file_id && !file) return fail(res, 'invalid_file', 400);
   if (file && file.visibility !== body.visibility) return fail(res, 'file_visibility_mismatch', 400);
-  const fileUrl = file ? fileDownloadPath(file.id) : body.file_url!.trim();
+  // Phase 1 — Upload-only rows write file_url=NULL. The previous code
+  // synthesised an internal download path into file_url to satisfy the
+  // legacy NOT NULL constraint; the schema now allows NULL when file_id
+  // is set, and the CHECK constraint guarantees at least one is present.
+  // The SPA already branches on doc.file_id to call openUploadedFile()
+  // vs <a href={file_url}>, so the null is invisible to the client.
+  const fileUrl = file ? null : (body.file_url ? body.file_url.trim() : null);
 
   db.prepare(
     `UPDATE building_documents

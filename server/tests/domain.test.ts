@@ -319,6 +319,100 @@ test('agent runs persist success and failure lifecycle details', () => {
   assert.ok(failRow.finished_at);
 });
 
+test('building_documents: schema accepts file-only and link-only rows, rejects both-null (Phase 1)', () => {
+  resetDb();
+  const { condoId } = createCondoFixture();
+  const adminId = createUser('docs-admin@example.com', 'board_admin');
+
+  // Link-only row (legacy shape) — file_url set, file_id NULL. Accepted.
+  const linkRow = db.prepare(
+    `INSERT INTO building_documents (condominium_id, uploaded_by_user_id, title, category, file_url, visibility)
+     VALUES (?, ?, 'Bylaws PDF (linked)', 'rules', 'https://example.com/bylaws.pdf', 'residents')`
+  ).run(condoId, adminId);
+  assert.ok(Number(linkRow.lastInsertRowid) > 0);
+
+  // File-only row (new shape) — file_url NULL, file_id set. Accepted now
+  // that the migration relaxed the NOT NULL. Real flow goes via the
+  // uploads pipeline; here we just need a `files` row to satisfy the
+  // FK.
+  const fileId = Number(db.prepare(
+    `INSERT INTO files (uploaded_by_user_id, condominium_id, purpose, storage_driver, storage_key,
+        content_type, size_bytes, original_filename, visibility)
+     VALUES (?, ?, 'document', 'local', 'docs/bylaws-2026.pdf', 'application/pdf', 12345, 'bylaws.pdf', 'residents')`
+  ).run(adminId, condoId).lastInsertRowid);
+  const uploadRow = db.prepare(
+    `INSERT INTO building_documents (condominium_id, uploaded_by_user_id, title, category, file_url, file_id, visibility)
+     VALUES (?, ?, 'Bylaws PDF (uploaded)', 'rules', NULL, ?, 'residents')`
+  ).run(condoId, adminId, fileId);
+  assert.ok(Number(uploadRow.lastInsertRowid) > 0);
+
+  // Both-null row — CHECK constraint rejects. The route's Zod schema
+  // catches this at the API layer too, but the DB constraint is the
+  // last line of defense.
+  assert.throws(
+    () => db.prepare(
+      `INSERT INTO building_documents (condominium_id, uploaded_by_user_id, title, category, file_url, file_id, visibility)
+       VALUES (?, ?, 'Ghost doc', 'other', NULL, NULL, 'residents')`
+    ).run(condoId, adminId),
+    /CHECK constraint failed/,
+  );
+});
+
+test('building_documents: concierge filter excludes financial/legal/governance categories (Phase 2)', () => {
+  resetDb();
+  const { condoId } = createCondoFixture();
+  const adminId = createUser('docs-board@example.com', 'board_admin');
+
+  // Seed one document per category so we can assert exactly which
+  // categories the concierge filter blocks. All marked 'residents'
+  // visibility — the filter operates on category regardless.
+  const docs = [
+    ['rules',      'House rules'],
+    ['minutes',    'Board meeting minutes — May'],
+    ['contracts',  'Elevator vendor contract'],
+    ['insurance',  'Building insurance policy'],
+    ['warranties', 'AC warranty'],
+    ['receipts',   'Quarterly maintenance receipts'],
+    ['vendors',    'Vendor directory'],
+    ['notices',    'Water shutoff notice'],
+    ['other',      'Misc'],
+  ] as const;
+  for (const [category, title] of docs) {
+    db.prepare(
+      `INSERT INTO building_documents (condominium_id, uploaded_by_user_id, title, category, file_url, visibility)
+       VALUES (?, ?, ?, ?, 'https://example.com/x.pdf', 'residents')`
+    ).run(condoId, adminId, title, category);
+  }
+
+  // Re-create the same condition logic the route uses (this is a
+  // domain test, not an HTTP test). The filter must drop receipts,
+  // insurance, contracts, and minutes from the concierge's view.
+  const blocked = new Set(['receipts', 'insurance', 'contracts', 'minutes']);
+  const placeholders = Array.from(blocked).map(() => '?').join(', ');
+  const conciergeRows = db.prepare(
+    `SELECT category FROM building_documents
+      WHERE condominium_id = ? AND active = 1
+        AND visibility = 'residents'
+        AND category NOT IN (${placeholders})
+      ORDER BY category`
+  ).all(condoId, ...Array.from(blocked)) as Array<{ category: string }>;
+  const conciergeCategories = conciergeRows.map((r) => r.category);
+  assert.deepEqual(
+    conciergeCategories.sort(),
+    ['notices', 'other', 'rules', 'vendors', 'warranties'].sort(),
+    'concierge sees only non-blocked categories',
+  );
+  for (const cat of blocked) {
+    assert.ok(!conciergeCategories.includes(cat), `concierge must NOT see ${cat}`);
+  }
+
+  // Board admin gets all 9 categories on a no-include-inactive query.
+  const adminRows = db.prepare(
+    `SELECT category FROM building_documents WHERE condominium_id = ? AND active = 1`
+  ).all(condoId) as Array<{ category: string }>;
+  assert.equal(adminRows.length, 9);
+});
+
 test('agent-vendor-repo: loadVendorBundle returns contacts + cost map + id-by-name', async () => {
   resetDb();
   const { condoId } = createCondoFixture();

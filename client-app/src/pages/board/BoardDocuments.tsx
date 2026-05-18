@@ -14,7 +14,11 @@ export interface BuildingDocument {
   title: string;
   category: string;
   description: string | null;
-  file_url: string;
+  // Phase 1 — file_url is now nullable. Either file_url (external link)
+  // or file_id (uploaded blob) is set, never both. The render below
+  // already branches on file_id to call openUploadedFile() instead of
+  // the <a href> path.
+  file_url: string | null;
   file_id: number | null;
   file_name: string | null;
   file_content_type: string | null;
@@ -225,7 +229,7 @@ function DocumentRow({ doc, onChanged }: { doc: BuildingDocument; onChanged: () 
           title: doc.title,
           category: doc.category,
           description: doc.description || '',
-          file_url: doc.file_url,
+          file_url: doc.file_url || '',
           file_id: doc.file_id || null,
           document_date: doc.document_date ? doc.document_date.slice(0, 10) : '',
           visibility: doc.visibility,
@@ -265,7 +269,7 @@ function DocumentRow({ doc, onChanged }: { doc: BuildingDocument; onChanged: () 
               >
                 <ExternalLink className="w-3 h-3" /> {tr('abrir documento')}
               </button>
-            ) : (
+            ) : doc.file_url ? (
               <a
                 className="inline-flex items-center gap-1 rounded-full bg-white/60 px-3 py-1 hover:text-dusk-500"
                 href={doc.file_url}
@@ -274,7 +278,7 @@ function DocumentRow({ doc, onChanged }: { doc: BuildingDocument; onChanged: () 
               >
                 <ExternalLink className="w-3 h-3" /> {tr('abrir documento')}
               </a>
-            )}
+            ) : null}
           </div>
         </div>
         <div className="flex items-center gap-2">
