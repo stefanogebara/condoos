@@ -36,7 +36,6 @@ This document separates what is real today from what still needs production wiri
 ## Not Production-Ready Yet
 
 - Production R2 bucket/CORS/secrets must be configured and tested against Fly/Vercel before a real building uses uploads.
-- Turnstile keys are not installed in the current demo deployment, so create-building captcha is not active yet. `npm run audit:prod:hardening` should fail until those keys are set.
 - Resident payment-proof upload/approval.
 - Full ticket timeline events and vendor quote comparison.
 - Building-level Brazil/Ecuador country, currency, timezone, locale, and governance mode.

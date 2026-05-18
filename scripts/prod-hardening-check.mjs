@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 const DEFAULT_API_URL = 'https://condoos-api.fly.dev/api';
+const DEFAULT_CLIENT_URL = 'https://condoos-ten.vercel.app';
 
 function argValue(name) {
   const idx = process.argv.indexOf(name);
@@ -13,6 +14,8 @@ function hasFlag(name) {
 }
 
 const apiURL = (argValue('--api-url') || process.env.PROD_API_URL || process.env.E2E_API_URL || DEFAULT_API_URL)
+  .replace(/\/+$/, '');
+const clientURL = (argValue('--client-url') || process.env.PROD_CLIENT_URL || process.env.E2E_BASE_URL || DEFAULT_CLIENT_URL)
   .replace(/\/+$/, '');
 const strictCaptcha = !hasFlag('--warn-only-captcha');
 const requireDemoDisabled = hasFlag('--require-demo-disabled');
@@ -37,6 +40,16 @@ async function getJson(path) {
 
 function add(list, ok, message, details) {
   list.push({ ok, message, ...(details === undefined ? {} : { details }) });
+}
+
+function cspHasSource(csp, directive, source) {
+  const parts = csp
+    .split(';')
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const rule = parts.find((part) => part.split(/\s+/)[0] === directive);
+  if (!rule) return false;
+  return rule.split(/\s+/).slice(1).includes(source);
 }
 
 async function main() {
@@ -70,6 +83,19 @@ async function main() {
     });
   }
 
+  const clientRes = await fetch(clientURL, {
+    headers: { Accept: 'text/html', 'User-Agent': 'CondoOS-prod-hardening-check/1.0' },
+  });
+  const csp = clientRes.headers.get('content-security-policy') || '';
+  const turnstileCspReady = clientRes.ok
+    && cspHasSource(csp, 'script-src', 'https://challenges.cloudflare.com')
+    && cspHasSource(csp, 'frame-src', 'https://challenges.cloudflare.com');
+  add(checks, turnstileCspReady, 'Client CSP allows Turnstile script and frame origins', {
+    client_status: clientRes.status,
+    script_src_allows_turnstile: cspHasSource(csp, 'script-src', 'https://challenges.cloudflare.com'),
+    frame_src_allows_turnstile: cspHasSource(csp, 'frame-src', 'https://challenges.cloudflare.com'),
+  });
+
   if (requireDemoDisabled) {
     add(checks, config.demo_enabled === false, 'Demo login is disabled in production', { demo_enabled: config.demo_enabled });
   } else if (config.demo_enabled) {
@@ -83,6 +109,7 @@ async function main() {
   const result = {
     ok: failures.length === 0,
     api_url: apiURL,
+    client_url: clientURL,
     strict_captcha: strictCaptcha,
     checks,
     warnings,
@@ -96,6 +123,7 @@ main().catch((err) => {
   console.error(JSON.stringify({
     ok: false,
     api_url: apiURL,
+    client_url: clientURL,
     error: err instanceof Error ? err.message : String(err),
   }, null, 2));
   process.exit(1);
