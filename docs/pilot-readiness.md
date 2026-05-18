@@ -45,7 +45,7 @@ npm run test:e2e:prod:safe:desktop
 Use `npm run test:e2e:prod:safe` when mobile production coverage is needed too. Do not run the full mutating E2E suite against production unless the database is disposable or a cleanup plan exists.
 For a real non-demo production launch, run `npm run audit:prod:hardening`
 instead; it must pass with email verification, Turnstile keys, and the client
-CSP allowing Turnstile.
+CSP allowing Turnstile script, frame, and connection origins.
 
 ## Current Watch Items
 

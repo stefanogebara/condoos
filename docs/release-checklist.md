@@ -36,9 +36,9 @@ npm run audit:perf:prod
 ```
 
 `audit:prod:hardening` is intentionally strict: it requires production email
-verification, Turnstile captcha, and a client CSP that allows Turnstile to
-load. Use `npm run audit:prod:hardening:warn` for disposable demo environments
-where captcha keys have not been installed yet.
+verification, Turnstile captcha, and a client CSP that allows Turnstile script,
+frame, and connection origins. Use `npm run audit:prod:hardening:warn` for
+disposable demo environments where captcha keys have not been installed yet.
 
 ## Product Gate
 

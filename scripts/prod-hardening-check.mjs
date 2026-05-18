@@ -89,11 +89,13 @@ async function main() {
   const csp = clientRes.headers.get('content-security-policy') || '';
   const turnstileCspReady = clientRes.ok
     && cspHasSource(csp, 'script-src', 'https://challenges.cloudflare.com')
-    && cspHasSource(csp, 'frame-src', 'https://challenges.cloudflare.com');
-  add(checks, turnstileCspReady, 'Client CSP allows Turnstile script and frame origins', {
+    && cspHasSource(csp, 'frame-src', 'https://challenges.cloudflare.com')
+    && cspHasSource(csp, 'connect-src', 'https://challenges.cloudflare.com');
+  add(checks, turnstileCspReady, 'Client CSP allows Turnstile script, frame, and connect origins', {
     client_status: clientRes.status,
     script_src_allows_turnstile: cspHasSource(csp, 'script-src', 'https://challenges.cloudflare.com'),
     frame_src_allows_turnstile: cspHasSource(csp, 'frame-src', 'https://challenges.cloudflare.com'),
+    connect_src_allows_turnstile: cspHasSource(csp, 'connect-src', 'https://challenges.cloudflare.com'),
   });
 
   if (requireDemoDisabled) {
