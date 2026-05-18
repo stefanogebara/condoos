@@ -303,9 +303,15 @@ router.post('/create-building', createBuildingRateLimit, requireAuth, asyncHandl
 }));
 
 // ---------------------------------------------------------------------------
-// Look up a condo by invite code (public, so join UI can show details)
+// Look up a condo by invite code. Authenticated — Join.tsx is reached via
+// /onboarding/join which is wrapped in RequireSignedIn, so the only legit
+// caller already has a JWT. Requiring auth means a leaked invite code
+// (which they do leak — admins email them, residents post in WhatsApp)
+// is no longer a public window into building structure (address + full
+// unit list + claim counts). Combined with the per-(IP,code) lookupRateLimit
+// it's now "you need an account AND can't probe at volume".
 // ---------------------------------------------------------------------------
-router.get('/by-code/:code', lookupRateLimit, asyncHandler(async (req, res) => {
+router.get('/by-code/:code', requireAuth, lookupRateLimit, asyncHandler(async (req, res) => {
   const code = (req.params.code || '').toUpperCase().trim();
   if (!code) return fail(res, 'missing_code');
   const condo = db.prepare(

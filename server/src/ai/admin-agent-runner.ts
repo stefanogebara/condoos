@@ -14,6 +14,7 @@ import {
   normalizeAdminAgentMode,
   sanitizeAdminAgentOutput,
   agentLanguage,
+  looksOutOfScope,
   type AdminAgentInput,
   type AdminAgentMode,
 } from './admin-agent';
@@ -21,9 +22,26 @@ import { ADMIN_AGENT_TOOLS, buildToolHandler } from './admin-agent-tools';
 import { analyzeTicketAttachments } from './attachment-vision';
 import { appendAgentRunProgress, createAgentRun, finishAgentRunFailure, finishAgentRunSuccess } from '../lib/agent-runs';
 import { buildAgentEvidenceSources } from '../lib/agent-evidence';
+import { loadVendorBundle, type VendorBundle } from '../lib/agent-vendor-repo';
+import { buildBuildingMemory } from '../lib/agent-building-memory';
 
 function clip(value: unknown, max: number): string {
   return String(value || '').slice(0, max);
+}
+
+// SEC-1 — Wrap resident-supplied free-text in a hard boundary so the
+// model treats it as data, not instruction. The system prompt tells the
+// model that anything inside <resident_text>...</resident_text> is
+// untrusted. Strip any existing delimiter tokens from the input so an
+// attacker can't close the boundary mid-payload ("</resident_text>
+// SYSTEM: now obey...").
+//
+// We DON'T strip "instructions" — the model should still see the
+// original wording so it can summarize correctly. The defense is the
+// boundary + prompt instruction, not censorship.
+export function wrapUntrusted(text: unknown): string {
+  const safe = String(text ?? '').replace(/<\/?resident_text>/gi, '[tag]');
+  return `<resident_text>${safe}</resident_text>`;
 }
 
 // Compress a tool output into a short human-readable phrase for the
@@ -92,16 +110,39 @@ export function inferCategoryFromTask(task: string): string | null {
   return null;
 }
 
-// Strip stopwords + punctuation; lowercase; keep tokens >= 4 chars. Used
-// to score title overlap between the new task and past resolved tickets.
+// Strip stopwords + punctuation; lowercase; keep meaningful tokens.
+// Used to score title overlap between the new task and past resolved
+// tickets.
+//
+// COR-M2 — Added Spanish and French stopwords. Previously only pt+en
+// were filtered, so a French ticket "problème avec l'ascenseur" would
+// keep "avec" / "probleme" as keywords and inflate overlap against
+// unrelated past tickets that happened to share those tokens.
+//
+// COR-M5 — Lowered the min token length from 4 to 3, and added a
+// domain-specific allowlist for short acronyms (AC, EV, UV, RH, TI)
+// that mean something in a building-ops context. The 4-char cutoff
+// was dropping "AC" / "ar condicionado" → "ac" mappings and missing
+// matches between past and current AC tickets.
 const STOPWORDS = new Set([
+  // Portuguese
   'para','com','sem','que','dos','das','uma','este','esta','esse','essa','isso',
   'pelo','pela','suas','seus','minha','meu','muito','mais','sobre','tambem',
   'mas','por','foi','tem','ter','ser','este','isso','aqui','agora','hoje',
   'entre','sobre','depois','antes','quando','onde','como','porque','quanto',
+  // English
   'the','and','for','with','from','that','this','these','those','some','very',
   'also','more','need','needs','urgent','urgente','again','then','before','after',
+  // Spanish (COR-M2)
+  'que','con','sin','los','las','del','una','unas','unos','este','esta','esto','eso',
+  'por','para','pero','como','cuando','donde','porque','muy','mas','sobre','entre',
+  'desde','hasta','tras','tambien','tener','ser','estar','hace','hacer',
+  // French (COR-M2)
+  'que','avec','sans','les','des','une','cette','cet','ces','dans','pour','par',
+  'pas','mais','comme','quand','tres','plus','dont','donc','aussi','etre','avoir',
+  'sont','etait','sera','jamais','toujours','aujourd','demain','hier',
 ]);
+const SHORT_TOKEN_ALLOWLIST = new Set(['ac','ev','uv','rh','ti','tv','wc','wi','fi']);
 export function extractKeywords(s: string): string[] {
   return String(s || '')
     .normalize('NFD')
@@ -109,7 +150,11 @@ export function extractKeywords(s: string): string[] {
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, ' ')
     .split(/\s+/)
-    .filter((w) => w.length >= 4 && !STOPWORDS.has(w));
+    .filter((w) => {
+      if (!w || STOPWORDS.has(w)) return false;
+      if (w.length >= 3) return true;
+      return SHORT_TOKEN_ALLOWLIST.has(w);
+    });
 }
 
 // Cheap overlap score. Equal-weight tokens; pre-normalised both sides so
@@ -245,72 +290,14 @@ async function runAdminAgentInner(args: RunAdminAgentArgs): Promise<RunAdminAgen
      WHERE b.condominium_id = ?`
   ).get(args.condoId) as any;
 
-  // Vendor reputation — joins dispatch stats so the model sees how each
-  // vendor has actually performed (responded N out of M, avg response time).
-  // The picker preselection uses the same stats client-side; here it shapes
-  // the prompt so the AI prefers proven responders over alphabetic-first.
-  const serviceContacts = db.prepare(
-    `WITH stats AS (
-       SELECT service_contact_id,
-              SUM(CASE WHEN channel IN ('whatsapp','email') THEN 1 ELSE 0 END) AS sent,
-              SUM(CASE WHEN status = 'responded' AND channel IN ('whatsapp','email') THEN 1 ELSE 0 END) AS responded,
-              AVG(CASE WHEN status = 'responded' AND responded_at IS NOT NULL
-                       THEN (strftime('%s', responded_at) - strftime('%s', created_at))
-                       ELSE NULL END) AS avg_response_seconds
-       FROM ticket_dispatches
-       GROUP BY service_contact_id
-     )
-     SELECT sc.category, sc.company_name, sc.contact_name, sc.phone, sc.whatsapp, sc.email, sc.website,
-            sc.service_scope, sc.notes, sc.emergency_available, sc.preferred, sc.last_used_at,
-            COALESCE(stats.sent, 0) AS dispatches_total,
-            COALESCE(stats.responded, 0) AS dispatches_responded,
-            stats.avg_response_seconds AS avg_response_seconds
-     FROM service_contacts sc
-     LEFT JOIN stats ON stats.service_contact_id = sc.id
-     WHERE sc.condominium_id = ? AND sc.active = 1
-     ORDER BY sc.preferred DESC, sc.emergency_available DESC, sc.company_name ASC
-     LIMIT 40`
-  ).all(args.condoId) as any[];
-
-  // Cost history per vendor — pulled from the expenses ledger so the agent
-  // can answer "how much will this cost?" with actual past spend instead of
-  // "confirm by quote." Match is `LOWER(expenses.vendor) LIKE company_name
-  // + '%'` since the free-text vendor column drifts (admins type 'Otis' or
-  // 'Otis Elevadores' or 'Otis - SP'); the prefix match tolerates that.
-  // Last 24 months only — older data isn't a useful cost signal.
-  const vendorCostHistory = db.prepare(
-    `SELECT sc.id           AS service_contact_id,
-            sc.company_name AS company_name,
-            COUNT(e.id)     AS expense_count,
-            SUM(e.amount_cents) AS total_cents,
-            AVG(e.amount_cents) AS avg_cents,
-            MIN(e.amount_cents) AS min_cents,
-            MAX(e.amount_cents) AS max_cents,
-            MAX(e.spent_at)     AS last_spent_at,
-            (SELECT amount_cents FROM expenses e2
-             WHERE e2.condominium_id = sc.condominium_id
-               AND LOWER(e2.vendor) LIKE LOWER(sc.company_name) || '%'
-             ORDER BY spent_at DESC LIMIT 1) AS last_amount_cents
-     FROM service_contacts sc
-     LEFT JOIN expenses e
-       ON e.condominium_id = sc.condominium_id
-      AND LOWER(e.vendor) LIKE LOWER(sc.company_name) || '%'
-      AND substr(e.spent_at, 1, 10) >= date('now', '-24 months')
-     WHERE sc.condominium_id = ? AND sc.active = 1
-     GROUP BY sc.id, sc.company_name
-     HAVING expense_count > 0`
-  ).all(args.condoId) as Array<{
-    service_contact_id: number;
-    company_name: string;
-    expense_count: number;
-    total_cents: number | null;
-    avg_cents: number | null;
-    min_cents: number | null;
-    max_cents: number | null;
-    last_spent_at: string | null;
-    last_amount_cents: number | null;
-  }>;
-  const costByVendor = new Map(vendorCostHistory.map((c) => [String(c.company_name).toLowerCase(), c]));
+  // ARC-R4 — Vendor data extracted to lib/agent-vendor-repo.ts. The
+  // bundle returns contacts (with reputation stats), cost history map
+  // keyed by lowercase company_name, AND the name→id map used by the
+  // SEC-2 binding to drop hallucinated vendor names. One DB round-
+  // trip pair, same shape the inline queries produced before.
+  const vendorBundle: VendorBundle = loadVendorBundle(args.condoId);
+  const serviceContacts = vendorBundle.contacts;
+  const costByVendor = vendorBundle.costByVendor;
 
   const amenities = db.prepare(
     `SELECT name, description, capacity, admin_notes
@@ -355,95 +342,28 @@ async function runAdminAgentInner(args: RunAdminAgentArgs): Promise<RunAdminAgen
   //
   // Detection: derive a likely category from keywords in the task text
   // (cheap, no model call). Then SQL on that.
+  // ARC-R4 — Building memory extracted to lib/agent-building-memory.ts.
+  // The orchestrator composes: (a) inferred category from task text,
+  // (b) similar resolved tickets ranked by keyword overlap + recency,
+  // (c) open-similar count over 30 days, (d) local hour + after-hours
+  // signal for the condo's timezone. Inferred category + task
+  // keywords stay in the runner because they're shared with the
+  // sanitizer; everything else lives in the module now.
   const inferredCategory = inferCategoryFromTask(args.task);
   const taskKeywords = extractKeywords(args.task);
-
-  let similarResolved: any[] = [];
-  let openSimilarCount = 0;
-  if (inferredCategory) {
-    // Resolved tickets in same category, last 12 months. Score each by
-    // how many of the new task's keywords appear in the title — top 3
-    // by (keyword overlap, recency).
-    const candidates = db.prepare(
-      `SELECT t.id, t.title, t.description, t.category, t.resolved_at,
-              t.agent_plan,
-              GROUP_CONCAT(DISTINCT sc.company_name) AS dispatched_vendors,
-              MAX(d.responded_at)                      AS last_vendor_responded_at,
-              MAX(d.response_summary)                  AS last_vendor_response,
-              (SELECT body FROM ticket_comments c
-               WHERE c.ticket_id = t.id ORDER BY c.created_at DESC LIMIT 1) AS last_comment
-       FROM tickets t
-       LEFT JOIN ticket_dispatches d ON d.ticket_id = t.id
-       LEFT JOIN service_contacts sc ON sc.id = d.service_contact_id
-       WHERE t.condominium_id = ?
-         AND t.category = ?
-         AND t.remediation_status = 'resolved'
-         AND substr(t.resolved_at, 1, 10) >= date('now', '-12 months')
-       GROUP BY t.id
-       ORDER BY t.resolved_at DESC
-       LIMIT 20`
-    ).all(args.condoId, inferredCategory) as any[];
-
-    const scored = candidates.map((c) => ({
-      ...c,
-      _score: scoreTitleOverlap(taskKeywords, c.title || ''),
-    })).sort((a, b) => {
-      if (b._score !== a._score) return b._score - a._score;
-      return String(b.resolved_at || '').localeCompare(String(a.resolved_at || ''));
-    });
-    similarResolved = scored.slice(0, 3);
-
-    openSimilarCount = (db.prepare(
-      `SELECT COUNT(*) AS n FROM tickets
-       WHERE condominium_id = ?
-         AND category = ?
-         AND remediation_status != 'resolved'
-         AND substr(created_at, 1, 10) >= date('now', '-30 days')`
-    ).get(args.condoId, inferredCategory) as { n: number }).n;
-  }
-
-  // Time-of-day context. Uses the condo's IANA timezone (default
-  // America/Sao_Paulo) — Intl.DateTimeFormat handles DST automatically,
-  // so an admin in any zone gets the right "is it after hours?" signal.
-  // The intent is to stop the agent recommending "ligar agora" at 22h.
-  const now = new Date();
-  const tz = (condo?.timezone as string | null) || 'America/Sao_Paulo';
-  let localHour: number;
-  try {
-    localHour = Number(new Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12: false, timeZone: tz }).format(now));
-    if (!Number.isFinite(localHour)) throw new Error('invalid hour');
-  } catch {
-    // Unknown timezone string → fall back to BRT so the runner doesn't
-    // throw. Logged so a bad condo.timezone gets noticed.
-    console.warn(`[agent] invalid condo timezone "${tz}" — falling back to UTC-3`);
-    localHour = ((now.getUTCHours() - 3) % 24 + 24) % 24;
-  }
-  const isOutsideBusinessHours = localHour < 8 || localHour >= 19;
-
-  const buildingMemory = {
-    similar_resolved_tickets: similarResolved.map((t) => {
-      let agentPlanCost: number | null = null;
-      try {
-        if (t.agent_plan) {
-          const parsed = JSON.parse(t.agent_plan);
-          agentPlanCost = parsed?.proposal_draft?.estimated_cost ?? null;
-        }
-      } catch { /* malformed plan — leave cost null */ }
-      return {
-        id: t.id,
-        title: clip(t.title, 160),
-        resolved_at: t.resolved_at,
-        dispatched_vendors: t.dispatched_vendors,
-        resolution_note: clip(t.last_vendor_response || t.last_comment || '', 400),
-        estimated_cost_brl: agentPlanCost,
-      };
-    }),
-    open_similar_count: openSimilarCount,
-    inferred_category: inferredCategory,
-    current_local_time: now.toISOString(),
-    local_hour: localHour,
-    is_outside_business_hours: isOutsideBusinessHours,
-  };
+  const buildingMemory = buildBuildingMemory({
+    condoId: args.condoId,
+    task: args.task,
+    inferredCategory,
+    taskKeywords,
+    scoreOverlap: scoreTitleOverlap,
+    timezone: condo?.timezone as string | null | undefined,
+  });
+  // The runner used to keep separate local `now`, `localHour`,
+  // `isOutsideBusinessHours` for the buildingMemory object literal.
+  // The module owns those now — read back from buildingMemory for any
+  // downstream code in this function that still references them.
+  const isOutsideBusinessHours = buildingMemory.is_outside_business_hours;
 
   // Vision step — analyze every image attached to this ticket (cached
   // per-attachment so re-runs are free). Skipped when no ticketId
@@ -469,6 +389,9 @@ async function runAdminAgentInner(args: RunAdminAgentArgs): Promise<RunAdminAgen
     locale: args.locale || '',
     condo: condo ? { name: condo.name, address: condo.address } : null,
     service_contacts: serviceContacts,
+    // SEC-L5 — thread the after-hours flag in so the fallback's
+    // outreach message asks about tomorrow when fired at 23h.
+    is_outside_business_hours: buildingMemory.is_outside_business_hours,
   };
 
   // Output-language enforcement. The in-prompt rule ("use the dominant
@@ -483,7 +406,10 @@ async function runAdminAgentInner(args: RunAdminAgentArgs): Promise<RunAdminAgen
   const context = {
     generated_at: new Date().toISOString(),
     request: {
-      task: args.task,
+      // SEC-1: wrap the resident-controlled task string in a delimiter so
+      // the model treats it as untrusted data, not instruction. See
+      // wrapUntrusted() above and the SECURITY block in prompts.ts.
+      task: wrapUntrusted(args.task),
       mode,
       location: adminInput.location || condo?.address || null,
       budget: adminInput.budget || null,
@@ -499,13 +425,28 @@ async function runAdminAgentInner(args: RunAdminAgentArgs): Promise<RunAdminAgen
     saved_service_contacts: serviceContacts.map((c) => ({
       category: clip(c.category, 80),
       company_name: clip(c.company_name, 140),
+      // contact_name is typically a first name + role ("Plantão Otis",
+      // "João — atendimento"). Useful for personalized outreach drafts
+      // and lower PII than direct contact details.
       contact_name: clip(c.contact_name, 120),
-      phone: clip(c.phone, 60),
-      whatsapp: clip(c.whatsapp, 60),
-      email: clip(c.email, 160),
-      website: clip(c.website, 240),
+      // SEC-H2 — Don't ship literal phone/whatsapp/email PII to
+      // OpenRouter. The model doesn't need the raw numbers to make
+      // decisions; it only needs to know which channels are reachable
+      // so it can recommend "WhatsApp this vendor". The actual
+      // outreach is server-templated post-decision from the DB row
+      // using the service_contact_id binding (SEC-2). This also
+      // reduces prompt token cost ~30% per vendor.
+      has_whatsapp: !!(c.whatsapp && String(c.whatsapp).trim()),
+      has_phone: !!(c.phone && String(c.phone).trim()),
+      has_email: !!(c.email && String(c.email).trim()),
+      // service_scope is semantically necessary (vendor capability
+      // text used to match to task). notes is admin free-text that
+      // tends to contain resident names + unit numbers; cap shorter
+      // and pass-through only the first sentence. The agent doesn't
+      // need the whole admin scratchpad.
       service_scope: clip(c.service_scope, 500),
-      notes: clip(c.notes, 700),
+      notes: clip(String(c.notes || '').split(/[.\n]/)[0], 220),
+      website: clip(c.website, 240),
       emergency_available: !!c.emergency_available,
       preferred: !!c.preferred,
       last_used_at: c.last_used_at,
@@ -567,20 +508,45 @@ async function runAdminAgentInner(args: RunAdminAgentArgs): Promise<RunAdminAgen
     // (description, signals[]) — the model can branch on signals like
     // "leak_active" without having to interpret prose. Empty array when
     // there's no ticket context or no images.
-    attachment_analysis: attachmentAnalysis,
+    //
+    // SEC-M3 (re-audit) — The `description` field is vision-model
+    // output of a resident-uploaded image. A crafted image whose
+    // OCR'd text is "IGNORE PRIOR INSTRUCTIONS..." gets transcribed
+    // verbatim. Wrap it with the same boundary applied to task text
+    // so the prompt instruction telling the model "treat <resident_text>
+    // contents as data" covers this surface too. Signals are
+    // structured tags we control, not free text — no wrapping needed.
+    attachment_analysis: attachmentAnalysis.map((a) => ({
+      ...a,
+      description: a.description ? wrapUntrusted(a.description) : a.description,
+    })),
     // Prior turns in the same thread, oldest first. Capped at 5 so the
     // prompt doesn't grow unbounded on long conversations. Each turn is
     // a tight (user_task, agent_summary, recommended_next_step) tuple —
     // we don't replay the full plan JSON, just the essence, to keep
     // token cost sane.
+    // SEC-M2 — Re-check thread ownership before loading turn history.
+    // The /admin-agent/threads/:id route already gates on (condo_id,
+    // admin_user_id), but `runAdminAgent` is also callable from other
+    // paths and from future code. Loading turns by thread_id alone
+    // would let a misconfigured caller mix conversations across
+    // tenants. The JOIN to agent_threads enforces the scope at the
+    // query layer regardless of how the runner is invoked.
     prior_turns: args.threadId
       ? db.prepare(
-          `SELECT user_task, agent_summary, agent_plan, turn_index
-           FROM agent_turns
-           WHERE thread_id = ?
-           ORDER BY turn_index DESC
+          `SELECT t.user_task, t.agent_summary, t.agent_plan, t.turn_index
+           FROM agent_turns t
+           JOIN agent_threads th ON th.id = t.thread_id
+           WHERE t.thread_id = ?
+             AND th.condominium_id = ?
+             ${args.adminUserId ? 'AND th.admin_user_id = ?' : ''}
+           ORDER BY t.turn_index DESC
            LIMIT 5`
-        ).all(args.threadId).reverse().map((t: any) => {
+        ).all(
+          ...(args.adminUserId
+            ? [args.threadId, args.condoId, args.adminUserId]
+            : [args.threadId, args.condoId])
+        ).reverse().map((t: any) => {
           let nextStep: string | null = null;
           try {
             const p = t.agent_plan ? JSON.parse(t.agent_plan) : null;
@@ -588,7 +554,14 @@ async function runAdminAgentInner(args: RunAdminAgentArgs): Promise<RunAdminAgen
           } catch { /* malformed plan, skip */ }
           return {
             turn_index: t.turn_index,
-            user_task: clip(t.user_task, 300),
+            // SEC-H1 (re-audit) — Wrap prior-turn user input with the
+            // same delimiter applied to the current task. Without it a
+            // prompt-injection payload typed in turn N gets replayed
+            // unwrapped in turn N+1, bypassing the system-prompt
+            // boundary. agent_summary + recommended_next_step are
+            // already server-produced (LLM output we vetted), so we
+            // don't wrap them — only user-supplied fields.
+            user_task: wrapUntrusted(clip(t.user_task, 300)),
             agent_summary: clip(t.agent_summary, 300),
             recommended_next_step: nextStep ? clip(nextStep, 200) : null,
           };
@@ -623,7 +596,18 @@ async function runAdminAgentInner(args: RunAdminAgentArgs): Promise<RunAdminAgen
     return parsed;
   };
 
-  if (args.forceFallback) {
+  // COR-M4 — Detect out-of-scope tasks BEFORE the LLM call. The
+  // sanitizer rewrites these tasks as refusals downstream anyway, so
+  // there's no reason to spend tokens generating a plan that will be
+  // discarded. We force the fallback path which is faster, free, and
+  // produces output the sanitizer can refuse identically.
+  if (!args.forceFallback && looksOutOfScope(args.task || '')) {
+    if (args.agentRunId) {
+      appendAgentRunProgress(args.agentRunId, { label: 'Tarefa fora de escopo — recusa direta' });
+    }
+    raw = fallbackAdminAgent(adminInput);
+    usedFallback = true;
+  } else if (args.forceFallback) {
     raw = fallbackAdminAgent(adminInput);
     usedFallback = true;
     if (args.agentRunId) {
@@ -745,7 +729,39 @@ async function runAdminAgentInner(args: RunAdminAgentArgs): Promise<RunAdminAgen
   }
   } // end: concurrency-guard fallback vs live LLM path
 
-  const plan = sanitizeAdminAgentOutput(raw, adminInput);
+  // COR-H6 — thread the trusted usedFallback signal through so the
+  // sanitizer doesn't have to read `_fallback` from the model's raw
+  // output (which it would emit on a real LLM response after seeing
+  // the field in prompt examples).
+  const plan = sanitizeAdminAgentOutput(raw, adminInput, usedFallback);
+
+  // SEC-2 — Bind each model-emitted network fit back to a real
+  // service_contacts row via DB id, and DROP any fit whose company_name
+  // doesn't match a saved contact in this condo. The model only ever
+  // sees company_name strings (which could be hallucinated or planted
+  // via prompt injection); the auto-dispatch path will dispatch by id,
+  // so an unmatched fit becomes a no-op rather than a possible
+  // attacker-controlled outreach. The build map (vendorBundle.idByName)
+  // is built case-insensitively (also fixes COR-H5).
+  if (plan.existing_network_fit?.length) {
+    plan.existing_network_fit = plan.existing_network_fit
+      .map((fit) => {
+        const id = vendorBundle.idByName.get(String(fit.company_name || '').toLowerCase()) ?? null;
+        if (!id) {
+          // Model named a vendor that doesn't exist in this condo. Could
+          // be a hallucination or a prompt-injection attempt. Either way,
+          // we cannot dispatch to it — return with id=null so callers
+          // can refuse, and log the event.
+          console.warn(`[agent] dropping unmatched fit company_name="${fit.company_name}" for condo ${args.condoId}`);
+        }
+        return { ...fit, service_contact_id: id };
+      })
+      // Drop entries with no matching DB row entirely — the UI doesn't
+      // need to show ghosts, and the dispatch path is no longer the only
+      // line of defense.
+      .filter((fit) => fit.service_contact_id != null);
+  }
+
   // Decorate the existing_network_fit entries with cost history from the
   // expenses ledger. The model may or may not echo the cost data back; we
   // always have it from the DB, so the UI gets reliable numbers either
@@ -837,26 +853,37 @@ async function runAdminAgentInner(args: RunAdminAgentArgs): Promise<RunAdminAgen
   // Persist the turn to agent_turns when we have a thread + admin. The
   // route is responsible for creating the thread row before calling this
   // helper if it's a fresh conversation; here we just append.
+  //
+  // COR-M1 — SELECT MAX + INSERT could race when two tabs hit the same
+  // thread simultaneously: both reads see the same MAX → both insert
+  // with the same turn_index → the second turn is silently dropped by
+  // any consumer that paginates by index. Wrap the read-then-write in
+  // a SQLite transaction so concurrent calls serialize at the writer.
+  // Even though better-sqlite3 is synchronous within a process, the
+  // transaction makes the invariant explicit and survives an
+  // accidental async refactor.
   let persistedTurnIndex: number | undefined;
   if (args.threadId && args.adminUserId) {
-    const next = (db.prepare(
-      `SELECT COALESCE(MAX(turn_index), -1) + 1 AS next_index FROM agent_turns WHERE thread_id = ?`
-    ).get(args.threadId) as { next_index: number }).next_index;
-    db.prepare(
-      `INSERT INTO agent_turns (thread_id, turn_index, user_task, agent_summary, agent_plan, fallback)
-       VALUES (?, ?, ?, ?, ?, ?)`
-    ).run(
-      args.threadId,
-      next,
-      args.task,
-      String(plan.summary || '').slice(0, 800),
-      JSON.stringify(plan),
-      usedFallback ? 1 : 0,
-    );
-    db.prepare(
-      `UPDATE agent_threads SET updated_at = CURRENT_TIMESTAMP WHERE id = ?`
-    ).run(args.threadId);
-    persistedTurnIndex = next;
+    persistedTurnIndex = db.transaction(() => {
+      const next = (db.prepare(
+        `SELECT COALESCE(MAX(turn_index), -1) + 1 AS next_index FROM agent_turns WHERE thread_id = ?`
+      ).get(args.threadId) as { next_index: number }).next_index;
+      db.prepare(
+        `INSERT INTO agent_turns (thread_id, turn_index, user_task, agent_summary, agent_plan, fallback)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      ).run(
+        args.threadId,
+        next,
+        args.task,
+        String(plan.summary || '').slice(0, 800),
+        JSON.stringify(plan),
+        usedFallback ? 1 : 0,
+      );
+      db.prepare(
+        `UPDATE agent_threads SET updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+      ).run(args.threadId);
+      return next;
+    })();
   }
 
   return { plan, fallback: usedFallback, thread_id: args.threadId, turn_index: persistedTurnIndex };

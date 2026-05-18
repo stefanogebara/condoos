@@ -274,8 +274,11 @@ router.post('/invite', requireAuth, requireRole('board_admin'), async (req: Auth
   if (existing) return fail(res, 'email_taken', 409);
 
   // Hash the password — bcryptjs imported lazily to keep the route lean.
+  // Cost 12 matches /register, /dev-register, /reset-password and the
+  // DUMMY_BCRYPT_HASH used by /login. Don't introduce cost variance per
+  // route — it puts noise into the login timing channel.
   const bcrypt = await import('bcryptjs');
-  const pwHash = bcrypt.hashSync(data.password, 10);
+  const pwHash = bcrypt.hashSync(data.password, 12);
 
   const result = db.prepare(
     `INSERT INTO users (condominium_id, email, password_hash, first_name, last_name, role)

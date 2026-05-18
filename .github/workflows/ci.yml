@@ -28,6 +28,14 @@ jobs:
       - run: npm test
       - run: npx tsc --noEmit
       - run: npm run seed
+      # Hard gate on agent behavior. Covers SEC-1 (prompt-injection
+      # boundary), SEC-2 (vendor binding), SEC-5 (urgent-safety
+      # evidence), cross-condo isolation, fallback path, and the
+      # auto-dispatch gate matrix. No live LLM calls — the harness
+      # forces OPENROUTER_API_KEY='' and AGENT_USE_REACT='0', so the
+      # job has zero ongoing cost. When this fails, the PR is blocked:
+      # the confidence-cap rule and gate semantics live here.
+      - run: npm run agent:eval
 
   e2e:
     runs-on: ubuntu-latest

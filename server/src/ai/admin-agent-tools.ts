@@ -248,24 +248,39 @@ function getVendorHistory(ctx: ToolContext, input: any) {
   ).get(ctx.condoId, name) as any;
   if (!vendor) return { error: 'vendor_not_found', searched_name: name };
 
-  // Dispatch stats + 5 most-recent.
+  // SEC-M1 — Scope dispatch joins by condominium_id even though
+  // service_contact_id is already condo-bound (vendor.id was fetched
+  // WHERE condominium_id = ? above). The defense is for: a future
+  // data migration that ever lets service_contact_id span condos, or
+  // a vendor row that gets reassigned. The cost of the extra
+  // condition is zero — the index already covers the path.
   const dispatches = db.prepare(
     `SELECT d.id, d.channel, d.status, d.created_at, d.responded_at, d.response_summary,
             t.id AS ticket_id, t.title AS ticket_title
      FROM ticket_dispatches d
      JOIN tickets t ON t.id = d.ticket_id
-     WHERE d.service_contact_id = ?
+     WHERE d.service_contact_id = ? AND t.condominium_id = ?
      ORDER BY d.created_at DESC
      LIMIT 5`
-  ).all(vendor.id) as any[];
+  ).all(vendor.id, ctx.condoId) as any[];
+  // COR-M3 — Align dispatch_stats to the same 24-month window as
+  // expense_stats. Previously dispatch totals were all-time while
+  // expense counts were 24-month, so the model reasoned about a
+  // vendor with "50 dispatches but only 2 expenses (low confidence)"
+  // when the real comparison should be "12 dispatches in 24 months
+  // vs 2 expenses in 24 months — still low but meaningful". Same
+  // window on both sides means the confidence reasoning lines up.
   const dispatchStats = db.prepare(
     `SELECT COUNT(*) AS total,
-            SUM(CASE WHEN status = 'responded' THEN 1 ELSE 0 END) AS responded,
-            AVG(CASE WHEN status = 'responded' AND responded_at IS NOT NULL
-                     THEN (strftime('%s', responded_at) - strftime('%s', created_at))
+            SUM(CASE WHEN d.status = 'responded' THEN 1 ELSE 0 END) AS responded,
+            AVG(CASE WHEN d.status = 'responded' AND d.responded_at IS NOT NULL
+                     THEN (strftime('%s', d.responded_at) - strftime('%s', d.created_at))
                      ELSE NULL END) AS avg_response_seconds
-     FROM ticket_dispatches WHERE service_contact_id = ?`
-  ).get(vendor.id) as any;
+     FROM ticket_dispatches d
+     JOIN tickets t ON t.id = d.ticket_id
+     WHERE d.service_contact_id = ? AND t.condominium_id = ?
+       AND substr(d.created_at, 1, 10) >= date('now', '-24 months')`
+  ).get(vendor.id, ctx.condoId) as any;
 
   // Expense history.
   const expenses = db.prepare(

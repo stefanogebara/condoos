@@ -181,11 +181,22 @@ function renderPage(opts: {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- SEC-H5 — Suppress the Referer header on all outbound requests.
+     The portal URL contains the HMAC vendor token in the path
+     (/v/<dispatchId>.<token>); without this directive the browser
+     leaks that token to every external resource (fonts.googleapis.com,
+     any tracking pixel in a forwarded email screenshot, etc.) via the
+     Referer header. The token functions as an auth credential, so
+     even logging-only third parties end up holding it. -->
+<meta name="referrer" content="no-referrer">
 <title>${escapeHtml(opts.title)}</title>
 ${opts.noindex ? '<meta name="robots" content="noindex,nofollow">' : ''}
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Inter+Tight:wght@500;600;700&display=swap">
+<!-- Fonts removed from external CDN (was fonts.googleapis.com +
+     fonts.gstatic.com). The portal now uses the system font stack —
+     loses some typography polish, but keeps the page self-contained
+     and avoids ANY external network request that could leak the
+     token. The CSS below already lists 'Inter, system-ui, ...' as a
+     graceful fallback. -->
 <style>
   /* Palette + type mirror client-app (tailwind.config.js + index.css) so the
      portal feels like the same product, not an orphaned server page. */
@@ -590,16 +601,29 @@ router.post('/:combined/complete', (req: Request, res: Response) => {
   db.prepare(
     `UPDATE ticket_dispatches SET response_summary = ? WHERE id = ?`
   ).run(newSummary, parsed.dispatchId);
-  // Flip the ticket to resolved — same path the admin's manual
-  // /resolve route takes, minus the resident announcement (the admin
-  // can publish that later if they want).
+
+  // SEC-H4 — DO NOT flip the ticket to `status='resolved'` here.
+  //
+  // Anyone holding a valid vendor token (the vendor themselves, OR an
+  // attacker who got the token via a forwarded WhatsApp message,
+  // Referer leak, or shoulder-surfing the link) can call this
+  // endpoint and used to be able to unilaterally mark a ticket
+  // resolved — including safety-critical tickets like gas leaks. The
+  // admin then had no signal that something was wrong; the ticket
+  // simply disappeared from the active queue.
+  //
+  // Now: the vendor's claim goes to `remediation_status='vendor_claims_complete'`
+  // (only flipping the global ticket state if it wasn't already in a
+  // terminal/resolved state). The admin keeps `status` and must
+  // explicitly confirm via the normal admin /resolve path before the
+  // ticket is considered closed. The admin gets a notification
+  // (below) prompting them to verify.
   db.prepare(
     `UPDATE tickets
-     SET status = 'resolved',
-         remediation_status = 'resolved',
-         resolved_at = CURRENT_TIMESTAMP,
+     SET remediation_status = 'vendor_claims_complete',
          updated_at = CURRENT_TIMESTAMP
-     WHERE id = ? AND remediation_status != 'resolved'`
+     WHERE id = ?
+       AND remediation_status NOT IN ('resolved','vendor_claims_complete')`
   ).run(dispatch.ticket_id);
 
   // Cost-variance check — compare the final cost the vendor reported
@@ -651,9 +675,12 @@ router.post('/:combined/complete', (req: Request, res: Response) => {
       const dir = costVariance.overBudget
         ? `${pct}% ACIMA do orçado (R$ ${costVariance.promised})`
         : `${Math.abs(pct)}% abaixo do orçado (R$ ${costVariance.promised})`;
-      msg = `⚠️ ${vendor} concluiu "${ticketTitle}" com custo final R$ ${costVariance.final} — ${dir}. Confira: /board/tickets`;
+      msg = `⚠️ ${vendor} afirma ter concluído "${ticketTitle}" com custo final R$ ${costVariance.final} — ${dir}. Confirme em /board/tickets`;
     } else {
-      msg = `🎉 ${vendor} concluiu: "${ticketTitle}"${costStr}. Ver: /board/tickets`;
+      // SEC-H4 — Vendor's claim is now pending admin confirmation, not
+      // an automatic close. Message wording reflects that the admin
+      // must take action before the ticket leaves the active queue.
+      msg = `✅ ${vendor} afirma ter concluído: "${ticketTitle}"${costStr}. Confirme em /board/tickets`;
     }
     void notifyUsers(admins, msg).catch((err) => {
       console.warn(`[vendor.complete] admin notify failed:`, (err as Error)?.message || err);

@@ -66,8 +66,18 @@ export default function Join() {
         setStep(3);
       }
     } catch (err: any) {
+      // Map known backend error codes to translated strings. Raw codes
+      // like 'unit_wrong_condo' / 'already_claimed' must never reach the
+      // toast — they're snake_case English internals.
       const code = err?.response?.data?.error;
-      toast.error(code === 'invalid_input' ? t('Adicione ao menos um telefone válido') : code || t('Falha ao entrar'));
+      const msg = ({
+        invalid_input:    t('Adicione ao menos um telefone válido'),
+        invalid_code:     t('Esse código não corresponde a nenhum prédio'),
+        unit_not_found:   t('Apartamento não encontrado'),
+        unit_wrong_condo: t('Esse apartamento não pertence a esse prédio'),
+        already_claimed:  t('Você já está vinculado a esse prédio'),
+      } as Record<string, string>)[code] || t('Falha ao entrar');
+      toast.error(msg);
     } finally { setBusy(false); }
   }
 

@@ -188,17 +188,17 @@ export default function Signup() {
 
           <form onSubmit={submit} className="space-y-3" noValidate>
             <div className="grid sm:grid-cols-2 gap-3">
-              <input className="input" aria-label="Nome" placeholder="Nome" value={firstName} onChange={(e) => setFirstName(e.target.value)} required autoComplete="given-name" />
-              <input className="input" aria-label="Sobrenome" placeholder="Sobrenome" value={lastName} onChange={(e) => setLastName(e.target.value)} required autoComplete="family-name" />
+              <input className="input" aria-label={t('Nome')} placeholder={t('Nome')} value={firstName} onChange={(e) => setFirstName(e.target.value)} required autoComplete="given-name" />
+              <input className="input" aria-label={t('Sobrenome')} placeholder={t('Sobrenome')} value={lastName} onChange={(e) => setLastName(e.target.value)} required autoComplete="family-name" />
             </div>
-            <input type="email" className="input" aria-label="Email" placeholder="voce@predio.com.br" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" />
-            <input type="password" className="input" aria-label="Senha" placeholder="senha de 12+ caracteres" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={12} autoComplete="new-password" />
+            <input type="email" className="input" aria-label={t('Email')} placeholder={t('voce@predio.com.br')} value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" />
+            <input type="password" className="input" aria-label={t('Senha')} placeholder={t('senha de 12+ caracteres')} value={password} onChange={(e) => setPassword(e.target.value)} required minLength={12} autoComplete="new-password" />
             {intent === 'join' && (
               <label className="block">
-                <span className="sr-only">Código de convite</span>
+                <span className="sr-only">{t('Código de convite')}</span>
                 <input
                   className="input text-center font-mono uppercase tracking-[0.24em]"
-                  aria-label="Código de convite"
+                  aria-label={t('Código de convite')}
                   placeholder="ABC123"
                   value={code}
                   onChange={(e) => setCode(e.target.value.toUpperCase())}

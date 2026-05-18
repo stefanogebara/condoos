@@ -6,7 +6,7 @@ import PageHeader from '../../components/PageHeader';
 import GlassCard from '../../components/GlassCard';
 import Button from '../../components/Button';
 import Badge from '../../components/Badge';
-import { apiGet, apiPost } from '../../lib/api';
+import { apiGet, apiPost, apiPatch } from '../../lib/api';
 import { t, useLocale } from '../../lib/i18n';
 
 // vendor_options is back now that the backend has a cited research tool.
@@ -284,6 +284,32 @@ export default function BoardAgent() {
   const { locale } = useLocale();
   const tr = (key: string) => t(key, locale);
   const navigate = useNavigate();
+  // ARC-R5 — Auto-dispatch kill switch state. Surface the current
+  // setting + a toggle so the board can pause automatic vendor sends
+  // without a redeploy. The agent itself still runs (drafting outreach
+  // for the admin is still valuable); only the auto-WhatsApp fire is
+  // gated. Reads from /api/admin/agent/kill-switch on mount.
+  const [autoDispatchEnabled, setAutoDispatchEnabled] = useState<boolean | null>(null);
+  const [killSwitchBusy, setKillSwitchBusy] = useState(false);
+  React.useEffect(() => {
+    apiGet<{ auto_dispatch_enabled: boolean }>('/admin/agent/kill-switch')
+      .then((r) => setAutoDispatchEnabled(r.auto_dispatch_enabled))
+      .catch(() => setAutoDispatchEnabled(null));
+  }, []);
+  async function toggleAutoDispatch() {
+    if (autoDispatchEnabled == null || killSwitchBusy) return;
+    setKillSwitchBusy(true);
+    try {
+      const next = !autoDispatchEnabled;
+      await apiPatch('/admin/agent/kill-switch', { auto_dispatch_enabled: next });
+      setAutoDispatchEnabled(next);
+      toast.success(next ? tr('Auto-dispatch ligado') : tr('Auto-dispatch pausado'));
+    } catch {
+      toast.error(tr('Não foi possível atualizar'));
+    } finally {
+      setKillSwitchBusy(false);
+    }
+  }
   const [task, setTask] = useState('');
   const [mode, setMode] = useState<Mode>('general');
   const [location, setLocation] = useState('');
@@ -563,6 +589,43 @@ export default function BoardAgent() {
           </div>
         }
       />
+
+      {/* ARC-R5 — Auto-dispatch kill switch. Compact banner that shows
+          the current state and lets the board pause / resume without
+          a redeploy. Hidden until the GET resolves so we don't flash
+          a wrong default state. */}
+      {autoDispatchEnabled !== null && (
+        <GlassCard
+          className={`p-3 mb-5 flex items-center justify-between gap-3 ${
+            autoDispatchEnabled ? '' : 'border-amber-300 bg-amber-50/60'
+          }`}
+        >
+          <div className="flex items-center gap-2.5 text-sm">
+            <span className={`inline-block w-2 h-2 rounded-full ${autoDispatchEnabled ? 'bg-sage-500' : 'bg-amber-500'}`} />
+            <div>
+              <div className="font-medium text-dusk-500">
+                {autoDispatchEnabled
+                  ? tr('Auto-dispatch ativo')
+                  : tr('Auto-dispatch pausado')}
+              </div>
+              <div className="text-xs text-dusk-300">
+                {autoDispatchEnabled
+                  ? tr('Chamados verificados são enviados ao fornecedor automaticamente após a janela de cancelamento.')
+                  : tr('O agente continua analisando, mas nenhum disparo automático é enviado. Aprovação manual obrigatória.')}
+              </div>
+            </div>
+          </div>
+          <Button
+            type="button"
+            variant={autoDispatchEnabled ? 'ghost' : 'primary'}
+            size="sm"
+            onClick={toggleAutoDispatch}
+            loading={killSwitchBusy}
+          >
+            {autoDispatchEnabled ? tr('Pausar') : tr('Reativar')}
+          </Button>
+        </GlassCard>
+      )}
 
       {/* Thread history drawer — collapsed by default, opens above the
           workbench so the admin can pick a past conversation to resume.

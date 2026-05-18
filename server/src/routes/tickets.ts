@@ -9,6 +9,7 @@ import { createTicketQuote, listTicketQuotes } from '../lib/ticket-quotes';
 import { categoryMatches } from '../lib/category-aliases';
 import { buildVendorPortalUrl } from '../lib/vendor-tokens';
 import { evaluateAgentAutoDispatch, isSafetyCriticalUrgent } from '../lib/agent-auto-dispatch';
+import { enqueueDispatch } from '../lib/agent-dispatch-queue';
 import { runAdminAgent } from '../ai/admin-agent-runner';
 import { notifyUsers } from '../lib/whatsapp';
 import { assertFileReadyForUse, attachFileToTarget, fileDownloadPath } from '../lib/files';
@@ -133,22 +134,49 @@ function shouldSkipVetoWindow(priority: string, category: string): boolean {
   return isSafetyCriticalUrgent(priority, category);
 }
 
+// ARC-R2 — Enqueue into agent_dispatch_queue instead of firing an
+// IIFE. The queue worker (lib/agent-dispatch-queue.ts, started in
+// server.ts) drains within ~5s and calls runDispatchForTicket below.
+// A crash between enqueue and processor execution leaves the row
+// stuck at 'claimed' which the reaper transitions to 'failed' for
+// admin visibility; never silently lost. Idempotent via the partial
+// unique index — concurrent verifies on the same ticket no-op.
 export function dispatchAgentInBackground(
   ticketId: number,
   condoId: number,
   locale: string | undefined,
   // Audit-trail completeness — when the agent run is triggered by a
-  // verification, we know who triggered it. Threading the id lets the
-  // agent_runs row attribute the run to the verifier instead of leaving
-  // admin_user_id null on the auto-dispatch path.
+  // verification, we know who triggered it. Threaded through the
+  // queue row so the agent_runs row attributes the run to the
+  // verifier instead of leaving admin_user_id null on the auto-
+  // dispatch path.
   triggeredByUserId?: number,
 ): void {
-  void (async () => {
-    try {
-      const ticket = db.prepare(
-        `SELECT title, description, priority, category FROM tickets WHERE id = ? AND condominium_id = ?`
-      ).get(ticketId, condoId) as { title: string; description: string; priority: string; category: string } | undefined;
-      if (!ticket) return;
+  enqueueDispatch({
+    ticketId,
+    condoId,
+    triggeredByUserId,
+    locale: locale || undefined,
+  });
+}
+
+// The actual dispatch work, extracted from the old IIFE body. Called
+// by the queue worker for each claimed row. Throws on failure so the
+// worker can mark the queue row 'failed' with the error message; the
+// existing ticket.remediation_status='blocked_needs_admin' bookkeeping
+// runs inside the try/catch below so the resident UI sees a terminal
+// state either way.
+export async function runDispatchForTicket(
+  ticketId: number,
+  condoId: number,
+  locale: string | undefined,
+  triggeredByUserId?: number,
+): Promise<void> {
+  try {
+    const ticket = db.prepare(
+      `SELECT title, description, priority, category FROM tickets WHERE id = ? AND condominium_id = ?`
+    ).get(ticketId, condoId) as { title: string; description: string; priority: string; category: string } | undefined;
+    if (!ticket) return;
 
       const result = await runAdminAgent({
         condoId,
@@ -203,11 +231,24 @@ export function dispatchAgentInBackground(
       if (blocked) return;
       const topFit = result.plan?.existing_network_fit?.[0];
       if (!topFit?.company_name) return;
+
+      // SEC-2 — Dispatch by the server-decorated DB id, not the model-
+      // emitted company_name string. The runner binds service_contact_id
+      // to a real row in this condo at sanitize-time and drops any fit
+      // whose name didn't match. If service_contact_id is missing here,
+      // it means the runner is older than this code OR the binding failed
+      // for some other reason — in both cases, refuse to dispatch rather
+      // than fall back to a name lookup that's the original attack surface.
+      const fitId = topFit.service_contact_id;
+      if (!fitId || typeof fitId !== 'number') {
+        console.warn(`[tickets:${ticketId}] auto-dispatch held: fit_missing_service_contact_id`);
+        return;
+      }
       const vendor = db.prepare(
         `SELECT id, company_name, category, whatsapp, email, contact_name
          FROM service_contacts
-         WHERE condominium_id = ? AND active = 1 AND company_name = ?`
-      ).get(condoId, topFit.company_name) as
+         WHERE id = ? AND condominium_id = ? AND active = 1`
+      ).get(fitId, condoId) as
         | { id: number; company_name: string; category: string; whatsapp: string | null; email: string | null; contact_name: string | null }
         | undefined;
       if (!vendor || !vendor.whatsapp) return;
@@ -216,6 +257,20 @@ export function dispatchAgentInBackground(
         `SELECT id FROM ticket_dispatches WHERE ticket_id = ? AND status NOT IN ('cancelled','failed') LIMIT 1`
       ).get(ticketId);
       if (existingDispatch) return;
+
+      // ARC-R5 — Per-condo kill switch. When ops flips
+      // condominiums.auto_dispatch_enabled to 0, the gate refuses
+      // regardless of confidence/evidence. The agent still ran (the
+      // plan goes to the admin UI), but no automatic WhatsApp fires.
+      // This is the fastest production response to "the agent
+      // shipped something bad" — no redeploy, no env change.
+      const condoSettings = db.prepare(
+        `SELECT auto_dispatch_enabled FROM condominiums WHERE id = ?`
+      ).get(condoId) as { auto_dispatch_enabled: number | null } | undefined;
+      if (condoSettings && !condoSettings.auto_dispatch_enabled) {
+        console.log(`[tickets:${ticketId}] auto-dispatch held: kill_switch_off`);
+        return;
+      }
 
       // Hard auto-dispatch gate. Model confidence alone is not enough:
       // non-urgent tickets require server-visible evidence from building
@@ -246,65 +301,133 @@ export function dispatchAgentInBackground(
         ? null  // worker fires immediately on next tick
         : new Date(Date.now() + AUTO_DISPATCH_VETO_SECONDS * 1000).toISOString().replace('T', ' ').slice(0, 19);
 
-      // Create the dispatch row FIRST so we have an id to sign the
-      // vendor portal token against. message_body is the base text;
-      // we update it with the appended link once the token is built.
-      const dispatch = db.prepare(
-        `INSERT INTO ticket_dispatches
-           (ticket_id, service_contact_id, channel, outbox_id, message_body, status, scheduled_send_after)
-         VALUES (?, ?, 'whatsapp', NULL, ?, 'queued', ?)`
-      ).run(ticketId, vendor.id, baseMessage, sendAfter);
-      const dispatchId = Number(dispatch.lastInsertRowid);
-      recordTicketEvent({
-        ticketId,
-        condoId,
-        eventType: 'vendor.dispatched',
-        title: 'Fornecedor acionado',
-        body: vendor.company_name,
-        metadata: { dispatch_id: dispatchId, vendor_id: vendor.id, channel: 'whatsapp', auto: true },
-        visibility: 'resident',
-      });
-
-      // Build the magic-link URL + the final message body the vendor
-      // will receive. The link lets them respond directly via a tiny
-      // server-rendered form (no admin transcription needed). Falls
-      // back to base message if token signing fails for some reason.
-      let finalMessage = baseMessage;
-      try {
-        const portalUrl = buildVendorPortalUrl(dispatchId);
-        finalMessage = `${baseMessage}\n\nResponder: ${portalUrl}`.slice(0, 4_000);
-      } catch (err) {
-        console.warn(`[tickets:${ticketId}] vendor link sign failed:`, (err as Error)?.message || err);
-      }
-
+      // ARC-R3 — Wrap dispatch creation in a single SQLite transaction.
+      //
+      // Before: 4 INSERTs/UPDATEs across 3 tables ran without atomicity.
+      // A crash between the INSERT ticket_dispatches and the UPDATE
+      // ticket_dispatches outbox_id backfill would leave a dispatch row
+      // with outbox_id=NULL — invisible to the outbox worker — and a
+      // ticket flipped to awaiting_vendor with no scheduled WhatsApp.
+      // The message was silently lost.
+      //
+      // Now: the whole sequence (dispatch insert, audit event, outbox
+      // row, dispatch backfill, ticket flip, vendor last_used stamp)
+      // commits or rolls back as one unit. buildVendorPortalUrl is a
+      // pure HMAC sign so it's safe to call from inside the
+      // transaction body.
       const provider = process.env.WHATSAPP_PROVIDER || 'twilio';
-      // Outbox row — when sendAfter is set, the worker only picks this up
-      // once next_attempt_at <= now, giving the veto window time to elapse.
-      const outbox = db.prepare(
-        `INSERT INTO notification_outbox (channel, provider, phone, body, status, next_attempt_at)
-         VALUES ('whatsapp', ?, ?, ?, 'pending', ?)`
-      ).run(provider, vendor.whatsapp, finalMessage, sendAfter || new Date().toISOString().replace('T', ' ').slice(0, 19));
-      const outboxId = Number(outbox.lastInsertRowid);
+      const dispatchId = db.transaction(() => {
+        // 1. Create the dispatch row to get an id we can sign the
+        //    vendor portal token against.
+        const dispatch = db.prepare(
+          `INSERT INTO ticket_dispatches
+             (ticket_id, service_contact_id, channel, outbox_id, message_body, status, scheduled_send_after)
+           VALUES (?, ?, 'whatsapp', NULL, ?, 'queued', ?)`
+        ).run(ticketId, vendor.id, baseMessage, sendAfter);
+        const dId = Number(dispatch.lastInsertRowid);
 
-      // Backfill dispatch with the outbox link + the final message body.
-      db.prepare(
-        `UPDATE ticket_dispatches SET outbox_id = ?, message_body = ? WHERE id = ?`
-      ).run(outboxId, finalMessage, dispatchId);
+        // 2. Audit event in the same transaction so a partial commit
+        //    can't leave an audit row pointing at a rolled-back dispatch.
+        //
+        // SEC-M5 — Record the agent's actual reasoning so a wrong
+        // dispatch (wrong vendor, prompt-injection survivor, future
+        // calibration drift) can be forensically reconstructed. We
+        // record the gate decision, confidence tier+score, evidence
+        // summary, and first 3 lines of the model's reasoning. Plan
+        // text and tool trace already live in agent_runs.plan_json /
+        // trace_json so we just link by run id.
+        recordTicketEvent({
+          ticketId,
+          condoId,
+          eventType: 'vendor.dispatched',
+          title: 'Fornecedor acionado',
+          body: vendor.company_name,
+          metadata: {
+            dispatch_id: dId,
+            vendor_id: vendor.id,
+            service_contact_id: fitId,
+            channel: 'whatsapp',
+            auto: true,
+            agent_run_id: result.agent_run_id,
+            gate_reason: gate.reason,
+            confidence_tier: result.plan?.confidence?.tier,
+            confidence_score: result.plan?.confidence?.score,
+            evidence: {
+              similar_resolved_ticket: gate.evidence.similarResolvedTicket,
+              high_confidence_cost_history: gate.evidence.highConfidenceCostHistory,
+            },
+            // First 3 reasoning bullets, each clipped — full reasoning
+            // sits in agent_runs.plan_json keyed by agent_run_id.
+            reasoning: (result.plan?.confidence?.reasoning || []).slice(0, 3).map((r: string) => String(r).slice(0, 220)),
+            used_fallback: result.fallback === true,
+          },
+          visibility: 'resident',
+        });
 
-      db.prepare(
-        `UPDATE tickets
-         SET remediation_status = 'awaiting_vendor', updated_at = CURRENT_TIMESTAMP
-         WHERE id = ?`
-      ).run(ticketId);
-      // Stamp last_used_at so the next agent run weights this vendor higher.
-      db.prepare(`UPDATE service_contacts SET last_used_at = CURRENT_TIMESTAMP WHERE id = ?`).run(vendor.id);
+        // 3. Build the magic-link URL + final body. HMAC sign is sync,
+        //    no DB call. Falls back to base message if the secret is
+        //    misconfigured (logged for ops, not silently dropped).
+        let finalMessage = baseMessage;
+        try {
+          const portalUrl = buildVendorPortalUrl(dId);
+          finalMessage = `${baseMessage}\n\nResponder: ${portalUrl}`.slice(0, 4_000);
+        } catch (err) {
+          console.warn(`[tickets:${ticketId}] vendor link sign failed:`, (err as Error)?.message || err);
+        }
+
+        // 4. Outbox row. When sendAfter is set the worker waits for the
+        //    veto window before picking this up.
+        const outbox = db.prepare(
+          `INSERT INTO notification_outbox (channel, provider, phone, body, status, next_attempt_at)
+           VALUES ('whatsapp', ?, ?, ?, 'pending', ?)`
+        ).run(provider, vendor.whatsapp, finalMessage, sendAfter || new Date().toISOString().replace('T', ' ').slice(0, 19));
+        const outboxId = Number(outbox.lastInsertRowid);
+
+        // 5. Backfill dispatch with the outbox link + the final body.
+        db.prepare(
+          `UPDATE ticket_dispatches SET outbox_id = ?, message_body = ? WHERE id = ?`
+        ).run(outboxId, finalMessage, dId);
+
+        // 6. Flip the ticket — once this commits the resident UI shows
+        //    "awaiting vendor" and any subsequent agent runs see the
+        //    existingDispatch guard above. No partial state visible.
+        db.prepare(
+          `UPDATE tickets
+           SET remediation_status = 'awaiting_vendor', updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?`
+        ).run(ticketId);
+
+        // 7. Stamp last_used_at so the next agent run weights this
+        //    vendor higher.
+        db.prepare(`UPDATE service_contacts SET last_used_at = CURRENT_TIMESTAMP WHERE id = ?`).run(vendor.id);
+
+        return dId;
+      })();
 
       console.log(`[tickets:${ticketId}] auto-dispatched to ${vendor.company_name} ${skipVeto ? '(no veto — urgent safety)' : `(veto window ${AUTO_DISPATCH_VETO_SECONDS}s)`}, dispatch #${dispatchId}`);
     } catch (err) {
       markTicketAgentFailed(ticketId);
       console.warn(`[tickets:${ticketId}] background agent failed:`, (err as Error)?.message || err);
+      // SEC-L3 — Record agent failure to the audit timeline so a
+      // prompt-injection attempt or repeated failure pattern can be
+      // detected later. Previously a failed dispatch left only a
+      // console warning, no persistent forensic record.
+      try {
+        recordTicketEvent({
+          ticketId,
+          condoId,
+          eventType: 'agent.failed',
+          title: 'Análise automática falhou',
+          body: 'O agente não conseguiu produzir um plano. Reveja manualmente.',
+          metadata: { error: (err as Error)?.message || String(err) },
+          visibility: 'admin',
+        });
+      } catch { /* audit failure is non-fatal */ }
+      // Re-throw so the queue worker marks the row 'failed' with the
+      // original error message. The ticket bookkeeping above already
+      // ran inside the try block.
+      throw err;
     }
-  })();
 }
 
 const ticketUpdateSchema = z.object({

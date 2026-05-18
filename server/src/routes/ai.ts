@@ -41,6 +41,24 @@ const aiRateLimit = createRateLimit({
   key: (req) => String((req as AuthedRequest).user?.id || req.ip || 'unknown'),
 });
 
+// SEC-M3 — Per-condo budget on top of the per-user limit. A condo with
+// 5 board admins could otherwise burst 5×30=150 LLM-bound requests per
+// minute, each potentially fanning out to 6 ReAct rounds = 900 model
+// calls/min on OpenRouter. The per-condo cap puts the building's
+// shared budget in one bucket regardless of how many board members
+// are hammering the workbench. Generous enough that legitimate work
+// (one admin per minute average, with bursts) never trips it.
+const aiCondoRateLimit = createRateLimit({
+  keyPrefix: 'ai_condo',
+  windowMs: 60_000,
+  max: 60,
+  key: (req) => {
+    const r = req as AuthedRequest;
+    const condoId = r.user?.condominium_id;
+    return condoId ? `condo:${condoId}` : `user:${r.user?.id || r.ip || 'unknown'}`;
+  },
+});
+
 function boundedText(value: unknown, max: number): { ok: true; text: string } | { ok: false; error: 'missing_text' | 'text_too_long' } {
   const text = String(value || '').trim();
   if (!text) return { ok: false, error: 'missing_text' };
@@ -188,7 +206,7 @@ router.post('/proposal-classify', requireAuth, aiRateLimit, asyncHandler(async (
 // own duplicated context-builder which missed every enhancement made to
 // the runner (vendor reputation joins, cost history from expenses,
 // mojibake fix). Now they always stay in sync.
-router.post('/admin-agent', requireAuth, aiRateLimit, requireRole('board_admin'), asyncHandler(async (req: AuthedRequest, res) => {
+router.post('/admin-agent', requireAuth, aiRateLimit, aiCondoRateLimit, requireRole('board_admin'), asyncHandler(async (req: AuthedRequest, res) => {
   const input = boundedText(req.body?.task, 6_000);
   if (!input.ok) return fail(res, input.error, input.error === 'text_too_long' ? 413 : 400);
   // Min-length guard. The agent is expensive (4 model calls in ReAct +
@@ -287,23 +305,32 @@ router.get('/admin-agent/runs/:id', requireAuth, requireRole('board_admin'), (re
   const condoId = getActiveCondoId(req);
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) return fail(res, 'invalid_id', 400);
-  const snapshot = getAgentRunSnapshot(id, condoId);
+  // SEC-H1 — pass caller id so the snapshot library can filter out
+  // workbench runs belonging to a different admin in the same condo.
+  // Ticket-bound runs remain visible to all condo admins.
+  const snapshot = getAgentRunSnapshot(id, condoId, req.user!.id);
   if (!snapshot) return fail(res, 'not_found', 404);
   return ok(res, snapshot);
 });
 
 router.get('/admin-agent/runs', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
+  const adminId = req.user!.id;
   const limit = Math.min(100, Math.max(1, Number(req.query.limit || 30)));
+  // SEC-H1 — Workbench runs (thread_id IS NOT NULL) are scoped to the
+  // admin who started the thread. Ticket-bound runs (thread_id NULL)
+  // stay condo-wide so the board can review what the agent did on a
+  // given ticket regardless of which admin verified it.
   const rows = db.prepare(
     `SELECT id, admin_user_id, thread_id, ticket_id, mode, task, status,
             attempt_count, fallback, model, react_enabled, duration_ms,
             last_error, started_at, finished_at, created_at
        FROM agent_runs
       WHERE condominium_id = ?
+        AND (thread_id IS NULL OR admin_user_id = ?)
       ORDER BY created_at DESC
       LIMIT ?`
-  ).all(condoId, limit);
+  ).all(condoId, adminId, limit);
   return ok(res, rows);
 });
 

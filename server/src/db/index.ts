@@ -256,6 +256,15 @@ export function initSchema() {
   // warning at 19h local. Default to São Paulo because the product is
   // Brazil-first, but it's per-condo so a Miami building can override.
   addColumnIfMissing('condominiums', 'timezone',           `TEXT NOT NULL DEFAULT 'America/Sao_Paulo'`);
+  // ARC-R5 — Per-condo agent kill switch. When auto_dispatch_enabled
+  // is 0, the auto-dispatch gate refuses regardless of confidence /
+  // evidence — admin reviews every dispatch manually. Default ON so
+  // existing condos aren't disrupted. The agent ITSELF still runs
+  // (helping admins draft outreach is still useful); this only gates
+  // the automatic WhatsApp send. Toggling the bit is the fastest
+  // ops response to "the agent shipped something bad" — no redeploy
+  // needed, no env var change, just an SQL flip.
+  addColumnIfMissing('condominiums', 'auto_dispatch_enabled', `INTEGER NOT NULL DEFAULT 1`);
   // Voter eligibility on proposals: 'all' (residents + owners), 'owners_only', 'primary_contact_only'
   addColumnIfMissing('proposals',    'voter_eligibility',  `TEXT NOT NULL DEFAULT 'all'`);
   addColumnIfMissing('invites',      'relationship',       `TEXT NOT NULL DEFAULT 'tenant'`);
@@ -379,6 +388,10 @@ export function initSchema() {
   // Explicit JWT revocation. Incremented on logout / forced session reset;
   // requireAuth rejects tokens whose embedded version no longer matches.
   addColumnIfMissing('users',        'token_version',      `INTEGER NOT NULL DEFAULT 0`);
+  // Email verification timestamp. NULL = unverified. Set when the user
+  // clicks the link in their verify-email message. Used as an audit
+  // signal (e.g. AGO vote eligibility); login still works while NULL.
+  addColumnIfMissing('users',        'email_verified_at',  `TEXT`);
   // Concierge role (#11) — widen the role CHECK constraint. Done AFTER
   // the columns above so the rebuilt table preserves them.
   migrateUsersRoleConcierge();
@@ -625,6 +638,63 @@ export function initSchema() {
   addColumnIfMissing('ticket_dispatches', 'cancelled_at',         `TEXT`);
   db.prepare(`CREATE INDEX IF NOT EXISTS idx_ticket_dispatches_scheduled
     ON ticket_dispatches(scheduled_send_after) WHERE scheduled_send_after IS NOT NULL`).run();
+  // COR-M7 — Prevent double-dispatch races on concurrent verification.
+  // Two board admins verifying the same ticket within ~200ms could
+  // each pass the `SELECT existingDispatch` guard (which runs outside
+  // a transaction earlier in the path) and both INSERT a queued
+  // dispatch, sending the vendor two WhatsApp messages. The unique
+  // index is restricted to status='queued' specifically — once a
+  // dispatch transitions to sent/responded, a follow-up dispatch on
+  // a different channel (e.g. email after WhatsApp) is legitimate
+  // and must not be blocked. The dispatch transaction (ARC-R3)
+  // wraps everything that follows so a unique-violation rolls back
+  // the whole sequence cleanly.
+  // Drop the previous attempt at this index (too strict — blocked
+  // legitimate multi-channel follow-up dispatches). Safe to leave the
+  // DROP in place forever since it's idempotent.
+  db.prepare(`DROP INDEX IF EXISTS idx_ticket_dispatches_active_unique`).run();
+  db.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS idx_ticket_dispatches_queued_unique
+    ON ticket_dispatches(ticket_id, service_contact_id)
+    WHERE status = 'queued'`).run();
+
+  // ARC-R2 — Agent dispatch queue. Replaces the fire-and-forget IIFE
+  // in dispatchAgentInBackground with a durable row + worker. Surviving
+  // a process crash mid-dispatch is the main win: the IIFE used to drop
+  // the work entirely on Fly redeploy, OOM, or panic. Multi-machine
+  // support comes free — the SELECT+UPDATE-to-claim pattern works for
+  // one writer today and N writers when we move to Postgres.
+  //
+  // Status walks: queued → claimed → done (or failed). The reaper
+  // (lib/agent-dispatch-queue.ts) transitions 'claimed' rows older than
+  // 5 minutes to 'failed' for retry. Idempotency for "the same ticket
+  // got verified twice in a second" comes from the partial unique
+  // index below — only one queued/claimed row per ticket at a time.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS agent_dispatch_queue (
+      id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+      ticket_id            INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+      condominium_id       INTEGER NOT NULL REFERENCES condominiums(id) ON DELETE CASCADE,
+      triggered_by_user_id INTEGER REFERENCES users(id),
+      locale               TEXT,
+      status               TEXT NOT NULL DEFAULT 'queued'
+                             CHECK (status IN ('queued','claimed','done','failed')),
+      claimed_at           TEXT,
+      claimed_by           TEXT,
+      attempt_count        INTEGER NOT NULL DEFAULT 0,
+      last_error           TEXT,
+      created_at           TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      finished_at          TEXT
+    )
+  `);
+  db.prepare(`CREATE INDEX IF NOT EXISTS idx_agent_dispatch_queue_drain
+    ON agent_dispatch_queue(status, created_at) WHERE status = 'queued'`).run();
+  db.prepare(`CREATE INDEX IF NOT EXISTS idx_agent_dispatch_queue_reaper
+    ON agent_dispatch_queue(status, claimed_at) WHERE status = 'claimed'`).run();
+  // Idempotency — a ticket can't have two active queue entries. If the
+  // verify-and-enqueue path fires twice within a heartbeat, the second
+  // INSERT fails the unique constraint and the caller no-ops cleanly.
+  db.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_dispatch_queue_active_ticket
+    ON agent_dispatch_queue(ticket_id) WHERE status IN ('queued','claimed')`).run();
   // Roadmap item 6 — image / document understanding. When residents
   // upload a photo of a leak, the model can SEE it instead of asking
   // for a written description. Same for vendor PDF quotes and contract

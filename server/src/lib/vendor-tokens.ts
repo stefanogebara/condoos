@@ -23,17 +23,50 @@ import crypto from 'crypto';
 
 const TOKEN_TTL_SECONDS = 7 * 24 * 3600; // 7 days
 
+// SEC-4 — Separate VENDOR_TOKEN_SECRET from JWT_SECRET.
+//
+// Reusing JWT_SECRET coupled two distinct rotation policies: rotating
+// the admin-session secret would silently invalidate every outstanding
+// vendor magic-link, and vice versa. Worse, the dev fallback
+// 'local-dev-fallback-secret-not-secure' was a known constant — meaning
+// any Vercel preview deploy that hadn't set JWT_SECRET would accept
+// vendor tokens forged offline.
+//
+// Behavior now:
+//   1. Prefer VENDOR_TOKEN_SECRET when set. Required in production.
+//   2. Fall back to JWT_SECRET (also required to be 32+ in prod) for
+//      one deploy window — gives ops time to roll the new env var
+//      without invalidating links from yesterday's dispatches.
+//   3. Dev fallback is randomized per process, so cached/forged tokens
+//      across preview deploys can't collide. This DOES mean restarting
+//      the dev server invalidates outstanding test vendor links — which
+//      is the correct dev-time behavior.
+const DEV_FALLBACK_SECRET = crypto.randomBytes(32).toString('hex');
+
 function getSecret(): string {
-  // Reuse JWT_SECRET — vendor links live as long as a session does,
-  // and we already validated this secret on startup. A separate
-  // VENDOR_TOKEN_SECRET env can be added later if rotation policies
-  // diverge between admin sessions and vendor links.
-  const secret = process.env.JWT_SECRET || '';
-  if (process.env.NODE_ENV === 'production' && (!secret || secret.length < 32)) {
-    throw new Error('JWT_SECRET (used for vendor tokens) must be >= 32 chars in production');
+  const dedicated = process.env.VENDOR_TOKEN_SECRET || '';
+  const shared = process.env.JWT_SECRET || '';
+
+  if (process.env.NODE_ENV === 'production') {
+    if (dedicated.length >= 32) return dedicated;
+    // SEC-M1 (re-audit fix) — If VENDOR_TOKEN_SECRET is set but too
+    // short, throw instead of silently falling back to JWT_SECRET.
+    // The operator who set the dedicated var believes it's protecting
+    // vendor tokens; silently using the shared secret defeats the
+    // whole point of the split. An explicit boot failure is better
+    // than wrong-but-working.
+    if (dedicated.length > 0) {
+      throw new Error(`VENDOR_TOKEN_SECRET is set but only ${dedicated.length} chars — must be >= 32. Either fix the value or unset it to fall back to JWT_SECRET.`);
+    }
+    if (shared.length >= 32) {
+      // Transitional: log loudly so ops sees the migration is pending.
+      // This warn fires once per token sign, which is noisy on purpose.
+      console.warn('[vendor-tokens] VENDOR_TOKEN_SECRET not set — falling back to JWT_SECRET. Set VENDOR_TOKEN_SECRET before the next rotation.');
+      return shared;
+    }
+    throw new Error('VENDOR_TOKEN_SECRET (or JWT_SECRET) must be >= 32 chars in production');
   }
-  // Dev fallback so local boot doesn't crash without env config.
-  return secret || 'local-dev-fallback-secret-not-secure';
+  return dedicated || shared || DEV_FALLBACK_SECRET;
 }
 
 function b64url(buf: Buffer): string {
@@ -66,9 +99,15 @@ export function verifyDispatchToken(dispatchId: number, token: string): VerifyRe
   if (Math.floor(Date.now() / 1000) > expires) return { ok: false, error: 'expired' };
   const expected = signRaw(dispatchId, expires);
   // Timing-safe compare. Both sides are b64url so we can do byte-level.
+  // SEC-H2 (re-audit fix) — burn a constant-time compare even on
+  // length mismatch so we don't leak "your HMAC has the wrong length"
+  // vs "your HMAC has the right length but wrong bytes".
   const a = Buffer.from(parts[1]);
   const b = Buffer.from(expected);
-  if (a.length !== b.length) return { ok: false, error: 'invalid' };
+  if (a.length !== b.length) {
+    crypto.timingSafeEqual(b, b);
+    return { ok: false, error: 'invalid' };
+  }
   if (!crypto.timingSafeEqual(a, b)) return { ok: false, error: 'invalid' };
   return { ok: true };
 }

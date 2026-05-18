@@ -27,6 +27,11 @@ server/data/
 npm-debug.log*
 test-results/
 
+# Audit + Playwright artifacts (screenshots from manual audit runs)
+audit-shots/
+playwright-report/
+.playwright-mcp/
+
 # Editors
 .vscode/
 .idea/

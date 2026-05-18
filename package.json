@@ -9,6 +9,7 @@
     "dev:client": "npm --prefix client-app start",
     "build": "npm --prefix client-app run build && npm --prefix server run build",
     "test": "npm --prefix server test",
+    "agent:eval": "npm --prefix server run agent:eval",
     "test:e2e": "cross-env E2E_REGISTER_SECRET=local-e2e-secret-32chars-min playwright test",
     "test:e2e:desktop": "cross-env E2E_REGISTER_SECRET=local-e2e-secret-32chars-min playwright test --project=desktop",
     "test:e2e:mobile": "cross-env E2E_REGISTER_SECRET=local-e2e-secret-32chars-min playwright test --project=mobile",

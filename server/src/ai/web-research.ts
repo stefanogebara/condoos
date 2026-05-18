@@ -26,16 +26,77 @@ function clip(value: unknown, max: number): string {
   return String(value || '').replace(/\s+/g, ' ').trim().slice(0, max);
 }
 
+// SEC-3 — Block internal hosts in citation URLs.
+//
+// Citation URLs returned by the search provider flow back into the
+// model context as "vendor URLs the model cited". A malicious or
+// misconfigured search provider could return URLs pointing at:
+//   - 169.254.169.254  (cloud metadata endpoint — IMDS)
+//   - 127.x.x.x         (loopback — any server-local listener)
+//   - localhost
+//   - RFC1918 ranges    (10/172.16-31/192.168 — internal network)
+//   - file://, gopher:// etc (already blocked by the protocol check)
+//
+// Today none of those URLs are auto-fetched by CondoOS, so the
+// immediate risk is "model sees a URL like
+// http://169.254.169.254/latest/meta-data/ and helpfully suggests the
+// admin browse it". The bigger risk is a future feature that adds
+// "fetch citation content" — that would make this trivially
+// exploitable. Block at the URL-acceptance layer so it's safe by
+// construction.
+function isBlockedHostname(hostname: string): boolean {
+  const h = hostname.toLowerCase();
+  if (!h || h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local')) return true;
+  // IPv6 loopback / link-local / private. Lightweight string checks —
+  // full parsing isn't needed because we only need to reject; the
+  // legitimate-vendor URL space is unaffected.
+  if (h === '::1' || h.startsWith('fe80:') || h.startsWith('fc00:') || h.startsWith('fd00:')) return true;
+  // IPv4 — match dotted-quad and check each octet against the well-
+  // known private/link-local/loopback ranges. Anything that isn't a
+  // dotted-quad falls through to "allowed" (it's a normal hostname).
+  const ipv4 = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (!ipv4) return false;
+  const [a, b, c] = [Number(ipv4[1]), Number(ipv4[2]), Number(ipv4[3])];
+  if (a === 127) return true;                          // 127.0.0.0/8 — loopback
+  if (a === 10) return true;                           // 10.0.0.0/8 — RFC1918
+  if (a === 192 && b === 168) return true;             // 192.168.0.0/16 — RFC1918
+  if (a === 172 && b >= 16 && b <= 31) return true;    // 172.16.0.0/12 — RFC1918
+  if (a === 169 && b === 254) return true;             // 169.254.0.0/16 — link-local + IMDS
+  if (a === 0) return true;                            // 0.0.0.0/8 — "this network"
+  if (a >= 224) return true;                           // 224+ — multicast / reserved
+  void c; // include for readability above
+  return false;
+}
+
 function safeUrl(value: unknown): string | null {
   const raw = String(value || '').trim();
   if (!raw) return null;
   try {
     const url = new URL(raw);
     if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+    if (isBlockedHostname(url.hostname)) return null;
     return url.toString();
   } catch {
     return null;
   }
+}
+
+// Exported for tests — keeps the SSRF rules independently testable.
+export { isBlockedHostname };
+
+// SEC-3 — Response size cap. A misbehaving or malicious search provider
+// could return hundreds of MB of JSON; without a cap we'd happily
+// buffer it into memory and OOM the process. 1MB is well over what a
+// 5-result citation response needs (~50KB typical) and bounds the
+// damage. Larger responses are treated as a failed call.
+const MAX_RESPONSE_BYTES = 1_000_000;
+
+async function readBodyCapped(res: Response, cap: number): Promise<string> {
+  const len = Number(res.headers.get('content-length') || 0);
+  if (len > cap) throw new Error('response_too_large');
+  const buf = await res.arrayBuffer();
+  if (buf.byteLength > cap) throw new Error('response_too_large');
+  return new TextDecoder('utf-8').decode(buf);
 }
 
 function buildQuery(input: WebResearchInput): string {
@@ -121,16 +182,22 @@ async function callSearchProvider(query: string, maxResults: number): Promise<We
       signal: controller.signal,
     });
     if (!res.ok) {
-      const text = await res.text();
+      // SEC-M6 — Do NOT echo the provider's raw error body into the
+      // model context. Some search providers include the API key in
+      // error messages; the `note` field reaches the model. Log the
+      // detail server-side instead.
+      const text = await readBodyCapped(res, MAX_RESPONSE_BYTES).catch(() => '(unreadable)');
+      console.warn(`[web-research] provider HTTP ${res.status}: ${text.slice(0, 200)}`);
       return {
         configured: true,
         provider,
         query,
         citations: fallbackCitations(query),
-        note: `Search provider returned HTTP ${res.status}: ${text.slice(0, 200)}`,
+        note: `Search provider returned HTTP ${res.status}.`,
       };
     }
-    const data = await res.json();
+    const bodyText = await readBodyCapped(res, MAX_RESPONSE_BYTES);
+    const data = JSON.parse(bodyText);
     const citations = normalizeResults(data, maxResults, provider);
     return {
       configured: true,

@@ -11,6 +11,9 @@ import { requireAuth, requireActiveMembership } from './lib/auth';
 import { startVoteCloser } from './lib/vote-closer';
 import { startSlaEscalator } from './lib/sla-escalator';
 import { startBackupScheduler } from './lib/backup';
+import { reapStaleAgentRuns } from './lib/agent-runs';
+import { startDispatchQueueWorker, reapStaleDispatches } from './lib/agent-dispatch-queue';
+import { runDispatchForTicket } from './routes/tickets';
 import { getWhatsAppHealth, getWhatsAppStatus } from './lib/whatsapp';
 import { captureException, initSentry } from './lib/sentry';
 import authRoutes from './routes/auth';
@@ -202,6 +205,52 @@ app.listen(PORT, () => {
     // still well under the smallest (urgent=2h) window.
     startSlaEscalator(5 * 60_000);
     startBackupScheduler();
+
+    // ARC-R1 — Reap orphaned agent_runs. Once at boot (catches crashes
+    // from the previous process) and every 5min (catches mid-process
+    // orphans). The reaper transitions 'running' rows older than 5min
+    // to 'failed' so the polling UI gets a terminal state instead of
+    // an infinite spinner.
+    try {
+      const reaped = reapStaleAgentRuns();
+      if (reaped > 0) console.log(`[agent-runs] reaped ${reaped} orphaned run(s) at boot`);
+    } catch (err) {
+      console.warn('[agent-runs] boot reap failed:', (err as Error)?.message || err);
+    }
+    setInterval(() => {
+      try {
+        const reaped = reapStaleAgentRuns();
+        if (reaped > 0) console.log(`[agent-runs] reaped ${reaped} orphaned run(s)`);
+        const reapedDispatches = reapStaleDispatches();
+        if (reapedDispatches > 0) console.log(`[agent-dispatch-queue] reaped ${reapedDispatches} stuck row(s)`);
+      } catch (err) {
+        console.warn('[agent-runs] periodic reap failed:', (err as Error)?.message || err);
+      }
+    }, 5 * 60_000);
+
+    // ARC-R2 — Agent dispatch queue worker. Drains queued rows every
+    // 5s and calls runDispatchForTicket (extracted from the old IIFE).
+    // Surviving a crash mid-dispatch is the main win — the work
+    // resumes (or fails loudly with a forensic row) instead of being
+    // silently dropped. Multi-machine ready: the claim transaction
+    // serializes with other workers on the same DB.
+    startDispatchQueueWorker(async (row) => {
+      await runDispatchForTicket(
+        row.ticket_id,
+        row.condominium_id,
+        row.locale ?? undefined,
+        row.triggered_by_user_id ?? undefined,
+      );
+    }, 5_000);
+    console.log('[agent-dispatch-queue] worker started (5s interval)');
+    // One-shot boot reap so a crashed-process leftover from before the
+    // worker started cycling is cleared on the first interval.
+    try {
+      const reapedBoot = reapStaleDispatches();
+      if (reapedBoot > 0) console.log(`[agent-dispatch-queue] reaped ${reapedBoot} stuck row(s) at boot`);
+    } catch (err) {
+      console.warn('[agent-dispatch-queue] boot reap failed:', (err as Error)?.message || err);
+    }
     console.log('[vote-closer] started (60s interval)');
     console.log('[finance] scheduled invoice generator started (6h interval)');
     console.log('[notification-outbox] retry loop started (60s interval)');

@@ -47,13 +47,34 @@ function isOfflineAction(item: { step: string; details: string }): boolean {
   return !PLATFORM_DUPLICATE_KEYWORDS.some((re) => re.test(combined));
 }
 
-function shortOutreach(task: string, lang: 'pt' | 'en' = 'pt'): string {
+// COR-H3 — Fallback outreach localized across all 4 supported languages.
+// The previous signature only accepted 'pt'|'en' and the caller did a
+// hardcoded `input.locale === 'en-US' ? 'en' : 'pt'` check, so es-ES and
+// fr-FR condos got Portuguese WhatsApp messages.
+//
+// SEC-L5 — Honors after-hours signal. When the building is currently
+// outside business hours, the outreach asks about TOMORROW instead of
+// "today" so the vendor doesn't get a "can you come now?" at 23h.
+function shortOutreach(task: string, lang: 'pt' | 'en' | 'es' | 'fr' = 'pt', afterHours = false): string {
   const trimmed = String(task || '').replace(/\s+/g, ' ').trim();
   const summary = trimmed.length > 120 ? trimmed.slice(0, 117) + '…' : trimmed;
   const cleaned = summary.replace(/[.!?]+$/, '');
-  return lang === 'en'
-    ? `Hi — ${cleaned}. Can you come today?`
-    : `Oi, tudo bem? ${cleaned}. Pode atender hoje?`;
+  if (afterHours) {
+    switch (lang) {
+      case 'en': return `Hi — ${cleaned}. Can you come tomorrow?`;
+      case 'es': return `Hola, ¿qué tal? ${cleaned}. ¿Puede atender mañana?`;
+      case 'fr': return `Bonjour, ${cleaned}. Pouvez-vous intervenir demain ?`;
+      case 'pt':
+      default:   return `Oi, tudo bem? ${cleaned}. Pode atender amanhã?`;
+    }
+  }
+  switch (lang) {
+    case 'en': return `Hi — ${cleaned}. Can you come today?`;
+    case 'es': return `Hola, ¿qué tal? ${cleaned}. ¿Puede atender hoy?`;
+    case 'fr': return `Bonjour, ${cleaned}. Pouvez-vous intervenir aujourd'hui ?`;
+    case 'pt':
+    default:   return `Oi, tudo bem? ${cleaned}. Pode atender hoje?`;
+  }
 }
 
 export type AdminAgentMode = 'general' | 'repair' | 'install' | 'vendor_options' | 'policy';
@@ -83,6 +104,11 @@ export interface AdminAgentInput {
   locale?: string;
   condo?: { name?: string | null; address?: string | null } | null;
   service_contacts?: AdminAgentServiceContact[];
+  // SEC-L5 — Runner threads in the current after-hours signal so the
+  // deterministic fallback's outreach_message asks about tomorrow
+  // instead of "today" when fired at 23h local. Optional + defaults
+  // to false so external callers don't need to compute it.
+  is_outside_business_hours?: boolean;
 }
 
 export interface AdminAgentOption {
@@ -120,6 +146,13 @@ export interface AdminAgentNetworkFit {
   category: string;
   reason: string;
   contact_method: string;
+  // SEC-2 — Server-decorated DB id of the matching service_contacts row.
+  // The model can only see company_name (which it could hallucinate or
+  // have an attacker plant via prompt injection); the auto-dispatch path
+  // must dispatch by id, not name. Null when the model emitted a name
+  // that does NOT correspond to a real saved contact for this condo —
+  // in that case the auto-dispatch path refuses.
+  service_contact_id?: number | null;
   // Cost history is decorated by the runner after sanitize from the
   // expenses ledger. Null when the admin has never logged a spend with
   // this vendor. last_amount_brl is the headline number the UI surfaces;
@@ -455,7 +488,18 @@ function matchingContacts(input: AdminAgentInput): AdminAgentNetworkFit[] {
     .sort((a, b) => Number(boolish(b.preferred)) - Number(boolish(a.preferred)) || Number(boolish(b.emergency_available)) - Number(boolish(a.emergency_available)))
     .slice(0, 3)
     .map((contact) => {
-      const contactMethod = text(contact.whatsapp || contact.phone || contact.email || contact.website || 'Saved contact', 180);
+      // SEC-H2 (re-audit fix) — Don't echo literal phone/whatsapp/
+      // email into contact_method. The fallback path used to do that,
+      // partially undoing the PII-removal fix that scrubbed those
+      // fields from the LLM prompt context. The fallback output is
+      // returned to the admin UI which uses it to render hints; the
+      // UI doesn't need the raw number here either — it has direct
+      // access to the full vendor row via `service_contacts`.
+      const contactMethod =
+        boolish(contact.whatsapp) ? 'WhatsApp'
+        : boolish(contact.phone)   ? 'Phone'
+        : boolish(contact.email)   ? 'Email'
+        : text(contact.website, 180) || 'Saved contact';
       return {
         company_name: text(contact.company_name, 140),
         category: text(contact.category, 80) || 'service',
@@ -534,7 +578,9 @@ export function fallbackAdminAgent(input: AdminAgentInput): AdminAgentOutput {
         ],
         // WhatsApp-native one-liner — no headers, no template framing.
         // The vendor reads this on their phone, not in an inbox.
-        outreach_message: shortOutreach(task, input.locale === 'en-US' ? 'en' : 'pt'),
+        // COR-H3 — full agentLanguage() detection (en/es/fr/pt).
+        // SEC-L5 — after-hours flag flips "hoje?" → "amanhã?".
+        outreach_message: shortOutreach(task, agentLanguage(input), !!input.is_outside_business_hours),
       },
       action_plan: [
         { step: 'Conferir rede cadastrada', owner: 'Síndico', due: 'Hoje', details: 'Verificar fornecedores preferidos, contratos, garantias e último uso.' },
@@ -885,7 +931,11 @@ const OUT_OF_SCOPE_PATTERNS: RegExp[] = [
   /\b(processar (o |a )?(vizinho|morador|condômino|condomino)|a[çc][ãa]o judicial contra (o |a )?(vizinho|morador|condômino|condomino))\b/i,
   /\b(sue (the |my )?(neighbor|neighbour|resident|tenant))\b/i,
 ];
-function looksOutOfScope(task: string): boolean {
+// COR-M4 — Exported so the runner can short-circuit BEFORE making the
+// LLM call. Previously this check ran in `sanitizeAdminAgentOutput`
+// AFTER the model had already returned a (wasted) plan, costing
+// tokens + latency on every off-domain prompt.
+export function looksOutOfScope(task: string): boolean {
   const t = String(task || '');
   return OUT_OF_SCOPE_PATTERNS.some((re) => re.test(t));
 }
@@ -976,7 +1026,15 @@ function looksLikeInventedCost(costRange: string, networkFitCount: number): bool
   return networkFitCount === 0;
 }
 
-export function sanitizeAdminAgentOutput(raw: unknown, input: AdminAgentInput): AdminAgentOutput {
+// COR-H6 — `usedFallback` is the trusted server-side signal indicating
+// the runner chose the deterministic fallback path (forceFallback,
+// breakerOpen, overloaded, single-shot parse failed, etc.). Pass it
+// explicitly instead of trusting `data._fallback` from the model's
+// raw output — the model has seen `_fallback:true` in prompt examples
+// and can emit it on a real LLM response, which used to degrade
+// confidence on a live answer. When omitted, we still fall back to
+// reading `data._fallback` for backward compat with older callers.
+export function sanitizeAdminAgentOutput(raw: unknown, input: AdminAgentInput, usedFallback?: boolean): AdminAgentOutput {
   const fallback = fallbackAdminAgent(input);
   const data = obj(raw);
   const knownCompanies = new Set((input.service_contacts || []).map((c) => text(c.company_name, 140).toLowerCase()).filter(Boolean));
@@ -1102,8 +1160,16 @@ export function sanitizeAdminAgentOutput(raw: unknown, input: AdminAgentInput): 
       }
       : fallback.proposal_draft,
     risks: list(data.risks, fallback.risks, 8, 220),
-    confidence: sanitizeConfidence(data.confidence, !!data._fallback, input),
-    _fallback: data._fallback === true ? true : undefined,
+    // COR-H6 — Prefer the explicit usedFallback signal from the
+    // runner. data._fallback is only consulted when the caller didn't
+    // pass usedFallback (older callsites / tests). The runner now
+    // always threads this through.
+    confidence: sanitizeConfidence(
+      data.confidence,
+      usedFallback ?? !!data._fallback,
+      input,
+    ),
+    _fallback: (usedFallback === true || data._fallback === true) ? true : undefined,
   };
 
   // Scope check: when the task is clearly off-domain, force a refusal
@@ -1126,9 +1192,15 @@ export function sanitizeAdminAgentOutput(raw: unknown, input: AdminAgentInput): 
     output.resident_update = { title: '', body: '' };
     output.proposal_draft = null;
     output.risks = [refusal.risk];
+    // COR-H1 — Scope refusal used to set confidence={score:0.95, tier:'high'}.
+    // That value flowed into agent_runs metadata and the audit log,
+    // polluting calibration dashboards (a refusal is NOT a confident
+    // recommendation — it's a polite no). It also briefly opened a
+    // path past the confidence-cap rule (which exempts task_type='general').
+    // Refusals are now low-confidence by definition.
     output.confidence = {
-      score: 0.95,
-      tier: 'high',
+      score: 0.0,
+      tier: 'low',
       reasoning: [refusal.reasoning],
     };
   } else if (looksTooUnclear(input.task || '')) {

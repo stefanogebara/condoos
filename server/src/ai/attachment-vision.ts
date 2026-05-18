@@ -17,6 +17,7 @@
 
 import db from '../db';
 import { chatWithImage, OpenRouterError } from './openrouter';
+import { isBlockedHostname } from './web-research';
 
 // Failure kinds where retrying later WILL work — the problem is the AI
 // service (no credits, throttled, server blip, timed out, key missing),
@@ -134,6 +135,33 @@ export async function analyzeAttachment(
     db.prepare(
       `UPDATE ticket_attachments
        SET ai_analyzed_at = CURRENT_TIMESTAMP, ai_analysis_error = 'unsupported_content_type'
+       WHERE id = ?`
+    ).run(attachmentId);
+    return null;
+  }
+
+  // SEC-H3 — Refuse to send URLs pointing at internal/private hosts to
+  // OpenRouter's vision API. Upload validation only checks https://; an
+  // attacker who plants a URL like https://10.0.0.5/admin or a host
+  // that redirects to one would get OpenRouter to fetch internal
+  // infrastructure from their side. We reuse the SSRF guard from
+  // web-research.ts so the host policy stays in one place. Permanent
+  // failure (cached) — retrying won't change the host.
+  try {
+    const parsedUrl = new URL(row.url);
+    if (parsedUrl.protocol !== 'https:' || isBlockedHostname(parsedUrl.hostname)) {
+      db.prepare(
+        `UPDATE ticket_attachments
+         SET ai_analyzed_at = CURRENT_TIMESTAMP, ai_analysis_error = 'untrusted_url_host'
+         WHERE id = ?`
+      ).run(attachmentId);
+      console.warn(`[attachment-vision] blocked untrusted host for attachment ${attachmentId}: ${parsedUrl.hostname}`);
+      return null;
+    }
+  } catch {
+    db.prepare(
+      `UPDATE ticket_attachments
+       SET ai_analyzed_at = CURRENT_TIMESTAMP, ai_analysis_error = 'unparseable_url'
        WHERE id = ?`
     ).run(attachmentId);
     return null;
