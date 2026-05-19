@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { ExternalLink, FileText, FolderOpen, Lock, Pencil, Plus, Save, Trash2, UploadCloud, Users, X } from 'lucide-react';
+import { documentIconFor, formatFileSize } from '../../lib/fileDisplay';
 import PageHeader from '../../components/PageHeader';
 import GlassCard from '../../components/GlassCard';
 import Badge from '../../components/Badge';
@@ -241,11 +242,16 @@ function DocumentRow({ doc, onChanged }: { doc: BuildingDocument; onChanged: () 
     );
   }
 
+  // Phase 3 — content-type-aware icon for uploaded rows + size chip
+  // alongside the existing date + uploader chips.
+  const Icon = documentIconFor(doc);
+  const sizeLabel = formatFileSize(doc.file_size_bytes);
+
   return (
     <GlassCard className={`p-5 ${doc.active ? '' : 'opacity-60'}`} data-testid={`board-document-${doc.id}`}>
       <div className="flex items-start gap-4">
         <div className="w-11 h-11 rounded-2xl bg-white/70 border border-white/80 text-dusk-400 flex items-center justify-center shrink-0">
-          <FileText className="w-5 h-5" />
+          <Icon className="w-5 h-5" />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
@@ -260,6 +266,7 @@ function DocumentRow({ doc, onChanged }: { doc: BuildingDocument; onChanged: () 
           {doc.description && <p className="text-sm text-dusk-300 mt-2">{doc.description}</p>}
           <div className="mt-3 flex flex-wrap gap-2 text-xs text-dusk-300">
             {doc.document_date && <span className="rounded-full bg-white/60 px-3 py-1">{formatDate(doc.document_date)}</span>}
+            {sizeLabel && <span className="rounded-full bg-white/60 px-3 py-1" data-testid={`board-document-${doc.id}-size`}>{sizeLabel}</span>}
             {doc.uploaded_by_name && <span className="rounded-full bg-white/60 px-3 py-1">{tr('Enviado por')} {doc.uploaded_by_name}</span>}
             {doc.file_id ? (
               <button

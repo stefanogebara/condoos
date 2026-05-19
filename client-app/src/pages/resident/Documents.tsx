@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ExternalLink, FileText, FolderOpen, Sparkles } from 'lucide-react';
+import { ExternalLink, FileText, Sparkles } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 import GlassCard from '../../components/GlassCard';
 import Badge from '../../components/Badge';
 import { apiGet } from '../../lib/api';
 import { formatDate, t, useLocale } from '../../lib/i18n';
 import { openUploadedFile } from '../../lib/uploads';
+import { documentIconFor, formatFileSize } from '../../lib/fileDisplay';
 import { DOCUMENT_CATEGORIES, documentCategoryLabel } from '../board/BoardDocuments';
 import type { BuildingDocument } from '../board/BoardDocuments';
 
@@ -67,10 +68,16 @@ export default function Documents() {
         </GlassCard>
       ) : (
         <div className="grid md:grid-cols-2 gap-3" data-testid="resident-documents-list">
-          {filtered.map((doc) => (
+          {filtered.map((doc) => {
+            // Phase 3 — icon reflects the underlying file type for
+            // uploaded rows; falls back to a generic folder for
+            // external-link rows where we don't know the MIME.
+            const Icon = documentIconFor(doc);
+            const sizeLabel = formatFileSize(doc.file_size_bytes);
+            return (
             <GlassCard key={doc.id} className="p-5 flex items-start gap-4" data-testid={`resident-document-${doc.id}`}>
               <div className="w-11 h-11 rounded-2xl bg-sage-100 text-sage-700 flex items-center justify-center shrink-0">
-                <FolderOpen className="w-5 h-5" />
+                <Icon className="w-5 h-5" />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -80,6 +87,7 @@ export default function Documents() {
                 {doc.description && <p className="text-sm text-dusk-300 mt-2">{doc.description}</p>}
                 <div className="mt-3 flex flex-wrap gap-2 text-xs text-dusk-300">
                   {doc.document_date && <span className="rounded-full bg-white/60 px-3 py-1">{formatDate(doc.document_date)}</span>}
+                  {sizeLabel && <span className="rounded-full bg-white/60 px-3 py-1" data-testid={`resident-document-${doc.id}-size`}>{sizeLabel}</span>}
                   {doc.file_id ? (
                     <button
                       type="button"
@@ -101,7 +109,8 @@ export default function Documents() {
                 </div>
               </div>
             </GlassCard>
-          ))}
+            );
+          })}
         </div>
       )}
 
