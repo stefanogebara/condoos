@@ -31,6 +31,7 @@ Run before a serious demo or production review:
 npm run test:e2e:prod:smoke
 npm run test:e2e:prod:safe:desktop
 npm run audit:prod:hardening
+npm run audit:prod:uploads
 npm run audit:ops:backup-restore
 npm run audit:perf:prod
 ```

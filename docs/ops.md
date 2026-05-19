@@ -134,9 +134,40 @@ flyctl secrets set -a condoos-api R2_REGION=auto
 
 The frontend uploads directly to the presigned R2 URL, so the R2 bucket also
 needs CORS allowing `PUT` from the Vercel app origin and any pilot/staging
-origins. Keep uploaded files private; residents and admins open files through
-the API, which redirects to a short-lived signed R2 download URL after checking
-role, condo, and visibility.
+origins. Cloudflare documents this as required for browser-based access with
+presigned URLs. Use this bucket CORS policy as the production baseline:
+
+```json
+[
+  {
+    "AllowedOrigins": [
+      "https://condoos-ten.vercel.app",
+      "https://condoos-stefanogebaras-projects.vercel.app",
+      "https://condoos-git-main-stefanogebaras-projects.vercel.app"
+    ],
+    "AllowedMethods": ["PUT"],
+    "AllowedHeaders": ["Content-Type"],
+    "ExposeHeaders": ["ETag"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+Keep uploaded files private; residents and admins open files through the API,
+which redirects to a short-lived signed R2 download URL after checking role,
+condo, and visibility.
+
+After secrets and bucket CORS are configured, run the strict production upload
+probe:
+
+```bash
+npm run audit:prod:uploads
+```
+
+The probe logs in as a board admin, presigns a tiny file, uploads it, completes
+the registry row, downloads the file back through the API, verifies the bytes,
+and soft-deletes the test file. Use `npm run audit:prod:uploads:allow-local`
+only to verify the non-production local-storage fallback.
 
 ## Production E2E Against Vercel
 

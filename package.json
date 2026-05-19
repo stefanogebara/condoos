@@ -26,6 +26,8 @@
     "audit:perf:prod": "node scripts/lighthouse-budget.mjs",
     "audit:prod:hardening": "node scripts/prod-hardening-check.mjs",
     "audit:prod:hardening:warn": "node scripts/prod-hardening-check.mjs --warn-only-captcha",
+    "audit:prod:uploads": "node scripts/prod-upload-check.mjs --require-r2",
+    "audit:prod:uploads:allow-local": "node scripts/prod-upload-check.mjs --allow-local",
     "audit:ops:backup-restore": "node scripts/backup-restore-dry-run.mjs",
     "ops:turnstile:setup": "node scripts/setup-turnstile.mjs",
     "ops:turnstile:dry-run": "node scripts/setup-turnstile.mjs --dry-run",

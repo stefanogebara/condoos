@@ -35,7 +35,7 @@ This document separates what is real today from what still needs production wiri
 
 ## Not Production-Ready Yet
 
-- Production R2 bucket/CORS/secrets must be configured and tested against Fly/Vercel before a real building uses uploads.
+- Production R2 bucket/CORS/secrets must pass `npm run audit:prod:uploads` before a real building uses uploads.
 - Resident payment-proof upload/approval.
 - Full ticket timeline events and vendor quote comparison.
 - Building-level Brazil/Ecuador country, currency, timezone, locale, and governance mode.

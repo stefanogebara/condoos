@@ -38,6 +38,7 @@ Before using live Vercel/Fly in front of someone, run:
 
 ```bash
 npm run audit:prod:hardening:warn
+npm run audit:prod:uploads
 npm run test:e2e:prod:smoke
 npm run test:e2e:prod:safe:desktop
 ```
