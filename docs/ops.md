@@ -166,8 +166,9 @@ npm run audit:prod:uploads
 
 The probe logs in as a board admin, presigns a tiny file, uploads it, completes
 the registry row, downloads the file back through the API, verifies the bytes,
-and soft-deletes the test file. Use `npm run audit:prod:uploads:allow-local`
-only to verify the non-production local-storage fallback.
+checks that the live client CSP allows the R2 upload origin, and soft-deletes
+the test file. Use `npm run audit:prod:uploads:allow-local` only to verify the
+non-production local-storage fallback.
 
 ## Production E2E Against Vercel
 

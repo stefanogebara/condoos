@@ -3,6 +3,7 @@
 import { randomUUID } from 'node:crypto';
 
 const DEFAULT_API_URL = 'https://condoos-api.fly.dev/api';
+const DEFAULT_CLIENT_URL = 'https://condoos-ten.vercel.app';
 const DEFAULT_EMAIL = 'admin@condoos.dev';
 const DEFAULT_PASSWORD = 'admin123';
 
@@ -18,6 +19,8 @@ function hasFlag(name) {
 
 const apiURL = (argValue('--api-url') || process.env.PROD_API_URL || process.env.E2E_API_URL || DEFAULT_API_URL)
   .replace(/\/+$/, '');
+const clientURL = (argValue('--client-url') || process.env.PROD_CLIENT_URL || process.env.E2E_BASE_URL || DEFAULT_CLIENT_URL)
+  .replace(/\/+$/, '');
 const email = argValue('--email') || process.env.PROD_UPLOAD_EMAIL || process.env.PROD_ADMIN_EMAIL || DEFAULT_EMAIL;
 const password = argValue('--password') || process.env.PROD_UPLOAD_PASSWORD || process.env.PROD_ADMIN_PASSWORD || DEFAULT_PASSWORD;
 const requireR2 = hasFlag('--require-r2') || !hasFlag('--allow-local');
@@ -29,6 +32,39 @@ function apiOrigin() {
 function resolveUploadUrl(uploadUrl) {
   if (/^https?:\/\//i.test(uploadUrl)) return uploadUrl;
   return `${apiOrigin()}${uploadUrl}`;
+}
+
+function cspSources(csp, directive) {
+  const parts = csp
+    .split(';')
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const rule = parts.find((part) => part.split(/\s+/)[0] === directive);
+  return rule ? rule.split(/\s+/).slice(1) : [];
+}
+
+function sourceAllowsOrigin(source, origin) {
+  if (source === origin || source === '*') return true;
+  if (source === 'https:' && origin.startsWith('https://')) return true;
+  if (!source.startsWith('https://*.')) return false;
+
+  const patternHost = source.slice('https://*.'.length);
+  const originHost = new URL(origin).hostname;
+  return origin.startsWith('https://') && originHost.endsWith(`.${patternHost}`);
+}
+
+async function assertClientCspAllowsUpload(uploadUrl) {
+  const uploadOrigin = new URL(resolveUploadUrl(uploadUrl)).origin;
+  const res = await fetch(clientURL, {
+    headers: { Accept: 'text/html', 'User-Agent': 'CondoOS-prod-upload-check/1.0' },
+  });
+  const csp = res.headers.get('content-security-policy') || '';
+  const connectSources = cspSources(csp, 'connect-src');
+  const allowed = res.ok && connectSources.some((source) => sourceAllowsOrigin(source, uploadOrigin));
+  if (!allowed) {
+    throw new Error(`client CSP connect-src does not allow R2 origin ${uploadOrigin}`);
+  }
+  return uploadOrigin;
 }
 
 async function jsonRequest(path, init = {}) {
@@ -109,6 +145,9 @@ async function main() {
     if (requireR2 && presign.upload_method !== 'put') {
       throw new Error(`production upload is not using R2: upload_method=${presign.upload_method}, storage_driver=${storageDriver}`);
     }
+    const uploadOrigin = requireR2 && presign.upload_method === 'put'
+      ? await assertClientCspAllowsUpload(presign.upload_url)
+      : null;
 
     const uploadHeaders = { ...(presign.headers || {}) };
     if (presign.upload_method === 'api') uploadHeaders.Authorization = `Bearer ${token}`;
@@ -141,9 +180,11 @@ async function main() {
     console.log(JSON.stringify({
       ok: true,
       api_url: apiURL,
+      client_url: clientURL,
       require_r2: requireR2,
       upload_method: presign.upload_method,
       storage_driver: storageDriver,
+      upload_origin: uploadOrigin,
       bytes_verified: content.length,
     }, null, 2));
   } finally {
@@ -160,6 +201,7 @@ main().catch((err) => {
   console.error(JSON.stringify({
     ok: false,
     api_url: apiURL,
+    client_url: clientURL,
     require_r2: requireR2,
     error: err instanceof Error ? err.message : String(err),
   }, null, 2));
