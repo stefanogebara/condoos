@@ -104,6 +104,75 @@ test('board-only documents stay hidden from residents', async ({ page, request }
   }
 });
 
+test('uploaded document shows a size chip on both board and resident views (Phase 3)', async ({ page, request }) => {
+  const admin = await loginApi(request, 'admin@condoos.dev', 'admin123');
+  const resident = await loginApi(request, 'resident@condoos.dev', 'resident123');
+  const title = `Phase3 size chip ${Date.now()}`;
+  const bytes = Buffer.from('A'.repeat(4096));
+  let docId: number | undefined;
+  let fileId: number | undefined;
+
+  try {
+    const presign = await request.post(`${apiURL}/uploads/presign`, {
+      headers: { Authorization: `Bearer ${admin.token}` },
+      data: {
+        filename: 'phase3.txt',
+        content_type: 'text/plain',
+        size_bytes: bytes.length,
+        purpose: 'document',
+        visibility: 'residents',
+      },
+    });
+    expect(presign.ok()).toBeTruthy();
+    const presigned = (await presign.json()).data;
+    fileId = presigned.file.id;
+    const uploadUrl = String(presigned.upload_url).startsWith('http')
+      ? presigned.upload_url
+      : `${apiOrigin}${presigned.upload_url}`;
+    await request.put(uploadUrl, {
+      headers: { Authorization: `Bearer ${admin.token}`, 'Content-Type': 'text/plain' },
+      data: bytes,
+    });
+    await request.post(`${apiURL}/uploads/complete`, {
+      headers: { Authorization: `Bearer ${admin.token}` },
+      data: { file_id: fileId },
+    });
+
+    const created = await request.post(`${apiURL}/documents`, {
+      headers: { Authorization: `Bearer ${admin.token}` },
+      data: {
+        title,
+        category: 'rules',
+        file_id: fileId,
+        visibility: 'residents',
+        active: true,
+      },
+    });
+    expect(created.ok()).toBeTruthy();
+    docId = (await created.json()).data.id;
+
+    // Board view — uploaded row shows the size chip with the testid
+    // we added in Phase 3. 4096 bytes → "4.0 KB".
+    await setSession(page, admin);
+    await page.goto('/board/documents');
+    await expect(page.getByText(title)).toBeVisible();
+    await expect(page.getByTestId(`board-document-${docId}-size`)).toContainText(/KB|kB/i);
+
+    // Resident view — same chip + same content.
+    await setSession(page, resident);
+    await page.goto('/app/documents');
+    await expect(page.getByText(title)).toBeVisible();
+    await expect(page.getByTestId(`resident-document-${docId}-size`)).toContainText(/KB|kB/i);
+  } finally {
+    if (docId) await request.delete(`${apiURL}/documents/${docId}`, {
+      headers: { Authorization: `Bearer ${admin.token}` },
+    });
+    if (fileId) await request.delete(`${apiURL}/uploads/files/${fileId}`, {
+      headers: { Authorization: `Bearer ${admin.token}` },
+    });
+  }
+});
+
 test('admin uploads a document file and resident can download the stored copy', async ({ page, request }) => {
   const admin = await loginApi(request, 'admin@condoos.dev', 'admin123');
   const resident = await loginApi(request, 'resident@condoos.dev', 'resident123');
