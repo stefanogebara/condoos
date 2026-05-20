@@ -265,6 +265,15 @@ This slice makes the board UI match the server-side agency lanes:
 - Made the portfolio page load even when enterprise integration status is admin-only, so scoped staff can still use their allowed portfolio view.
 - Tightened remaining read endpoints for memory, documents, finance transparency, and ticket views so manually typing a URL does not bypass agency capability checks.
 
+## Completed Slice: Role-Aware Agency Exports
+
+This slice prevents scoped agency staff from downloading export families outside their lane:
+
+- Mapped operational CSV exports to explicit capabilities: resident/audit exports require building-admin access, finance exports require finance access, and ticket/work-order exports require maintenance access.
+- Required report capability for the agency monthly Markdown report and portfolio CSV summary.
+- Made the frontend show only the export buttons each agency role can actually use.
+- Added tests proving scoped finance and maintenance staff are blocked from unrelated export families while assigned building admins still get sensitive building-scoped exports.
+
 ## Completed Slice: Vendor Intelligence
 
 This slice makes the saved service network feel operational instead of static:
@@ -357,5 +366,5 @@ The next implementation slice should keep building on the private-enterprise pla
 
 - Harden maintenance into a fuller work-order timeline with quote comparison and SLA alerts.
 - Expand portfolio reporting into a true agency command center.
-- Add role-aware operational export limits so scoped staff download only the export families that match their lane.
+- Add polished report packaging and stronger multi-building agency priorities.
 - Keep production-safe i18n, build, server tests, and pilot smoke checks green before each push.

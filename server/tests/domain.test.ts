@@ -655,7 +655,9 @@ test('agency operational exports respect staff building scope', () => {
   ).run(secondBuildingId).lastInsertRowid);
 
   const adminId = createUser('agency-admin@example.com', 'board_admin');
-  const staffId = createUser('finance-staff@example.com', 'resident');
+  const financeStaffId = createUser('finance-staff@example.com', 'resident');
+  const maintenanceStaffId = createUser('maintenance-staff@example.com', 'resident');
+  const buildingAdminStaffId = createUser('building-admin-staff@example.com', 'resident');
   const firstResidentId = createUser('first-resident@example.com');
   const secondResidentId = createUser('second-resident@example.com');
   db.prepare(`UPDATE users SET condominium_id = ? WHERE id = ?`).run(first.condoId, firstResidentId);
@@ -678,6 +680,18 @@ test('agency operational exports respect staff building scope', () => {
     agencyId: agency!.agencyId,
     email: 'finance-staff@example.com',
     role: 'finance_manager',
+    buildingIds: [secondCondoId],
+  });
+  upsertAgencyStaff({
+    agencyId: agency!.agencyId,
+    email: 'maintenance-staff@example.com',
+    role: 'maintenance_manager',
+    buildingIds: [secondCondoId],
+  });
+  upsertAgencyStaff({
+    agencyId: agency!.agencyId,
+    email: 'building-admin-staff@example.com',
+    role: 'building_admin',
     buildingIds: [secondCondoId],
   });
 
@@ -727,29 +741,40 @@ test('agency operational exports respect staff building scope', () => {
      VALUES (NULL, ?, 'agency@example.com', 'agency.action', 'agency', ?, ?)`
   ).run(adminId, agency!.agencyId, JSON.stringify({ agency_id: agency!.agencyId }));
 
-  const membership = userAgencyMemberships(staffId)[0];
-  const residentsCsv = agencyOperationalExportToCsv(membership, 'residents');
-  assert.match(residentsCsv, /second-resident@example.com/);
-  assert.doesNotMatch(residentsCsv, /first-resident@example.com/);
+  const financeMembership = userAgencyMemberships(financeStaffId)[0];
+  assert.throws(() => agencyOperationalExportToCsv(financeMembership, 'residents'), /agency_export_forbidden/);
+  assert.throws(() => agencyOperationalExportToCsv(financeMembership, 'tickets'), /agency_export_forbidden/);
+  assert.throws(() => agencyOperationalExportToCsv(financeMembership, 'work-orders'), /agency_export_forbidden/);
+  assert.throws(() => agencyOperationalExportToCsv(financeMembership, 'audit'), /agency_export_forbidden/);
 
-  const financeCsv = agencyOperationalExportToCsv(membership, 'finance');
+  const financeCsv = agencyOperationalExportToCsv(financeMembership, 'finance');
   assert.match(financeCsv, /Second expense/);
   assert.doesNotMatch(financeCsv, /First expense/);
 
-  const ticketsCsv = agencyOperationalExportToCsv(membership, 'tickets');
+  const maintenanceMembership = userAgencyMemberships(maintenanceStaffId)[0];
+  assert.throws(() => agencyOperationalExportToCsv(maintenanceMembership, 'residents'), /agency_export_forbidden/);
+  assert.throws(() => agencyOperationalExportToCsv(maintenanceMembership, 'finance'), /agency_export_forbidden/);
+  assert.throws(() => agencyOperationalExportToCsv(maintenanceMembership, 'audit'), /agency_export_forbidden/);
+
+  const ticketsCsv = agencyOperationalExportToCsv(maintenanceMembership, 'tickets');
   assert.match(ticketsCsv, /Second gate/);
   assert.doesNotMatch(ticketsCsv, /First leak/);
 
-  const workOrdersCsv = agencyOperationalExportToCsv(membership, 'work-orders');
+  const workOrdersCsv = agencyOperationalExportToCsv(maintenanceMembership, 'work-orders');
   assert.match(workOrdersCsv, /Second repair/);
   assert.doesNotMatch(workOrdersCsv, /First repair/);
 
-  const auditCsv = agencyOperationalExportToCsv(membership, 'audit');
+  const buildingAdminMembership = userAgencyMemberships(buildingAdminStaffId)[0];
+  const residentsCsv = agencyOperationalExportToCsv(buildingAdminMembership, 'residents');
+  assert.match(residentsCsv, /second-resident@example.com/);
+  assert.doesNotMatch(residentsCsv, /first-resident@example.com/);
+
+  const auditCsv = agencyOperationalExportToCsv(buildingAdminMembership, 'audit');
   assert.match(auditCsv, /second.action/);
   assert.match(auditCsv, /agency.action/);
   assert.doesNotMatch(auditCsv, /first.action/);
 
-  const events = listAgencyAuditEvents(membership);
+  const events = listAgencyAuditEvents(buildingAdminMembership);
   assert.ok(events.some((event) => event.action === 'second.action'));
   assert.ok(events.some((event) => event.action === 'agency.action'));
   assert.ok(!events.some((event) => event.action === 'first.action'));

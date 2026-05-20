@@ -6,7 +6,7 @@ import Button from '../../components/Button';
 import { api, apiDelete, apiGet, apiPost } from '../../lib/api';
 import { t } from '../../lib/i18n';
 import { useAuth, type User } from '../../lib/auth';
-import type { AgencyBuildingCapability, AgencyRole } from '../../lib/agencyAccess';
+import { capabilitiesForAgencyRole, type AgencyBuildingCapability, type AgencyRole } from '../../lib/agencyAccess';
 
 interface AgencyBuildingMetrics {
   pending_residents: number;
@@ -218,12 +218,12 @@ const agencyRoles: AgencyRole[] = [
   'concierge_supervisor',
 ];
 
-const operationalExports: Array<{ kind: AgencyExportKind; label: string }> = [
-  { kind: 'residents', label: 'Moradores' },
-  { kind: 'finance', label: 'Financeiro' },
-  { kind: 'tickets', label: 'Chamados' },
-  { kind: 'work-orders', label: 'Ordens de serviço' },
-  { kind: 'audit', label: 'Auditoria' },
+const operationalExports: Array<{ kind: AgencyExportKind; label: string; capability: AgencyBuildingCapability }> = [
+  { kind: 'residents', label: 'Moradores', capability: 'building_admin' },
+  { kind: 'finance', label: 'Financeiro', capability: 'finance' },
+  { kind: 'tickets', label: 'Chamados', capability: 'maintenance' },
+  { kind: 'work-orders', label: 'Ordens de serviço', capability: 'maintenance' },
+  { kind: 'audit', label: 'Auditoria', capability: 'building_admin' },
 ];
 
 function agencyRoleLabel(role: AgencyRole | string) {
@@ -394,6 +394,18 @@ export default function BoardAgencyPortfolio() {
     upcoming_meetings: 0,
   }, [primaryAgency]);
   const permissionReview = primaryAgency?.permission_review || null;
+  const agencyCapabilitySet = useMemo(() => {
+    if (!primaryAgency) return new Set<AgencyBuildingCapability>();
+    const capabilities = primaryAgency.capabilities?.length
+      ? primaryAgency.capabilities
+      : capabilitiesForAgencyRole(primaryAgency.role);
+    return new Set(capabilities);
+  }, [primaryAgency]);
+  const canExportReports = agencyCapabilitySet.has('reports');
+  const visibleOperationalExports = useMemo(
+    () => operationalExports.filter((item) => agencyCapabilitySet.has(item.capability)),
+    [agencyCapabilitySet],
+  );
   const canReviewEnterprise = !!primaryAgency?.capabilities?.includes('building_admin')
     || primaryAgency?.role === 'agency_admin'
     || primaryAgency?.role === 'building_admin';
@@ -925,17 +937,26 @@ export default function BoardAgencyPortfolio() {
                   {t('Baixe dados do portfólio respeitando os prédios permitidos para sua função.')}
                 </p>
                 <div className="grid grid-cols-1 gap-2">
-                  <Button variant="sage" onClick={downloadAgencyReport} leftIcon={<Download className="w-4 h-4" />}>
-                    {t('Relatório mensal da administradora')}
-                  </Button>
-                  <Button variant="ghost" onClick={downloadPortfolioCsv} leftIcon={<Download className="w-4 h-4" />}>
-                    {t('Resumo do portfólio')}
-                  </Button>
-                  {operationalExports.map((item) => (
+                  {canExportReports && (
+                    <>
+                      <Button variant="sage" onClick={downloadAgencyReport} leftIcon={<Download className="w-4 h-4" />}>
+                        {t('Relatório mensal da administradora')}
+                      </Button>
+                      <Button variant="ghost" onClick={downloadPortfolioCsv} leftIcon={<Download className="w-4 h-4" />}>
+                        {t('Resumo do portfólio')}
+                      </Button>
+                    </>
+                  )}
+                  {visibleOperationalExports.map((item) => (
                     <Button key={item.kind} variant="ghost" onClick={() => downloadOperationalCsv(item.kind)} leftIcon={<Download className="w-4 h-4" />}>
                       {t(item.label)}
                     </Button>
                   ))}
+                  {!canExportReports && visibleOperationalExports.length === 0 && (
+                    <div className="rounded-2xl border border-white/70 bg-white/50 px-3 py-3 text-sm text-dusk-300">
+                      {t('Sua função não tem exportações liberadas.')}
+                    </div>
+                  )}
                 </div>
               </GlassCard>
 

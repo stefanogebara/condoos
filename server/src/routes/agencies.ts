@@ -9,6 +9,7 @@ import {
   acceptAgencyStaffInvite,
   agencyPortfolioToCsv,
   agencyOperationalExportToCsv,
+  assertAgencyMembershipCanUseCapability,
   agencyPortfoliosForUser,
   buildAgencyMonthlyReport,
   buildAgencyPortfolio,
@@ -101,6 +102,16 @@ function agencyMembershipOrFail(req: AuthedRequest, res: any, agencyId: number, 
     return null;
   }
   return membership;
+}
+
+function failAgencyAccess(res: any, err: unknown): boolean {
+  const status = (err as Error & { status?: number }).status;
+  if (!status || status >= 500) return false;
+  fail(res, (err as Error).message, status, {
+    required_capability: (err as any).required_capability,
+    export_kind: (err as any).export_kind,
+  });
+  return true;
 }
 
 router.get('/portfolio', requireAuth, asyncHandler(async (req: AuthedRequest, res) => {
@@ -386,6 +397,12 @@ router.get('/:agencyId/export/portfolio.csv', requireAuth, asyncHandler(async (r
   if (!params) return fail(res, 'invalid_input', 400);
   const membership = agencyMembershipOrFail(req, res, params.agencyId, false);
   if (!membership) return;
+  try {
+    assertAgencyMembershipCanUseCapability(membership, 'reports');
+  } catch (err) {
+    if (failAgencyAccess(res, err)) return;
+    throw err;
+  }
   const portfolio = buildAgencyPortfolio(membership);
   audit(req, {
     action: 'agency.export_portfolio',
@@ -407,6 +424,12 @@ router.get('/:agencyId/report.md', requireAuth, asyncHandler(async (req: AuthedR
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
   const membership = agencyMembershipOrFail(req, res, params.agencyId, false);
   if (!membership) return;
+  try {
+    assertAgencyMembershipCanUseCapability(membership, 'reports');
+  } catch (err) {
+    if (failAgencyAccess(res, err)) return;
+    throw err;
+  }
   const report = buildAgencyMonthlyReport(membership, parsed.data.month);
   audit(req, {
     action: 'agency.export_monthly_report',
@@ -428,7 +451,13 @@ router.get('/:agencyId/export/:kind.csv', requireAuth, asyncHandler(async (req: 
   if (!params) return fail(res, 'invalid_input', 400);
   const membership = agencyMembershipOrFail(req, res, params.agencyId, false);
   if (!membership) return;
-  const csv = agencyOperationalExportToCsv(membership, params.kind);
+  let csv: string;
+  try {
+    csv = agencyOperationalExportToCsv(membership, params.kind);
+  } catch (err) {
+    if (failAgencyAccess(res, err)) return;
+    throw err;
+  }
   audit(req, {
     action: 'agency.export_operational',
     target_type: 'agency',

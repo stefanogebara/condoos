@@ -208,6 +208,14 @@ export interface CreatedAgencySetupCode extends AgencySetupCode {
 export const AGENCY_EXPORT_KINDS = ['residents', 'finance', 'tickets', 'work-orders', 'audit'] as const;
 export type AgencyExportKind = typeof AGENCY_EXPORT_KINDS[number];
 
+export const AGENCY_EXPORT_CAPABILITIES: Record<AgencyExportKind, AgencyBuildingCapability> = {
+  residents: 'building_admin',
+  finance: 'finance',
+  tickets: 'maintenance',
+  'work-orders': 'maintenance',
+  audit: 'building_admin',
+};
+
 export interface AgencyAuditEvent {
   id: number;
   created_at: string;
@@ -402,6 +410,35 @@ export function agencyUserCanUseBuildingCapability(
     allowed: roles.some((role) => agencyRoleCanUseCapability(role, capability)),
     roles,
   };
+}
+
+export function agencyMembershipCanUseCapability(membership: AgencyMembership, capability: AgencyBuildingCapability): boolean {
+  return agencyRoleCanUseCapability(membership.role, capability);
+}
+
+export function assertAgencyMembershipCanUseCapability(
+  membership: AgencyMembership,
+  capability: AgencyBuildingCapability,
+  error = 'agency_capability_forbidden',
+): void {
+  if (agencyMembershipCanUseCapability(membership, capability)) return;
+  throw Object.assign(new Error(error), {
+    status: 403,
+    required_capability: capability,
+  });
+}
+
+export function agencyMembershipCanExportKind(membership: AgencyMembership, kind: AgencyExportKind): boolean {
+  return agencyMembershipCanUseCapability(membership, AGENCY_EXPORT_CAPABILITIES[kind]);
+}
+
+export function assertAgencyMembershipCanExportKind(membership: AgencyMembership, kind: AgencyExportKind): void {
+  if (agencyMembershipCanExportKind(membership, kind)) return;
+  throw Object.assign(new Error('agency_export_forbidden'), {
+    status: 403,
+    export_kind: kind,
+    required_capability: AGENCY_EXPORT_CAPABILITIES[kind],
+  });
 }
 
 function zeroMetrics(): AgencyBuildingMetrics {
@@ -1153,6 +1190,8 @@ function placeholders(ids: number[]): string {
 }
 
 export function agencyOperationalExportToCsv(membership: AgencyMembership, kind: AgencyExportKind): string {
+  assertAgencyMembershipCanExportKind(membership, kind);
+
   const buildingIds = buildingIdsForMembership(membership);
   if (buildingIds.length === 0) {
     const emptyHeaders: Record<AgencyExportKind, string[]> = {
