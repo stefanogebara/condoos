@@ -47,7 +47,16 @@ import { researchExternalVendors } from '../src/ai/web-research';
 import { getDashboardActions } from '../src/lib/dashboard-actions';
 import { createInAppNotification, markInAppNotificationRead } from '../src/lib/in-app-notifications';
 import { assertFileReadyForUse, canAccessFile, createPendingFile, markFileReady } from '../src/lib/files';
-import { linkCondominiumToAgency, userAgencyMemberships } from '../src/lib/agencies';
+import {
+  agencyPortfolioToCsv,
+  buildAgencyPortfolio,
+  createAgencySetupCode,
+  disableAgencySetupCode,
+  linkCondominiumToAgency,
+  listAgencySetupCodes,
+  userAgencyMemberships,
+  userCanManageAgency,
+} from '../src/lib/agencies';
 import { checkPrivateSetupCode, consumePrivateSetupCode, hashSetupCode } from '../src/lib/private-access';
 
 function resetDb() {
@@ -161,6 +170,99 @@ test('agency links sit above existing building-level roles', () => {
     `SELECT COUNT(*) AS count FROM agency_condominiums WHERE agency_id = ? AND condominium_id = ?`
   ).get(agency!.agencyId, condoId) as any;
   assert.equal(linked.count, 1);
+});
+
+test('agency activation codes can be created, listed, consumed, and disabled by agency scope', () => {
+  resetDb();
+  const { condoId } = createCondoFixture();
+  const adminId = createUser('agency-admin@example.com', 'board_admin');
+  const agency = linkCondominiumToAgency({
+    agencyName: 'Andes Management',
+    condominiumId: condoId,
+    userId: adminId,
+  });
+  assert.ok(agency);
+  assert.equal(userCanManageAgency(adminId, agency!.agencyId), true);
+
+  const created = createAgencySetupCode({
+    agencyId: agency!.agencyId,
+    actorUserId: adminId,
+    label: 'Pilot building',
+    code: 'andes-pilot',
+    maxUses: 2,
+  });
+  assert.equal(created.code, 'ANDES-PILOT');
+  assert.equal(created.status, 'active');
+  assert.equal(created.max_uses, 2);
+
+  const stored = db.prepare(
+    `SELECT code_hash, agency_name, used_count FROM private_setup_codes WHERE id = ?`
+  ).get(created.id) as any;
+  assert.equal(stored.code_hash, hashSetupCode('ANDES-PILOT'));
+  assert.equal(stored.agency_name, 'Andes Management');
+  assert.equal(stored.used_count, 0);
+
+  const listed = listAgencySetupCodes(agency!.agencyId);
+  assert.equal(listed.length, 1);
+  assert.equal(listed[0].label, 'Pilot building');
+  assert.equal((listed[0] as any).code, undefined);
+
+  const checked = checkPrivateSetupCode('andes-pilot', {
+    PRIVATE_CREATE_BUILDING_REQUIRED: '1',
+  } as NodeJS.ProcessEnv);
+  assert.equal(checked.ok, true);
+  if (!checked.ok) return;
+  assert.equal(consumePrivateSetupCode(checked).ok, true);
+  assert.equal(listAgencySetupCodes(agency!.agencyId)[0].used_count, 1);
+
+  const disabled = disableAgencySetupCode(agency!.agencyId, created.id);
+  assert.equal(disabled.status, 'disabled');
+  assert.deepEqual(checkPrivateSetupCode('andes-pilot', {
+    PRIVATE_CREATE_BUILDING_REQUIRED: '1',
+  } as NodeJS.ProcessEnv), {
+    ok: false,
+    status: 403,
+    error: 'invalid_setup_code',
+  });
+});
+
+test('agency portfolio CSV exports scoped building metrics', () => {
+  resetDb();
+  const { condoId, unit101 } = createCondoFixture();
+  const adminId = createUser('portfolio-admin@example.com', 'board_admin');
+  const residentId = createUser('pending@example.com', 'resident');
+  const agency = linkCondominiumToAgency({
+    agencyName: 'Quito Operations',
+    condominiumId: condoId,
+    userId: adminId,
+  });
+  assert.ok(agency);
+
+  db.prepare(
+    `INSERT INTO user_unit (user_id, unit_id, relationship, status, primary_contact, voting_weight)
+     VALUES (?, ?, 'tenant', 'pending', 1, 1.0)`
+  ).run(residentId, unit101);
+  db.prepare(
+    `INSERT INTO tickets (condominium_id, reporter_id, title, description, category, priority, status)
+     VALUES (?, ?, 'Elevator noise', 'Noise on floor 4', 'maintenance', 'urgent', 'open')`
+  ).run(condoId, residentId);
+  db.prepare(
+    `INSERT INTO invoices (condominium_id, unit_id, amount_cents, period, due_date, status)
+     VALUES (?, ?, 12000, '2026-05', date('now', '-3 day'), 'overdue')`
+  ).run(condoId, unit101);
+
+  const membership = userAgencyMemberships(adminId)[0];
+  const portfolio = buildAgencyPortfolio(membership);
+  assert.equal(portfolio.totals.pending_residents, 1);
+  assert.equal(portfolio.totals.unresolved_tickets, 1);
+  assert.equal(portfolio.totals.urgent_tickets, 1);
+  assert.equal(portfolio.totals.overdue_dues, 1);
+
+  const csv = agencyPortfolioToCsv(portfolio);
+  assert.match(csv, /agency_id,agency_name,building_id,building_name/);
+  assert.match(csv, /Quito Operations/);
+  assert.match(csv, /Test Condo/);
+  assert.match(csv, /,1,1,1,1,/);
 });
 
 function createCondoFixture() {

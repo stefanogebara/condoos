@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Building2, Calendar, CheckCircle2, FileArchive, LockKeyhole, RefreshCw, ShieldCheck, Users, Wallet, Wrench } from 'lucide-react';
+import { AlertTriangle, Ban, Building2, Calendar, CheckCircle2, Copy, Download, FileArchive, KeyRound, LockKeyhole, PlusCircle, RefreshCw, ShieldCheck, Users, Wallet, Wrench } from 'lucide-react';
 import GlassCard from '../../components/GlassCard';
 import Badge from '../../components/Badge';
 import Button from '../../components/Button';
-import { apiGet } from '../../lib/api';
+import { api, apiGet, apiPost } from '../../lib/api';
 import { t } from '../../lib/i18n';
 
 interface AgencyBuildingMetrics {
@@ -36,6 +36,21 @@ interface AgencyPortfolio {
 
 interface PortfolioResponse {
   agencies: AgencyPortfolio[];
+}
+
+interface AgencySetupCode {
+  id: number;
+  label: string | null;
+  agency_name: string | null;
+  max_uses: number;
+  used_count: number;
+  expires_at: string | null;
+  disabled_at: string | null;
+  created_by_user_id: number | null;
+  created_at: string;
+  last_used_at: string | null;
+  status: 'active' | 'disabled' | 'expired' | 'exhausted';
+  code?: string;
 }
 
 interface IntegrationStatus {
@@ -72,9 +87,40 @@ function StatusPill({ label, ok }: { label: string; ok: boolean }) {
   );
 }
 
+function formatDate(value: string | null) {
+  if (!value) return t('Sem vencimento');
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString();
+}
+
+function codeTone(status: AgencySetupCode['status']) {
+  if (status === 'active') return 'sage' as const;
+  if (status === 'disabled' || status === 'expired') return 'warning' as const;
+  return 'neutral' as const;
+}
+
+function codeStatusLabel(status: AgencySetupCode['status']) {
+  const labels = {
+    active: 'Ativo',
+    disabled: 'Desativado',
+    expired: 'Expirado',
+    exhausted: 'Esgotado',
+  };
+  return t(labels[status]);
+}
+
 export default function BoardAgencyPortfolio() {
   const [portfolio, setPortfolio] = useState<PortfolioResponse | null>(null);
   const [status, setStatus] = useState<IntegrationStatus | null>(null);
+  const [selectedAgencyId, setSelectedAgencyId] = useState<number | null>(null);
+  const [setupCodes, setSetupCodes] = useState<AgencySetupCode[]>([]);
+  const [setupCodesLoading, setSetupCodesLoading] = useState(false);
+  const [creatingCode, setCreatingCode] = useState(false);
+  const [createdCode, setCreatedCode] = useState<string | null>(null);
+  const [copiedCode, setCopiedCode] = useState(false);
+  const [setupCodeError, setSetupCodeError] = useState<string | null>(null);
+  const [form, setForm] = useState({ label: '', max_uses: '1', expires_at: '' });
   const [loading, setLoading] = useState(true);
 
   async function load() {
@@ -86,6 +132,10 @@ export default function BoardAgencyPortfolio() {
       ]);
       setPortfolio(nextPortfolio);
       setStatus(nextStatus);
+      setSelectedAgencyId((current) => {
+        if (current && nextPortfolio.agencies.some((agency) => agency.id === current)) return current;
+        return nextPortfolio.agencies[0]?.id || null;
+      });
     } finally {
       setLoading(false);
     }
@@ -95,7 +145,10 @@ export default function BoardAgencyPortfolio() {
     load().catch(() => {});
   }, []);
 
-  const primaryAgency = portfolio?.agencies[0] || null;
+  const primaryAgency = useMemo(() => {
+    const agencies = portfolio?.agencies || [];
+    return agencies.find((agency) => agency.id === selectedAgencyId) || agencies[0] || null;
+  }, [portfolio, selectedAgencyId]);
   const totals = useMemo(() => primaryAgency?.totals || {
     pending_residents: 0,
     unresolved_tickets: 0,
@@ -106,6 +159,80 @@ export default function BoardAgencyPortfolio() {
     proposals_missing_budget: 0,
     upcoming_meetings: 0,
   }, [primaryAgency]);
+
+  async function loadSetupCodes(agencyId = primaryAgency?.id) {
+    if (!agencyId || primaryAgency?.role !== 'agency_admin') {
+      setSetupCodes([]);
+      return;
+    }
+    setSetupCodesLoading(true);
+    try {
+      const res = await apiGet<{ setup_codes: AgencySetupCode[] }>(`/agencies/${agencyId}/setup-codes`);
+      setSetupCodes(res.setup_codes);
+    } catch {
+      setSetupCodeError(t('Não foi possível carregar os códigos privados.'));
+    } finally {
+      setSetupCodesLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadSetupCodes().catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [primaryAgency?.id, primaryAgency?.role]);
+
+  async function createCode(e: React.FormEvent) {
+    e.preventDefault();
+    if (!primaryAgency) return;
+    setCreatingCode(true);
+    setSetupCodeError(null);
+    setCreatedCode(null);
+    try {
+      const expiresAt = form.expires_at ? new Date(form.expires_at).toISOString() : null;
+      const res = await apiPost<{ setup_code: AgencySetupCode & { code: string } }>(`/agencies/${primaryAgency.id}/setup-codes`, {
+        label: form.label || undefined,
+        max_uses: Number(form.max_uses || 1),
+        expires_at: expiresAt,
+      });
+      setCreatedCode(res.setup_code.code);
+      setForm({ label: '', max_uses: '1', expires_at: '' });
+      await loadSetupCodes(primaryAgency.id);
+    } catch {
+      setSetupCodeError(t('Não foi possível criar o código privado.'));
+    } finally {
+      setCreatingCode(false);
+    }
+  }
+
+  async function disableCode(codeId: number) {
+    if (!primaryAgency) return;
+    setSetupCodeError(null);
+    await apiPost(`/agencies/${primaryAgency.id}/setup-codes/${codeId}/disable`);
+    await loadSetupCodes(primaryAgency.id);
+  }
+
+  async function copyCreatedCode() {
+    if (!createdCode) return;
+    await navigator.clipboard?.writeText(createdCode);
+    setCopiedCode(true);
+    window.setTimeout(() => setCopiedCode(false), 1600);
+  }
+
+  async function downloadPortfolioCsv() {
+    if (!primaryAgency) return;
+    const response = await api.get(`/agencies/${primaryAgency.id}/export/portfolio.csv`, { responseType: 'blob' });
+    const blob = response.data instanceof Blob
+      ? response.data
+      : new Blob([response.data], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `condoos-${primaryAgency.slug}-portfolio.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
 
   return (
     <>
@@ -119,9 +246,16 @@ export default function BoardAgencyPortfolio() {
             {t('Visão executiva para administradoras: prédios, riscos operacionais, dinheiro e configuração de produção.')}
           </p>
         </div>
-        <Button variant="ghost" onClick={load} loading={loading} leftIcon={<RefreshCw className="w-4 h-4" />}>
-          {t('Atualizar')}
-        </Button>
+        <div className="flex items-center gap-2 flex-wrap">
+          {primaryAgency && (
+            <Button variant="ghost" onClick={downloadPortfolioCsv} leftIcon={<Download className="w-4 h-4" />}>
+              {t('Exportar CSV')}
+            </Button>
+          )}
+          <Button variant="ghost" onClick={load} loading={loading} leftIcon={<RefreshCw className="w-4 h-4" />}>
+            {t('Atualizar')}
+          </Button>
+        </div>
       </div>
 
       {!primaryAgency ? (
@@ -141,7 +275,21 @@ export default function BoardAgencyPortfolio() {
                 <h2 className="font-display text-2xl text-dusk-500 mt-1" data-user-content>{primaryAgency.name}</h2>
                 <p className="text-sm text-dusk-300 mt-1">{primaryAgency.buildings.length} {t('prédios vinculados')}</p>
               </div>
-              <Badge tone="neutral">{primaryAgency.role}</Badge>
+              <div className="flex items-center gap-2 flex-wrap justify-end">
+                {portfolio && portfolio.agencies.length > 1 && (
+                  <select
+                    className="rounded-full bg-white/60 border border-white/70 px-3 py-2 text-sm text-dusk-400 outline-none"
+                    value={primaryAgency.id}
+                    onChange={(event) => setSelectedAgencyId(Number(event.target.value))}
+                    aria-label={t('Selecionar administradora')}
+                  >
+                    {portfolio.agencies.map((agency) => (
+                      <option key={agency.id} value={agency.id}>{agency.name}</option>
+                    ))}
+                  </select>
+                )}
+                <Badge tone="neutral">{primaryAgency.role}</Badge>
+              </div>
             </div>
             <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-5">
               <Metric icon={Users} label={t('Pendentes')} value={totals.pending_residents} />
@@ -176,26 +324,125 @@ export default function BoardAgencyPortfolio() {
               ))}
             </div>
 
-            <GlassCard className="p-5 h-fit">
-              <div className="flex items-center gap-2 mb-4">
-                <ShieldCheck className="w-5 h-5 text-sage-700" />
-                <h2 className="font-display text-xl text-dusk-500">{t('Estado enterprise')}</h2>
-              </div>
-              {status ? (
-                <div className="space-y-2">
-                  <StatusPill label={t('Acesso privado')} ok={status.private_access.configured} />
-                  <StatusPill label={t('Email')} ok={status.email.configured} />
-                  <StatusPill label={t('Google login')} ok={status.google_login.configured} />
-                  <StatusPill label={t('WhatsApp')} ok={status.whatsapp.configured} />
-                  <StatusPill label={t('Uploads R2')} ok={status.uploads.configured} />
-                  <StatusPill label={t('IA')} ok={status.ai.configured} />
-                  <StatusPill label={t('Backups')} ok={status.backups.configured} />
-                  <StatusPill label={t('Sentry/PostHog')} ok={status.observability.sentry_configured && status.observability.posthog_configured} />
+            <div className="space-y-5">
+              <GlassCard className="p-5 h-fit">
+                <div className="flex items-center gap-2 mb-4">
+                  <ShieldCheck className="w-5 h-5 text-sage-700" />
+                  <h2 className="font-display text-xl text-dusk-500">{t('Estado enterprise')}</h2>
                 </div>
-              ) : (
-                <div className="text-sm text-dusk-300">{t('Carregando...')}</div>
+                {status ? (
+                  <div className="space-y-2">
+                    <StatusPill label={t('Acesso privado')} ok={status.private_access.configured} />
+                    <StatusPill label={t('Email')} ok={status.email.configured} />
+                    <StatusPill label={t('Google login')} ok={status.google_login.configured} />
+                    <StatusPill label={t('WhatsApp')} ok={status.whatsapp.configured} />
+                    <StatusPill label={t('Uploads R2')} ok={status.uploads.configured} />
+                    <StatusPill label={t('IA')} ok={status.ai.configured} />
+                    <StatusPill label={t('Backups')} ok={status.backups.configured} />
+                    <StatusPill label={t('Sentry/PostHog')} ok={status.observability.sentry_configured && status.observability.posthog_configured} />
+                  </div>
+                ) : (
+                  <div className="text-sm text-dusk-300">{t('Carregando...')}</div>
+                )}
+              </GlassCard>
+
+              {primaryAgency.role === 'agency_admin' && (
+                <GlassCard className="p-5 h-fit">
+                  <div className="flex items-center gap-2 mb-2">
+                    <KeyRound className="w-5 h-5 text-sage-700" />
+                    <h2 className="font-display text-xl text-dusk-500">{t('Códigos privados')}</h2>
+                  </div>
+                  <p className="text-sm text-dusk-300 mb-4">
+                    {t('Emita códigos para ativar novos prédios vendidos pela administradora. O código completo aparece apenas uma vez.')}
+                  </p>
+
+                  {createdCode && (
+                    <div className="rounded-2xl border border-sage-200 bg-sage-100/70 p-3 mb-4">
+                      <div className="text-xs uppercase tracking-[0.12em] text-sage-700">{t('Código criado')}</div>
+                      <div className="font-mono text-sm text-dusk-500 break-all mt-1">{createdCode}</div>
+                      <Button type="button" variant="ghost" size="sm" className="mt-3" onClick={copyCreatedCode} leftIcon={<Copy className="w-4 h-4" />}>
+                        {copiedCode ? t('Copiado') : t('Copiar código')}
+                      </Button>
+                    </div>
+                  )}
+
+                  {setupCodeError && (
+                    <div className="rounded-2xl bg-peach-100/70 border border-peach-200 text-sm text-peach-600 px-3 py-2 mb-4">
+                      {setupCodeError}
+                    </div>
+                  )}
+
+                  <form onSubmit={createCode} className="space-y-3">
+                    <label className="block">
+                      <span className="text-xs uppercase tracking-[0.12em] text-dusk-300">{t('Rótulo')}</span>
+                      <input
+                        value={form.label}
+                        onChange={(event) => setForm((prev) => ({ ...prev, label: event.target.value }))}
+                        placeholder={t('Ex: piloto Edifício Jardins')}
+                        className="mt-1 w-full rounded-2xl bg-white/60 border border-white/70 px-3 py-2 text-sm text-dusk-500 outline-none"
+                      />
+                    </label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <label className="block">
+                        <span className="text-xs uppercase tracking-[0.12em] text-dusk-300">{t('Usos')}</span>
+                        <input
+                          type="number"
+                          min={1}
+                          max={500}
+                          value={form.max_uses}
+                          onChange={(event) => setForm((prev) => ({ ...prev, max_uses: event.target.value }))}
+                          className="mt-1 w-full rounded-2xl bg-white/60 border border-white/70 px-3 py-2 text-sm text-dusk-500 outline-none"
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="text-xs uppercase tracking-[0.12em] text-dusk-300">{t('Vence em')}</span>
+                        <input
+                          type="datetime-local"
+                          value={form.expires_at}
+                          onChange={(event) => setForm((prev) => ({ ...prev, expires_at: event.target.value }))}
+                          className="mt-1 w-full rounded-2xl bg-white/60 border border-white/70 px-3 py-2 text-sm text-dusk-500 outline-none"
+                        />
+                      </label>
+                    </div>
+                    <Button type="submit" variant="sage" className="w-full" loading={creatingCode} leftIcon={<PlusCircle className="w-4 h-4" />}>
+                      {t('Criar código')}
+                    </Button>
+                  </form>
+
+                  <div className="mt-5 space-y-2">
+                    <div className="text-xs uppercase tracking-[0.12em] text-dusk-300">{t('Códigos emitidos')}</div>
+                    {setupCodesLoading ? (
+                      <div className="text-sm text-dusk-300">{t('Carregando...')}</div>
+                    ) : setupCodes.length === 0 ? (
+                      <div className="rounded-2xl border border-white/70 bg-white/50 px-3 py-3 text-sm text-dusk-300">
+                        {t('Nenhum código privado emitido ainda.')}
+                      </div>
+                    ) : (
+                      setupCodes.map((setupCode) => (
+                        <div key={setupCode.id} className="rounded-2xl border border-white/70 bg-white/55 px-3 py-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="font-medium text-dusk-500 truncate" data-user-content>
+                                {setupCode.label || t('Código privado')}
+                              </div>
+                              <div className="text-xs text-dusk-300 mt-1">
+                                {setupCode.used_count}/{setupCode.max_uses} {t('usos')} · {t('Vence')} {formatDate(setupCode.expires_at)}
+                              </div>
+                            </div>
+                            <Badge tone={codeTone(setupCode.status)}>{codeStatusLabel(setupCode.status)}</Badge>
+                          </div>
+                          {setupCode.status === 'active' && (
+                            <Button type="button" variant="ghost" size="sm" className="mt-3" onClick={() => disableCode(setupCode.id)} leftIcon={<Ban className="w-4 h-4" />}>
+                              {t('Desativar')}
+                            </Button>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </GlassCard>
               )}
-            </GlassCard>
+            </div>
           </div>
         </>
       )}

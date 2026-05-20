@@ -46,10 +46,15 @@ flyctl secrets set -a condoos-api TWILIO_WHATSAPP_FROM=whatsapp:+14155238886
 ```
 
 For a temporary bootstrap code during a private pilot, set
-`PRIVATE_SETUP_CODES=CODE1,CODE2`. For real sales tracking, insert hashed rows
-into `private_setup_codes` with a label, optional `agency_name`, `max_uses`,
-and `expires_at`. Codes are SHA-256 hashed with the same normalization used by
-the app; never store the plaintext sales code in production.
+`PRIVATE_SETUP_CODES=CODE1,CODE2`. For real sales tracking, agency admins can
+issue and disable tracked codes from `/board/portfolio` after their first
+agency-linked building exists. The full plaintext code is shown only once; the
+database stores only a SHA-256 hash with the same normalization used by the
+app.
+
+Operators can also insert hashed rows into `private_setup_codes` with a label,
+optional `agency_name`, `max_uses`, and `expires_at`. Never store the plaintext
+sales code in production.
 
 Local/SSH helper for issuing one tracked code:
 
@@ -61,6 +66,10 @@ DB_PATH=/data/condoos.sqlite npm --prefix server run private:setup-code -- \
   --max-uses=1 \
   --expires-at=2026-06-30T23:59:59Z
 ```
+
+Agency portfolio exports are available to agency members from
+`/api/agencies/:agencyId/export/portfolio.csv` and from the Export CSV button on
+`/board/portfolio`.
 
 Turnstile setup can be automated once you have a Cloudflare account ID and an
 API token with Turnstile widget write permission:

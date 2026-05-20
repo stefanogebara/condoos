@@ -1,135 +1,141 @@
 import { Router } from 'express';
-import db from '../db';
+import { z } from 'zod';
 import { AuthedRequest, requireAuth } from '../lib/auth';
-import { ok, asyncHandler } from '../lib/respond';
-import { userAgencyMemberships } from '../lib/agencies';
+import { audit } from '../lib/audit';
+import { ok, fail, asyncHandler } from '../lib/respond';
+import {
+  agencyPortfolioToCsv,
+  agencyPortfoliosForUser,
+  buildAgencyPortfolio,
+  createAgencySetupCode,
+  disableAgencySetupCode,
+  listAgencySetupCodes,
+  userAgencyMembership,
+} from '../lib/agencies';
 
 const router = Router();
 
-function count(sql: string, ...params: unknown[]): number {
-  const row = db.prepare(sql).get(...params) as { count: number } | undefined;
-  return Number(row?.count || 0);
+const agencyIdParam = z.object({
+  agencyId: z.coerce.number().int().positive(),
+});
+
+const setupCodeIdParam = agencyIdParam.extend({
+  codeId: z.coerce.number().int().positive(),
+});
+
+const setupCodeSchema = z.object({
+  label: z.string().trim().min(1).max(120).optional(),
+  code: z.string().trim().min(6).max(80).optional(),
+  max_uses: z.coerce.number().int().min(1).max(500).optional(),
+  expires_at: z.string().datetime().nullable().optional(),
+});
+
+function parseParams<T extends z.ZodTypeAny>(schema: T, req: AuthedRequest): z.infer<T> | null {
+  const parsed = schema.safeParse(req.params);
+  if (!parsed.success) return null;
+  return parsed.data;
+}
+
+function agencyMembershipOrFail(req: AuthedRequest, res: any, agencyId: number, adminOnly = false) {
+  const membership = userAgencyMembership(req.user!.id, agencyId);
+  if (!membership) {
+    fail(res, 'agency_forbidden', 403);
+    return null;
+  }
+  if (adminOnly && membership.role !== 'agency_admin') {
+    fail(res, 'agency_admin_required', 403);
+    return null;
+  }
+  return membership;
 }
 
 router.get('/portfolio', requireAuth, asyncHandler(async (req: AuthedRequest, res) => {
-  const userId = req.user!.id;
-  const memberships = userAgencyMemberships(userId);
-  if (!memberships.length) return ok(res, { agencies: [] });
+  return ok(res, { agencies: agencyPortfoliosForUser(req.user!.id) });
+}));
 
-  const agencies = memberships.map((membership) => {
-    const condos = db.prepare(
-      `SELECT c.id, c.name, c.address, c.invite_code
-       FROM agency_condominiums ac
-       JOIN condominiums c ON c.id = ac.condominium_id
-       WHERE ac.agency_id = ?
-       ORDER BY c.name`
-    ).all(membership.agency_id) as Array<{
-      id: number;
-      name: string;
-      address: string;
-      invite_code: string | null;
-    }>;
+router.get('/:agencyId/setup-codes', requireAuth, asyncHandler(async (req: AuthedRequest, res) => {
+  const params = parseParams(agencyIdParam, req);
+  if (!params) return fail(res, 'invalid_input', 400);
+  if (!agencyMembershipOrFail(req, res, params.agencyId, true)) return;
+  return ok(res, { setup_codes: listAgencySetupCodes(params.agencyId) });
+}));
 
-    const buildings = condos.map((condo) => {
-      const pendingResidents = count(
-        `SELECT COUNT(*) AS count
-         FROM user_unit uu
-         JOIN units un ON un.id = uu.unit_id
-         JOIN buildings b ON b.id = un.building_id
-         WHERE b.condominium_id = ? AND uu.status = 'pending'`,
-        condo.id,
-      );
-      const openTickets = count(
-        `SELECT COUNT(*) AS count
-         FROM tickets
-         WHERE condominium_id = ? AND status NOT IN ('resolved','closed')`,
-        condo.id,
-      );
-      const urgentTickets = count(
-        `SELECT COUNT(*) AS count
-         FROM tickets
-         WHERE condominium_id = ?
-           AND status NOT IN ('resolved','closed')
-           AND priority IN ('high','urgent')`,
-        condo.id,
-      );
-      const overdueDues = count(
-        `SELECT COUNT(*) AS count
-         FROM invoices
-         WHERE condominium_id = ?
-           AND status IN ('open','overdue')
-           AND due_date < date('now')`,
-        condo.id,
-      );
-      const pendingPaymentProofs = count(
-        `SELECT COUNT(*) AS count
-         FROM payment_proofs
-         WHERE condominium_id = ? AND status = 'pending'`,
-        condo.id,
-      );
-      const vendorSlaProblems = count(
-        `SELECT COUNT(*) AS count
-         FROM ticket_work_orders wo
-         JOIN tickets t ON t.id = wo.ticket_id
-         WHERE t.condominium_id = ?
-           AND wo.status IN ('scheduled','in_progress')
-           AND wo.scheduled_for IS NOT NULL
-           AND wo.scheduled_for < CURRENT_TIMESTAMP`,
-        condo.id,
-      );
-      const proposalsMissingBudget = count(
-        `SELECT COUNT(*) AS count
-         FROM proposals
-         WHERE condominium_id = ?
-           AND status IN ('discussion','voting')
-           AND estimated_cost IS NULL`,
-        condo.id,
-      );
-      const upcomingMeetings = count(
-        `SELECT COUNT(*) AS count
-         FROM meetings
-         WHERE condominium_id = ?
-           AND status = 'scheduled'
-           AND scheduled_for >= CURRENT_TIMESTAMP`,
-        condo.id,
-      );
+router.post('/:agencyId/setup-codes', requireAuth, asyncHandler(async (req: AuthedRequest, res) => {
+  const params = parseParams(agencyIdParam, req);
+  if (!params) return fail(res, 'invalid_input', 400);
+  const parsed = setupCodeSchema.safeParse(req.body);
+  if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
+  if (!agencyMembershipOrFail(req, res, params.agencyId, true)) return;
 
-      return {
-        id: condo.id,
-        name: condo.name,
-        address: condo.address,
-        invite_code: condo.invite_code,
-        metrics: {
-          pending_residents: pendingResidents,
-          unresolved_tickets: openTickets,
-          urgent_tickets: urgentTickets,
-          overdue_dues: overdueDues,
-          pending_payment_proofs: pendingPaymentProofs,
-          vendor_sla_problems: vendorSlaProblems,
-          proposals_missing_budget: proposalsMissingBudget,
-          upcoming_meetings: upcomingMeetings,
-        },
-      };
+  try {
+    const created = createAgencySetupCode({
+      agencyId: params.agencyId,
+      actorUserId: req.user!.id,
+      label: parsed.data.label,
+      code: parsed.data.code,
+      maxUses: parsed.data.max_uses,
+      expiresAt: parsed.data.expires_at,
     });
+    audit(req, {
+      action: 'agency.setup_code_create',
+      target_type: 'private_setup_code',
+      target_id: created.id,
+      metadata: {
+        agency_id: params.agencyId,
+        label: created.label,
+        max_uses: created.max_uses,
+        expires_at: created.expires_at,
+      },
+    });
+    return ok(res, { setup_code: created }, 201);
+  } catch (err) {
+    const status = (err as Error & { status?: number }).status || 500;
+    if (status < 500) return fail(res, (err as Error).message, status);
+    throw err;
+  }
+}));
 
-    const totals = buildings.reduce((acc, building) => {
-      for (const [key, value] of Object.entries(building.metrics)) {
-        acc[key] = (acc[key] || 0) + Number(value || 0);
-      }
-      return acc;
-    }, {} as Record<string, number>);
+router.post('/:agencyId/setup-codes/:codeId/disable', requireAuth, asyncHandler(async (req: AuthedRequest, res) => {
+  const params = parseParams(setupCodeIdParam, req);
+  if (!params) return fail(res, 'invalid_input', 400);
+  if (!agencyMembershipOrFail(req, res, params.agencyId, true)) return;
 
-    return {
-      id: membership.agency_id,
-      name: membership.agency_name,
-      slug: membership.slug,
-      role: membership.role,
-      totals,
-      buildings,
-    };
+  try {
+    const setupCode = disableAgencySetupCode(params.agencyId, params.codeId);
+    audit(req, {
+      action: 'agency.setup_code_disable',
+      target_type: 'private_setup_code',
+      target_id: setupCode.id,
+      metadata: {
+        agency_id: params.agencyId,
+        label: setupCode.label,
+      },
+    });
+    return ok(res, { setup_code: setupCode });
+  } catch (err) {
+    const status = (err as Error & { status?: number }).status || 500;
+    if (status < 500) return fail(res, (err as Error).message, status);
+    throw err;
+  }
+}));
+
+router.get('/:agencyId/export/portfolio.csv', requireAuth, asyncHandler(async (req: AuthedRequest, res) => {
+  const params = parseParams(agencyIdParam, req);
+  if (!params) return fail(res, 'invalid_input', 400);
+  const membership = agencyMembershipOrFail(req, res, params.agencyId, false);
+  if (!membership) return;
+  const portfolio = buildAgencyPortfolio(membership);
+  audit(req, {
+    action: 'agency.export_portfolio',
+    target_type: 'agency',
+    target_id: params.agencyId,
+    metadata: {
+      buildings: portfolio.buildings.length,
+    },
   });
-
-  return ok(res, { agencies });
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="condoos-agency-${params.agencyId}-portfolio.csv"`);
+  return res.status(200).send(agencyPortfolioToCsv(portfolio));
 }));
 
 export default router;
