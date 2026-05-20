@@ -13,6 +13,7 @@ interface AgencyBuildingMetrics {
   unresolved_tickets: number;
   urgent_tickets: number;
   recurring_problem_clusters: number;
+  vendor_follow_up_problems: number;
   overdue_dues: number;
   pending_payment_proofs: number;
   vendor_sla_problems: number;
@@ -45,6 +46,7 @@ interface AgencyPermissionReview {
 type AgencyAttentionKind =
   | 'urgent_tickets'
   | 'recurring_problem_clusters'
+  | 'vendor_follow_up_problems'
   | 'vendor_sla_problems'
   | 'overdue_dues'
   | 'pending_payment_proofs'
@@ -243,6 +245,7 @@ function attentionLabel(kind: AgencyAttentionKind) {
   const labels: Record<AgencyAttentionKind, string> = {
     urgent_tickets: 'Chamados urgentes',
     recurring_problem_clusters: 'Problemas recorrentes',
+    vendor_follow_up_problems: 'Retorno fornecedor',
     vendor_sla_problems: 'SLA de fornecedor',
     overdue_dues: 'Cobranças em atraso',
     pending_payment_proofs: 'Comprovantes pendentes',
@@ -264,7 +267,9 @@ function buildPilotReadiness(
   permissionReview: AgencyPermissionReview | null,
 ): PilotReadinessItem[] {
   if (!agency) return [];
-  const hasCriticalOps = agency.totals.urgent_tickets > 0 || agency.totals.vendor_sla_problems > 0;
+  const hasCriticalOps = agency.totals.urgent_tickets > 0
+    || agency.totals.vendor_sla_problems > 0
+    || agency.totals.vendor_follow_up_problems > 0;
   const items: PilotReadinessItem[] = [
     {
       id: 'private-access',
@@ -305,8 +310,8 @@ function buildPilotReadiness(
       id: 'critical-ops',
       ready: !hasCriticalOps,
       label: 'Fila crítica',
-      okDetail: 'Sem chamados urgentes ou SLA crítico no portfólio.',
-      reviewDetail: 'Resolva chamados urgentes ou SLA de fornecedor antes da demo.',
+      okDetail: 'Sem chamados urgentes, retorno parado ou SLA crítico no portfólio.',
+      reviewDetail: 'Resolva chamados urgentes, retornos parados ou SLA de fornecedor antes da demo.',
     },
   ];
 
@@ -391,6 +396,7 @@ export default function BoardAgencyPortfolio() {
     unresolved_tickets: 0,
     urgent_tickets: 0,
     recurring_problem_clusters: 0,
+    vendor_follow_up_problems: 0,
     overdue_dues: 0,
     pending_payment_proofs: 0,
     vendor_sla_problems: 0,
@@ -721,6 +727,7 @@ export default function BoardAgencyPortfolio() {
               <Metric icon={Users} label={t('Pendentes')} value={totals.pending_residents} />
               <Metric icon={AlertTriangle} label={t('Chamados abertos')} value={totals.unresolved_tickets} urgent />
               <Metric icon={RefreshCw} label={t('Recorrentes')} value={totals.recurring_problem_clusters} urgent />
+              <Metric icon={ClipboardCheck} label={t('Retornos')} value={totals.vendor_follow_up_problems} urgent />
               <Metric icon={Wallet} label={t('Cobranças em atraso')} value={totals.overdue_dues} urgent />
               <Metric icon={Wrench} label={t('SLA fornecedor')} value={totals.vendor_sla_problems} urgent />
               <Metric icon={ShieldCheck} label={t('Urgentes')} value={totals.urgent_tickets} urgent />
@@ -801,6 +808,7 @@ export default function BoardAgencyPortfolio() {
                   <div className="grid sm:grid-cols-4 gap-2 mt-4">
                     <Metric icon={AlertTriangle} label={t('Chamados')} value={building.metrics.unresolved_tickets} urgent />
                     <Metric icon={RefreshCw} label={t('Recorrentes')} value={building.metrics.recurring_problem_clusters} urgent />
+                    <Metric icon={ClipboardCheck} label={t('Retornos')} value={building.metrics.vendor_follow_up_problems} urgent />
                     <Metric icon={Wallet} label={t('Atrasos')} value={building.metrics.overdue_dues} urgent />
                     <Metric icon={Users} label={t('Pendentes')} value={building.metrics.pending_residents} />
                     <Metric icon={Wrench} label={t('SLA')} value={building.metrics.vendor_sla_problems} urgent />

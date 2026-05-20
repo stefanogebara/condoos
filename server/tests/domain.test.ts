@@ -269,6 +269,10 @@ test('agency portfolio CSV exports scoped building metrics', () => {
     `INSERT INTO user_unit (user_id, unit_id, relationship, status, primary_contact, voting_weight)
      VALUES (?, ?, 'tenant', 'pending', 1, 1.0)`
   ).run(residentId, unit101);
+  const vendorId = Number(db.prepare(
+    `INSERT INTO service_contacts (condominium_id, category, company_name, contact_name, phone)
+     VALUES (?, 'maintenance', 'Lift Vendor', 'Ana', '+593999000111')`
+  ).run(condoId).lastInsertRowid);
   const ticketId = Number(db.prepare(
     `INSERT INTO tickets (condominium_id, reporter_id, title, description, category, priority, status)
      VALUES (?, ?, 'Elevator noise', 'Noise on floor 4', 'maintenance', 'urgent', 'open')`
@@ -281,10 +285,18 @@ test('agency portfolio CSV exports scoped building metrics', () => {
     `INSERT INTO tickets (condominium_id, reporter_id, title, description, category, priority, status)
      VALUES (?, ?, 'Elevator smell', 'Third elevator complaint', 'maintenance', 'normal', 'resolved')`
   ).run(condoId, residentId);
+  const staleVendorTicketId = Number(db.prepare(
+    `INSERT INTO tickets (condominium_id, reporter_id, title, description, category, priority, status)
+     VALUES (?, ?, 'Garage gate vendor follow-up', 'Vendor has not sent update', 'access_control', 'normal', 'waiting')`
+  ).run(condoId, residentId).lastInsertRowid);
   db.prepare(
     `INSERT INTO ticket_work_orders (ticket_id, title, status, completed_at)
      VALUES (?, 'Elevator inspection', 'completed', '2026-05-12T10:00:00.000Z')`
   ).run(ticketId);
+  db.prepare(
+    `INSERT INTO ticket_work_orders (ticket_id, service_contact_id, title, status, updated_at)
+     VALUES (?, ?, 'Garage gate repair', 'in_progress', datetime('now', '-8 day'))`
+  ).run(staleVendorTicketId, vendorId);
   const invoiceId = Number(db.prepare(
     `INSERT INTO invoices (condominium_id, unit_id, amount_cents, currency, period, due_date, status)
      VALUES (?, ?, 12000, 'USD', '2026-05', date('now', '-3 day'), 'overdue')`
@@ -302,20 +314,22 @@ test('agency portfolio CSV exports scoped building metrics', () => {
   const portfolio = buildAgencyPortfolio(membership);
   assert.deepEqual(portfolio.capabilities, ['building_admin', 'finance', 'maintenance', 'concierge', 'documents', 'reports']);
   assert.equal(portfolio.totals.pending_residents, 1);
-  assert.equal(portfolio.totals.unresolved_tickets, 2);
+  assert.equal(portfolio.totals.unresolved_tickets, 3);
   assert.equal(portfolio.totals.urgent_tickets, 1);
   assert.equal(portfolio.totals.overdue_dues, 1);
   assert.equal(portfolio.totals.recurring_problem_clusters, 1);
+  assert.equal(portfolio.totals.vendor_follow_up_problems, 1);
   assert.deepEqual(
     portfolio.attention.map((item) => item.kind),
-    ['urgent_tickets', 'recurring_problem_clusters', 'overdue_dues', 'pending_residents'],
+    ['urgent_tickets', 'recurring_problem_clusters', 'vendor_follow_up_problems', 'overdue_dues', 'pending_residents'],
   );
   assert.equal(portfolio.attention[0].severity, 'critical');
   assert.equal(portfolio.attention[0].route, '/board/tickets');
   assert.equal(portfolio.attention[0].condominium_id, condoId);
   assert.equal(portfolio.attention[1].route, '/board/tickets');
-  assert.equal(portfolio.attention[2].route, '/board/financas');
-  assert.equal(portfolio.attention[3].condominium_name, 'Test Condo');
+  assert.equal(portfolio.attention[2].route, '/board/tickets');
+  assert.equal(portfolio.attention[3].route, '/board/financas');
+  assert.equal(portfolio.attention[4].condominium_name, 'Test Condo');
 
   const report = buildAgencyMonthlyReport(membership, '2026-05');
   assert.equal(report.month, '2026-05');
@@ -329,13 +343,15 @@ test('agency portfolio CSV exports scoped building metrics', () => {
   assert.match(report.markdown, /Test Condo/);
   assert.match(report.markdown, /urgent ticket/);
   assert.match(report.markdown, /recurring problem cluster/);
+  assert.match(report.markdown, /vendor follow-up problem/);
 
   const csv = agencyPortfolioToCsv(portfolio);
   assert.match(csv, /agency_id,agency_name,building_id,building_name/);
   assert.match(csv, /Quito Operations/);
   assert.match(csv, /Test Condo/);
   assert.match(csv, /recurring_problem_clusters/);
-  assert.match(csv, /,1,2,1,1,1,/);
+  assert.match(csv, /vendor_follow_up_problems/);
+  assert.match(csv, /,1,3,1,1,1,1,/);
 });
 
 test('agency staff assignments scope portfolio building access', () => {

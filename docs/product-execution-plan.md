@@ -293,6 +293,15 @@ This slice makes repeated maintenance pain visible at the agency level:
 - Adds next-action guidance so agency managers know which buildings need pattern investigation, not only one-off ticket response.
 - Keeps the signal scoped by condominium and covered by the existing agency portfolio domain test.
 
+## Completed Slice: Vendor Follow-Up Health
+
+This slice makes stalled vendor work visible before it becomes board drama:
+
+- Detects active assigned vendor work orders with no update for seven days.
+- Surfaces stale vendor follow-ups in agency portfolio totals, building cards, attention priorities, portfolio CSV exports, monthly reports, and pilot-readiness checks.
+- Keeps the signal separate from schedule/SLA failures so agencies can tell the difference between “vendor is late” and “vendor has gone quiet.”
+- Covers the metric through the agency portfolio domain test and keeps labels localized across PT/EN/ES/FR.
+
 ## Completed Slice: Vendor Intelligence
 
 This slice makes the saved service network feel operational instead of static:
@@ -383,7 +392,7 @@ This slice makes portfolio access safer before private pilots:
 
 The next implementation slice should keep building on the private-enterprise plan:
 
-- Package the now-real maintenance lifecycle into stronger agency reporting: vendor follow-up health and richer multi-building maintenance summaries.
+- Package the now-real maintenance lifecycle into richer multi-building maintenance summaries.
 - Expand portfolio reporting into a true agency command center.
 - Add polished report packaging and stronger multi-building agency priorities.
 - Keep production-safe i18n, build, server tests, and pilot smoke checks green before each push.
