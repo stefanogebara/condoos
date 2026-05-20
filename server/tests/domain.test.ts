@@ -50,11 +50,14 @@ import { assertFileReadyForUse, canAccessFile, createPendingFile, markFileReady 
 import {
   agencyOperationalExportToCsv,
   agencyPortfolioToCsv,
+  acceptAgencyStaffInvite,
   buildAgencyPortfolio,
+  createAgencyStaffInvite,
   createAgencySetupCode,
   disableAgencySetupCode,
   linkCondominiumToAgency,
   listAgencyAuditEvents,
+  listAgencyStaffInvites,
   listAgencySetupCodes,
   listAgencyStaff,
   removeAgencyStaff,
@@ -67,6 +70,7 @@ import { defaultCurrencyForCondo, getCondoSettings, updateCondoSettings } from '
 
 function resetDb() {
   const tables = [
+    'agency_staff_invites',
     'agency_member_buildings',
     'agency_memberships',
     'agency_condominiums',
@@ -302,6 +306,9 @@ test('agency staff assignments scope portfolio building access', () => {
   assert.equal(staff.user_id, staffId);
   assert.deepEqual(staff.assigned_building_ids, [secondCondoId]);
   assert.equal(listAgencyStaff(agency!.agencyId).length, 2);
+  const activatedStaff = db.prepare(`SELECT role, condominium_id FROM users WHERE id = ?`).get(staffId) as { role: string; condominium_id: number };
+  assert.equal(activatedStaff.role, 'board_admin');
+  assert.equal(activatedStaff.condominium_id, secondCondoId);
 
   const membership = userAgencyMemberships(staffId)[0];
   const portfolio = buildAgencyPortfolio(membership);
@@ -327,6 +334,61 @@ test('agency staff assignments scope portfolio building access', () => {
     }),
     /last_agency_admin/,
   );
+});
+
+test('agency staff invites are pending until matching email accepts and then scope access', () => {
+  resetDb();
+  const { condoId } = createCondoFixture();
+  const secondCondoId = Number(db.prepare(
+    `INSERT INTO condominiums (name, address, invite_code) VALUES ('Second Condo', '2 Main', 'TEST02')`
+  ).run().lastInsertRowid);
+  const adminId = createUser('agency-admin@example.com', 'board_admin');
+  const wrongUserId = createUser('wrong@example.com', 'resident');
+  const invitedUserId = createUser('ops@example.com', 'resident');
+  const agency = linkCondominiumToAgency({
+    agencyName: 'Andes Management',
+    condominiumId: condoId,
+    userId: adminId,
+  });
+  assert.ok(agency);
+  db.prepare(
+    `INSERT INTO agency_condominiums (agency_id, condominium_id) VALUES (?, ?)`
+  ).run(agency!.agencyId, secondCondoId);
+
+  const invite = createAgencyStaffInvite({
+    agencyId: agency!.agencyId,
+    email: 'ops@example.com',
+    role: 'maintenance_manager',
+    buildingIds: [secondCondoId],
+    createdByUserId: adminId,
+  });
+
+  assert.equal(invite.email, 'ops@example.com');
+  assert.equal(invite.status, 'pending');
+  assert.ok(invite.token);
+  const storedInvite = db.prepare(`SELECT token_hash FROM agency_staff_invites WHERE id = ?`).get(invite.id) as { token_hash: string };
+  assert.notEqual(invite.token, storedInvite.token_hash);
+  assert.deepEqual(listAgencyStaffInvites(agency!.agencyId).map((row: { email: string }) => row.email), ['ops@example.com']);
+
+  assert.throws(
+    () => acceptAgencyStaffInvite({ token: invite.token, userId: wrongUserId }),
+    /invite_email_mismatch/,
+  );
+
+  const accepted = acceptAgencyStaffInvite({ token: invite.token, userId: invitedUserId });
+  assert.equal(accepted.staff.email, 'ops@example.com');
+  assert.equal(accepted.staff.role, 'maintenance_manager');
+  assert.deepEqual(accepted.staff.assigned_building_ids, [secondCondoId]);
+
+  const user = db.prepare(`SELECT role, condominium_id FROM users WHERE id = ?`).get(invitedUserId) as { role: string; condominium_id: number };
+  assert.equal(user.role, 'board_admin');
+  assert.equal(user.condominium_id, secondCondoId);
+
+  const membership = userAgencyMemberships(invitedUserId)[0];
+  const portfolio = buildAgencyPortfolio(membership);
+  assert.equal(portfolio.buildings.length, 1);
+  assert.equal(portfolio.buildings[0].id, secondCondoId);
+  assert.equal(listAgencyStaffInvites(agency!.agencyId)[0].status, 'accepted');
 });
 
 test('agency staff removal keeps the last agency admin safe', () => {

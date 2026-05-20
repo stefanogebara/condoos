@@ -2914,6 +2914,26 @@ const phrases: Copy[] = [
   c('Equador · USD · Espanhol', 'Ecuador · USD · Spanish', 'Ecuador · USD · Español', 'Équateur · USD · Espagnol'),
   c('Você pode mudar moeda, idioma e fuso horário depois em Edifício.', 'You can change currency, language, and timezone later in Building.', 'Puedes cambiar moneda, idioma y zona horaria después en Edificio.', 'Vous pourrez modifier devise, langue et fuseau horaire plus tard dans Immeuble.'),
   c('Usada por padrão em cobranças, orçamentos e despesas.', 'Used by default for dues, budgets, and expenses.', 'Se usa por defecto en cobros, presupuestos y gastos.', 'Utilisée par défaut pour appels, budgets et dépenses.'),
+  // Agency staff invite flow.
+  c('Adicione uma conta existente ou envie convite por email. Cada pessoa vê somente os prédios permitidos para sua função.', 'Add an existing account or send an email invite. Each person sees only the buildings allowed for their role.', 'Agrega una cuenta existente o envía una invitación por email. Cada persona ve solo los edificios permitidos para su función.', 'Ajoutez un compte existant ou envoyez une invitation par e-mail. Chaque personne ne voit que les immeubles autorisés pour son rôle.'),
+  c('Não foi possível salvar a equipe. Verifique se há prédios selecionados e se a permissão faz sentido.', 'Could not save staff. Check that buildings are selected and the permission makes sense.', 'No se pudo guardar el equipo. Verifica que haya edificios seleccionados y que el permiso tenga sentido.', 'Impossible d’enregistrer l’équipe. Vérifiez que les immeubles sont sélectionnés et que l’autorisation est cohérente.'),
+  c('Convite enviado', 'Invite sent', 'Invitación enviada', 'Invitation envoyée'),
+  c('Se o email não chegar, copie este link privado e envie manualmente. Ele aparece apenas agora.', 'If the email does not arrive, copy this private link and send it manually. It only appears now.', 'Si el email no llega, copia este enlace privado y envíalo manualmente. Solo aparece ahora.', 'Si l’e-mail n’arrive pas, copiez ce lien privé et envoyez-le manuellement. Il n’apparaît que maintenant.'),
+  c('Copiar link do convite', 'Copy invite link', 'Copiar enlace de invitación', 'Copier le lien d’invitation'),
+  c('Adicionar ou convidar', 'Add or invite', 'Agregar o invitar', 'Ajouter ou inviter'),
+  c('Convites pendentes', 'Pending invites', 'Invitaciones pendientes', 'Invitations en attente'),
+  c('Nenhum convite pendente.', 'No pending invites.', 'No hay invitaciones pendientes.', 'Aucune invitation en attente.'),
+  c('Novo membro da equipe', 'New staff member', 'Nuevo miembro del equipo', 'Nouveau membre de l’équipe'),
+  c('Crie sua conta para aceitar o convite', 'Create your account to accept the invite', 'Crea tu cuenta para aceptar la invitación', 'Créez votre compte pour accepter l’invitation'),
+  c('Depois de criar sua conta, ativamos seu acesso à administradora e aos prédios permitidos.', 'After you create your account, we activate your agency access and allowed buildings.', 'Después de crear tu cuenta, activamos tu acceso a la administradora y a los edificios permitidos.', 'Après la création de votre compte, nous activons votre accès à la société de gestion et aux immeubles autorisés.'),
+  c('Não foi possível aceitar o convite da administradora', 'Could not accept the agency invite', 'No se pudo aceptar la invitación de la administradora', 'Impossible d’accepter l’invitation de la société de gestion'),
+  c('Convite aceito', 'Invite accepted', 'Invitación aceptada', 'Invitation acceptée'),
+  c('Criar conta e aceitar convite', 'Create account and accept invite', 'Crear cuenta y aceptar invitación', 'Créer le compte et accepter l’invitation'),
+  c('Você receberá acesso somente aos prédios autorizados pela administradora.', 'You will receive access only to the buildings authorized by the agency.', 'Recibirás acceso solo a los edificios autorizados por la administradora.', 'Vous recevrez uniquement l’accès aux immeubles autorisés par la société de gestion.'),
+  c('sent', 'sent', 'enviado', 'envoyé'),
+  c('skipped', 'skipped', 'omitido', 'ignoré'),
+  c('failed', 'failed', 'falló', 'échoué'),
+  c('pendente', 'pending', 'pendiente', 'en attente'),
 ];
 
 function c(pt: string, en: string, es: string, fr: string): Copy {

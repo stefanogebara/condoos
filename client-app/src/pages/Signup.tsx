@@ -6,12 +6,12 @@ import { ArrowLeft, ArrowRight, Building2, KeyRound, Plus, UserPlus } from 'luci
 import Logo from '../components/Logo';
 import GlassCard from '../components/GlassCard';
 import Button from '../components/Button';
-import { useAuth } from '../lib/auth';
-import { apiGet } from '../lib/api';
+import { useAuth, type User } from '../lib/auth';
+import { apiGet, apiPost } from '../lib/api';
 import { track } from '../lib/analytics';
 import { t } from '../lib/i18n';
 
-type SignupIntent = 'join' | 'create';
+type SignupIntent = 'join' | 'create' | 'agency';
 
 function signupErrorMessage(err: any): string {
   const status = err?.response?.status;
@@ -37,13 +37,14 @@ function signupErrorMessage(err: any): string {
 
 export default function Signup() {
   const navigate = useNavigate();
-  const { register, loginWithGoogle } = useAuth();
-  const { intent, initialCode } = useMemo(() => {
+  const { register, loginWithGoogle, user } = useAuth();
+  const { intent, initialCode, agencyInvite } = useMemo(() => {
     const params = new URLSearchParams(window.location.search);
     const raw = params.get('intent');
     return {
-      intent: raw === 'create' ? 'create' as SignupIntent : 'join' as SignupIntent,
+      intent: raw === 'create' ? 'create' as SignupIntent : raw === 'agency' ? 'agency' as SignupIntent : 'join' as SignupIntent,
       initialCode: (params.get('code') || '').toUpperCase(),
+      agencyInvite: params.get('agency_invite') || '',
     };
   }, []);
   const [firstName, setFirstName] = useState('');
@@ -56,7 +57,7 @@ export default function Signup() {
   const submittingRef = useRef(false);
 
   useEffect(() => {
-    track('signup_viewed', { intent, has_code: !!initialCode });
+    track('signup_viewed', { intent, has_code: !!initialCode, has_agency_invite: !!agencyInvite });
     const envClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
     if (envClientId) {
       setGoogleClientId(envClientId);
@@ -66,12 +67,36 @@ export default function Signup() {
         if (!envClientId && cfg.google_enabled && cfg.google_client_id) setGoogleClientId(cfg.google_client_id);
       })
       .catch(() => {});
-  }, [intent, initialCode]);
+  }, [intent, initialCode, agencyInvite]);
+
+  useEffect(() => {
+    if (!user || !agencyInvite || submittingRef.current) return;
+    submittingRef.current = true;
+    setLoading(true);
+    acceptAgencyInvite()
+      .catch(() => {
+        toast.error(t('Não foi possível aceitar o convite da administradora'));
+        submittingRef.current = false;
+        setLoading(false);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, agencyInvite]);
 
   function nextOnboardingPath() {
+    if (intent === 'agency') return '/board/portfolio';
     if (intent === 'create') return '/onboarding/create';
     const trimmed = code.trim().toUpperCase();
     return trimmed ? `/onboarding/join?code=${encodeURIComponent(trimmed)}` : '/onboarding/join';
+  }
+
+  async function acceptAgencyInvite() {
+    if (!agencyInvite) return false;
+    const accepted = await apiPost<{ user?: User }>('/agencies/staff-invites/accept', { token: agencyInvite });
+    if (accepted.user) localStorage.setItem('condoos_user', JSON.stringify(accepted.user));
+    track('agency_staff_invite_accepted', {});
+    toast.success(t('Convite aceito'));
+    window.location.href = '/board/portfolio';
+    return true;
   }
 
   async function submit(e: React.FormEvent) {
@@ -90,7 +115,8 @@ export default function Signup() {
         first_name: firstName.trim(),
         last_name: lastName.trim(),
       });
-      track('signup_completed', { intent, has_code: !!code.trim() });
+      track('signup_completed', { intent, has_code: !!code.trim(), has_agency_invite: !!agencyInvite });
+      if (await acceptAgencyInvite()) return;
       toast.success(intent === 'create' && !user.email_verified_at
         ? t('Conta criada. Confirme seu email para criar o prédio.')
         : t('Conta criada'));
@@ -110,7 +136,8 @@ export default function Signup() {
     setLoading(true);
     try {
       await loginWithGoogle(credential);
-      track('signup_google_completed', { intent, has_code: !!code.trim() });
+      track('signup_google_completed', { intent, has_code: !!code.trim(), has_agency_invite: !!agencyInvite });
+      if (await acceptAgencyInvite()) return;
       toast.success(t('Conta criada'));
       navigate(nextOnboardingPath());
     } catch {
@@ -151,14 +178,16 @@ export default function Signup() {
               </div>
               <div>
                 <div className="text-[11px] uppercase tracking-[0.14em] text-dusk-300 font-semibold mb-1">
-                  {intent === 'create' ? 'Novo administrador' : 'Novo morador'}
+                  {intent === 'create' ? 'Novo administrador' : intent === 'agency' ? 'Novo membro da equipe' : 'Novo morador'}
                 </div>
                 <h1 className="font-display text-3xl text-dusk-500 leading-tight tracking-tight">
-                  {intent === 'create' ? 'Crie sua conta de administrador' : 'Crie sua conta para entrar'}
+                  {intent === 'create' ? 'Crie sua conta de administrador' : intent === 'agency' ? 'Crie sua conta para aceitar o convite' : 'Crie sua conta para entrar'}
                 </h1>
                 <p className="text-sm text-dusk-300 mt-2 leading-relaxed">
                   {intent === 'create'
                     ? 'Depois de criar sua conta, configuramos o prédio e geramos o código para moradores.'
+                    : intent === 'agency'
+                      ? 'Depois de criar sua conta, ativamos seu acesso à administradora e aos prédios permitidos.'
                     : 'Depois de criar sua conta, insira o código do administrador e escolha sua unidade.'}
                 </p>
               </div>
@@ -215,7 +244,7 @@ export default function Signup() {
               rightIcon={<ArrowRight className="w-4 h-4" />}
               className="w-full"
             >
-              {intent === 'create' ? 'Criar conta e prédio' : 'Criar conta e entrar'}
+              {intent === 'create' ? 'Criar conta e prédio' : intent === 'agency' ? 'Criar conta e aceitar convite' : 'Criar conta e entrar'}
             </Button>
           </form>
 
@@ -226,7 +255,11 @@ export default function Signup() {
 
           <div className="mt-5 flex items-center gap-2 text-xs text-dusk-200">
             <UserPlus className="w-3.5 h-3.5" />
-            {intent === 'join' ? 'O administrador aprova seu acesso se o prédio exigir.' : 'Você pode administrar mesmo sem morar no prédio.'}
+            {intent === 'join'
+              ? 'O administrador aprova seu acesso se o prédio exigir.'
+              : intent === 'agency'
+                ? 'Você receberá acesso somente aos prédios autorizados pela administradora.'
+                : 'Você pode administrar mesmo sem morar no prédio.'}
           </div>
         </div>
       </div>

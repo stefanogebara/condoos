@@ -1,5 +1,6 @@
-import { randomBytes } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 import db from '../db';
+import type { EmailDeliveryResult } from './email';
 import { hashSetupCode, normalizeSetupCode } from './private-access';
 
 export type AgencyRole =
@@ -44,6 +45,29 @@ export interface AgencyStaffMember {
   role: AgencyRole;
   created_at: string;
   assigned_building_ids: number[];
+}
+
+export interface AgencyStaffInvite {
+  id: number;
+  agency_id: number;
+  agency_name: string;
+  email: string;
+  role: AgencyRole;
+  created_at: string;
+  expires_at: string;
+  accepted_at: string | null;
+  accepted_by_user_id: number | null;
+  revoked_at: string | null;
+  created_by_user_id: number | null;
+  email_status: string | null;
+  email_sent_at: string | null;
+  email_error: string | null;
+  assigned_building_ids: number[];
+  status: 'pending' | 'accepted' | 'revoked' | 'expired';
+}
+
+export interface CreatedAgencyStaffInvite extends AgencyStaffInvite {
+  token: string;
 }
 
 export interface AgencyBuildingMetrics {
@@ -421,6 +445,53 @@ function mapStaffMember(row: Omit<AgencyStaffMember, 'assigned_building_ids'>): 
   };
 }
 
+function agencyStaffInviteStatus(row: Pick<AgencyStaffInvite, 'accepted_at' | 'revoked_at' | 'expires_at'>): AgencyStaffInvite['status'] {
+  if (row.accepted_at) return 'accepted';
+  if (row.revoked_at) return 'revoked';
+  if (Date.parse(row.expires_at) <= Date.now()) return 'expired';
+  return 'pending';
+}
+
+function parseInviteBuildingIds(raw: string | null | undefined): number[] {
+  try {
+    const parsed = JSON.parse(raw || '[]');
+    return normalizeBuildingIds(Array.isArray(parsed) ? parsed : []);
+  } catch {
+    return [];
+  }
+}
+
+function mapStaffInvite(row: any): AgencyStaffInvite {
+  const invite: AgencyStaffInvite = {
+    id: Number(row.id),
+    agency_id: Number(row.agency_id),
+    agency_name: row.agency_name,
+    email: row.email,
+    role: row.role,
+    created_at: row.created_at,
+    expires_at: row.expires_at,
+    accepted_at: row.accepted_at || null,
+    accepted_by_user_id: row.accepted_by_user_id ?? null,
+    revoked_at: row.revoked_at || null,
+    created_by_user_id: row.created_by_user_id ?? null,
+    email_status: row.email_status || null,
+    email_sent_at: row.email_sent_at || null,
+    email_error: row.email_error || null,
+    assigned_building_ids: parseInviteBuildingIds(row.building_ids),
+    status: 'pending',
+  };
+  invite.status = agencyStaffInviteStatus(invite);
+  return invite;
+}
+
+function randomInviteToken(): string {
+  return randomBytes(24).toString('base64url');
+}
+
+function hashAgencyStaffInviteToken(token: string): string {
+  return createHash('sha256').update(String(token || '').trim()).digest('hex');
+}
+
 export function listAgencyStaff(agencyId: number): AgencyStaffMember[] {
   if (!agencyById(agencyId)) throw Object.assign(new Error('agency_not_found'), { status: 404 });
   const rows = db.prepare(
@@ -433,6 +504,153 @@ export function listAgencyStaff(agencyId: number): AgencyStaffMember[] {
        lower(u.email)`
   ).all(agencyId) as Array<Omit<AgencyStaffMember, 'assigned_building_ids'>>;
   return rows.map(mapStaffMember);
+}
+
+export function listAgencyStaffInvites(agencyId: number): AgencyStaffInvite[] {
+  if (!agencyById(agencyId)) throw Object.assign(new Error('agency_not_found'), { status: 404 });
+  const rows = db.prepare(
+    `SELECT asi.id, asi.agency_id, a.name AS agency_name, asi.email, asi.role,
+            asi.building_ids, asi.expires_at, asi.accepted_at, asi.accepted_by_user_id,
+            asi.revoked_at, asi.created_by_user_id, asi.email_status, asi.email_sent_at,
+            asi.email_error, asi.created_at
+     FROM agency_staff_invites asi
+     JOIN agencies a ON a.id = asi.agency_id
+     WHERE asi.agency_id = ?
+     ORDER BY asi.created_at DESC, asi.id DESC`
+  ).all(agencyId);
+  return rows.map(mapStaffInvite);
+}
+
+export function createAgencyStaffInvite(input: {
+  agencyId: number;
+  email: string;
+  role: AgencyRole;
+  buildingIds?: number[] | null;
+  createdByUserId?: number | null;
+  expiresAt?: string | null;
+}): CreatedAgencyStaffInvite {
+  const agency = agencyById(input.agencyId);
+  if (!agency) throw Object.assign(new Error('agency_not_found'), { status: 404 });
+  if (!isAgencyRole(input.role)) throw Object.assign(new Error('invalid_agency_role'), { status: 400 });
+
+  const email = input.email.trim().toLowerCase();
+  if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    throw Object.assign(new Error('invalid_email'), { status: 400 });
+  }
+  const buildingIds = validateAgencyBuildingIds(input.agencyId, input.role === 'agency_admin' ? [] : normalizeBuildingIds(input.buildingIds));
+  if (input.role !== 'agency_admin' && buildingIds.length === 0) {
+    throw Object.assign(new Error('building_assignment_required'), { status: 400 });
+  }
+  const expiresAt = input.expiresAt || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  if (Number.isNaN(Date.parse(expiresAt))) {
+    throw Object.assign(new Error('invalid_expires_at'), { status: 400 });
+  }
+
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const token = randomInviteToken();
+    try {
+      const result = db.prepare(
+        `INSERT INTO agency_staff_invites (
+           agency_id, email, role, building_ids, token_hash, expires_at, created_by_user_id
+         ) VALUES (?, ?, ?, ?, ?, ?, ?)`
+      ).run(
+        input.agencyId,
+        email,
+        input.role,
+        JSON.stringify(buildingIds),
+        hashAgencyStaffInviteToken(token),
+        expiresAt,
+        input.createdByUserId || null,
+      );
+      const invite = listAgencyStaffInvites(input.agencyId).find((item) => item.id === Number(result.lastInsertRowid));
+      if (!invite) throw new Error('agency_staff_invite_not_found');
+      return { ...invite, token };
+    } catch (err) {
+      if (attempt === 7) {
+        throw Object.assign(new Error('agency_staff_invite_generation_failed'), { status: 500, cause: err });
+      }
+    }
+  }
+  throw Object.assign(new Error('agency_staff_invite_generation_failed'), { status: 500 });
+}
+
+export function recordAgencyStaffInviteEmailDelivery(inviteId: number, delivery: EmailDeliveryResult): void {
+  db.prepare(
+    `UPDATE agency_staff_invites
+     SET email_status = ?,
+         email_sent_at = CASE WHEN ? = 'sent' THEN CURRENT_TIMESTAMP ELSE email_sent_at END,
+         email_error = ?
+     WHERE id = ?`
+  ).run(delivery.status, delivery.status, delivery.error || null, inviteId);
+}
+
+function firstBuildingForAgency(agencyId: number): number | null {
+  const row = db.prepare(
+    `SELECT condominium_id
+     FROM agency_condominiums
+     WHERE agency_id = ?
+     ORDER BY condominium_id
+     LIMIT 1`
+  ).get(agencyId) as { condominium_id: number } | undefined;
+  return row?.condominium_id || null;
+}
+
+function activateAgencyStaffUser(userId: number, agencyId: number, role: AgencyRole, buildingIds: number[]): void {
+  const activeBuildingId = role === 'agency_admin'
+    ? firstBuildingForAgency(agencyId)
+    : buildingIds[0] || firstBuildingForAgency(agencyId);
+  db.prepare(
+    `UPDATE users
+     SET role = 'board_admin',
+         condominium_id = COALESCE(?, condominium_id)
+     WHERE id = ?`
+  ).run(activeBuildingId, userId);
+}
+
+export function acceptAgencyStaffInvite(input: {
+  token: string;
+  userId: number;
+}): { invite: AgencyStaffInvite; staff: AgencyStaffMember } {
+  const tokenHash = hashAgencyStaffInviteToken(input.token);
+  const row = db.prepare(
+    `SELECT asi.id, asi.agency_id, a.name AS agency_name, asi.email, asi.role,
+            asi.building_ids, asi.expires_at, asi.accepted_at, asi.accepted_by_user_id,
+            asi.revoked_at, asi.created_by_user_id, asi.email_status, asi.email_sent_at,
+            asi.email_error, asi.created_at
+     FROM agency_staff_invites asi
+     JOIN agencies a ON a.id = asi.agency_id
+     WHERE asi.token_hash = ?
+     LIMIT 1`
+  ).get(tokenHash);
+  if (!row) throw Object.assign(new Error('invalid_agency_staff_invite'), { status: 404 });
+  const invite = mapStaffInvite(row);
+  if (invite.revoked_at) throw Object.assign(new Error('agency_staff_invite_revoked'), { status: 403 });
+  if (invite.accepted_at) throw Object.assign(new Error('agency_staff_invite_accepted'), { status: 409 });
+  if (Date.parse(invite.expires_at) <= Date.now()) throw Object.assign(new Error('agency_staff_invite_expired'), { status: 403 });
+
+  const user = db.prepare(
+    `SELECT id, email FROM users WHERE id = ? LIMIT 1`
+  ).get(input.userId) as { id: number; email: string } | undefined;
+  if (!user) throw Object.assign(new Error('user_not_found'), { status: 404 });
+  if (user.email.trim().toLowerCase() !== invite.email.trim().toLowerCase()) {
+    throw Object.assign(new Error('invite_email_mismatch'), { status: 403 });
+  }
+
+  const staff = upsertAgencyStaff({
+    agencyId: invite.agency_id,
+    email: invite.email,
+    role: invite.role,
+    buildingIds: invite.role === 'agency_admin' ? [] : invite.assigned_building_ids,
+  });
+  db.prepare(
+    `UPDATE agency_staff_invites
+     SET accepted_at = CURRENT_TIMESTAMP,
+         accepted_by_user_id = ?
+     WHERE id = ?`
+  ).run(input.userId, invite.id);
+
+  const acceptedInvite = listAgencyStaffInvites(invite.agency_id).find((item) => item.id === invite.id)!;
+  return { invite: acceptedInvite, staff };
 }
 
 export function upsertAgencyStaff(input: {
@@ -473,6 +691,7 @@ export function upsertAgencyStaff(input: {
     `SELECT id FROM agency_memberships WHERE agency_id = ? AND user_id = ? LIMIT 1`
   ).get(input.agencyId, user.id) as { id: number };
   setAgencyMemberBuildings(input.agencyId, membership.id, input.role === 'agency_admin' ? [] : buildingIds);
+  activateAgencyStaffUser(user.id, input.agencyId, input.role, input.role === 'agency_admin' ? [] : buildingIds);
 
   const row = db.prepare(
     `SELECT am.id, am.user_id, u.email, u.first_name, u.last_name, am.role, am.created_at
@@ -507,6 +726,7 @@ export function updateAgencyStaff(input: {
 
   db.prepare(`UPDATE agency_memberships SET role = ? WHERE id = ?`).run(nextRole, input.membershipId);
   setAgencyMemberBuildings(input.agencyId, input.membershipId, nextRole === 'agency_admin' ? [] : nextBuildings);
+  activateAgencyStaffUser(membership.user_id, input.agencyId, nextRole, nextRole === 'agency_admin' ? [] : nextBuildings);
 
   const row = db.prepare(
     `SELECT am.id, am.user_id, u.email, u.first_name, u.last_name, am.role, am.created_at

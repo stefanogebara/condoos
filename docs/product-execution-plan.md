@@ -256,11 +256,22 @@ This slice gives every building a market identity instead of assuming one countr
 - Make invoices, dues schedules, expenses, and budget summaries default to the building currency.
 - Cover Ecuador currency defaults with server tests and keep the full local i18n sweep green.
 
+## Completed Slice: Agency Staff Invites
+
+This slice turns agency staff setup from a manual pre-created-user step into a private invite flow:
+
+- Add hashed agency staff invite records with expiry, accepted/revoked state, scoped building assignments, and email delivery status.
+- Send agency staff invites through the existing email pipeline, with a one-time private signup link fallback when email is not configured.
+- Let invited staff create an account or continue after signup, then accept the invite only if the account email matches.
+- Show pending agency staff invites and the one-time copy link from `/board/portfolio`.
+- Cover invite email generation, email mismatch rejection, scoped acceptance, accepted status, and portfolio visibility with server tests.
+- Keep server tests, production build, and the full desktop i18n leak sweep green.
+
 ## Current Execution Slice: Enterprise Operations Hardening
 
 The next implementation slice should keep building on the private-enterprise plan:
 
 - Harden maintenance into a fuller work-order timeline with quote comparison and SLA alerts.
-- Add agency staff invite delivery and clearer permission review screens.
+- Add clearer agency permission review screens and deeper page-level access checks.
 - Expand portfolio reporting into a true agency command center.
 - Keep production-safe i18n, build, server tests, and pilot smoke checks green before each push.

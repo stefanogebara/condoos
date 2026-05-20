@@ -115,6 +115,32 @@ CREATE TABLE IF NOT EXISTS agency_member_buildings (
 CREATE INDEX IF NOT EXISTS idx_agency_member_buildings_member
   ON agency_member_buildings(agency_membership_id, condominium_id);
 
+CREATE TABLE IF NOT EXISTS agency_staff_invites (
+  id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+  agency_id           INTEGER NOT NULL REFERENCES agencies(id) ON DELETE CASCADE,
+  email               TEXT NOT NULL,
+  role                TEXT NOT NULL CHECK(role IN (
+    'agency_admin','building_admin','finance_manager',
+    'maintenance_manager','concierge_supervisor'
+  )),
+  building_ids        TEXT NOT NULL DEFAULT '[]',
+  token_hash          TEXT NOT NULL UNIQUE,
+  expires_at          TEXT NOT NULL,
+  accepted_at         TEXT,
+  accepted_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  revoked_at          TEXT,
+  created_by_user_id  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  email_status        TEXT,
+  email_sent_at       TEXT,
+  email_error         TEXT,
+  created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_agency_staff_invites_agency
+  ON agency_staff_invites(agency_id, accepted_at, revoked_at, expires_at);
+CREATE INDEX IF NOT EXISTS idx_agency_staff_invites_email
+  ON agency_staff_invites(email, agency_id);
+
 -- Packages waiting at front desk
 CREATE TABLE IF NOT EXISTS packages (
   id               INTEGER PRIMARY KEY AUTOINCREMENT,

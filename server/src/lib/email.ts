@@ -24,6 +24,14 @@ export interface VerificationEmailInput {
   verificationUrl: string;
 }
 
+export interface AgencyStaffInviteEmailInput {
+  to: string;
+  agencyName: string;
+  role: string;
+  token: string;
+  senderName?: string;
+}
+
 export type EmailFetcher = (
   url: string,
   init: { method: string; headers: Record<string, string>; body: string },
@@ -43,7 +51,7 @@ function escapeHtml(value: string): string {
 }
 
 async function sendEmail(
-  kind: 'invite' | 'verification',
+  kind: 'invite' | 'verification' | 'agency_invite',
   message: { to: string; subject: string; text: string; html: string },
   env: NodeJS.ProcessEnv,
   fetcher: EmailFetcher,
@@ -147,6 +155,32 @@ export function buildVerificationEmail(input: VerificationEmailInput) {
   return { subject, text, html };
 }
 
+export function buildAgencyStaffInviteEmail(
+  input: AgencyStaffInviteEmailInput,
+  env: NodeJS.ProcessEnv = process.env,
+) {
+  const origin = appOrigin(env);
+  const inviteUrl = `${origin}/signup?intent=agency&agency_invite=${encodeURIComponent(input.token)}`;
+  const subject = `You're invited to ${input.agencyName} on CondoOS`;
+  const senderName = input.senderName || 'The agency admin';
+  const text = [
+    `${senderName} invited you to join ${input.agencyName} on CondoOS.`,
+    '',
+    `Role: ${input.role}`,
+    '',
+    `Accept the invite and create/sign in to your staff account: ${inviteUrl}`,
+    '',
+    'This link is private. If you were not expecting this invite, you can ignore this email.',
+  ].join('\n');
+  const html = `
+    <p>${escapeHtml(senderName)} invited you to join <strong>${escapeHtml(input.agencyName)}</strong> on CondoOS.</p>
+    <p><strong>Role:</strong> ${escapeHtml(input.role)}</p>
+    <p><a href="${escapeHtml(inviteUrl)}">Accept agency invite</a></p>
+    <p>This link is private. If you were not expecting this invite, you can ignore this email.</p>
+  `;
+  return { subject, text, html, inviteUrl };
+}
+
 export async function sendInviteEmail(
   input: InviteEmailInput,
   env: NodeJS.ProcessEnv = process.env,
@@ -154,6 +188,15 @@ export async function sendInviteEmail(
 ): Promise<EmailDeliveryResult> {
   const email = buildInviteEmail(input, env);
   return sendEmail('invite', { to: input.to, ...email }, env, fetcher);
+}
+
+export async function sendAgencyStaffInviteEmail(
+  input: AgencyStaffInviteEmailInput,
+  env: NodeJS.ProcessEnv = process.env,
+  fetcher: EmailFetcher = fetch as unknown as EmailFetcher,
+): Promise<EmailDeliveryResult> {
+  const email = buildAgencyStaffInviteEmail(input, env);
+  return sendEmail('agency_invite', { to: input.to, ...email }, env, fetcher);
 }
 
 export async function sendVerificationEmail(

@@ -67,6 +67,26 @@ interface AgencyStaffMember {
   assigned_building_ids: number[];
 }
 
+interface AgencyStaffInvite {
+  id: number;
+  agency_id: number;
+  agency_name: string;
+  email: string;
+  role: AgencyRole;
+  created_at: string;
+  expires_at: string;
+  accepted_at: string | null;
+  accepted_by_user_id: number | null;
+  revoked_at: string | null;
+  created_by_user_id: number | null;
+  email_status: string | null;
+  email_sent_at: string | null;
+  email_error: string | null;
+  assigned_building_ids: number[];
+  status: 'pending' | 'accepted' | 'revoked' | 'expired';
+  token?: string;
+}
+
 interface AgencyAuditEvent {
   id: number;
   created_at: string;
@@ -176,9 +196,12 @@ export default function BoardAgencyPortfolio() {
   const [setupCodeError, setSetupCodeError] = useState<string | null>(null);
   const [form, setForm] = useState({ label: '', max_uses: '1', expires_at: '' });
   const [staff, setStaff] = useState<AgencyStaffMember[]>([]);
+  const [staffInvites, setStaffInvites] = useState<AgencyStaffInvite[]>([]);
   const [staffLoading, setStaffLoading] = useState(false);
   const [staffSaving, setStaffSaving] = useState(false);
   const [staffError, setStaffError] = useState<string | null>(null);
+  const [createdStaffInvite, setCreatedStaffInvite] = useState<AgencyStaffInvite | null>(null);
+  const [copiedStaffInvite, setCopiedStaffInvite] = useState(false);
   const [auditEvents, setAuditEvents] = useState<AgencyAuditEvent[]>([]);
   const [auditEventsLoading, setAuditEventsLoading] = useState(false);
   const [staffForm, setStaffForm] = useState<{ email: string; role: AgencyRole; building_ids: number[] }>({
@@ -268,13 +291,15 @@ export default function BoardAgencyPortfolio() {
   async function loadStaff(agencyId = primaryAgency?.id) {
     if (!agencyId || primaryAgency?.role !== 'agency_admin') {
       setStaff([]);
+      setStaffInvites([]);
       return;
     }
     setStaffLoading(true);
     setStaffError(null);
     try {
-      const res = await apiGet<{ staff: AgencyStaffMember[] }>(`/agencies/${agencyId}/staff`);
+      const res = await apiGet<{ staff: AgencyStaffMember[]; invites?: AgencyStaffInvite[] }>(`/agencies/${agencyId}/staff`);
       setStaff(res.staff);
+      setStaffInvites(res.invites || []);
     } catch {
       setStaffError(t('Não foi possível carregar a equipe.'));
     } finally {
@@ -377,12 +402,14 @@ export default function BoardAgencyPortfolio() {
     if (!primaryAgency) return;
     setStaffSaving(true);
     setStaffError(null);
+    setCreatedStaffInvite(null);
     try {
-      await apiPost(`/agencies/${primaryAgency.id}/staff`, {
+      const res = await apiPost<{ staff?: AgencyStaffMember; invite?: AgencyStaffInvite }>(`/agencies/${primaryAgency.id}/staff`, {
         email: staffForm.email,
         role: staffForm.role,
         building_ids: staffForm.role === 'agency_admin' ? [] : staffForm.building_ids,
       });
+      if (res.invite) setCreatedStaffInvite(res.invite);
       setStaffForm({
         email: '',
         role: 'building_admin',
@@ -392,10 +419,18 @@ export default function BoardAgencyPortfolio() {
       await load();
       await loadAuditEvents(primaryAgency.id);
     } catch {
-      setStaffError(t('Não foi possível salvar a equipe. Verifique se a conta já existe e se há prédios selecionados.'));
+      setStaffError(t('Não foi possível salvar a equipe. Verifique se há prédios selecionados e se a permissão faz sentido.'));
     } finally {
       setStaffSaving(false);
     }
+  }
+
+  async function copyStaffInviteLink() {
+    if (!createdStaffInvite?.token) return;
+    const url = `${window.location.origin}/signup?intent=agency&agency_invite=${encodeURIComponent(createdStaffInvite.token)}`;
+    await navigator.clipboard?.writeText(url);
+    setCopiedStaffInvite(true);
+    window.setTimeout(() => setCopiedStaffInvite(false), 1600);
   }
 
   async function removeStaffMember(staffId: number) {
@@ -691,8 +726,23 @@ export default function BoardAgencyPortfolio() {
                     <h2 className="font-display text-xl text-dusk-500">{t('Equipe da administradora')}</h2>
                   </div>
                   <p className="text-sm text-dusk-300 mb-4">
-                    {t('Adicione contas existentes à administradora e limite cada pessoa aos prédios certos. Use o mesmo email para atualizar função ou prédios.')}
+                    {t('Adicione uma conta existente ou envie convite por email. Cada pessoa vê somente os prédios permitidos para sua função.')}
                   </p>
+
+                  {createdStaffInvite?.token && (
+                    <div className="rounded-2xl border border-sage-200 bg-sage-100/70 p-3 mb-4">
+                      <div className="text-xs uppercase tracking-[0.12em] text-sage-700">{t('Convite enviado')}</div>
+                      <div className="text-sm text-dusk-400 mt-1" data-user-content>
+                        {createdStaffInvite.email}
+                      </div>
+                      <div className="text-xs text-dusk-300 mt-1">
+                        {t('Se o email não chegar, copie este link privado e envie manualmente. Ele aparece apenas agora.')}
+                      </div>
+                      <Button type="button" variant="ghost" size="sm" className="mt-3" onClick={copyStaffInviteLink} leftIcon={<Copy className="w-4 h-4" />}>
+                        {copiedStaffInvite ? t('Copiado') : t('Copiar link do convite')}
+                      </Button>
+                    </div>
+                  )}
 
                   {staffError && (
                     <div className="rounded-2xl bg-peach-100/70 border border-peach-200 text-sm text-peach-600 px-3 py-2 mb-4">
@@ -742,9 +792,39 @@ export default function BoardAgencyPortfolio() {
                       </div>
                     )}
                     <Button type="submit" variant="sage" className="w-full" loading={staffSaving} leftIcon={<UserPlus className="w-4 h-4" />}>
-                      {t('Salvar equipe')}
+                      {t('Adicionar ou convidar')}
                     </Button>
                   </form>
+
+                  <div className="mt-5 space-y-2">
+                    <div className="text-xs uppercase tracking-[0.12em] text-dusk-300">{t('Convites pendentes')}</div>
+                    {staffLoading ? (
+                      <div className="text-sm text-dusk-300">{t('Carregando...')}</div>
+                    ) : staffInvites.filter((invite) => invite.status === 'pending').length === 0 ? (
+                      <div className="rounded-2xl border border-white/70 bg-white/50 px-3 py-3 text-sm text-dusk-300">
+                        {t('Nenhum convite pendente.')}
+                      </div>
+                    ) : (
+                      staffInvites.filter((invite) => invite.status === 'pending').map((invite) => (
+                        <div key={invite.id} className="rounded-2xl border border-white/70 bg-white/55 px-3 py-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="font-medium text-dusk-500 truncate" data-user-content>{invite.email}</div>
+                              <div className="text-xs text-dusk-300 mt-1">
+                                {invite.role === 'agency_admin'
+                                  ? t('Todos os prédios')
+                                  : buildingNames(invite.assigned_building_ids) || t('Sem prédios')}
+                              </div>
+                              <div className="text-xs text-dusk-300 mt-1">
+                                {t('Vence')} {formatDate(invite.expires_at)} · {t('Email')} {t(invite.email_status || 'pendente')}
+                              </div>
+                            </div>
+                            <Badge tone="warning">{agencyRoleLabel(invite.role)}</Badge>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
 
                   <div className="mt-5 space-y-2">
                     <div className="text-xs uppercase tracking-[0.12em] text-dusk-300">{t('Membros')}</div>

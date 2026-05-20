@@ -2,7 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { GoogleAuthError, verifyGoogleCredential } from '../src/lib/google-auth';
 import db from '../src/db';
-import { buildInviteEmail, buildVerificationEmail, sendInviteEmail, sendVerificationEmail } from '../src/lib/email';
+import {
+  buildAgencyStaffInviteEmail,
+  buildInviteEmail,
+  buildVerificationEmail,
+  sendInviteEmail,
+  sendVerificationEmail,
+} from '../src/lib/email';
 import {
   consumeEmailVerificationToken,
   createEmailVerificationToken,
@@ -80,6 +86,23 @@ test('buildInviteEmail creates both a sign-in URL and a deep-link with the invit
   assert.match(email.text, /Invite code: DEMO123/);
   assert.match(email.text, /https:\/\/condoos\.example\/\?code=DEMO123/);
   assert.match(email.html, /tap here to claim your unit/);
+});
+
+test('buildAgencyStaffInviteEmail creates a staff signup and acceptance link', () => {
+  const email = buildAgencyStaffInviteEmail({
+    to: 'ops@example.com',
+    agencyName: 'Andes Management',
+    role: 'maintenance_manager',
+    token: 'raw-token',
+    senderName: 'Alex Silva',
+  }, { APP_ORIGIN: 'https://condoos.example/' } as NodeJS.ProcessEnv);
+
+  assert.equal(email.inviteUrl, 'https://condoos.example/signup?intent=agency&agency_invite=raw-token');
+  assert.match(email.subject, /Andes Management/);
+  assert.match(email.text, /Alex Silva invited you to join Andes Management/);
+  assert.match(email.text, /maintenance_manager/);
+  assert.match(email.text, /https:\/\/condoos\.example\/signup\?intent=agency&agency_invite=raw-token/);
+  assert.match(email.html, /Accept agency invite/);
 });
 
 test('sendInviteEmail skips safely when email delivery is not configured', async () => {

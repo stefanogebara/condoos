@@ -90,21 +90,24 @@ The portfolio page also shows a recent audit preview from
 the CSV exports, so staff see only their allowed buildings plus agency-level
 events.
 
-Agency admins can manage existing staff accounts from `/board/portfolio`:
-enter the staff email, pick an agency role, and assign the buildings they are
-allowed to see. Non-admin agency staff only see assigned buildings in
-`/api/agencies/portfolio` and portfolio CSV exports. Agency admins always see
-the whole linked portfolio. The API endpoints are:
+Agency admins can manage staff accounts from `/board/portfolio`: enter the
+staff email, pick an agency role, and assign the buildings they are allowed to
+see. If the user account already exists, the staff membership is attached
+immediately. If it does not exist, CONDOS creates a hashed staff invite, sends a
+private acceptance email when Resend is configured, and shows a one-time manual
+link fallback for controlled demos. Non-admin agency staff only see assigned
+buildings in `/api/agencies/portfolio` and portfolio CSV exports. Agency admins
+always see the whole linked portfolio. The API endpoints are:
 
 - `GET /api/agencies/:agencyId/staff`
 - `POST /api/agencies/:agencyId/staff`
 - `POST /api/agencies/:agencyId/staff/:membershipId`
 - `DELETE /api/agencies/:agencyId/staff/:membershipId`
+- `POST /api/agencies/staff-invites/accept`
 
-Staff accounts must already exist. For now, create or invite the user through
-the normal account flow first, then attach them to the agency. The safeguards
-prevent removing the current actor and prevent deleting/demoting the last
-agency admin.
+Invite acceptance requires the signed-in account email to match the invite
+email. The safeguards prevent removing the current actor and prevent
+deleting/demoting the last agency admin.
 
 Turnstile setup can be automated once you have a Cloudflare account ID and an
 API token with Turnstile widget write permission:

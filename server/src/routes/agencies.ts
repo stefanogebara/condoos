@@ -6,21 +6,27 @@ import { ok, fail, asyncHandler } from '../lib/respond';
 import {
   AGENCY_ROLES,
   AGENCY_EXPORT_KINDS,
+  acceptAgencyStaffInvite,
   agencyPortfolioToCsv,
   agencyOperationalExportToCsv,
   agencyPortfoliosForUser,
   buildAgencyPortfolio,
+  createAgencyStaffInvite,
   createAgencySetupCode,
   disableAgencySetupCode,
   listAgencySetupCodes,
   listAgencyAuditEvents,
   listAgencyStaff,
+  listAgencyStaffInvites,
+  recordAgencyStaffInviteEmailDelivery,
   removeAgencyStaff,
   updateAgencyStaff,
   upsertAgencyStaff,
   userAgencyMembership,
 } from '../lib/agencies';
 import type { AgencyRole } from '../lib/agencies';
+import { sendAgencyStaffInviteEmail } from '../lib/email';
+import db from '../db';
 
 const router = Router();
 
@@ -60,6 +66,10 @@ const staffUpdateSchema = z.object({
   building_ids: z.array(z.coerce.number().int().positive()).optional(),
 });
 
+const acceptStaffInviteSchema = z.object({
+  token: z.string().trim().min(20).max(200),
+});
+
 const auditEventsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).optional(),
 });
@@ -87,6 +97,38 @@ router.get('/portfolio', requireAuth, asyncHandler(async (req: AuthedRequest, re
   return ok(res, { agencies: agencyPortfoliosForUser(req.user!.id) });
 }));
 
+router.post('/staff-invites/accept', requireAuth, asyncHandler(async (req: AuthedRequest, res) => {
+  const parsed = acceptStaffInviteSchema.safeParse(req.body);
+  if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
+  try {
+    const accepted = acceptAgencyStaffInvite({
+      token: parsed.data.token,
+      userId: req.user!.id,
+    });
+    audit(req, {
+      action: 'agency.staff_invite_accept',
+      target_type: 'agency_staff_invite',
+      target_id: accepted.invite.id,
+      metadata: {
+        agency_id: accepted.invite.agency_id,
+        role: accepted.staff.role,
+        building_ids: accepted.staff.assigned_building_ids,
+      },
+    });
+    const user = db.prepare(
+      `SELECT id, email, role, condominium_id, first_name, last_name,
+              unit_number, avatar_url, mobile_phone, home_phone, email_verified_at
+       FROM users
+       WHERE id = ?`
+    ).get(req.user!.id);
+    return ok(res, { invite: accepted.invite, staff: accepted.staff, user });
+  } catch (err) {
+    const status = (err as Error & { status?: number }).status || 500;
+    if (status < 500) return fail(res, (err as Error).message, status);
+    throw err;
+  }
+}));
+
 router.get('/:agencyId/audit-events', requireAuth, asyncHandler(async (req: AuthedRequest, res) => {
   const params = parseParams(agencyIdParam, req);
   if (!params) return fail(res, 'invalid_input', 400);
@@ -101,7 +143,10 @@ router.get('/:agencyId/staff', requireAuth, asyncHandler(async (req: AuthedReque
   const params = parseParams(agencyIdParam, req);
   if (!params) return fail(res, 'invalid_input', 400);
   if (!agencyMembershipOrFail(req, res, params.agencyId, true)) return;
-  return ok(res, { staff: listAgencyStaff(params.agencyId) });
+  return ok(res, {
+    staff: listAgencyStaff(params.agencyId),
+    invites: listAgencyStaffInvites(params.agencyId),
+  });
 }));
 
 router.post('/:agencyId/staff', requireAuth, asyncHandler(async (req: AuthedRequest, res) => {
@@ -112,12 +157,46 @@ router.post('/:agencyId/staff', requireAuth, asyncHandler(async (req: AuthedRequ
   if (!agencyMembershipOrFail(req, res, params.agencyId, true)) return;
 
   try {
-    const staff = upsertAgencyStaff({
-      agencyId: params.agencyId,
-      email: parsed.data.email,
-      role: parsed.data.role,
-      buildingIds: parsed.data.building_ids,
-    });
+    let staff;
+    try {
+      staff = upsertAgencyStaff({
+        agencyId: params.agencyId,
+        email: parsed.data.email,
+        role: parsed.data.role,
+        buildingIds: parsed.data.building_ids,
+      });
+    } catch (err) {
+      if ((err as Error).message !== 'staff_user_not_found') throw err;
+      const invite = createAgencyStaffInvite({
+        agencyId: params.agencyId,
+        email: parsed.data.email,
+        role: parsed.data.role,
+        buildingIds: parsed.data.building_ids,
+        createdByUserId: req.user!.id,
+      });
+      const delivery = await sendAgencyStaffInviteEmail({
+        to: invite.email,
+        agencyName: invite.agency_name,
+        role: invite.role,
+        token: invite.token,
+        senderName: `${req.user!.first_name} ${req.user!.last_name}`.trim() || req.user!.email,
+      });
+      recordAgencyStaffInviteEmailDelivery(invite.id, delivery);
+      const savedInvite = listAgencyStaffInvites(params.agencyId).find((item) => item.id === invite.id) || invite;
+      audit(req, {
+        action: 'agency.staff_invite_create',
+        target_type: 'agency_staff_invite',
+        target_id: invite.id,
+        metadata: {
+          agency_id: params.agencyId,
+          email: invite.email,
+          role: invite.role,
+          building_ids: invite.assigned_building_ids,
+          email_status: delivery.status,
+        },
+      });
+      return ok(res, { invite: { ...savedInvite, token: invite.token } }, 202);
+    }
     audit(req, {
       action: 'agency.staff_upsert',
       target_type: 'agency_membership',
