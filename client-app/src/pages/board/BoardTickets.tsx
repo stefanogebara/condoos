@@ -9,7 +9,7 @@ import PageHeader from '../../components/PageHeader';
 import GlassCard from '../../components/GlassCard';
 import Button from '../../components/Button';
 import Badge from '../../components/Badge';
-import { apiGet, apiPost } from '../../lib/api';
+import { apiGet, apiPatch, apiPost } from '../../lib/api';
 import { formatCurrency, formatDateTime, formatRelativeTime, t as translate, useLocale } from '../../lib/i18n';
 import { openUploadedFile } from '../../lib/uploads';
 
@@ -329,6 +329,7 @@ export default function BoardTickets() {
   const [vendors, setVendors] = useState<ServiceContact[]>([]);
   const [workOrderSavingId, setWorkOrderSavingId] = useState<number | null>(null);
   const [quoteSavingId, setQuoteSavingId] = useState<number | null>(null);
+  const [quoteStatusSavingId, setQuoteStatusSavingId] = useState<number | null>(null);
   const seenTicketIds = useRef<Set<number> | null>(null);
 
   useEffect(() => {
@@ -484,6 +485,20 @@ export default function BoardTickets() {
     }
   }
 
+  async function updateQuoteStatus(ticketId: number, quoteId: number, status: QuoteStatus) {
+    setQuoteStatusSavingId(quoteId);
+    try {
+      await apiPatch<TicketQuote>(`/tickets/${ticketId}/quotes/${quoteId}`, { status });
+      toast.success(tr('Cotação atualizada'));
+      apiGet<TicketDetail>(`/tickets/${ticketId}`).then(setDetail).catch(() => {});
+      load();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || tr('Falha ao atualizar cotação'));
+    } finally {
+      setQuoteStatusSavingId(null);
+    }
+  }
+
   const needsAttention = rows.filter((r) => r.verification_threshold > 0 && r.remediation_status === 'open');
   const verified = rows.filter((r) => r.remediation_status === 'verified' || r.remediation_status === 'agent_dispatched');
   const inProgress = rows.filter((r) => (
@@ -527,37 +542,43 @@ export default function BoardTickets() {
                detail={detail} runningId={runningId} verifyingId={verifyingId} dispatchingId={dispatchingId}
                onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={openVendorResponse}
                onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} onOpenWorkOrder={setWorkOrderTicketId}
-               onOpenQuote={setQuoteTicketId} />
+               onOpenQuote={setQuoteTicketId} quoteStatusSavingId={quoteStatusSavingId}
+               onUpdateQuoteStatus={updateQuoteStatus} />
 
       <Section title={tr('Aguardando verificação')} tickets={needsAttention} openId={openId} setOpenId={setOpenId}
                detail={detail} runningId={runningId} verifyingId={verifyingId} dispatchingId={dispatchingId}
                onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={openVendorResponse}
                onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} onOpenWorkOrder={setWorkOrderTicketId}
-               onOpenQuote={setQuoteTicketId} />
+               onOpenQuote={setQuoteTicketId} quoteStatusSavingId={quoteStatusSavingId}
+               onUpdateQuoteStatus={updateQuoteStatus} />
 
       <Section title={tr('Verificados — pronto para acionar a IA')} tickets={verified} openId={openId} setOpenId={setOpenId}
                detail={detail} runningId={runningId} verifyingId={verifyingId} dispatchingId={dispatchingId}
                onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={openVendorResponse}
                onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} onOpenWorkOrder={setWorkOrderTicketId}
-               onOpenQuote={setQuoteTicketId} />
+               onOpenQuote={setQuoteTicketId} quoteStatusSavingId={quoteStatusSavingId}
+               onUpdateQuoteStatus={updateQuoteStatus} />
 
       <Section title={tr('Em andamento — fornecedor acionado')} tickets={inProgress} openId={openId} setOpenId={setOpenId}
                detail={detail} runningId={runningId} verifyingId={verifyingId} dispatchingId={dispatchingId}
                onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={openVendorResponse}
                onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} onOpenWorkOrder={setWorkOrderTicketId}
-               onOpenQuote={setQuoteTicketId} />
+               onOpenQuote={setQuoteTicketId} quoteStatusSavingId={quoteStatusSavingId}
+               onUpdateQuoteStatus={updateQuoteStatus} />
 
       <Section title={tr('Chamados privados')} tickets={privateOpen} openId={openId} setOpenId={setOpenId}
                detail={detail} runningId={runningId} verifyingId={verifyingId} dispatchingId={dispatchingId}
                onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={openVendorResponse}
                onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} onOpenWorkOrder={setWorkOrderTicketId}
-               onOpenQuote={setQuoteTicketId} />
+               onOpenQuote={setQuoteTicketId} quoteStatusSavingId={quoteStatusSavingId}
+               onUpdateQuoteStatus={updateQuoteStatus} />
 
       <Section title={tr('Resolvidos')} tickets={resolvedTickets} openId={openId} setOpenId={setOpenId}
                detail={detail} runningId={runningId} verifyingId={verifyingId} dispatchingId={dispatchingId}
                onRunAgent={runAgent} onVerify={verify} onDispatch={dispatch} onMarkResponded={openVendorResponse}
                onOpenPicker={setPickerTicketId} onOpenResolve={setResolveTicketId} onOpenWorkOrder={setWorkOrderTicketId}
-               onOpenQuote={setQuoteTicketId} />
+               onOpenQuote={setQuoteTicketId} quoteStatusSavingId={quoteStatusSavingId}
+               onUpdateQuoteStatus={updateQuoteStatus} />
 
       {pickerTicketId != null && detail && (
         <VendorPickerModal
@@ -656,6 +677,7 @@ function NeedsAttentionBanner({ total, noVendor, noResponse }: { total: number; 
 function Section({
   title, tickets, openId, setOpenId, detail, runningId, verifyingId, dispatchingId,
   onRunAgent, onVerify, onDispatch, onMarkResponded, onOpenPicker, onOpenResolve, onOpenWorkOrder, onOpenQuote,
+  quoteStatusSavingId, onUpdateQuoteStatus,
 }: {
   title: string;
   tickets: Ticket[];
@@ -673,6 +695,8 @@ function Section({
   onOpenResolve: (id: number) => void;
   onOpenWorkOrder: (id: number) => void;
   onOpenQuote: (id: number) => void;
+  quoteStatusSavingId: number | null;
+  onUpdateQuoteStatus: (ticketId: number, quoteId: number, status: QuoteStatus) => void;
 }) {
   if (tickets.length === 0) return null;
   return (
@@ -698,7 +722,9 @@ function Section({
                      onOpenPicker={() => onOpenPicker(tk.id)}
                      onOpenResolve={() => onOpenResolve(tk.id)}
                      onOpenWorkOrder={() => onOpenWorkOrder(tk.id)}
-                     onOpenQuote={() => onOpenQuote(tk.id)} />
+                     onOpenQuote={() => onOpenQuote(tk.id)}
+                     quoteStatusSavingId={quoteStatusSavingId}
+                     onUpdateQuoteStatus={onUpdateQuoteStatus} />
         ))}
       </div>
     </>
@@ -708,6 +734,7 @@ function Section({
 function AdminCard({
   ticket, expanded, detail, onToggle, running, verifying, dispatching,
   onRunAgent, onVerify, onDispatch, onMarkResponded, onOpenPicker, onOpenResolve, onOpenWorkOrder, onOpenQuote,
+  quoteStatusSavingId, onUpdateQuoteStatus,
 }: {
   ticket: Ticket;
   expanded: boolean;
@@ -724,6 +751,8 @@ function AdminCard({
   onOpenResolve: () => void;
   onOpenWorkOrder: () => void;
   onOpenQuote: () => void;
+  quoteStatusSavingId: number | null;
+  onUpdateQuoteStatus: (ticketId: number, quoteId: number, status: QuoteStatus) => void;
 }) {
   const tr = useTicketTranslator();
   const isCommunity = ticket.verification_threshold > 0;
@@ -973,7 +1002,12 @@ function AdminCard({
           )}
 
           {detail?.quotes && detail.quotes.length > 0 && (
-            <QuoteComparisonPanel quotes={detail.quotes} />
+            <QuoteComparisonPanel
+              ticketId={ticket.id}
+              quotes={detail.quotes}
+              savingQuoteId={quoteStatusSavingId}
+              onStatusChange={onUpdateQuoteStatus}
+            />
           )}
 
           {detail?.dispatches && detail.dispatches.length > 0 && (
@@ -1111,7 +1145,17 @@ function WorkOrderPanel({ workOrder }: { workOrder: WorkOrder }) {
   );
 }
 
-function QuoteComparisonPanel({ quotes }: { quotes: TicketQuote[] }) {
+function QuoteComparisonPanel({
+  ticketId,
+  quotes,
+  savingQuoteId,
+  onStatusChange,
+}: {
+  ticketId: number;
+  quotes: TicketQuote[];
+  savingQuoteId: number | null;
+  onStatusChange: (ticketId: number, quoteId: number, status: QuoteStatus) => void;
+}) {
   const tr = useTicketTranslator();
   return (
     <GlassCard variant="clay" className="p-4 border border-peach-300/35 bg-peach-100/25">
@@ -1131,6 +1175,43 @@ function QuoteComparisonPanel({ quotes }: { quotes: TicketQuote[] }) {
               <Badge tone={quote.status === 'selected' ? 'sage' : quote.status === 'rejected' ? 'dark' : 'peach'}>
                 {tr(QUOTE_STATUS_LABEL[quote.status])}
               </Badge>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {quote.status !== 'selected' && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="sage"
+                  loading={savingQuoteId === quote.id}
+                  leftIcon={<CheckCircle2 className="w-3.5 h-3.5" />}
+                  onClick={() => onStatusChange(ticketId, quote.id, 'selected')}
+                >
+                  {tr('Selecionar')}
+                </Button>
+              )}
+              {quote.status !== 'shortlisted' && quote.status !== 'selected' && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  loading={savingQuoteId === quote.id}
+                  onClick={() => onStatusChange(ticketId, quote.id, 'shortlisted')}
+                >
+                  {tr('Pré-selecionar')}
+                </Button>
+              )}
+              {quote.status !== 'rejected' && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  loading={savingQuoteId === quote.id}
+                  leftIcon={<X className="w-3.5 h-3.5" />}
+                  onClick={() => onStatusChange(ticketId, quote.id, 'rejected')}
+                >
+                  {tr('Rejeitar')}
+                </Button>
+              )}
             </div>
             <div className="mt-2 flex flex-wrap gap-2 items-center">
               {quote.quote_amount_cents != null && (

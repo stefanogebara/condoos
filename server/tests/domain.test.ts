@@ -35,7 +35,7 @@ import {
 } from '../src/lib/finance';
 import { requireAuth, requireBoardCapability, revokeUserTokens, signToken } from '../src/lib/auth';
 import { canAssignTicketToUser, listTicketTimeline, markTicketAgentFailed, recordTicketEvent } from '../src/lib/tickets';
-import { createTicketQuote, listTicketQuotes } from '../src/lib/ticket-quotes';
+import { createTicketQuote, listTicketQuotes, updateTicketQuoteStatus } from '../src/lib/ticket-quotes';
 import { createAgentRun, finishAgentRunFailure, finishAgentRunSuccess, reapStaleAgentRuns } from '../src/lib/agent-runs';
 import { buildAgentEvidenceSources } from '../src/lib/agent-evidence';
 import { evaluateAgentAutoDispatch } from '../src/lib/agent-auto-dispatch';
@@ -2144,6 +2144,16 @@ test('ticket vendor quotes are condo-scoped and hidden from residents', () => {
     notes: 'Admin-only price detail and internal negotiation notes.',
   });
   assert.equal(quote.ok, true);
+  const selectedQuote = createTicketQuote({
+    condoId,
+    ticketId,
+    actorUserId: adminId,
+    vendorName: 'Backup Repairs',
+    quoteAmountCents: 140000,
+    currency: 'USD',
+    status: 'selected',
+  });
+  assert.equal(selectedQuote.ok, true);
 
   const wrongVendor = createTicketQuote({
     condoId,
@@ -2156,10 +2166,35 @@ test('ticket vendor quotes are condo-scoped and hidden from residents', () => {
   assert.equal((wrongVendor as any).error, 'vendor_not_in_condo');
 
   const adminQuotes = listTicketQuotes({ condoId, ticketId, role: 'board_admin' });
-  assert.equal(adminQuotes.length, 1);
-  assert.equal(adminQuotes[0].vendor_name, 'FixFast');
-  assert.equal(adminQuotes[0].quote_amount_cents, 125000);
-  assert.match(adminQuotes[0].notes || '', /Admin-only price detail/);
+  assert.equal(adminQuotes.length, 2);
+  const fixFastQuote = adminQuotes.find((row) => row.vendor_name === 'FixFast');
+  assert.ok(fixFastQuote);
+  assert.equal(fixFastQuote.quote_amount_cents, 125000);
+  assert.match(fixFastQuote.notes || '', /Admin-only price detail/);
+
+  const updatedQuote = updateTicketQuoteStatus({
+    condoId,
+    ticketId,
+    quoteId: quote.id,
+    actorUserId: adminId,
+    status: 'selected',
+  });
+  assert.equal(updatedQuote.ok, true);
+  assert.equal(updatedQuote.status, 'selected');
+
+  const postDecisionQuotes = listTicketQuotes({ condoId, ticketId, role: 'board_admin' });
+  assert.equal(postDecisionQuotes.find((q) => q.id === quote.id)?.status, 'selected');
+  assert.equal(postDecisionQuotes.find((q) => q.id === selectedQuote.id)?.status, 'shortlisted');
+
+  const crossCondoUpdate = updateTicketQuoteStatus({
+    condoId: otherCondoId,
+    ticketId,
+    quoteId: quote.id,
+    actorUserId: adminId,
+    status: 'rejected',
+  });
+  assert.equal(crossCondoUpdate.ok, false);
+  assert.equal(crossCondoUpdate.error, 'ticket_not_found');
 
   const residentQuotes = listTicketQuotes({ condoId, ticketId, role: 'resident' });
   assert.equal(residentQuotes.length, 0);
@@ -2169,8 +2204,10 @@ test('ticket vendor quotes are condo-scoped and hidden from residents', () => {
 
   const adminTimeline = listTicketTimeline({ ticketId, condoId, role: 'board_admin' });
   assert.ok(adminTimeline.some((event) => event.event_type === 'vendor.quote_added'));
+  assert.ok(adminTimeline.some((event) => event.event_type === 'vendor.quote_status_updated'));
   const residentTimeline = listTicketTimeline({ ticketId, condoId, role: 'resident' });
   assert.ok(!residentTimeline.some((event) => event.event_type === 'vendor.quote_added'));
+  assert.ok(!residentTimeline.some((event) => event.event_type === 'vendor.quote_status_updated'));
 });
 
 test('board packet aggregates monthly operations without cross-condo leakage', () => {

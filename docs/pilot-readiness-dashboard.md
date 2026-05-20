@@ -9,7 +9,7 @@ This document separates what is real today from what still needs production wiri
 - Resident visitors, parties, recurring visitors, packages, amenity reservations, suggestions, proposals, meetings, tickets, documents, transparency, and settings.
 - Guard dashboard for visitors, parties, packages, resident contact fallback, walk-up visitor notification, package handoff, and search.
 - Admin residents, pending approvals, proposals, assemblies, meetings, announcements, amenities, building layout, services, tickets, finance, documents, Building Memory, reports, and concierge staff.
-- Manual dues/invoices/payments, expense transparency, vendor scorecards, work orders, audit log, and monthly board packet Markdown export.
+- Manual dues/invoices/payments, expense transparency, vendor scorecards, work orders, vendor quote decisions, audit log, and monthly board packet Markdown export.
 - Resident payment-proof upload plus admin approval/rejection queue. Approved proofs create payment records and overpayment is blocked.
 - In-app dashboard actions for resident/admin/guard command centers.
 - File upload registry with local/dev storage and Cloudflare R2-compatible presigned upload support for documents, receipts, and ticket evidence.
@@ -43,11 +43,11 @@ This document separates what is real today from what still needs production wiri
 - Production R2 bucket/CORS/secrets must pass `npm run audit:prod:uploads` before a real building uses uploads.
 - Turnstile keys are not installed in the current demo deployment, so create-building captcha is not active yet. `npm run audit:prod:hardening` should fail until those keys are set.
 - If `PRIVATE_CREATE_BUILDING_REQUIRED` is not set in production, random signed-in users can still attempt create-building. Private sales deployments should fail closed with setup codes; public login/signup copy now reflects private activation when the gate is enabled.
-- Full ticket timeline events, SLA escalation rules, and vendor quote comparison.
+- Ticket timeline events, SLA escalation rules, vendor quote comparison, and quote selection/rejection decisions are real. Remaining maintenance hardening is recurring problem detection, richer vendor follow-up reporting, and more polished multi-building maintenance summaries.
 - Market settings exist, but the remaining localization hardening is legal/governance wording, date/time formatting sweeps, and production seed-content cleanup per market.
 - Incident mode.
 - Portfolio dashboard is not yet a full agency command center: agency setup-code controls, staff email invites, assigned-building switching, scoped staff controls, server capability guardrails, frontend role-specific navigation, permission review, pilot readiness checklist, prioritized attention queue, monthly Markdown report, and role-aware scoped CSV exports exist, but polished report packaging and richer multi-building reporting are still pending.
 
 ## Next Pilot Upgrade
 
-The next buyer-visible upgrade should harden maintenance into a full work-order timeline: ticket events, vendor quotes, SLA alerts, and resident-safe progress history. That is the next place where a buyer will judge whether CONDOS can run a real building, not just record requests.
+The next buyer-visible upgrade should package the already-real maintenance workflow into stronger agency reporting: recurring problem detection, vendor follow-up health, richer multi-building maintenance summaries, and a walkthrough-ready work-order story.

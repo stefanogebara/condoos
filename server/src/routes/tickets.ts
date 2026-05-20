@@ -5,7 +5,7 @@ import { requireAuth, requireRole, requireBoardCapability, getActiveCondoId, Aut
 import { ok, fail, asyncHandler } from '../lib/respond';
 import { audit } from '../lib/audit';
 import { canAssignTicketToUser, listTicketTimeline, markTicketAgentFailed, recordTicketEvent } from '../lib/tickets';
-import { createTicketQuote, listTicketQuotes } from '../lib/ticket-quotes';
+import { createTicketQuote, listTicketQuotes, updateTicketQuoteStatus } from '../lib/ticket-quotes';
 import { categoryMatches } from '../lib/category-aliases';
 import { buildVendorPortalUrl } from '../lib/vendor-tokens';
 import { evaluateAgentAutoDispatch, isSafetyCriticalUrgent } from '../lib/agent-auto-dispatch';
@@ -115,6 +115,9 @@ const ticketQuoteCreateSchema = z.object({
 }).refine((body) => !!body.service_contact_id || !!String(body.vendor_name || '').trim(), {
   message: 'vendor_required',
   path: ['vendor_name'],
+});
+const ticketQuoteStatusUpdateSchema = z.object({
+  status: quoteStatusSchema,
 });
 
 // Phase 2 — fire-and-forget agent invocation triggered the moment a ticket
@@ -1312,6 +1315,33 @@ router.post('/:id/quotes', requireAuth, requireRole('board_admin'), requireBoard
     metadata: { ticket_id: id, service_contact_id: quote.service_contact_id, status: quote.status },
   });
   return ok(res, quote, 201);
+});
+
+router.patch('/:id/quotes/:quoteId', requireAuth, requireRole('board_admin'), requireBoardCapability('maintenance'), (req: AuthedRequest, res) => {
+  const parsed = ticketQuoteStatusUpdateSchema.safeParse(req.body);
+  if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
+  const condoId = getActiveCondoId(req);
+  const id = Number(req.params.id);
+  const quoteId = Number(req.params.quoteId);
+  if (!Number.isFinite(id) || !Number.isFinite(quoteId)) return fail(res, 'invalid_id', 400);
+
+  const quote = updateTicketQuoteStatus({
+    condoId,
+    ticketId: id,
+    quoteId,
+    actorUserId: req.user!.id,
+    status: parsed.data.status,
+  });
+  if (!quote.ok) return fail(res, quote.error, 404);
+
+  audit(req, {
+    action: 'ticket.quote_update',
+    target_type: 'ticket_vendor_quote',
+    target_id: quote.id,
+    condominium_id: condoId,
+    metadata: { ticket_id: id, status: quote.status },
+  });
+  return ok(res, quote);
 });
 
 router.post('/:id/work-order', requireAuth, requireRole('board_admin'), requireBoardCapability('maintenance'), (req: AuthedRequest, res) => {

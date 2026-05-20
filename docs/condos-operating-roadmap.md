@@ -39,7 +39,8 @@ Every shipped feature must improve at least one promise:
    - Defer live processors until the workflow is trusted.
 
 4. **Maintenance as work orders**
-   - Add ticket timeline events, quote comparison, SLA alerts, recurring problem detection, and resident-safe progress visibility.
+   - Ticket timeline events, quote comparison, quote decisions, SLA alerts, and resident-safe progress visibility are in place.
+   - Remaining work: recurring problem detection, richer vendor follow-up health, and multi-building maintenance summaries.
 
 5. **Brazil + Ecuador readiness**
    - Building-level country, currency, timezone, locale, and governance mode are in place.
@@ -75,3 +76,4 @@ Enterprise-private readiness plus market hardening:
 - Surface production integration readiness from `/board/portfolio`.
 - Keep public login available, but remove the assumption that anyone can freely create a real production building.
 - Keep login/signup/onboarding language aligned with private activation whenever setup codes are required.
+- Keep maintenance decisions auditable: one selected quote per ticket, quote decision history in the admin timeline, and residents shielded from private vendor notes.

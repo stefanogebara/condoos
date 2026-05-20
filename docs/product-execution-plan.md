@@ -274,6 +274,16 @@ This slice prevents scoped agency staff from downloading export families outside
 - Made the frontend show only the export buttons each agency role can actually use.
 - Added tests proving scoped finance and maintenance staff are blocked from unrelated export families while assigned building admins still get sensitive building-scoped exports.
 
+## Completed Slice: Vendor Quote Decision Flow
+
+This slice makes maintenance quote comparison operational instead of read-only:
+
+- Added an admin-only quote status update flow for received, shortlisted, selected, and rejected quotes.
+- Enforced one selected quote per ticket by automatically moving any previous selected quote back to shortlisted when a new quote is selected.
+- Added an admin-only ticket timeline event when a quote decision changes so the board can audit why a vendor was chosen.
+- Added quote decision buttons in the admin ticket view: select, shortlist, and reject.
+- Kept quote details and decision history hidden from residents while preserving condo-scoped tests.
+
 ## Completed Slice: Vendor Intelligence
 
 This slice makes the saved service network feel operational instead of static:
@@ -364,7 +374,7 @@ This slice makes portfolio access safer before private pilots:
 
 The next implementation slice should keep building on the private-enterprise plan:
 
-- Harden maintenance into a fuller work-order timeline with quote comparison and SLA alerts.
+- Package the now-real maintenance lifecycle into stronger agency reporting: recurring problem detection, vendor follow-up health, and multi-building maintenance summaries.
 - Expand portfolio reporting into a true agency command center.
 - Add polished report packaging and stronger multi-building agency priorities.
 - Keep production-safe i18n, build, server tests, and pilot smoke checks green before each push.

@@ -46,6 +46,10 @@ type CreateTicketQuoteResult =
   | ({ ok: true } & TicketQuoteRow)
   | { ok: false; error: 'ticket_not_found' | 'vendor_not_in_condo' | 'vendor_required' };
 
+type UpdateTicketQuoteStatusResult =
+  | ({ ok: true } & TicketQuoteRow)
+  | { ok: false; error: 'ticket_not_found' | 'quote_not_found' };
+
 function cleanText(value: string | null | undefined, max: number): string | null {
   if (value == null) return null;
   const trimmed = String(value).trim();
@@ -59,6 +63,17 @@ function cleanCurrency(value: string | null | undefined): string {
 
 function ticketInCondo(ticketId: number, condoId: number): boolean {
   return !!db.prepare(`SELECT 1 FROM tickets WHERE id = ? AND condominium_id = ?`).get(ticketId, condoId);
+}
+
+function demoteOtherSelectedQuotes(condoId: number, ticketId: number, quoteId?: number): void {
+  db.prepare(
+    `UPDATE ticket_vendor_quotes
+     SET status = 'shortlisted', updated_at = CURRENT_TIMESTAMP
+     WHERE condominium_id = ?
+       AND ticket_id = ?
+       AND status = 'selected'
+       AND (? IS NULL OR id <> ?)`
+  ).run(condoId, ticketId, quoteId ?? null, quoteId ?? null);
 }
 
 export function createTicketQuote(input: TicketQuoteInput): CreateTicketQuoteResult {
@@ -77,6 +92,9 @@ export function createTicketQuote(input: TicketQuoteInput): CreateTicketQuoteRes
     serviceContactId = vendor.id;
   }
   if (!vendorName) return { ok: false, error: 'vendor_required' };
+  if ((input.status || 'received') === 'selected') {
+    demoteOtherSelectedQuotes(input.condoId, input.ticketId);
+  }
 
   const result = db.prepare(
     `INSERT INTO ticket_vendor_quotes (
@@ -118,6 +136,51 @@ export function createTicketQuote(input: TicketQuoteInput): CreateTicketQuoteRes
   });
 
   return { ok: true, ...listTicketQuotes({ condoId: input.condoId, ticketId: input.ticketId, role: 'board_admin' }).find((q) => q.id === quoteId)! };
+}
+
+export function updateTicketQuoteStatus(input: {
+  condoId: number;
+  ticketId: number;
+  quoteId: number;
+  actorUserId: number;
+  status: TicketQuoteStatus;
+}): UpdateTicketQuoteStatusResult {
+  if (!ticketInCondo(input.ticketId, input.condoId)) return { ok: false, error: 'ticket_not_found' };
+  const existing = db.prepare(
+    `SELECT id, vendor_name, status
+     FROM ticket_vendor_quotes
+     WHERE id = ? AND ticket_id = ? AND condominium_id = ?`
+  ).get(input.quoteId, input.ticketId, input.condoId) as { id: number; vendor_name: string; status: TicketQuoteStatus } | undefined;
+  if (!existing) return { ok: false, error: 'quote_not_found' };
+
+  if (input.status === 'selected') {
+    demoteOtherSelectedQuotes(input.condoId, input.ticketId, input.quoteId);
+  }
+  db.prepare(
+    `UPDATE ticket_vendor_quotes
+     SET status = ?, updated_at = CURRENT_TIMESTAMP
+     WHERE id = ? AND ticket_id = ? AND condominium_id = ?`
+  ).run(input.status, input.quoteId, input.ticketId, input.condoId);
+
+  recordTicketEvent({
+    ticketId: input.ticketId,
+    condoId: input.condoId,
+    actorUserId: input.actorUserId,
+    eventType: 'vendor.quote_status_updated',
+    title: 'Cotação atualizada',
+    body: existing.vendor_name,
+    metadata: {
+      quote_id: input.quoteId,
+      previous_status: existing.status,
+      status: input.status,
+    },
+    visibility: 'admin',
+  });
+
+  const updated = listTicketQuotes({ condoId: input.condoId, ticketId: input.ticketId, role: 'board_admin' })
+    .find((q) => q.id === input.quoteId);
+  if (!updated) return { ok: false, error: 'quote_not_found' };
+  return { ok: true, ...updated };
 }
 
 export function listTicketQuotes(input: {
