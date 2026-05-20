@@ -181,6 +181,10 @@ function formatDate(value: string | null) {
   return date.toLocaleDateString();
 }
 
+function currentReportMonth() {
+  return new Date().toISOString().slice(0, 7);
+}
+
 function codeTone(status: AgencySetupCode['status']) {
   if (status === 'active') return 'sage' as const;
   if (status === 'disabled' || status === 'expired') return 'warning' as const;
@@ -445,6 +449,16 @@ export default function BoardAgencyPortfolio() {
     await downloadCsv(
       `/agencies/${primaryAgency.id}/export/${kind}.csv`,
       `condoos-${primaryAgency.slug}-${kind}.csv`,
+    );
+    await loadAuditEvents(primaryAgency.id);
+  }
+
+  async function downloadAgencyReport() {
+    if (!primaryAgency) return;
+    const month = currentReportMonth();
+    await downloadCsv(
+      `/agencies/${primaryAgency.id}/report.md?month=${encodeURIComponent(month)}`,
+      `condoos-${primaryAgency.slug}-${month}-agency-report.md`,
     );
     await loadAuditEvents(primaryAgency.id);
   }
@@ -784,6 +798,9 @@ export default function BoardAgencyPortfolio() {
                   {t('Baixe dados do portfólio respeitando os prédios permitidos para sua função.')}
                 </p>
                 <div className="grid grid-cols-1 gap-2">
+                  <Button variant="sage" onClick={downloadAgencyReport} leftIcon={<Download className="w-4 h-4" />}>
+                    {t('Relatório mensal da administradora')}
+                  </Button>
                   <Button variant="ghost" onClick={downloadPortfolioCsv} leftIcon={<Download className="w-4 h-4" />}>
                     {t('Resumo do portfólio')}
                   </Button>

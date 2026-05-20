@@ -10,6 +10,7 @@ import {
   agencyPortfolioToCsv,
   agencyOperationalExportToCsv,
   agencyPortfoliosForUser,
+  buildAgencyMonthlyReport,
   buildAgencyPortfolio,
   createAgencyStaffInvite,
   createAgencySetupCode,
@@ -77,6 +78,10 @@ const activeBuildingSchema = z.object({
 
 const auditEventsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).optional(),
+});
+
+const agencyReportQuerySchema = z.object({
+  month: z.string().regex(/^\d{4}-\d{2}$/).optional(),
 });
 
 function parseParams<T extends z.ZodTypeAny>(schema: T, req: AuthedRequest): z.infer<T> | null {
@@ -393,6 +398,29 @@ router.get('/:agencyId/export/portfolio.csv', requireAuth, asyncHandler(async (r
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="condoos-agency-${params.agencyId}-portfolio.csv"`);
   return res.status(200).send(agencyPortfolioToCsv(portfolio));
+}));
+
+router.get('/:agencyId/report.md', requireAuth, asyncHandler(async (req: AuthedRequest, res) => {
+  const params = parseParams(agencyIdParam, req);
+  if (!params) return fail(res, 'invalid_input', 400);
+  const parsed = agencyReportQuerySchema.safeParse(req.query);
+  if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
+  const membership = agencyMembershipOrFail(req, res, params.agencyId, false);
+  if (!membership) return;
+  const report = buildAgencyMonthlyReport(membership, parsed.data.month);
+  audit(req, {
+    action: 'agency.export_monthly_report',
+    target_type: 'agency',
+    target_id: params.agencyId,
+    metadata: {
+      agency_id: params.agencyId,
+      month: report.month,
+      buildings: report.buildings.length,
+    },
+  });
+  res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="condoos-agency-${params.agencyId}-${report.month}.md"`);
+  return res.status(200).send(report.markdown);
 }));
 
 router.get('/:agencyId/export/:kind.csv', requireAuth, asyncHandler(async (req: AuthedRequest, res) => {

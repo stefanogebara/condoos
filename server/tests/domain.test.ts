@@ -51,6 +51,7 @@ import {
   agencyOperationalExportToCsv,
   agencyPortfolioToCsv,
   acceptAgencyStaffInvite,
+  buildAgencyMonthlyReport,
   buildAgencyPortfolio,
   createAgencyStaffInvite,
   createAgencySetupCode,
@@ -267,14 +268,26 @@ test('agency portfolio CSV exports scoped building metrics', () => {
     `INSERT INTO user_unit (user_id, unit_id, relationship, status, primary_contact, voting_weight)
      VALUES (?, ?, 'tenant', 'pending', 1, 1.0)`
   ).run(residentId, unit101);
-  db.prepare(
+  const ticketId = Number(db.prepare(
     `INSERT INTO tickets (condominium_id, reporter_id, title, description, category, priority, status)
      VALUES (?, ?, 'Elevator noise', 'Noise on floor 4', 'maintenance', 'urgent', 'open')`
-  ).run(condoId, residentId);
+  ).run(condoId, residentId).lastInsertRowid);
   db.prepare(
-    `INSERT INTO invoices (condominium_id, unit_id, amount_cents, period, due_date, status)
-     VALUES (?, ?, 12000, '2026-05', date('now', '-3 day'), 'overdue')`
-  ).run(condoId, unit101);
+    `INSERT INTO ticket_work_orders (ticket_id, title, status, completed_at)
+     VALUES (?, 'Elevator inspection', 'completed', '2026-05-12T10:00:00.000Z')`
+  ).run(ticketId);
+  const invoiceId = Number(db.prepare(
+    `INSERT INTO invoices (condominium_id, unit_id, amount_cents, currency, period, due_date, status)
+     VALUES (?, ?, 12000, 'USD', '2026-05', date('now', '-3 day'), 'overdue')`
+  ).run(condoId, unit101).lastInsertRowid);
+  db.prepare(
+    `INSERT INTO payments (condominium_id, invoice_id, amount_cents, method, paid_at)
+     VALUES (?, ?, 5000, 'transfer', '2026-05-15T12:00:00.000Z')`
+  ).run(condoId, invoiceId);
+  db.prepare(
+    `INSERT INTO expenses (condominium_id, amount_cents, currency, category, vendor, description, spent_at, receipt_url)
+     VALUES (?, 3000, 'USD', 'maintenance', 'Elevator Co', 'Elevator inspection', '2026-05-16', 'https://example.com/receipt.pdf')`
+  ).run(condoId);
 
   const membership = userAgencyMemberships(adminId)[0];
   const portfolio = buildAgencyPortfolio(membership);
@@ -291,6 +304,18 @@ test('agency portfolio CSV exports scoped building metrics', () => {
   assert.equal(portfolio.attention[0].condominium_id, condoId);
   assert.equal(portfolio.attention[1].route, '/board/financas');
   assert.equal(portfolio.attention[2].condominium_name, 'Test Condo');
+
+  const report = buildAgencyMonthlyReport(membership, '2026-05');
+  assert.equal(report.month, '2026-05');
+  assert.equal(report.buildings.length, 1);
+  assert.equal(report.buildings[0].month.work_orders_completed, 1);
+  assert.equal(report.buildings[0].month.dues_billed, 'USD 120.00');
+  assert.equal(report.buildings[0].month.payments_received, 'USD 50.00');
+  assert.equal(report.buildings[0].month.expenses_spent, 'USD 30.00');
+  assert.equal(report.buildings[0].month.expense_receipt_coverage_percent, 100);
+  assert.match(report.markdown, /CONDOS agency report - Quito Operations - 2026-05/);
+  assert.match(report.markdown, /Test Condo/);
+  assert.match(report.markdown, /urgent ticket/);
 
   const csv = agencyPortfolioToCsv(portfolio);
   assert.match(csv, /agency_id,agency_name,building_id,building_name/);

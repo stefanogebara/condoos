@@ -84,11 +84,18 @@ Agency operational exports are available from `/board/portfolio` and through:
 - `GET /api/agencies/:agencyId/export/tickets.csv`
 - `GET /api/agencies/:agencyId/export/work-orders.csv`
 - `GET /api/agencies/:agencyId/export/audit.csv`
+- `GET /api/agencies/:agencyId/report.md?month=YYYY-MM`
 
 Exports respect the caller's agency membership. Agency admins export all linked
 buildings. Non-admin agency staff only export their assigned buildings. The
 audit export also includes agency-level audit rows whose metadata references the
 agency, so setup-code/staff/export actions are visible even when not tied to one
+building.
+
+The monthly agency report is Markdown so it can be copied into a board update,
+sales recap, or management-company operating review. It includes portfolio
+attention, risk totals, monthly tickets, completed work orders, billed dues,
+payments received, expenses, receipt coverage, and next actions per scoped
 building.
 
 The portfolio page also shows a recent audit preview from

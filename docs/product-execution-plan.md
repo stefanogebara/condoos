@@ -227,6 +227,15 @@ The management-company layer now behaves more like a command center:
 - Lets agency users jump from each alert into the correct building workflow.
 - Keeps non-admin agency staff scoped to assigned buildings while agency admins see the full linked portfolio.
 
+## Completed Slice: Agency Monthly Report
+
+This slice makes portfolio data easier to sell and operate:
+
+- Added a scoped monthly Markdown report for agency members.
+- Summarizes portfolio attention, current risk totals, monthly tickets, completed work orders, dues billed, payments received, expenses, receipt coverage, and next actions per building.
+- Exposes the report from `/api/agencies/:agencyId/report.md?month=YYYY-MM`.
+- Adds a one-click download from `/board/portfolio` alongside CSV exports.
+
 ## Completed Slice: Vendor Intelligence
 
 This slice makes the saved service network feel operational instead of static:

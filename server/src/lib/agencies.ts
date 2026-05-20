@@ -113,6 +113,33 @@ export interface AgencyPortfolioAttentionItem {
   route: string;
 }
 
+export interface AgencyMonthlyReportBuilding {
+  condominium_id: number;
+  condominium_name: string;
+  metrics: AgencyBuildingMetrics;
+  month: {
+    tickets_opened: number;
+    work_orders_completed: number;
+    dues_billed: string;
+    payments_received: string;
+    expenses_spent: string;
+    expense_receipt_coverage_percent: number;
+  };
+  next_actions: string[];
+}
+
+export interface AgencyMonthlyReport {
+  agency_id: number;
+  agency_name: string;
+  role: AgencyRole;
+  month: string;
+  generated_at: string;
+  totals: AgencyBuildingMetrics;
+  attention: AgencyPortfolioAttentionItem[];
+  buildings: AgencyMonthlyReportBuilding[];
+  markdown: string;
+}
+
 export interface AgencyPortfolio {
   id: number;
   name: string;
@@ -1237,4 +1264,193 @@ export function agencyPortfolioToCsv(portfolio: AgencyPortfolio): string {
     }).join(','));
   }
   return `${lines.join('\n')}\n`;
+}
+
+function normalizeAgencyReportMonth(input?: string | null): string {
+  if (input && /^\d{4}-\d{2}$/.test(input)) return input;
+  return new Date().toISOString().slice(0, 7);
+}
+
+function markdownText(value: unknown): string {
+  return String(value ?? '')
+    .replace(/\r?\n+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim() || 'N/A';
+}
+
+function formatMoneyByCurrency(rows: Array<{ currency: string | null; amount_cents: number | null }>): string {
+  const parts = rows
+    .map((row) => {
+      const amount = Number(row.amount_cents || 0);
+      if (amount <= 0) return null;
+      const currency = String(row.currency || 'BRL').toUpperCase();
+      return `${currency} ${(amount / 100).toLocaleString('en-US', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })}`;
+    })
+    .filter(Boolean);
+  return parts.length > 0 ? parts.join(' / ') : '0.00';
+}
+
+function moneyByCurrency(sql: string, ...params: unknown[]): string {
+  const rows = db.prepare(sql).all(...params) as Array<{ currency: string | null; amount_cents: number | null }>;
+  return formatMoneyByCurrency(rows);
+}
+
+function expenseReceiptCoverage(condominiumId: number, month: string): number {
+  const row = db.prepare(
+    `SELECT COUNT(*) AS total,
+            SUM(CASE WHEN receipt_url IS NOT NULL OR receipt_file_id IS NOT NULL THEN 1 ELSE 0 END) AS with_receipt
+     FROM expenses
+     WHERE condominium_id = ?
+       AND substr(spent_at, 1, 7) = ?`
+  ).get(condominiumId, month) as { total: number; with_receipt: number | null } | undefined;
+  const total = Number(row?.total || 0);
+  if (total <= 0) return 100;
+  return Math.round((Number(row?.with_receipt || 0) / total) * 100);
+}
+
+function agencyNextActions(building: AgencyPortfolio['buildings'][number]): string[] {
+  const actions: string[] = [];
+  if (building.metrics.urgent_tickets > 0) actions.push(`Review ${building.metrics.urgent_tickets} urgent ticket(s).`);
+  if (building.metrics.vendor_sla_problems > 0) actions.push(`Escalate ${building.metrics.vendor_sla_problems} vendor SLA problem(s).`);
+  if (building.metrics.overdue_dues > 0) actions.push(`Follow up on ${building.metrics.overdue_dues} overdue due(s).`);
+  if (building.metrics.pending_payment_proofs > 0) actions.push(`Review ${building.metrics.pending_payment_proofs} payment proof(s).`);
+  if (building.metrics.pending_residents > 0) actions.push(`Approve or reject ${building.metrics.pending_residents} pending resident request(s).`);
+  if (building.metrics.proposals_missing_budget > 0) actions.push(`Add budget analysis to ${building.metrics.proposals_missing_budget} proposal(s).`);
+  if (actions.length === 0) actions.push('No immediate agency action flagged by current metrics.');
+  return actions;
+}
+
+function buildAgencyMonthlyReportMarkdown(report: Omit<AgencyMonthlyReport, 'markdown'>): string {
+  const lines = [
+    `# CONDOS agency report - ${markdownText(report.agency_name)} - ${report.month}`,
+    '',
+    `Generated: ${report.generated_at}`,
+    `Scope: ${report.buildings.length} building(s) visible to ${report.role}`,
+    '',
+    '## Portfolio attention',
+  ];
+
+  if (report.attention.length === 0) {
+    lines.push('- No urgent portfolio actions right now.');
+  } else {
+    for (const item of report.attention.slice(0, 12)) {
+      lines.push(`- ${markdownText(item.condominium_name)}: ${item.count} ${item.kind.replace(/_/g, ' ')} (${item.severity})`);
+    }
+  }
+
+  lines.push(
+    '',
+    '## Portfolio totals',
+    `- Pending residents: ${report.totals.pending_residents}`,
+    `- Open tickets: ${report.totals.unresolved_tickets}`,
+    `- Urgent tickets: ${report.totals.urgent_tickets}`,
+    `- Overdue dues: ${report.totals.overdue_dues}`,
+    `- Pending payment proofs: ${report.totals.pending_payment_proofs}`,
+    `- Vendor SLA problems: ${report.totals.vendor_sla_problems}`,
+    `- Proposals missing budget: ${report.totals.proposals_missing_budget}`,
+    `- Upcoming meetings: ${report.totals.upcoming_meetings}`,
+    '',
+    '## Buildings',
+  );
+
+  if (report.buildings.length === 0) {
+    lines.push('- No buildings are visible for this agency member.');
+  }
+
+  for (const building of report.buildings) {
+    lines.push(
+      '',
+      `### ${markdownText(building.condominium_name)}`,
+      `- Month activity: ${building.month.tickets_opened} ticket(s) opened, ${building.month.work_orders_completed} work order(s) completed.`,
+      `- Finance: billed ${building.month.dues_billed}; received ${building.month.payments_received}; expenses ${building.month.expenses_spent}; receipt coverage ${building.month.expense_receipt_coverage_percent}%.`,
+      `- Current risk: ${building.metrics.urgent_tickets} urgent ticket(s), ${building.metrics.vendor_sla_problems} vendor SLA problem(s), ${building.metrics.overdue_dues} overdue due(s).`,
+      '- Next actions:',
+      ...building.next_actions.map((action) => `  - ${action}`),
+    );
+  }
+
+  return `${lines.join('\n')}\n`;
+}
+
+export function buildAgencyMonthlyReport(membership: AgencyMembership, monthInput?: string | null): AgencyMonthlyReport {
+  const month = normalizeAgencyReportMonth(monthInput);
+  const portfolio = buildAgencyPortfolio(membership);
+
+  const buildings = portfolio.buildings.map((building) => ({
+    condominium_id: building.id,
+    condominium_name: building.name,
+    metrics: building.metrics,
+    month: {
+      tickets_opened: count(
+        `SELECT COUNT(*) AS count
+         FROM tickets
+         WHERE condominium_id = ?
+           AND substr(created_at, 1, 7) = ?`,
+        building.id,
+        month,
+      ),
+      work_orders_completed: count(
+        `SELECT COUNT(*) AS count
+         FROM ticket_work_orders wo
+         JOIN tickets t ON t.id = wo.ticket_id
+         WHERE t.condominium_id = ?
+           AND wo.completed_at IS NOT NULL
+           AND substr(wo.completed_at, 1, 7) = ?`,
+        building.id,
+        month,
+      ),
+      dues_billed: moneyByCurrency(
+        `SELECT currency, COALESCE(SUM(amount_cents), 0) AS amount_cents
+         FROM invoices
+         WHERE condominium_id = ?
+           AND period = ?
+         GROUP BY currency
+         ORDER BY currency`,
+        building.id,
+        month,
+      ),
+      payments_received: moneyByCurrency(
+        `SELECT COALESCE(i.currency, 'BRL') AS currency, COALESCE(SUM(p.amount_cents), 0) AS amount_cents
+         FROM payments p
+         JOIN invoices i ON i.id = p.invoice_id
+         WHERE p.condominium_id = ?
+           AND substr(p.paid_at, 1, 7) = ?
+         GROUP BY COALESCE(i.currency, 'BRL')
+         ORDER BY COALESCE(i.currency, 'BRL')`,
+        building.id,
+        month,
+      ),
+      expenses_spent: moneyByCurrency(
+        `SELECT currency, COALESCE(SUM(amount_cents), 0) AS amount_cents
+         FROM expenses
+         WHERE condominium_id = ?
+           AND substr(spent_at, 1, 7) = ?
+         GROUP BY currency
+         ORDER BY currency`,
+        building.id,
+        month,
+      ),
+      expense_receipt_coverage_percent: expenseReceiptCoverage(building.id, month),
+    },
+    next_actions: agencyNextActions(building),
+  }));
+
+  const baseReport: Omit<AgencyMonthlyReport, 'markdown'> = {
+    agency_id: portfolio.id,
+    agency_name: portfolio.name,
+    role: portfolio.role,
+    month,
+    generated_at: new Date().toISOString(),
+    totals: portfolio.totals,
+    attention: portfolio.attention,
+    buildings,
+  };
+
+  return {
+    ...baseReport,
+    markdown: buildAgencyMonthlyReportMarkdown(baseReport),
+  };
 }
