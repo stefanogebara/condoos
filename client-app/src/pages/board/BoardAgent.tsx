@@ -310,6 +310,62 @@ export default function BoardAgent() {
       setKillSwitchBusy(false);
     }
   }
+
+  // Observability — dispatch queue snapshot, polled every 12s while
+  // the page is open. 12s lines up with the 5s worker tick + small
+  // network latency; a fresh enqueue shows up "queued: 1" within
+  // one poll and transitions to "claimed" or "done" on the next.
+  // Stops polling when the tab is hidden so we don't burn Fly hours
+  // on a backgrounded tab.
+  const [queueStatus, setQueueStatus] = useState<{
+    counts: { queued: number; claimed: number; done: number; failed: number };
+    oldest_queued_age_seconds: number | null;
+    oldest_claimed_age_seconds: number | null;
+    failed_24h: number;
+    recent_failures: Array<{ id: number; ticket_id: number; finished_at: string; last_error: string | null; attempt_count: number }>;
+    active_workers: string[];
+  } | null>(null);
+  React.useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const tick = async () => {
+      if (cancelled) return;
+      try {
+        const r = await apiGet<typeof queueStatus extends infer T ? Exclude<T, null> : never>('/admin/agent/queue/status');
+        if (!cancelled) setQueueStatus(r as any);
+      } catch { /* transient — try again next tick */ }
+      if (!cancelled && document.visibilityState !== 'hidden') {
+        timer = setTimeout(tick, 12_000);
+      }
+    };
+    const onVis = () => {
+      if (document.visibilityState === 'visible' && !timer) tick();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    tick();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+      document.removeEventListener('visibilitychange', onVis);
+    };
+  }, []);
+  // Health heuristic. Healthy when no failures in 24h AND queue isn't
+  // backed up (no row queued >30s, no row claimed >5min). Surfaces
+  // the worst signal as the banner tone — green/sage on healthy,
+  // amber on lag, red on recent failures.
+  const queueHealth: { tone: 'sage' | 'amber' | 'red'; reason: string | null } = (() => {
+    if (!queueStatus) return { tone: 'sage', reason: null };
+    if (queueStatus.failed_24h > 0) {
+      return { tone: 'red', reason: tr('Falhas recentes — confira os chamados afetados') };
+    }
+    if ((queueStatus.oldest_queued_age_seconds ?? 0) > 30) {
+      return { tone: 'amber', reason: tr('Fila com atraso — worker pode estar travado') };
+    }
+    if ((queueStatus.oldest_claimed_age_seconds ?? 0) > 300) {
+      return { tone: 'amber', reason: tr('Análise em andamento há muito tempo') };
+    }
+    return { tone: 'sage', reason: null };
+  })();
   const [task, setTask] = useState('');
   const [mode, setMode] = useState<Mode>('general');
   const [location, setLocation] = useState('');
@@ -624,6 +680,69 @@ export default function BoardAgent() {
           >
             {autoDispatchEnabled ? tr('Pausar') : tr('Reativar')}
           </Button>
+        </GlassCard>
+      )}
+
+      {/* Observability — dispatch queue snapshot. Auto-refreshes every
+          12s (paused when the tab is hidden). Green/sage when the
+          queue is healthy, amber on lag, red on recent failures. */}
+      {queueStatus && (
+        <GlassCard
+          data-testid="queue-ops-panel"
+          className={`p-4 mb-5 ${
+            queueHealth.tone === 'red' ? 'border-red-300 bg-red-50/60'
+            : queueHealth.tone === 'amber' ? 'border-amber-300 bg-amber-50/60'
+            : ''
+          }`}
+        >
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <div className="flex items-center gap-2.5 text-sm">
+              <span className={`inline-block w-2 h-2 rounded-full ${
+                queueHealth.tone === 'red' ? 'bg-red-500'
+                : queueHealth.tone === 'amber' ? 'bg-amber-500'
+                : 'bg-sage-500'
+              }`} />
+              <div className="font-medium text-dusk-500">{tr('Fila de despachos')}</div>
+            </div>
+            <div className="text-xs text-dusk-300">{queueStatus.active_workers.length} {tr('worker(s) ativo(s)')}</div>
+          </div>
+          <div className="grid grid-cols-4 gap-2 text-center text-xs">
+            <div className="rounded-xl bg-white/60 px-2 py-2" data-testid="queue-ops-queued">
+              <div className="text-lg font-display text-dusk-500">{queueStatus.counts.queued}</div>
+              <div className="text-dusk-300">{tr('Em fila')}</div>
+            </div>
+            <div className="rounded-xl bg-white/60 px-2 py-2" data-testid="queue-ops-claimed">
+              <div className="text-lg font-display text-dusk-500">{queueStatus.counts.claimed}</div>
+              <div className="text-dusk-300">{tr('Em análise')}</div>
+            </div>
+            <div className="rounded-xl bg-white/60 px-2 py-2" data-testid="queue-ops-done">
+              <div className="text-lg font-display text-dusk-500">{queueStatus.counts.done}</div>
+              <div className="text-dusk-300">{tr('Concluídos')}</div>
+            </div>
+            <div className="rounded-xl bg-white/60 px-2 py-2" data-testid="queue-ops-failed">
+              <div className="text-lg font-display text-dusk-500">{queueStatus.failed_24h}</div>
+              <div className="text-dusk-300">{tr('Falhas (24h)')}</div>
+            </div>
+          </div>
+          {queueHealth.reason && (
+            <div className="mt-3 text-xs text-dusk-400">{queueHealth.reason}</div>
+          )}
+          {queueStatus.recent_failures.length > 0 && (
+            <details className="mt-3 text-xs">
+              <summary className="cursor-pointer text-dusk-300 hover:text-dusk-500">
+                {tr('Falhas recentes')} ({queueStatus.recent_failures.length})
+              </summary>
+              <ul className="mt-2 space-y-1">
+                {queueStatus.recent_failures.map((f) => (
+                  <li key={f.id} className="rounded-lg bg-white/60 px-2 py-1.5 flex items-center justify-between gap-2">
+                    <span className="font-mono text-dusk-300">#{f.ticket_id}</span>
+                    <span className="text-dusk-500 truncate flex-1">{f.last_error || tr('sem detalhes')}</span>
+                    <span className="text-dusk-300">{new Date(f.finished_at).toLocaleString(locale)}</span>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
         </GlassCard>
       )}
 

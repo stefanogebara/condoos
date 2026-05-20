@@ -11,6 +11,7 @@ import { audit } from '../lib/audit';
 import { runBackup, getBackupStatus, backupConfigured } from '../lib/backup';
 import { getWhatsAppStatus } from '../lib/whatsapp';
 import { privateCreateBuildingRequired } from '../lib/private-access';
+import { getQueueStatusSnapshot } from '../lib/agent-dispatch-queue';
 
 const router = Router();
 
@@ -147,6 +148,16 @@ router.patch('/agent/kill-switch', requireAuth, requireRole('board_admin'), requ
   });
 
   return ok(res, { auto_dispatch_enabled: !!next });
+});
+
+// Observability — dispatch queue snapshot. Polled by the BoardAgent
+// ops panel every 10-15s to surface queue health (counts, lag,
+// recent failures). Scoped to the caller's condo so an admin sees
+// only their own building's queue.
+router.get('/agent/queue/status', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
+  const condoId = req.user?.condominium_id;
+  if (!condoId) return fail(res, 'no_active_condo', 400);
+  return ok(res, getQueueStatusSnapshot(condoId));
 });
 
 export default router;

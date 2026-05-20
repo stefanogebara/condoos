@@ -16,6 +16,14 @@ on:
           - safe-mobile
           - safe-full
           - integrations
+  # Nightly assurance against the live stack. 06:00 UTC = 03:00 BRT —
+  # off-hours for the Brazilian customer base, well before US morning.
+  # Runs the safe-desktop suite (now includes documents.spec.ts) which
+  # exercises the audit-remediated paths end-to-end. The suite costs
+  # zero LLM credits and cleans up its own fixtures, so 365 nightly
+  # runs leave no accumulation in the demo condo.
+  schedule:
+    - cron: '0 6 * * *'
 
 concurrency:
   group: production-e2e
@@ -50,8 +58,21 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chrome
 
+      # When triggered by schedule, default to safe-desktop. When
+      # triggered manually, honor the user's chosen suite. The step-
+      # level `if:` conditions below match against either
+      # inputs.suite (manual) OR a synthesized 'safe-desktop' value
+      # for scheduled runs (set via env so the if: gates can read it).
+      - name: Resolve scheduled suite
+        if: ${{ github.event_name == 'schedule' }}
+        run: echo "SUITE=safe-desktop" >> $GITHUB_ENV
+
+      - name: Resolve manual suite
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        run: echo "SUITE=${{ inputs.suite }}" >> $GITHUB_ENV
+
       - name: Check VERCEL_AUTOMATION_BYPASS_SECRET
-        if: ${{ inputs.suite != 'api' }}
+        if: ${{ env.SUITE != 'api' }}
         run: |
           if [ -z "$VERCEL_AUTOMATION_BYPASS_SECRET" ]; then
             echo "VERCEL_AUTOMATION_BYPASS_SECRET is required for protected Vercel browser suites."
@@ -77,31 +98,31 @@ jobs:
           exit "$missing"
 
       - name: Run production API regression
-        if: ${{ inputs.suite == 'api' }}
+        if: ${{ env.SUITE == 'api' }}
         run: npm run test:e2e:prod:api
 
       - name: Run production UI walkthrough
-        if: ${{ inputs.suite == 'ui' }}
+        if: ${{ env.SUITE == 'ui' }}
         run: npm run test:e2e:prod:ui
 
       - name: Run production smoke suite
-        if: ${{ inputs.suite == 'smoke' }}
+        if: ${{ env.SUITE == 'smoke' }}
         run: npm run test:e2e:prod:smoke
 
       - name: Run production-safe desktop suite
-        if: ${{ inputs.suite == 'safe-desktop' }}
+        if: ${{ env.SUITE == 'safe-desktop' }}
         run: npm run test:e2e:prod:safe:desktop
 
       - name: Run production-safe mobile suite
-        if: ${{ inputs.suite == 'safe-mobile' }}
+        if: ${{ env.SUITE == 'safe-mobile' }}
         run: npm run test:e2e:prod:safe:mobile
 
       - name: Run production-safe full suite
-        if: ${{ inputs.suite == 'safe-full' }}
+        if: ${{ env.SUITE == 'safe-full' }}
         run: npm run test:e2e:prod:safe
 
       - name: Run live integration suite
-        if: ${{ inputs.suite == 'integrations' }}
+        if: ${{ env.SUITE == 'integrations' }}
         env:
           E2E_EXPECT_GOOGLE: ${{ vars.E2E_EXPECT_GOOGLE }}
           E2E_EXPECT_WHATSAPP: ${{ vars.E2E_EXPECT_WHATSAPP }}

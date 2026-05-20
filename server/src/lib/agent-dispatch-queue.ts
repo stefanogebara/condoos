@@ -188,6 +188,111 @@ export function markDispatchFailed(id: number, error: unknown): number {
   return Number(result.changes);
 }
 
+// Observability snapshot for the ops dashboard. Counts rows by status,
+// surfaces oldest-queued and oldest-claimed lag, returns last few
+// failure messages, and lists distinct worker stamps that have
+// claimed work recently. Scoped to one condo so admins see only
+// their own building's queue.
+//
+// Lag thresholds (callers can interpret):
+//   - oldest_queued_age_seconds > 30s   → worker may be stalled
+//   - oldest_claimed_age_seconds > 300s → run is genuinely slow or
+//                                         the reaper is about to fire
+//   - failed_24h > 0                    → something needs attention
+export interface QueueStatusSnapshot {
+  counts: { queued: number; claimed: number; done: number; failed: number };
+  oldest_queued_age_seconds: number | null;
+  oldest_claimed_age_seconds: number | null;
+  failed_24h: number;
+  recent_failures: Array<{
+    id: number;
+    ticket_id: number;
+    finished_at: string;
+    last_error: string | null;
+    attempt_count: number;
+  }>;
+  active_workers: string[];
+  generated_at: string;
+}
+
+export function getQueueStatusSnapshot(condoId: number): QueueStatusSnapshot {
+  const counts = { queued: 0, claimed: 0, done: 0, failed: 0 };
+  const countRows = db.prepare(
+    `SELECT status, COUNT(*) AS n
+     FROM agent_dispatch_queue
+     WHERE condominium_id = ?
+     GROUP BY status`
+  ).all(condoId) as Array<{ status: DispatchQueueStatus; n: number }>;
+  for (const r of countRows) {
+    if (r.status in counts) (counts as Record<string, number>)[r.status] = Number(r.n);
+  }
+
+  // Null when the bucket is empty so the UI can show "—" instead of
+  // "0s" (which would imply a fresh row just arrived).
+  const oldestQueued = db.prepare(
+    `SELECT (strftime('%s', 'now') - strftime('%s', created_at)) AS age_s
+     FROM agent_dispatch_queue
+     WHERE condominium_id = ? AND status = 'queued'
+     ORDER BY created_at ASC LIMIT 1`
+  ).get(condoId) as { age_s: number | null } | undefined;
+  const oldestClaimed = db.prepare(
+    `SELECT (strftime('%s', 'now') - strftime('%s', claimed_at)) AS age_s
+     FROM agent_dispatch_queue
+     WHERE condominium_id = ? AND status = 'claimed' AND claimed_at IS NOT NULL
+     ORDER BY claimed_at ASC LIMIT 1`
+  ).get(condoId) as { age_s: number | null } | undefined;
+
+  // Failure rate over the last 24h — the actionable signal. Steady-
+  // state should be near zero; a spike means OpenRouter outage,
+  // vendor mis-dispatch, or a code regression.
+  const failed24h = (db.prepare(
+    `SELECT COUNT(*) AS n
+     FROM agent_dispatch_queue
+     WHERE condominium_id = ?
+       AND status = 'failed'
+       AND finished_at >= datetime('now', '-24 hours')`
+  ).get(condoId) as { n: number }).n;
+
+  const recentFailures = db.prepare(
+    `SELECT id, ticket_id, finished_at, last_error, attempt_count
+     FROM agent_dispatch_queue
+     WHERE condominium_id = ?
+       AND status = 'failed'
+       AND finished_at IS NOT NULL
+     ORDER BY finished_at DESC
+     LIMIT 5`
+  ).all(condoId) as Array<{
+    id: number;
+    ticket_id: number;
+    finished_at: string;
+    last_error: string | null;
+    attempt_count: number;
+  }>;
+
+  // Distinct workers that have claimed work in the last hour. With
+  // N=1 machine this is just one stamp; with N>1 it surfaces which
+  // machines are actually pulling work.
+  const activeWorkers = (db.prepare(
+    `SELECT DISTINCT claimed_by
+     FROM agent_dispatch_queue
+     WHERE condominium_id = ?
+       AND claimed_at IS NOT NULL
+       AND claimed_at >= datetime('now', '-1 hour')`
+  ).all(condoId) as Array<{ claimed_by: string | null }>)
+    .map((r) => r.claimed_by)
+    .filter((s): s is string => !!s);
+
+  return {
+    counts,
+    oldest_queued_age_seconds: oldestQueued?.age_s ?? null,
+    oldest_claimed_age_seconds: oldestClaimed?.age_s ?? null,
+    failed_24h: failed24h,
+    recent_failures: recentFailures,
+    active_workers: activeWorkers,
+    generated_at: new Date().toISOString(),
+  };
+}
+
 // Reaper for stale 'claimed' rows. A crash between claim and done/fail
 // leaves the row stuck. Transitions any 'claimed' row older than
 // maxAgeSec to 'failed' with last_error='reaper_timeout'. Caller is

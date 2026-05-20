@@ -1305,6 +1305,88 @@ test('agent-building-memory: loadSimilarTickets ranks by keyword overlap, scopes
   assert.deepEqual(none, { similarResolved: [], openSimilarCount: 0 });
 });
 
+test('agent-dispatch-queue: getQueueStatusSnapshot surfaces counts, lag, failures, workers', async () => {
+  resetDb();
+  const { condoId } = createCondoFixture();
+  const reporterId = createUser('snap-reporter@example.com');
+
+  const { enqueueDispatch, claimNextDispatch, markDispatchDone, markDispatchFailed, getQueueStatusSnapshot } =
+    await import('../src/lib/agent-dispatch-queue');
+
+  // Empty queue — all counts zero, ages null, no failures.
+  let snap = getQueueStatusSnapshot(condoId);
+  assert.deepEqual(snap.counts, { queued: 0, claimed: 0, done: 0, failed: 0 });
+  assert.equal(snap.oldest_queued_age_seconds, null);
+  assert.equal(snap.oldest_claimed_age_seconds, null);
+  assert.equal(snap.failed_24h, 0);
+  assert.deepEqual(snap.recent_failures, []);
+  assert.deepEqual(snap.active_workers, []);
+  assert.match(snap.generated_at, /^\d{4}-/);
+
+  // Seed 5 tickets in our condo so we can enqueue against each.
+  const tIds: number[] = [];
+  for (let i = 0; i < 5; i++) {
+    tIds.push(Number(db.prepare(
+      `INSERT INTO tickets (condominium_id, reporter_id, title, description, category, priority, verification_threshold, remediation_status)
+       VALUES (?, ?, ?, 'desc', 'elevator', 'normal', 1, 'verified')`
+    ).run(condoId, reporterId, `Snap ticket ${i}`).lastInsertRowid));
+  }
+
+  // Target state: 2 queued, 1 claimed, 1 done, 1 failed.
+  //
+  // Order: enqueue a→b→c→d→e (oldest first). Sequence:
+  //   claim → returns a (oldest)  → markDone(a)              ⇒ a done
+  //   claim → returns b           → markFailed(b)            ⇒ b failed
+  //   claim → returns c           → leave c claimed          ⇒ c claimed
+  //   d and e never claimed                                  ⇒ d, e queued
+  const a = enqueueDispatch({ ticketId: tIds[0], condoId });
+  const b = enqueueDispatch({ ticketId: tIds[1], condoId });
+  const c = enqueueDispatch({ ticketId: tIds[2], condoId });
+  enqueueDispatch({ ticketId: tIds[3], condoId });
+  enqueueDispatch({ ticketId: tIds[4], condoId });
+
+  const claimedA = claimNextDispatch();
+  assert.equal(claimedA?.id, a);
+  markDispatchDone(a!);
+
+  const claimedB = claimNextDispatch();
+  assert.equal(claimedB?.id, b);
+  markDispatchFailed(b!, new Error('vendor offline'));
+
+  const claimedC = claimNextDispatch();
+  assert.equal(claimedC?.id, c);
+  // c stays claimed.
+
+  snap = getQueueStatusSnapshot(condoId);
+  assert.deepEqual(snap.counts, { queued: 2, claimed: 1, done: 1, failed: 1 });
+  assert.ok(snap.oldest_queued_age_seconds !== null && snap.oldest_queued_age_seconds >= 0);
+  assert.ok(snap.oldest_claimed_age_seconds !== null && snap.oldest_claimed_age_seconds >= 0);
+  assert.equal(snap.failed_24h, 1);
+  assert.equal(snap.recent_failures.length, 1);
+  assert.equal(snap.recent_failures[0].ticket_id, tIds[1]);
+  assert.match(snap.recent_failures[0].last_error || '', /vendor offline/);
+  assert.ok(snap.active_workers.length >= 1, 'at least the test worker stamp present');
+  assert.match(snap.active_workers[0], /:/); // hostname:pid format
+
+  // Cross-condo isolation — enqueue against a different condo + ticket,
+  // then verify the snapshot for our condo is unchanged.
+  const otherCondoId = Number(db.prepare(
+    `INSERT INTO condominiums (name, address, invite_code) VALUES ('Other Status Condo', '2 Park', 'STATUS2')`
+  ).run().lastInsertRowid);
+  const otherReporterId = createUser('snap-other-reporter@example.com');
+  db.prepare(`UPDATE users SET condominium_id = ? WHERE id = ?`).run(otherCondoId, otherReporterId);
+  const otherTicketId = Number(db.prepare(
+    `INSERT INTO tickets (condominium_id, reporter_id, title, description, category, priority, verification_threshold, remediation_status)
+     VALUES (?, ?, 'Other condo ticket', 'desc', 'elevator', 'normal', 1, 'verified')`
+  ).run(otherCondoId, otherReporterId).lastInsertRowid);
+  enqueueDispatch({ ticketId: otherTicketId, condoId: otherCondoId });
+
+  const stillOurs = getQueueStatusSnapshot(condoId);
+  assert.equal(stillOurs.counts.queued, 2, 'other condo enqueue does not affect this snapshot');
+  const otherSnap = getQueueStatusSnapshot(otherCondoId);
+  assert.equal(otherSnap.counts.queued, 1, 'other condo sees its own enqueue');
+});
+
 test('agent-dispatch-queue: enqueue/claim/done lifecycle, idempotent on double enqueue, reaper revives stuck claims', async () => {
   resetDb();
   const { condoId } = createCondoFixture();
