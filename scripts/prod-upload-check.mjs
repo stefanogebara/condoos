@@ -21,9 +21,21 @@ const apiURL = (argValue('--api-url') || process.env.PROD_API_URL || process.env
   .replace(/\/+$/, '');
 const clientURL = (argValue('--client-url') || process.env.PROD_CLIENT_URL || process.env.E2E_BASE_URL || DEFAULT_CLIENT_URL)
   .replace(/\/+$/, '');
-const email = argValue('--email') || process.env.PROD_UPLOAD_EMAIL || process.env.PROD_ADMIN_EMAIL || DEFAULT_EMAIL;
-const password = argValue('--password') || process.env.PROD_UPLOAD_PASSWORD || process.env.PROD_ADMIN_PASSWORD || DEFAULT_PASSWORD;
+const email = argValue('--email')
+  || process.env.PROD_UPLOAD_EMAIL
+  || process.env.PROD_ADMIN_EMAIL
+  || process.env.E2E_ADMIN_EMAIL
+  || DEFAULT_EMAIL;
+const password = argValue('--password')
+  || process.env.PROD_UPLOAD_PASSWORD
+  || process.env.PROD_ADMIN_PASSWORD
+  || process.env.E2E_ADMIN_PASSWORD
+  || DEFAULT_PASSWORD;
 const requireR2 = hasFlag('--require-r2') || !hasFlag('--allow-local');
+const rateLimitBypassSecret =
+  process.env.E2E_RATE_LIMIT_BYPASS_SECRET
+  || process.env.CONDOOS_RATE_LIMIT_BYPASS_SECRET
+  || process.env.RATE_LIMIT_BYPASS_SECRET;
 
 function apiOrigin() {
   return apiURL.replace(/\/api\/?$/, '');
@@ -74,6 +86,7 @@ async function jsonRequest(path, init = {}) {
       Accept: 'application/json',
       'Content-Type': 'application/json',
       'User-Agent': 'CondoOS-prod-upload-check/1.0',
+      ...(rateLimitBypassSecret ? { 'x-condoos-rate-limit-bypass': rateLimitBypassSecret } : {}),
       ...(init.headers || {}),
     },
   });
@@ -119,6 +132,16 @@ async function main() {
   let token = null;
 
   try {
+    if (email === DEFAULT_EMAIL && password === DEFAULT_PASSWORD) {
+      const config = await jsonRequest('/auth/config');
+      if (config?.demo_enabled === false) {
+        throw new Error(
+          'demo credentials are disabled in production; set PROD_UPLOAD_EMAIL/PROD_UPLOAD_PASSWORD ' +
+          'or E2E_ADMIN_EMAIL/E2E_ADMIN_PASSWORD for a real admin account',
+        );
+      }
+    }
+
     const session = await jsonRequest('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),

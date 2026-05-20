@@ -21,9 +21,11 @@ test('Landing forwards ?code= into the join CTA', async ({ page }) => {
 
 test('Login page shows intent banner when ?intent=create', async ({ page }) => {
   await gotoApp(page, '/login?intent=create');
-  await expect(page.getByText(/Sou síndico|I am the board admin|Soy administrador|Je suis syndic/i)).toBeVisible();
+  await expect(page.getByText(
+    /Sou síndico|I am the board admin|Soy administrador|Je suis syndic|Acesso privado aprovado|Approved private access|Acceso privado aprobado|Accès privé approuvé/i,
+  )).toBeVisible();
   await expect(page.getByRole('heading', {
-    name: /Vamos montar seu prédio|Let.s set up your building|Vamos a configurar tu edificio|Configurons votre immeuble/i,
+    name: /Vamos montar seu prédio|Let.s set up your building|Vamos a configurar tu edificio|Configurons votre immeuble|Ative seu prédio aprovado|Activate your approved building|Activa tu edificio aprobado|Activez votre immeuble approuvé/i,
   })).toBeVisible();
 });
 
