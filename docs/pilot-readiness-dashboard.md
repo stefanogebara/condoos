@@ -15,7 +15,7 @@ This document separates what is real today from what still needs production wiri
 - File upload registry with local/dev storage and Cloudflare R2-compatible presigned upload support for documents, receipts, and ticket evidence.
 - Building-level Brazil/Ecuador market settings: country, currency, timezone, locale, and governance mode. Finance defaults now follow the building currency.
 - Private B2B building activation with setup-code gate when `PRIVATE_CREATE_BUILDING_REQUIRED=1`.
-- Agency portfolio foundation: agency records, agency/building links, agency memberships, scoped staff building assignments, staff email invites with one-time manual link fallback, assigned-building switch into board workflows, `/api/agencies/portfolio`, `/board/portfolio` risk summary, permission review, recent audit preview, agency selector, private setup-code management with activation tracking, staff controls, portfolio CSV export, and scoped operational exports for residents, finance, tickets, work orders, and audit rows.
+- Agency portfolio foundation: agency records, agency/building links, agency memberships, scoped staff building assignments, staff email invites with one-time manual link fallback, assigned-building switch into board workflows, `/api/agencies/portfolio`, `/board/portfolio` risk summary, prioritized attention queue, permission review, recent audit preview, agency selector, private setup-code management with activation tracking, staff controls, portfolio CSV export, and scoped operational exports for residents, finance, tickets, work orders, and audit rows.
 
 ## Demo-Only Or Partially Wired
 
@@ -23,7 +23,7 @@ This document separates what is real today from what still needs production wiri
 - Payments are manual. Live payment providers are deferred.
 - WhatsApp/email/Google/AI depend on environment secrets and must degrade gracefully when missing.
 - Board packet PDF export is not implemented yet; Markdown copy/download/print exists.
-- Management-company portfolio mode is still early. Agency admins can manage private activation codes, invite or scope staff accounts to buildings, see permission review flags, and export key operational CSVs, but deeper page-level access review and polished report packaging still need hardening.
+- Management-company portfolio mode is still early. Agency admins can manage private activation codes, invite or scope staff accounts to buildings, see permission review flags, act on a prioritized portfolio attention queue, and export key operational CSVs, but deeper page-level access review and polished report packaging still need hardening.
 
 ## Env Secrets To Verify Before A Real Demo
 
@@ -46,7 +46,7 @@ This document separates what is real today from what still needs production wiri
 - Full ticket timeline events, SLA escalation rules, and vendor quote comparison.
 - Market settings exist, but the remaining localization hardening is legal/governance wording, date/time formatting sweeps, and production seed-content cleanup per market.
 - Incident mode.
-- Portfolio dashboard is not yet a full agency command center: agency setup-code controls, staff email invites, assigned-building switching, scoped staff controls, permission review, and scoped CSV exports exist, but deeper page-level access review and richer multi-building reporting are still pending.
+- Portfolio dashboard is not yet a full agency command center: agency setup-code controls, staff email invites, assigned-building switching, scoped staff controls, permission review, prioritized attention queue, and scoped CSV exports exist, but deeper page-level access review and richer multi-building reporting are still pending.
 
 ## Next Pilot Upgrade
 

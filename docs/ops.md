@@ -96,6 +96,13 @@ The portfolio page also shows a recent audit preview from
 the CSV exports, so staff see only their allowed buildings plus agency-level
 events.
 
+The portfolio response includes an attention queue derived from the same scoped
+building metrics. `/board/portfolio` prioritizes urgent tickets, vendor SLA
+problems, overdue dues, pending payment proofs, pending residents, and
+proposals without budgets. Each queue item carries the target building and board
+route so agency staff can switch into the exact workflow without hunting through
+menus.
+
 Agency admins can manage staff accounts from `/board/portfolio`: enter the
 staff email, pick an agency role, and assign the buildings they are allowed to
 see. If the user account already exists, the staff membership is attached

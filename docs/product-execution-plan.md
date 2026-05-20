@@ -218,6 +218,15 @@ The moat work started without adding fragile automation:
 - Kept resident privacy boundaries intact: board-only documents and service-contact details stay admin-only.
 - Used the existing data model first; deeper AI answers can sit on top once the search surface is trusted.
 
+## Completed Slice: Agency Attention Queue
+
+The management-company layer now behaves more like a command center:
+
+- Added a prioritized portfolio attention queue from scoped building metrics.
+- Surfaces urgent tickets, vendor SLA problems, overdue dues, pending payment proofs, pending residents, and proposals missing budgets.
+- Lets agency users jump from each alert into the correct building workflow.
+- Keeps non-admin agency staff scoped to assigned buildings while agency admins see the full linked portfolio.
+
 ## Completed Slice: Vendor Intelligence
 
 This slice makes the saved service network feel operational instead of static:

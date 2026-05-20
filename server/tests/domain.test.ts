@@ -282,6 +282,15 @@ test('agency portfolio CSV exports scoped building metrics', () => {
   assert.equal(portfolio.totals.unresolved_tickets, 1);
   assert.equal(portfolio.totals.urgent_tickets, 1);
   assert.equal(portfolio.totals.overdue_dues, 1);
+  assert.deepEqual(
+    portfolio.attention.map((item) => item.kind),
+    ['urgent_tickets', 'overdue_dues', 'pending_residents'],
+  );
+  assert.equal(portfolio.attention[0].severity, 'critical');
+  assert.equal(portfolio.attention[0].route, '/board/tickets');
+  assert.equal(portfolio.attention[0].condominium_id, condoId);
+  assert.equal(portfolio.attention[1].route, '/board/financas');
+  assert.equal(portfolio.attention[2].condominium_name, 'Test Condo');
 
   const csv = agencyPortfolioToCsv(portfolio);
   assert.match(csv, /agency_id,agency_name,building_id,building_name/);

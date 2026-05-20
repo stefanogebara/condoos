@@ -95,6 +95,24 @@ export interface AgencyPermissionReview {
   }>;
 }
 
+export type AgencyPortfolioAttentionKind =
+  | 'urgent_tickets'
+  | 'vendor_sla_problems'
+  | 'overdue_dues'
+  | 'pending_payment_proofs'
+  | 'pending_residents'
+  | 'proposals_missing_budget';
+
+export interface AgencyPortfolioAttentionItem {
+  id: string;
+  kind: AgencyPortfolioAttentionKind;
+  severity: 'critical' | 'warning' | 'info';
+  condominium_id: number;
+  condominium_name: string;
+  count: number;
+  route: string;
+}
+
 export interface AgencyPortfolio {
   id: number;
   name: string;
@@ -102,6 +120,7 @@ export interface AgencyPortfolio {
   role: AgencyRole;
   totals: AgencyBuildingMetrics;
   permission_review: AgencyPermissionReview | null;
+  attention: AgencyPortfolioAttentionItem[];
   buildings: Array<{
     id: number;
     name: string;
@@ -302,6 +321,19 @@ function zeroMetrics(): AgencyBuildingMetrics {
   };
 }
 
+const ATTENTION_CONFIG: Record<AgencyPortfolioAttentionKind, {
+  severity: AgencyPortfolioAttentionItem['severity'];
+  route: string;
+  priority: number;
+}> = {
+  urgent_tickets: { severity: 'critical', route: '/board/tickets', priority: 10 },
+  vendor_sla_problems: { severity: 'critical', route: '/board/tickets', priority: 9 },
+  overdue_dues: { severity: 'warning', route: '/board/financas', priority: 8 },
+  pending_payment_proofs: { severity: 'warning', route: '/board/financas', priority: 7 },
+  pending_residents: { severity: 'info', route: '/board/pending', priority: 6 },
+  proposals_missing_budget: { severity: 'info', route: '/board/proposals', priority: 5 },
+};
+
 function buildingIdsForMembership(membership: AgencyMembership): number[] {
   const rows = db.prepare(
     `SELECT ac.condominium_id
@@ -347,6 +379,47 @@ function buildAgencyPermissionReview(
     failed_invite_emails: invites.filter((invite) => invite.email_status === 'failed').length,
     buildings_without_direct_staff: buildingsWithoutDirectStaff,
   };
+}
+
+function buildAgencyAttentionQueue(
+  buildings: AgencyPortfolio['buildings'],
+): AgencyPortfolioAttentionItem[] {
+  const items: AgencyPortfolioAttentionItem[] = [];
+  const candidates: AgencyPortfolioAttentionKind[] = [
+    'urgent_tickets',
+    'vendor_sla_problems',
+    'overdue_dues',
+    'pending_payment_proofs',
+    'pending_residents',
+    'proposals_missing_budget',
+  ];
+
+  for (const building of buildings) {
+    for (const kind of candidates) {
+      const countValue = Number(building.metrics[kind] || 0);
+      if (countValue <= 0) continue;
+      const config = ATTENTION_CONFIG[kind];
+      items.push({
+        id: `${building.id}:${kind}`,
+        kind,
+        severity: config.severity,
+        condominium_id: building.id,
+        condominium_name: building.name,
+        count: countValue,
+        route: config.route,
+      });
+    }
+  }
+
+  return items
+    .sort((a, b) => {
+      const priorityDiff = ATTENTION_CONFIG[b.kind].priority - ATTENTION_CONFIG[a.kind].priority;
+      if (priorityDiff !== 0) return priorityDiff;
+      const countDiff = b.count - a.count;
+      if (countDiff !== 0) return countDiff;
+      return a.condominium_name.localeCompare(b.condominium_name);
+    })
+    .slice(0, 12);
 }
 
 export function buildAgencyPortfolio(membership: AgencyMembership): AgencyPortfolio {
@@ -465,6 +538,7 @@ export function buildAgencyPortfolio(membership: AgencyMembership): AgencyPortfo
     permission_review: membership.role === 'agency_admin'
       ? buildAgencyPermissionReview(membership.agency_id, buildings)
       : null,
+    attention: buildAgencyAttentionQueue(buildings),
     buildings,
   };
 }

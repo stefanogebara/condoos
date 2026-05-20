@@ -40,6 +40,24 @@ interface AgencyPermissionReview {
   }>;
 }
 
+type AgencyAttentionKind =
+  | 'urgent_tickets'
+  | 'vendor_sla_problems'
+  | 'overdue_dues'
+  | 'pending_payment_proofs'
+  | 'pending_residents'
+  | 'proposals_missing_budget';
+
+interface AgencyAttentionItem {
+  id: string;
+  kind: AgencyAttentionKind;
+  severity: 'critical' | 'warning' | 'info';
+  condominium_id: number;
+  condominium_name: string;
+  count: number;
+  route: string;
+}
+
 interface AgencyPortfolio {
   id: number;
   name: string;
@@ -47,6 +65,7 @@ interface AgencyPortfolio {
   role: string;
   totals: AgencyBuildingMetrics;
   permission_review: AgencyPermissionReview | null;
+  attention: AgencyAttentionItem[];
   buildings: AgencyBuilding[];
 }
 
@@ -203,6 +222,24 @@ function agencyRoleLabel(role: AgencyRole | string) {
     concierge_supervisor: 'Supervisor de portaria',
   };
   return t(labels[role] || role);
+}
+
+function attentionLabel(kind: AgencyAttentionKind) {
+  const labels: Record<AgencyAttentionKind, string> = {
+    urgent_tickets: 'Chamados urgentes',
+    vendor_sla_problems: 'SLA de fornecedor',
+    overdue_dues: 'Cobranças em atraso',
+    pending_payment_proofs: 'Comprovantes pendentes',
+    pending_residents: 'Moradores pendentes',
+    proposals_missing_budget: 'Propostas sem orçamento',
+  };
+  return t(labels[kind]);
+}
+
+function attentionTone(severity: AgencyAttentionItem['severity']) {
+  if (severity === 'critical') return 'peach' as const;
+  if (severity === 'warning') return 'warning' as const;
+  return 'sage' as const;
 }
 
 export default function BoardAgencyPortfolio() {
@@ -457,10 +494,10 @@ export default function BoardAgencyPortfolio() {
     window.setTimeout(() => setCopiedStaffInvite(false), 1600);
   }
 
-  async function switchActiveBuilding(building: AgencyBuilding) {
+  async function switchActiveBuilding(building: AgencyBuilding, route = '/board') {
     if (!primaryAgency) return;
     if (user?.condominium_id === building.id) {
-      window.location.href = '/board';
+      window.location.href = route;
       return;
     }
     setSwitchingBuildingId(building.id);
@@ -469,7 +506,7 @@ export default function BoardAgencyPortfolio() {
         condominium_id: building.id,
       });
       if (res.user) localStorage.setItem('condoos_user', JSON.stringify(res.user));
-      window.location.href = '/board';
+      window.location.href = route;
     } catch {
       setStaffError(t('Não foi possível trocar de prédio.'));
       setSwitchingBuildingId(null);
@@ -495,6 +532,12 @@ export default function BoardAgencyPortfolio() {
 
   function auditEventTarget(event: AgencyAuditEvent) {
     return [event.target_type, event.target_id].filter(Boolean).join(' #');
+  }
+
+  async function openAttentionItem(item: AgencyAttentionItem) {
+    const building = primaryAgency?.buildings.find((row) => row.id === item.condominium_id);
+    if (!building) return;
+    await switchActiveBuilding(building, item.route);
   }
 
   return (
@@ -568,6 +611,51 @@ export default function BoardAgencyPortfolio() {
 
           <div className="grid lg:grid-cols-[1fr,360px] gap-5">
             <div className="space-y-3">
+              <GlassCard className="p-5">
+                <div className="flex items-start justify-between gap-3 flex-wrap mb-4">
+                  <div>
+                    <div className="text-xs uppercase tracking-[0.14em] text-dusk-300">{t('Prioridade do portfólio')}</div>
+                    <h2 className="font-display text-2xl text-dusk-500 mt-1">{t('Atenção agora')}</h2>
+                  </div>
+                  <Badge tone={primaryAgency.attention.length > 0 ? 'warning' : 'sage'}>
+                    {primaryAgency.attention.length > 0
+                      ? `${primaryAgency.attention.length} ${t('ações')}`
+                      : t('Em dia')}
+                  </Badge>
+                </div>
+                {primaryAgency.attention.length === 0 ? (
+                  <div className="rounded-2xl border border-white/70 bg-white/50 px-3 py-4 text-sm text-dusk-300">
+                    {t('Nenhuma ação urgente no portfólio.')}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {primaryAgency.attention.map((item) => (
+                      <div key={item.id} className="flex items-center justify-between gap-3 rounded-2xl border border-white/70 bg-white/60 px-3 py-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Badge tone={attentionTone(item.severity)}>{item.count}</Badge>
+                            <span className="font-medium text-dusk-500">{attentionLabel(item.kind)}</span>
+                          </div>
+                          <div className="text-sm text-dusk-300 truncate mt-1" data-user-content>
+                            {item.condominium_name}
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openAttentionItem(item)}
+                          loading={switchingBuildingId === item.condominium_id}
+                          leftIcon={<Building2 className="w-4 h-4" />}
+                        >
+                          {t('Ver')}
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </GlassCard>
+
               {primaryAgency.buildings.map((building) => (
                 <GlassCard key={building.id} className="p-4">
                   <div className="flex items-start justify-between gap-4 flex-wrap">
