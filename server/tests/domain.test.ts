@@ -47,9 +47,15 @@ import { researchExternalVendors } from '../src/ai/web-research';
 import { getDashboardActions } from '../src/lib/dashboard-actions';
 import { createInAppNotification, markInAppNotificationRead } from '../src/lib/in-app-notifications';
 import { assertFileReadyForUse, canAccessFile, createPendingFile, markFileReady } from '../src/lib/files';
+import { linkCondominiumToAgency, userAgencyMemberships } from '../src/lib/agencies';
+import { checkPrivateSetupCode, consumePrivateSetupCode, hashSetupCode } from '../src/lib/private-access';
 
 function resetDb() {
   const tables = [
+    'agency_memberships',
+    'agency_condominiums',
+    'agencies',
+    'private_setup_codes',
     'ai_usage',
     'agent_dispatch_queue',
     'agent_runs',
@@ -104,6 +110,58 @@ function resetDb() {
   for (const table of tables) db.prepare(`DELETE FROM sqlite_sequence WHERE name=?`).run(table);
   db.pragma('foreign_keys = ON');
 }
+
+test('private setup codes are hashed and consumed only up to their allowance', () => {
+  resetDb();
+  db.prepare(
+    `INSERT INTO private_setup_codes (code_hash, label, agency_name, max_uses)
+     VALUES (?, 'Pilot code', 'Andes Management', 1)`
+  ).run(hashSetupCode('andes-2026'));
+
+  const checked = checkPrivateSetupCode(' ANDES-2026 ', {
+    PRIVATE_CREATE_BUILDING_REQUIRED: '1',
+  } as NodeJS.ProcessEnv);
+  assert.equal(checked.ok, true);
+  if (!checked.ok) return;
+  assert.equal(checked.source, 'db');
+  assert.equal(checked.agencyName, 'Andes Management');
+
+  const consumed = consumePrivateSetupCode(checked);
+  assert.equal(consumed.ok, true);
+  const row = db.prepare(`SELECT used_count FROM private_setup_codes WHERE id = ?`).get(checked.setupCodeId) as any;
+  assert.equal(row.used_count, 1);
+
+  assert.deepEqual(checkPrivateSetupCode('andes-2026', {
+    PRIVATE_CREATE_BUILDING_REQUIRED: '1',
+  } as NodeJS.ProcessEnv), {
+    ok: false,
+    status: 403,
+    error: 'setup_code_exhausted',
+  });
+});
+
+test('agency links sit above existing building-level roles', () => {
+  resetDb();
+  const { condoId } = createCondoFixture();
+  const adminId = createUser('agency-admin@example.com', 'board_admin');
+
+  const agency = linkCondominiumToAgency({
+    agencyName: 'Andes Management',
+    condominiumId: condoId,
+    userId: adminId,
+  });
+  assert.ok(agency);
+  assert.equal(agency?.agencyName, 'Andes Management');
+
+  const memberships = userAgencyMemberships(adminId);
+  assert.equal(memberships.length, 1);
+  assert.equal(memberships[0].role, 'agency_admin');
+
+  const linked = db.prepare(
+    `SELECT COUNT(*) AS count FROM agency_condominiums WHERE agency_id = ? AND condominium_id = ?`
+  ).get(agency!.agencyId, condoId) as any;
+  assert.equal(linked.count, 1);
+});
 
 function createCondoFixture() {
   const condoId = Number(db.prepare(

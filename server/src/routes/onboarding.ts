@@ -14,6 +14,8 @@ import { audit } from '../lib/audit';
 import { normalizeServiceContact, serviceContactSchema } from '../lib/service-contacts';
 import { verifyCreateBuildingCaptcha } from '../lib/captcha';
 import { emailVerificationRequiredForCreateBuilding, isEmailVerified } from '../lib/email-verification';
+import { checkPrivateSetupCode, consumePrivateSetupCode } from '../lib/private-access';
+import { linkCondominiumToAgency } from '../lib/agencies';
 
 const router = Router();
 const lookupRateLimit = createRateLimit({ keyPrefix: 'onboarding_lookup', windowMs: 60_000, max: 60 });
@@ -127,6 +129,7 @@ const createSchema = z.object({
   requireApproval: z.boolean().default(true),
   votingModel: z.enum(['one_per_unit', 'weighted_by_sqft']).default('one_per_unit'),
   captchaToken: z.string().max(2048).optional(),
+  setupCode: z.string().max(80).optional(),
 }).superRefine((body, ctx) => {
   if (!body.floorUnitCounts) return;
   if (body.floorUnitCounts.length !== body.floors) {
@@ -162,7 +165,17 @@ router.post('/create-building', createBuildingRateLimit, requireAuth, asyncHandl
     });
   }
 
+  const setupAccess = checkPrivateSetupCode(body.setupCode);
+  if (!setupAccess.ok) return fail(res, setupAccess.error, setupAccess.status);
+
   const tx = db.transaction(() => {
+    const consumedSetupAccess = consumePrivateSetupCode(setupAccess);
+    if (!consumedSetupAccess.ok) {
+      const err = new Error(consumedSetupAccess.error) as Error & { status?: number };
+      err.status = consumedSetupAccess.status;
+      throw err;
+    }
+
     // 1. Create condo
     const inviteCode = uniqueRandomCode();
     const condoId = Number(
@@ -282,10 +295,23 @@ router.post('/create-building', createBuildingRateLimit, requireAuth, asyncHandl
       }
     }
 
-    return { condoId, buildingId: buildingIds[0], buildingIds, inviteCode };
+    const agency = linkCondominiumToAgency({
+      agencyName: consumedSetupAccess.agencyName,
+      condominiumId: condoId,
+      userId: u.id,
+    });
+
+    return { condoId, buildingId: buildingIds[0], buildingIds, inviteCode, agency };
   });
 
-  const out = tx();
+  let out: ReturnType<typeof tx>;
+  try {
+    out = tx();
+  } catch (err) {
+    const status = (err as Error & { status?: number }).status;
+    if (status && status < 500) return fail(res, (err as Error).message, status);
+    throw err;
+  }
   audit(req, {
     action: 'onboarding.create_building',
     target_type: 'condominium',
@@ -297,6 +323,10 @@ router.post('/create-building', createBuildingRateLimit, requireAuth, asyncHandl
       invite_code: out.inviteCode,
       amenities: body.amenities?.length || (body.seedAmenities ? defaultAmenities.length : 0),
       service_contacts: body.serviceContacts?.length || 0,
+      private_access: setupAccess.source,
+      setup_code_id: setupAccess.source === 'db' ? setupAccess.setupCodeId : undefined,
+      agency_id: out.agency?.agencyId,
+      agency_name: out.agency?.agencyName,
     },
   });
   return ok(res, out);

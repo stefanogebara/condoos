@@ -36,12 +36,30 @@ flyctl secrets set -a condoos-api EMAIL_PROVIDER=resend
 flyctl secrets set -a condoos-api EMAIL_FROM="CondoOS <noreply@your-domain.com>"
 flyctl secrets set -a condoos-api RESEND_API_KEY=...
 flyctl secrets set -a condoos-api EMAIL_VERIFICATION_REQUIRED=1
+flyctl secrets set -a condoos-api PRIVATE_CREATE_BUILDING_REQUIRED=1
 flyctl secrets set -a condoos-api TURNSTILE_SITE_KEY=...
 flyctl secrets set -a condoos-api TURNSTILE_SECRET_KEY=...
 flyctl secrets set -a condoos-api CREATE_BUILDING_CAPTCHA_REQUIRED=1
 flyctl secrets set -a condoos-api TWILIO_ACCOUNT_SID=...
 flyctl secrets set -a condoos-api TWILIO_AUTH_TOKEN=...
 flyctl secrets set -a condoos-api TWILIO_WHATSAPP_FROM=whatsapp:+14155238886
+```
+
+For a temporary bootstrap code during a private pilot, set
+`PRIVATE_SETUP_CODES=CODE1,CODE2`. For real sales tracking, insert hashed rows
+into `private_setup_codes` with a label, optional `agency_name`, `max_uses`,
+and `expires_at`. Codes are SHA-256 hashed with the same normalization used by
+the app; never store the plaintext sales code in production.
+
+Local/SSH helper for issuing one tracked code:
+
+```bash
+DB_PATH=/data/condoos.sqlite npm --prefix server run private:setup-code -- \
+  --code=ANDES-2026 \
+  --agency="Andes Management" \
+  --label="Pilot activation" \
+  --max-uses=1 \
+  --expires-at=2026-06-30T23:59:59Z
 ```
 
 Turnstile setup can be automated once you have a Cloudflare account ID and an

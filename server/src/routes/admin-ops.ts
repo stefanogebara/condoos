@@ -9,6 +9,8 @@ import { ok, fail, asyncHandler } from '../lib/respond';
 import { createRateLimit } from '../lib/rate-limit';
 import { audit } from '../lib/audit';
 import { runBackup, getBackupStatus, backupConfigured } from '../lib/backup';
+import { getWhatsAppStatus } from '../lib/whatsapp';
+import { privateCreateBuildingRequired } from '../lib/private-access';
 
 const router = Router();
 
@@ -24,6 +26,58 @@ const backupRateLimit = createRateLimit({
 
 router.get('/backup/status', requireAuth, requireRole('board_admin'), (_req: AuthedRequest, res) => {
   return ok(res, getBackupStatus());
+});
+
+router.get('/integrations/status', requireAuth, requireRole('board_admin'), (_req: AuthedRequest, res) => {
+  const activeSetupCodes = db.prepare(
+    `SELECT COUNT(*) AS count
+     FROM private_setup_codes
+     WHERE disabled_at IS NULL
+       AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
+       AND used_count < max_uses`
+  ).get() as { count: number };
+  const privateRequired = privateCreateBuildingRequired();
+  const privateEnvCodes = String(process.env.PRIVATE_SETUP_CODES || '').split(',').map((s) => s.trim()).filter(Boolean).length;
+  const r2Configured = !!(
+    process.env.R2_BUCKET
+    && process.env.R2_ENDPOINT
+    && process.env.R2_ACCESS_KEY_ID
+    && process.env.R2_SECRET_ACCESS_KEY
+  );
+  const emailProvider = process.env.EMAIL_PROVIDER || (process.env.RESEND_API_KEY ? 'resend' : 'none');
+  const emailConfigured = emailProvider === 'resend' && !!process.env.RESEND_API_KEY && !!process.env.EMAIL_FROM;
+
+  return ok(res, {
+    private_access: {
+      configured: !privateRequired || privateEnvCodes > 0 || Number(activeSetupCodes.count || 0) > 0,
+      required: privateRequired,
+      active_setup_codes: Number(activeSetupCodes.count || 0),
+      env_setup_codes: privateEnvCodes,
+    },
+    email: {
+      configured: emailConfigured,
+      provider: emailProvider,
+      from_configured: !!process.env.EMAIL_FROM,
+    },
+    google_login: {
+      configured: !!process.env.GOOGLE_CLIENT_ID,
+    },
+    whatsapp: getWhatsAppStatus(),
+    uploads: {
+      configured: r2Configured,
+      driver: r2Configured ? 'r2' : 'local',
+      bucket_configured: !!process.env.R2_BUCKET,
+    },
+    ai: {
+      configured: !!process.env.OPENROUTER_API_KEY,
+      model: process.env.OPENROUTER_MODEL || 'anthropic/claude-3.5-haiku',
+    },
+    backups: getBackupStatus(),
+    observability: {
+      sentry_configured: !!process.env.SENTRY_DSN,
+      posthog_configured: !!(process.env.POSTHOG_KEY || process.env.VITE_POSTHOG_KEY),
+    },
+  });
 });
 
 router.post('/backup/run', requireAuth, requireRole('board_admin'), backupRateLimit, asyncHandler(async (req: AuthedRequest, res) => {

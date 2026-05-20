@@ -13,9 +13,10 @@ Every shipped feature must improve at least one promise:
 
 ## Market Defaults
 
-- First buyer: condo boards.
+- First buyer: condo management agencies and selected private buildings reached through direct sales.
 - First markets: Brazil and Ecuador.
 - First revenue wedge: operations trust.
+- Signup model: private B2B activation for new buildings; residents and guards join through building/admin invites.
 - Payments and AI become stronger once daily workflows are reliable.
 
 ## Execution Order
@@ -57,14 +58,14 @@ Every shipped feature must improve at least one promise:
    - Add Brazil/Ecuador landing copy, pricing, pilot onboarding checklist, 15-minute sales script, and ROI proof.
 
 10. **Management-company expansion**
-   - Add portfolio dashboards, staff permissions, white-label basics, cross-building vendor intelligence, and multi-building monthly reports after single-building workflows are pilot-ready.
+   - Add portfolio dashboards, staff permissions, white-label basics, cross-building vendor intelligence, and multi-building monthly reports on top of the single-building workflows.
 
 ## Current Slice
 
-Week 2 is focused on Phase 2:
+Enterprise-private readiness:
 
-- Add a provider-agnostic `files` registry with soft-delete and visibility metadata.
-- Add upload endpoints for local/dev storage and Cloudflare R2 presigned uploads.
-- Keep external links working while allowing real uploaded documents, receipts, and ticket evidence.
-- Verify resident/admin visibility so board-only files do not leak across roles or condos.
-- Document the R2 env vars needed before production pilots rely on uploads.
+- Keep production quality gates green, especially production-safe i18n sweeps.
+- Gate new building creation behind private setup codes when `PRIVATE_CREATE_BUILDING_REQUIRED=1`.
+- Add agency records and a read-only portfolio route above existing building workflows.
+- Surface production integration readiness from `/board/portfolio`.
+- Keep public login available, but remove the assumption that anyone can freely create a real production building.

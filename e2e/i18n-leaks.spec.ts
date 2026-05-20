@@ -117,6 +117,7 @@ const ES_EXCLUDES = new Set([
   'descripcion', 'descrição',
   'historico', 'histórico',
   'analisis', 'análise',
+  'proxima', 'próxima', 'proximo', 'próximo',
   'proximas', 'próximas', 'proximos', 'próximos',
   'aprovacion', 'aprovación',
   'discusion', 'discussão',

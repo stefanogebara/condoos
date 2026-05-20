@@ -10,6 +10,7 @@ import {
   hashEmailVerificationToken,
 } from '../src/lib/email-verification';
 import { getCaptchaPublicConfig, verifyCreateBuildingCaptcha } from '../src/lib/captcha';
+import { checkPrivateSetupCode, privateCreateBuildingRequired } from '../src/lib/private-access';
 import { RATE_LIMIT_BYPASS_HEADER, createRateLimit, resetRateLimits } from '../src/lib/rate-limit';
 import { demoAuthEnabled, isBlockedDemoCredential } from '../src/lib/demo-auth';
 import { authRateLimitKey } from '../src/routes/auth';
@@ -210,6 +211,32 @@ test('Turnstile config stays optional until keys are installed', async () => {
 
   const skipped = await verifyCreateBuildingCaptcha(undefined, undefined, { NODE_ENV: 'production' } as NodeJS.ProcessEnv);
   assert.deepEqual(skipped, { ok: true, skipped: true });
+});
+
+test('private building creation gate is explicit and accepts sales-issued env codes', () => {
+  assert.equal(privateCreateBuildingRequired({} as NodeJS.ProcessEnv), false);
+  assert.equal(privateCreateBuildingRequired({ NODE_ENV: 'production' } as NodeJS.ProcessEnv), true);
+  assert.equal(privateCreateBuildingRequired({ PRIVATE_CREATE_BUILDING_REQUIRED: '1' } as NodeJS.ProcessEnv), true);
+  assert.equal(privateCreateBuildingRequired({ PRIVATE_CREATE_BUILDING_REQUIRED: '0' } as NodeJS.ProcessEnv), false);
+
+  const requiredEnv = { PRIVATE_CREATE_BUILDING_REQUIRED: '1' } as NodeJS.ProcessEnv;
+  assert.deepEqual(checkPrivateSetupCode('', requiredEnv), {
+    ok: false,
+    status: 403,
+    error: 'setup_code_required',
+  });
+  assert.deepEqual(checkPrivateSetupCode('wrong-code', requiredEnv), {
+    ok: false,
+    status: 403,
+    error: 'invalid_setup_code',
+  });
+
+  const accepted = checkPrivateSetupCode(' agency 2026 ', {
+    PRIVATE_CREATE_BUILDING_REQUIRED: '1',
+    PRIVATE_SETUP_CODES: 'AGENCY2026',
+  } as NodeJS.ProcessEnv);
+  assert.equal(accepted.ok, true);
+  if (accepted.ok) assert.equal(accepted.source, 'env');
 });
 
 test('verifyCreateBuildingCaptcha validates tokens server-side with Cloudflare Siteverify', async () => {

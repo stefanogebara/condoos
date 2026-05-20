@@ -46,6 +46,7 @@ import uploadsRoutes from './routes/uploads';
 import webhooksRoutes from './routes/webhooks';
 import vendorPortalRoutes from './routes/vendor-portal';
 import serviceContactsRoutes from './routes/service-contacts';
+import agenciesRoutes from './routes/agencies';
 import { processWhatsAppOutbox } from './lib/whatsapp';
 import { startScheduledInvoiceGenerator } from './lib/finance';
 
@@ -141,6 +142,9 @@ app.get('/api/health', (_req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/onboarding', onboardingRoutes);
 app.use('/api/me', meRoutes);
+// Agency portfolio sits above a single building. It is authenticated and
+// membership-scoped internally, but does not require a user_unit row.
+app.use('/api/agencies', agenciesRoutes);
 // Inbound webhooks — public endpoints (no requireAuth). Each handler
 // verifies its provider's signature / shared secret before mutating state.
 app.use('/api/webhooks', webhooksRoutes);

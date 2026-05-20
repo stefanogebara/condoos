@@ -46,6 +46,7 @@ interface ServiceContactDraft {
 }
 interface AuthConfig {
   email_verification_required_for_create_building?: boolean;
+  private_create_building_required?: boolean;
   turnstile_site_key?: string | null;
   create_building_captcha_required?: boolean;
 }
@@ -289,6 +290,7 @@ export default function Create() {
   const [verificationSending, setVerificationSending] = useState(false);
   const [captchaToken, setCaptchaToken] = useState('');
   const [captchaResetNonce, setCaptchaResetNonce] = useState(0);
+  const [setupCode, setSetupCode] = useState('');
 
   const [form, setForm] = useState({
     condoName: 'Vila Nova Residences',
@@ -437,10 +439,12 @@ export default function Create() {
     && isHttpsUrlOrBlank(c.contract_url)
   ));
   const emailVerificationRequired = !!authConfig?.email_verification_required_for_create_building;
+  const privateCreateBuildingRequired = !!authConfig?.private_create_building_required;
   const emailVerified = !!user?.email_verified_at;
   const captchaRequired = !!authConfig?.create_building_captcha_required;
   const turnstileSiteKey = authConfig?.turnstile_site_key || null;
   const submitBlocked = !serviceContactsValid
+    || (privateCreateBuildingRequired && !setupCode.trim())
     || (emailVerificationRequired && !emailVerified)
     || (captchaRequired && (!turnstileSiteKey || !captchaToken));
 
@@ -495,6 +499,7 @@ export default function Create() {
         requireApproval: form.requireApproval,
         votingModel: form.votingModel,
         captchaToken: captchaToken || undefined,
+        setupCode: privateCreateBuildingRequired ? setupCode.trim() : undefined,
       };
       const res = await apiPost<{ condoId: number; buildingId: number; inviteCode: string }>(
         '/onboarding/create-building',
@@ -521,6 +526,14 @@ export default function Create() {
         setCaptchaToken('');
         setCaptchaResetNonce((n) => n + 1);
         toast.error(t('A verificação humana falhou. Tente novamente.'));
+      } else if (code === 'setup_code_required') {
+        toast.error(t('Digite o código privado de ativação.'));
+      } else if (code === 'invalid_setup_code') {
+        toast.error(t('Código privado inválido.'));
+      } else if (code === 'setup_code_expired') {
+        toast.error(t('Código privado expirou. Peça um novo convite.'));
+      } else if (code === 'setup_code_exhausted') {
+        toast.error(t('Código privado já foi usado. Peça um novo convite.'));
       } else {
         toast.error(code || 'Failed to create building');
       }
@@ -1072,6 +1085,22 @@ export default function Create() {
                 {!serviceContactsValid && (
                   <div className="mt-4 p-3 rounded-2xl bg-peach-100/70 border border-peach-200 text-xs text-peach-700">
                     Cada contato salvo precisa ter empresa e pelo menos uma forma de contato ou observação. Links devem ser URLs válidas começando com https://.
+                  </div>
+                )}
+
+                {privateCreateBuildingRequired && (
+                  <div className="mt-4 p-4 rounded-2xl bg-dusk-50/70 border border-white/80">
+                    <div className="text-sm font-semibold text-dusk-500">Acesso privado</div>
+                    <p className="text-xs text-dusk-300 mt-1">
+                      CONDOS cria prédios novos apenas para clientes aprovados. Use o código de ativação que a equipe comercial enviou para sua administradora ou conselho.
+                    </p>
+                    <input
+                      className="input mt-3 font-mono tracking-[0.16em] uppercase"
+                      value={setupCode}
+                      onChange={(e) => setSetupCode(e.target.value.toUpperCase())}
+                      maxLength={80}
+                      placeholder="CÓDIGO PRIVADO"
+                    />
                   </div>
                 )}
 

@@ -1,6 +1,6 @@
 import React, { lazy, Suspense, useEffect, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { AlertTriangle, Bot, Home, Inbox, Vote, Calendar, Megaphone, Users, UserCheck, Gavel, Building2, Wallet, Waves, Wrench, ShieldCheck, FileText, BookOpenText, ClipboardList } from 'lucide-react';
+import { AlertTriangle, Bot, Home, Inbox, Vote, Calendar, Megaphone, Users, UserCheck, Gavel, Building2, Wallet, Waves, Wrench, ShieldCheck, FileText, BookOpenText, ClipboardList, Briefcase } from 'lucide-react';
 import Sidebar, { NavItem } from '../../components/Sidebar';
 import WhatsAppHealthPill from '../../components/WhatsAppHealthPill';
 import { apiGet } from '../../lib/api';
@@ -27,6 +27,7 @@ const BoardConciergeStaff = lazy(() => import('./BoardConciergeStaff'));
 const BoardDocuments = lazy(() => import('./BoardDocuments'));
 const BoardMemory = lazy(() => import('./BoardMemory'));
 const BoardReports = lazy(() => import('./BoardReports'));
+const BoardAgencyPortfolio = lazy(() => import('./BoardAgencyPortfolio'));
 
 interface TicketSummary {
   needs_admin: number;
@@ -66,6 +67,7 @@ export default function BoardApp() {
 
   const nav: NavItem[] = [
     { to: '/board',               label: 'Visão geral',   icon: Home },
+    { to: '/board/portfolio',     label: 'Portfólio',     icon: Briefcase },
     { to: '/board/suggestions',   label: 'Sugestões',     icon: Inbox },
     { to: '/board/agent',         label: 'Agente IA',     icon: Bot },
     { to: '/board/memory',        label: 'Memória',       icon: BookOpenText },
@@ -92,6 +94,7 @@ export default function BoardApp() {
         <Suspense fallback={<div className="py-16 text-center text-sm text-dusk-300">{t('Carregando...')}</div>}>
           <Routes>
             <Route index                   element={<BoardOverview />} />
+            <Route path="portfolio"        element={<BoardAgencyPortfolio />} />
             <Route path="suggestions"      element={<Suggestions />} />
             <Route path="agent"            element={<BoardAgent />} />
             <Route path="memory"           element={<BoardMemory />} />

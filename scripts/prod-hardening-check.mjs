@@ -66,6 +66,12 @@ async function main() {
     'Email verification is required before create-building',
     { email_verification_required_for_create_building: config.email_verification_required_for_create_building },
   );
+  add(
+    checks,
+    config.private_create_building_required === true,
+    'Private setup code is required before create-building',
+    { private_create_building_required: config.private_create_building_required },
+  );
 
   const captchaReady = !!config.turnstile_site_key && config.create_building_captcha_required === true;
   if (strictCaptcha) {

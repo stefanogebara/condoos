@@ -6,6 +6,19 @@ CONDOS should reduce calls, WhatsApps, confusion at the front desk, and board dr
 
 Every roadmap decision should answer one buyer question: will this make the building easier to operate and easier to trust?
 
+## Private Enterprise Direction
+
+CONDOS is not public self-serve software right now. Public visitors can see
+marketing/login and residents can join invited buildings, but new production
+buildings should be activated privately through direct sales to management
+agencies or selected condo boards. The production default is:
+
+- no uncontrolled public building creation
+- setup-code or invite activation for new buildings/agencies
+- agency portfolio visibility above building workflows
+- production-safe audit green before a buyer demo
+- demo credentials only on disposable demo deployments
+
 ## Product Truth From The Buyer Review
 
 The current product has a strong condo-specific foundation: visitors, guard flow, amenities, proposals, tickets, transparency, and AI-assisted operations. The gap is not ambition. The gap is trust polish and daily operational sharpness. A buyer should feel that this can run a real building, not only demo one.

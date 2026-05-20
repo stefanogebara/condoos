@@ -12,6 +12,8 @@ This document separates what is real today from what still needs production wiri
 - Manual dues/invoices/payments, expense transparency, vendor scorecards, work orders, audit log, and monthly board packet Markdown export.
 - In-app dashboard actions for resident/admin/guard command centers.
 - File upload registry with local/dev storage and Cloudflare R2-compatible presigned upload support for documents, receipts, and ticket evidence.
+- Private B2B building activation with setup-code gate when `PRIVATE_CREATE_BUILDING_REQUIRED=1`.
+- Agency portfolio foundation: agency records, agency/building links, agency memberships, `/api/agencies/portfolio`, and `/board/portfolio` read-only risk summary.
 
 ## Demo-Only Or Partially Wired
 
@@ -19,13 +21,14 @@ This document separates what is real today from what still needs production wiri
 - Payments are manual. Live payment providers are deferred.
 - WhatsApp/email/Google/AI depend on environment secrets and must degrade gracefully when missing.
 - Board packet PDF export is not implemented yet; Markdown copy/download/print exists.
-- Management-company portfolio mode is planned, not ready.
+- Management-company portfolio mode is read-only today. Building switching, staff assignment UI, and cross-building exports still need hardening.
 
 ## Env Secrets To Verify Before A Real Demo
 
 - `GOOGLE_CLIENT_ID` and optional `VITE_GOOGLE_CLIENT_ID`
 - `RESEND_API_KEY`, `EMAIL_PROVIDER`, `EMAIL_FROM`, `APP_ORIGIN`
 - `EMAIL_VERIFICATION_REQUIRED`, `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`, `CREATE_BUILDING_CAPTCHA_REQUIRED`
+- `PRIVATE_CREATE_BUILDING_REQUIRED` and either DB-backed `private_setup_codes` or temporary `PRIVATE_SETUP_CODES`
 - `WHATSAPP_PROVIDER` plus Twilio or WAHA credentials
 - `OPENROUTER_API_KEY`
 - `SENTRY_DSN`
@@ -36,11 +39,13 @@ This document separates what is real today from what still needs production wiri
 ## Not Production-Ready Yet
 
 - Production R2 bucket/CORS/secrets must pass `npm run audit:prod:uploads` before a real building uses uploads.
+- Turnstile keys are not installed in the current demo deployment, so create-building captcha is not active yet. `npm run audit:prod:hardening` should fail until those keys are set.
+- If `PRIVATE_CREATE_BUILDING_REQUIRED` is not set in production, random signed-in users can still attempt create-building. Private sales deployments should fail closed with setup codes.
 - Resident payment-proof upload/approval.
 - Full ticket timeline events and vendor quote comparison.
 - Building-level Brazil/Ecuador country, currency, timezone, locale, and governance mode.
 - Incident mode.
-- Portfolio dashboard for management companies.
+- Portfolio dashboard is not yet a full agency command center: no building switcher, no agency staff invite UI, and no CSV exports yet.
 
 ## Next Pilot Upgrade
 

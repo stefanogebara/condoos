@@ -17,15 +17,22 @@ interface Membership {
   condo_name: string;
   condo_address: string;
 }
+interface AuthConfig {
+  private_create_building_required?: boolean;
+}
 
 export default function Onboarding() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [memberships, setMemberships] = useState<Membership[]>([]);
+  const [privateCreateBuildingRequired, setPrivateCreateBuildingRequired] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     track('onboarding_view');
+    apiGet<AuthConfig>('/auth/config')
+      .then((cfg) => setPrivateCreateBuildingRequired(!!cfg.private_create_building_required))
+      .catch(() => {});
     apiGet<Membership[]>('/onboarding/me')
       .then((rows) => {
         setMemberships(rows);
@@ -60,7 +67,9 @@ export default function Onboarding() {
             </h1>
             <p className="mt-4 text-dusk-300 text-lg max-w-xl mx-auto">
               Se seu prédio já está no CondoOS, entre com o código que o síndico mandou.
-              Se não, monte um novo — você é o primeiro síndico.
+              {privateCreateBuildingRequired
+                ? ' Novos prédios são ativados pela administradora ou equipe CONDOS com código privado.'
+                : ' Se não, monte um novo — você é o primeiro síndico.'}
             </p>
           </div>
 
@@ -98,10 +107,12 @@ export default function Onboarding() {
                 </div>
                 <h2 className="font-display text-2xl text-dusk-500 tracking-tight">Montar um novo prédio</h2>
                 <p className="text-sm text-dusk-300 mt-2 leading-relaxed">
-                  Meu condomínio ainda não está no sistema. Me guie pelo cadastro: nome, unidades e código de convite.
+                  {privateCreateBuildingRequired
+                    ? 'Criação privada para administradoras e prédios aprovados. Tenha em mãos o código de ativação antes de começar.'
+                    : 'Meu condomínio ainda não está no sistema. Me guie pelo cadastro: nome, unidades e código de convite.'}
                 </p>
                 <div className="mt-5 inline-flex items-center gap-1 text-sm font-semibold text-dusk-500">
-                  Começar o cadastro <ArrowRight className="w-4 h-4" />
+                  {privateCreateBuildingRequired ? 'Ativar com código privado' : 'Começar o cadastro'} <ArrowRight className="w-4 h-4" />
                 </div>
               </GlassCard>
             </Link>

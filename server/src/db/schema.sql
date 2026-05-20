@@ -43,6 +43,62 @@ CREATE TABLE IF NOT EXISTS email_verification_tokens (
 CREATE INDEX IF NOT EXISTS idx_email_verification_tokens_user
   ON email_verification_tokens(user_id, used_at, expires_at);
 
+-- Private B2B activation. Production building creation is not meant to be
+-- public self-serve; sales/ops can issue setup codes to approved agencies or
+-- selected buildings, while residents/guards still join through building codes.
+CREATE TABLE IF NOT EXISTS private_setup_codes (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  code_hash      TEXT NOT NULL UNIQUE,
+  label          TEXT,
+  agency_name    TEXT,
+  max_uses       INTEGER NOT NULL DEFAULT 1 CHECK(max_uses >= 1),
+  used_count     INTEGER NOT NULL DEFAULT 0 CHECK(used_count >= 0),
+  expires_at     TEXT,
+  disabled_at    TEXT,
+  created_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  last_used_at   TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_private_setup_codes_active
+  ON private_setup_codes(disabled_at, expires_at, used_count);
+
+-- Management-agency foundation. Users keep their building-level role in
+-- users.role; agency access lives in memberships so portfolio mode can sit
+-- above existing single-building workflows without breaking them.
+CREATE TABLE IF NOT EXISTS agencies (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  name        TEXT NOT NULL,
+  slug        TEXT NOT NULL UNIQUE,
+  created_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS agency_memberships (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  agency_id   INTEGER NOT NULL REFERENCES agencies(id) ON DELETE CASCADE,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  role        TEXT NOT NULL CHECK(role IN (
+    'agency_admin','building_admin','finance_manager',
+    'maintenance_manager','concierge_supervisor'
+  )),
+  created_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(agency_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_agency_memberships_user
+  ON agency_memberships(user_id, agency_id);
+
+CREATE TABLE IF NOT EXISTS agency_condominiums (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  agency_id       INTEGER NOT NULL REFERENCES agencies(id) ON DELETE CASCADE,
+  condominium_id  INTEGER NOT NULL REFERENCES condominiums(id) ON DELETE CASCADE,
+  created_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(agency_id, condominium_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_agency_condominiums_condo
+  ON agency_condominiums(condominium_id, agency_id);
+
 -- Packages waiting at front desk
 CREATE TABLE IF NOT EXISTS packages (
   id               INTEGER PRIMARY KEY AUTOINCREMENT,

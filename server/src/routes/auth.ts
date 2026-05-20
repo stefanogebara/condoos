@@ -16,6 +16,7 @@ import {
   emailVerificationRequiredForCreateBuilding,
   issueAndSendEmailVerification,
 } from '../lib/email-verification';
+import { privateCreateBuildingRequired } from '../lib/private-access';
 
 const router = Router();
 const AUTH_RATE_LIMIT_WINDOW_MS = 15 * 60_000;
@@ -236,6 +237,7 @@ router.get('/config', (_req, res) => {
     google_enabled: !!process.env.GOOGLE_CLIENT_ID,
     demo_enabled: demoAuthEnabled(),
     email_verification_required_for_create_building: emailVerificationRequiredForCreateBuilding(null),
+    private_create_building_required: privateCreateBuildingRequired(),
     ...getCaptchaPublicConfig(),
   });
 });
