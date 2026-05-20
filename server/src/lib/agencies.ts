@@ -98,6 +98,7 @@ export interface AgencyBuildingMetrics {
   pending_residents: number;
   unresolved_tickets: number;
   urgent_tickets: number;
+  recurring_problem_clusters: number;
   overdue_dues: number;
   pending_payment_proofs: number;
   vendor_sla_problems: number;
@@ -121,6 +122,7 @@ export interface AgencyPermissionReview {
 
 export type AgencyPortfolioAttentionKind =
   | 'urgent_tickets'
+  | 'recurring_problem_clusters'
   | 'vendor_sla_problems'
   | 'overdue_dues'
   | 'pending_payment_proofs'
@@ -446,6 +448,7 @@ function zeroMetrics(): AgencyBuildingMetrics {
     pending_residents: 0,
     unresolved_tickets: 0,
     urgent_tickets: 0,
+    recurring_problem_clusters: 0,
     overdue_dues: 0,
     pending_payment_proofs: 0,
     vendor_sla_problems: 0,
@@ -461,7 +464,8 @@ const ATTENTION_CONFIG: Record<AgencyPortfolioAttentionKind, {
 }> = {
   urgent_tickets: { severity: 'critical', route: '/board/tickets', priority: 10 },
   vendor_sla_problems: { severity: 'critical', route: '/board/tickets', priority: 9 },
-  overdue_dues: { severity: 'warning', route: '/board/financas', priority: 8 },
+  recurring_problem_clusters: { severity: 'warning', route: '/board/tickets', priority: 8 },
+  overdue_dues: { severity: 'warning', route: '/board/financas', priority: 7 },
   pending_payment_proofs: { severity: 'warning', route: '/board/financas', priority: 7 },
   pending_residents: { severity: 'info', route: '/board/pending', priority: 6 },
   proposals_missing_budget: { severity: 'info', route: '/board/proposals', priority: 5 },
@@ -520,6 +524,7 @@ function buildAgencyAttentionQueue(
   const items: AgencyPortfolioAttentionItem[] = [];
   const candidates: AgencyPortfolioAttentionKind[] = [
     'urgent_tickets',
+    'recurring_problem_clusters',
     'vendor_sla_problems',
     'overdue_dues',
     'pending_payment_proofs',
@@ -596,6 +601,20 @@ export function buildAgencyPortfolio(membership: AgencyMembership): AgencyPortfo
          AND priority IN ('high','urgent')`,
       condo.id,
     );
+    const recurringProblemClusters = count(
+      `SELECT COUNT(*) AS count
+       FROM (
+         SELECT LOWER(TRIM(COALESCE(NULLIF(category, ''), 'uncategorized'))) AS category_key,
+                COUNT(*) AS ticket_count
+         FROM tickets
+         WHERE condominium_id = ?
+           AND status <> 'closed'
+           AND created_at >= datetime('now', '-180 day')
+         GROUP BY category_key
+         HAVING COUNT(*) >= 3
+       ) recurring`,
+      condo.id,
+    );
     const overdueDues = count(
       `SELECT COUNT(*) AS count
        FROM invoices
@@ -646,6 +665,7 @@ export function buildAgencyPortfolio(membership: AgencyMembership): AgencyPortfo
         pending_residents: pendingResidents,
         unresolved_tickets: openTickets,
         urgent_tickets: urgentTickets,
+        recurring_problem_clusters: recurringProblemClusters,
         overdue_dues: overdueDues,
         pending_payment_proofs: pendingPaymentProofs,
         vendor_sla_problems: vendorSlaProblems,
@@ -1351,6 +1371,7 @@ export function agencyPortfolioToCsv(portfolio: AgencyPortfolio): string {
     'pending_residents',
     'unresolved_tickets',
     'urgent_tickets',
+    'recurring_problem_clusters',
     'overdue_dues',
     'pending_payment_proofs',
     'vendor_sla_problems',
@@ -1424,6 +1445,7 @@ function agencyNextActions(building: AgencyPortfolio['buildings'][number]): stri
   const actions: string[] = [];
   if (building.metrics.urgent_tickets > 0) actions.push(`Review ${building.metrics.urgent_tickets} urgent ticket(s).`);
   if (building.metrics.vendor_sla_problems > 0) actions.push(`Escalate ${building.metrics.vendor_sla_problems} vendor SLA problem(s).`);
+  if (building.metrics.recurring_problem_clusters > 0) actions.push(`Investigate ${building.metrics.recurring_problem_clusters} recurring problem cluster(s).`);
   if (building.metrics.overdue_dues > 0) actions.push(`Follow up on ${building.metrics.overdue_dues} overdue due(s).`);
   if (building.metrics.pending_payment_proofs > 0) actions.push(`Review ${building.metrics.pending_payment_proofs} payment proof(s).`);
   if (building.metrics.pending_residents > 0) actions.push(`Approve or reject ${building.metrics.pending_residents} pending resident request(s).`);
@@ -1456,6 +1478,7 @@ function buildAgencyMonthlyReportMarkdown(report: Omit<AgencyMonthlyReport, 'mar
     `- Pending residents: ${report.totals.pending_residents}`,
     `- Open tickets: ${report.totals.unresolved_tickets}`,
     `- Urgent tickets: ${report.totals.urgent_tickets}`,
+    `- Recurring problem clusters: ${report.totals.recurring_problem_clusters}`,
     `- Overdue dues: ${report.totals.overdue_dues}`,
     `- Pending payment proofs: ${report.totals.pending_payment_proofs}`,
     `- Vendor SLA problems: ${report.totals.vendor_sla_problems}`,
@@ -1475,7 +1498,7 @@ function buildAgencyMonthlyReportMarkdown(report: Omit<AgencyMonthlyReport, 'mar
       `### ${markdownText(building.condominium_name)}`,
       `- Month activity: ${building.month.tickets_opened} ticket(s) opened, ${building.month.work_orders_completed} work order(s) completed.`,
       `- Finance: billed ${building.month.dues_billed}; received ${building.month.payments_received}; expenses ${building.month.expenses_spent}; receipt coverage ${building.month.expense_receipt_coverage_percent}%.`,
-      `- Current risk: ${building.metrics.urgent_tickets} urgent ticket(s), ${building.metrics.vendor_sla_problems} vendor SLA problem(s), ${building.metrics.overdue_dues} overdue due(s).`,
+      `- Current risk: ${building.metrics.urgent_tickets} urgent ticket(s), ${building.metrics.recurring_problem_clusters} recurring problem cluster(s), ${building.metrics.vendor_sla_problems} vendor SLA problem(s), ${building.metrics.overdue_dues} overdue due(s).`,
       '- Next actions:',
       ...building.next_actions.map((action) => `  - ${action}`),
     );

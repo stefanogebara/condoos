@@ -12,6 +12,7 @@ interface AgencyBuildingMetrics {
   pending_residents: number;
   unresolved_tickets: number;
   urgent_tickets: number;
+  recurring_problem_clusters: number;
   overdue_dues: number;
   pending_payment_proofs: number;
   vendor_sla_problems: number;
@@ -43,6 +44,7 @@ interface AgencyPermissionReview {
 
 type AgencyAttentionKind =
   | 'urgent_tickets'
+  | 'recurring_problem_clusters'
   | 'vendor_sla_problems'
   | 'overdue_dues'
   | 'pending_payment_proofs'
@@ -240,6 +242,7 @@ function agencyRoleLabel(role: AgencyRole | string) {
 function attentionLabel(kind: AgencyAttentionKind) {
   const labels: Record<AgencyAttentionKind, string> = {
     urgent_tickets: 'Chamados urgentes',
+    recurring_problem_clusters: 'Problemas recorrentes',
     vendor_sla_problems: 'SLA de fornecedor',
     overdue_dues: 'Cobranças em atraso',
     pending_payment_proofs: 'Comprovantes pendentes',
@@ -387,6 +390,7 @@ export default function BoardAgencyPortfolio() {
     pending_residents: 0,
     unresolved_tickets: 0,
     urgent_tickets: 0,
+    recurring_problem_clusters: 0,
     overdue_dues: 0,
     pending_payment_proofs: 0,
     vendor_sla_problems: 0,
@@ -716,6 +720,7 @@ export default function BoardAgencyPortfolio() {
             <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-5">
               <Metric icon={Users} label={t('Pendentes')} value={totals.pending_residents} />
               <Metric icon={AlertTriangle} label={t('Chamados abertos')} value={totals.unresolved_tickets} urgent />
+              <Metric icon={RefreshCw} label={t('Recorrentes')} value={totals.recurring_problem_clusters} urgent />
               <Metric icon={Wallet} label={t('Cobranças em atraso')} value={totals.overdue_dues} urgent />
               <Metric icon={Wrench} label={t('SLA fornecedor')} value={totals.vendor_sla_problems} urgent />
               <Metric icon={ShieldCheck} label={t('Urgentes')} value={totals.urgent_tickets} urgent />
@@ -795,6 +800,7 @@ export default function BoardAgencyPortfolio() {
                   </div>
                   <div className="grid sm:grid-cols-4 gap-2 mt-4">
                     <Metric icon={AlertTriangle} label={t('Chamados')} value={building.metrics.unresolved_tickets} urgent />
+                    <Metric icon={RefreshCw} label={t('Recorrentes')} value={building.metrics.recurring_problem_clusters} urgent />
                     <Metric icon={Wallet} label={t('Atrasos')} value={building.metrics.overdue_dues} urgent />
                     <Metric icon={Users} label={t('Pendentes')} value={building.metrics.pending_residents} />
                     <Metric icon={Wrench} label={t('SLA')} value={building.metrics.vendor_sla_problems} urgent />

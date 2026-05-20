@@ -274,6 +274,14 @@ test('agency portfolio CSV exports scoped building metrics', () => {
      VALUES (?, ?, 'Elevator noise', 'Noise on floor 4', 'maintenance', 'urgent', 'open')`
   ).run(condoId, residentId).lastInsertRowid);
   db.prepare(
+    `INSERT INTO tickets (condominium_id, reporter_id, title, description, category, priority, status)
+     VALUES (?, ?, 'Elevator vibration', 'Second elevator complaint', 'maintenance', 'normal', 'open')`
+  ).run(condoId, residentId);
+  db.prepare(
+    `INSERT INTO tickets (condominium_id, reporter_id, title, description, category, priority, status)
+     VALUES (?, ?, 'Elevator smell', 'Third elevator complaint', 'maintenance', 'normal', 'resolved')`
+  ).run(condoId, residentId);
+  db.prepare(
     `INSERT INTO ticket_work_orders (ticket_id, title, status, completed_at)
      VALUES (?, 'Elevator inspection', 'completed', '2026-05-12T10:00:00.000Z')`
   ).run(ticketId);
@@ -294,18 +302,20 @@ test('agency portfolio CSV exports scoped building metrics', () => {
   const portfolio = buildAgencyPortfolio(membership);
   assert.deepEqual(portfolio.capabilities, ['building_admin', 'finance', 'maintenance', 'concierge', 'documents', 'reports']);
   assert.equal(portfolio.totals.pending_residents, 1);
-  assert.equal(portfolio.totals.unresolved_tickets, 1);
+  assert.equal(portfolio.totals.unresolved_tickets, 2);
   assert.equal(portfolio.totals.urgent_tickets, 1);
   assert.equal(portfolio.totals.overdue_dues, 1);
+  assert.equal(portfolio.totals.recurring_problem_clusters, 1);
   assert.deepEqual(
     portfolio.attention.map((item) => item.kind),
-    ['urgent_tickets', 'overdue_dues', 'pending_residents'],
+    ['urgent_tickets', 'recurring_problem_clusters', 'overdue_dues', 'pending_residents'],
   );
   assert.equal(portfolio.attention[0].severity, 'critical');
   assert.equal(portfolio.attention[0].route, '/board/tickets');
   assert.equal(portfolio.attention[0].condominium_id, condoId);
-  assert.equal(portfolio.attention[1].route, '/board/financas');
-  assert.equal(portfolio.attention[2].condominium_name, 'Test Condo');
+  assert.equal(portfolio.attention[1].route, '/board/tickets');
+  assert.equal(portfolio.attention[2].route, '/board/financas');
+  assert.equal(portfolio.attention[3].condominium_name, 'Test Condo');
 
   const report = buildAgencyMonthlyReport(membership, '2026-05');
   assert.equal(report.month, '2026-05');
@@ -318,12 +328,14 @@ test('agency portfolio CSV exports scoped building metrics', () => {
   assert.match(report.markdown, /CONDOS agency report - Quito Operations - 2026-05/);
   assert.match(report.markdown, /Test Condo/);
   assert.match(report.markdown, /urgent ticket/);
+  assert.match(report.markdown, /recurring problem cluster/);
 
   const csv = agencyPortfolioToCsv(portfolio);
   assert.match(csv, /agency_id,agency_name,building_id,building_name/);
   assert.match(csv, /Quito Operations/);
   assert.match(csv, /Test Condo/);
-  assert.match(csv, /,1,1,1,1,/);
+  assert.match(csv, /recurring_problem_clusters/);
+  assert.match(csv, /,1,2,1,1,1,/);
 });
 
 test('agency staff assignments scope portfolio building access', () => {

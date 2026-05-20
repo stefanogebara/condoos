@@ -284,6 +284,15 @@ This slice makes maintenance quote comparison operational instead of read-only:
 - Added quote decision buttons in the admin ticket view: select, shortlist, and reject.
 - Kept quote details and decision history hidden from residents while preserving condo-scoped tests.
 
+## Completed Slice: Recurring Maintenance Risk
+
+This slice makes repeated maintenance pain visible at the agency level:
+
+- Detects recurring problem clusters when a building has three or more non-closed tickets in the same category within the last 180 days.
+- Surfaces recurring maintenance clusters in `/api/agencies/portfolio`, `/board/portfolio`, the prioritized agency attention queue, portfolio CSV exports, and monthly agency Markdown reports.
+- Adds next-action guidance so agency managers know which buildings need pattern investigation, not only one-off ticket response.
+- Keeps the signal scoped by condominium and covered by the existing agency portfolio domain test.
+
 ## Completed Slice: Vendor Intelligence
 
 This slice makes the saved service network feel operational instead of static:
@@ -374,7 +383,7 @@ This slice makes portfolio access safer before private pilots:
 
 The next implementation slice should keep building on the private-enterprise plan:
 
-- Package the now-real maintenance lifecycle into stronger agency reporting: recurring problem detection, vendor follow-up health, and multi-building maintenance summaries.
+- Package the now-real maintenance lifecycle into stronger agency reporting: vendor follow-up health and richer multi-building maintenance summaries.
 - Expand portfolio reporting into a true agency command center.
 - Add polished report packaging and stronger multi-building agency priorities.
 - Keep production-safe i18n, build, server tests, and pilot smoke checks green before each push.
