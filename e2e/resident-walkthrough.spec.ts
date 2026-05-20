@@ -1,6 +1,7 @@
 // Comprehensive resident click-through. Mirrors admin-walkthrough.spec but
 // for /app/* routes. Each test is non-destructive on prod.
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
+import { credentialsFor } from './support/credentials';
 
 const apiURL = process.env.E2E_API_URL
   || (process.env.E2E_BASE_URL ? `${process.env.E2E_BASE_URL.replace(/\/$/, '')}/api` : 'http://127.0.0.1:4316/api');
@@ -21,7 +22,8 @@ async function loginApi(request: APIRequestContext, email: string, password: str
 }
 
 async function residentLogin(page: Page, request: APIRequestContext) {
-  const s = await loginApi(request, 'resident@condoos.dev', 'resident123');
+  const creds = credentialsFor('resident');
+  const s = await loginApi(request, creds.email, creds.password);
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await page.evaluate(({ token, user }) => {
     localStorage.setItem('condoos_token', token);
@@ -129,8 +131,10 @@ test('resident: amenities page lists bookable areas', async ({ page, request }) 
 });
 
 test('resident: amenities page can create a reservation from an amenity card', async ({ page, request }) => {
-  const admin = await loginApi(request, 'admin@condoos.dev', 'admin123');
-  const resident = await loginApi(request, 'resident@condoos.dev', 'resident123');
+  const adminCreds = credentialsFor('admin');
+  const residentCreds = credentialsFor('resident');
+  const admin = await loginApi(request, adminCreds.email, adminCreds.password);
+  const resident = await loginApi(request, residentCreds.email, residentCreds.password);
   const name = `E2E Booking Court ${Date.now()}`;
   let amenityId: number | undefined;
   let reservationId: number | undefined;

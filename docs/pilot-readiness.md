@@ -44,6 +44,10 @@ npm run test:e2e:prod:safe:desktop
 ```
 
 Use `npm run test:e2e:prod:safe` when mobile production coverage is needed too. Do not run the full mutating E2E suite against production unless the database is disposable or a cleanup plan exists.
+Set `E2E_ADMIN_EMAIL`, `E2E_ADMIN_PASSWORD`, `E2E_RESIDENT_EMAIL`,
+`E2E_RESIDENT_PASSWORD`, `E2E_CONCIERGE_EMAIL`, and
+`E2E_CONCIERGE_PASSWORD` to private pilot accounts first; real production should
+not depend on seeded demo credentials.
 For a real non-demo production launch, run `npm run audit:prod:hardening`
 instead; it must pass with email verification, Turnstile keys, and the client
 CSP allowing Turnstile script, frame, and connection origins.
@@ -51,5 +55,5 @@ CSP allowing Turnstile script, frame, and connection origins.
 ## Current Watch Items
 
 - The main app bundle is currently above Vite's default 500 kB warning threshold. This is not blocking, but code-splitting should be a polish task before heavier pilots.
-- Demo credentials must stay disabled in real production unless `DEMO_AUTH_ENABLED` is intentionally set for a disposable demo environment.
+- Demo credentials must stay disabled in real production unless both `DEMO_AUTH_ENABLED` and `ALLOW_DEMO_AUTH_IN_PRODUCTION` are intentionally set for a disposable demo environment.
 - Live email, WhatsApp, Google, PostHog, and LLM behavior depends on configured provider secrets. Local tests cover graceful fallbacks, but a real pilot should verify the exact deployment environment.

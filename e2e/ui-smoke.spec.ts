@@ -1,6 +1,7 @@
 // Full UI smoke — click through every board + resident page and verify each
 // renders its main heading and role-appropriate navigation.
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
+import { credentialsFor } from './support/credentials';
 import { gotoApp } from './support/navigation';
 
 const apiURL = process.env.E2E_API_URL
@@ -20,10 +21,8 @@ async function loginApi(request: APIRequestContext, email: string, password: str
 }
 
 async function browserLogin(page: Page, request: APIRequestContext, kind: 'admin' | 'resident') {
-  const creds = kind === 'admin'
-    ? ['admin@condoos.dev', 'admin123']
-    : ['resident@condoos.dev', 'resident123'];
-  const s = await loginApi(request, creds[0], creds[1]);
+  const creds = credentialsFor(kind);
+  const s = await loginApi(request, creds.email, creds.password);
   await gotoApp(page, '/');
   await page.evaluate(({ token, user }) => {
     localStorage.setItem('condoos_token', token);

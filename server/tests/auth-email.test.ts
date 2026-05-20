@@ -237,7 +237,9 @@ test('Turnstile config stays optional until keys are installed', async () => {
 });
 
 test('private building creation gate is explicit and accepts sales-issued env codes', () => {
-  assert.equal(privateCreateBuildingRequired({} as NodeJS.ProcessEnv), false);
+  assert.equal(privateCreateBuildingRequired({} as NodeJS.ProcessEnv), true);
+  assert.equal(privateCreateBuildingRequired({ NODE_ENV: 'development' } as NodeJS.ProcessEnv), false);
+  assert.equal(privateCreateBuildingRequired({ NODE_ENV: 'test' } as NodeJS.ProcessEnv), false);
   assert.equal(privateCreateBuildingRequired({ NODE_ENV: 'production' } as NodeJS.ProcessEnv), true);
   assert.equal(privateCreateBuildingRequired({ PRIVATE_CREATE_BUILDING_REQUIRED: '1' } as NodeJS.ProcessEnv), true);
   assert.equal(privateCreateBuildingRequired({ PRIVATE_CREATE_BUILDING_REQUIRED: '0' } as NodeJS.ProcessEnv), false);
@@ -405,13 +407,20 @@ test('createRateLimit allows secret-gated automation bypass', () => {
 test('demo auth blocks every seeded demo credential in production unless explicitly enabled', () => {
   const productionEnv = { NODE_ENV: 'production' } as NodeJS.ProcessEnv;
   const enabledEnv = { NODE_ENV: 'production', DEMO_AUTH_ENABLED: '1' } as NodeJS.ProcessEnv;
+  const explicitlyAllowedEnv = {
+    NODE_ENV: 'production',
+    DEMO_AUTH_ENABLED: '1',
+    ALLOW_DEMO_AUTH_IN_PRODUCTION: '1',
+  } as NodeJS.ProcessEnv;
 
   assert.equal(demoAuthEnabled(productionEnv), false);
-  assert.equal(demoAuthEnabled(enabledEnv), true);
+  assert.equal(demoAuthEnabled(enabledEnv), false);
+  assert.equal(demoAuthEnabled(explicitlyAllowedEnv), true);
 
   for (const email of [
     'admin@condoos.dev',
     'resident@condoos.dev',
+    'porteiro@condoos.dev',
     'jordan@condoos.dev',
     'taylor@condoos.dev',
     'riley@condoos.dev',
@@ -419,9 +428,11 @@ test('demo auth blocks every seeded demo credential in production unless explici
   ]) {
     assert.equal(isBlockedDemoCredential(email, 'resident123', productionEnv), true);
     assert.equal(isBlockedDemoCredential(email.toUpperCase(), 'resident123', productionEnv), true);
-    assert.equal(isBlockedDemoCredential(email, 'resident123', enabledEnv), false);
+    assert.equal(isBlockedDemoCredential(email, 'resident123', enabledEnv), true);
+    assert.equal(isBlockedDemoCredential(email, 'resident123', explicitlyAllowedEnv), false);
   }
 
   assert.equal(isBlockedDemoCredential('real-owner@example.com', 'resident123', productionEnv), false);
+  assert.equal(isBlockedDemoCredential('porteiro@condoos.dev', 'porteiro123', productionEnv), true);
   assert.equal(isBlockedDemoCredential('resident@condoos.dev', 'wrong-password', productionEnv), false);
 });

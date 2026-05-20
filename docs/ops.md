@@ -36,6 +36,8 @@ flyctl secrets set -a condoos-api EMAIL_PROVIDER=resend
 flyctl secrets set -a condoos-api EMAIL_FROM="CondoOS <noreply@your-domain.com>"
 flyctl secrets set -a condoos-api RESEND_API_KEY=...
 flyctl secrets set -a condoos-api EMAIL_VERIFICATION_REQUIRED=1
+# This is explicit documentation; the server also fails closed by default
+# outside NODE_ENV=development/test.
 flyctl secrets set -a condoos-api PRIVATE_CREATE_BUILDING_REQUIRED=1
 flyctl secrets set -a condoos-api TURNSTILE_SITE_KEY=...
 flyctl secrets set -a condoos-api TURNSTILE_SECRET_KEY=...
@@ -178,13 +180,15 @@ blocked by zero-traffic sleep.
 Production demo-login safety:
 
 ```bash
-# Omit this in real production. Set only on disposable demo deployments.
+# Omit both in real production. Set only on disposable demo deployments.
 flyctl secrets set -a condoos-api DEMO_AUTH_ENABLED=1
+flyctl secrets set -a condoos-api ALLOW_DEMO_AUTH_IN_PRODUCTION=1
 ```
 
-When `NODE_ENV=production` and `DEMO_AUTH_ENABLED` is not set, known seeded demo
-credentials such as `admin@condoos.dev / admin123` are rejected and the login
-page hides one-click demo buttons.
+In production, `DEMO_AUTH_ENABLED=1` alone is ignored. Known seeded demo
+credentials such as `admin@condoos.dev / admin123` are rejected unless both demo
+flags are set, and the login page hides one-click demo buttons when demo auth is
+off.
 
 Production auth rate limits:
 
@@ -198,8 +202,22 @@ flyctl secrets set -a condoos-api AUTH_IP_RATE_LIMIT_MAX=60
 or CI runner from locking out every user after a few legitimate logins while
 still limiting credential attacks against each account.
 
-Production E2E runs make many legitimate demo logins in a short window. Do not
-raise or disable public limits for that. Instead configure a long random
+Production E2E should use private automation/pilot credentials, not seeded demo
+credentials, unless the deployment is intentionally disposable. Configure these
+as local shell variables or GitHub Actions secrets before running production-safe
+authenticated suites:
+
+```text
+E2E_ADMIN_EMAIL
+E2E_ADMIN_PASSWORD
+E2E_RESIDENT_EMAIL
+E2E_RESIDENT_PASSWORD
+E2E_CONCIERGE_EMAIL
+E2E_CONCIERGE_PASSWORD
+```
+
+These runs make many legitimate logins in a short window. Do not raise or
+disable public limits for that. Instead configure a long random
 `RATE_LIMIT_BYPASS_SECRET` on the Fly API and expose the same value to Playwright
 as `E2E_RATE_LIMIT_BYPASS_SECRET`. When present, Playwright sends
 `x-condoos-rate-limit-bypass`; the API ignores it unless the server-side secret
@@ -280,6 +298,12 @@ settings or API, then expose it only through your local shell or CI secrets:
 ```powershell
 $env:VERCEL_AUTOMATION_BYPASS_SECRET='<secret-from-vercel>'
 $env:E2E_RATE_LIMIT_BYPASS_SECRET='<same-secret-configured-on-fly>'
+$env:E2E_ADMIN_EMAIL='automation-admin@example.com'
+$env:E2E_ADMIN_PASSWORD='...'
+$env:E2E_RESIDENT_EMAIL='automation-resident@example.com'
+$env:E2E_RESIDENT_PASSWORD='...'
+$env:E2E_CONCIERGE_EMAIL='automation-guard@example.com'
+$env:E2E_CONCIERGE_PASSWORD='...'
 npm run test:e2e:prod:ui
 npm run test:e2e:prod:smoke
 ```
@@ -327,6 +351,12 @@ Required GitHub secrets for production browser checks:
 ```text
 VERCEL_AUTOMATION_BYPASS_SECRET
 E2E_RATE_LIMIT_BYPASS_SECRET
+E2E_ADMIN_EMAIL
+E2E_ADMIN_PASSWORD
+E2E_RESIDENT_EMAIL
+E2E_RESIDENT_PASSWORD
+E2E_CONCIERGE_EMAIL
+E2E_CONCIERGE_PASSWORD
 ```
 
 Optional GitHub variables:

@@ -11,6 +11,7 @@
 // /auth/login. seedSession() does an API login once per role and pre-loads
 // the JWT into localStorage so each test skips the login form entirely.
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
+import { credentialsFor } from './support/credentials';
 import { gotoApp } from './support/navigation';
 
 const apiURL = process.env.E2E_API_URL
@@ -43,13 +44,8 @@ async function seedSession(page: Page, request: APIRequestContext, kind: 'admin'
   // Check the web edge before consuming one of production's scarce auth attempts.
   await gotoApp(page, '/');
 
-  const creds: Record<typeof kind, [string, string]> = {
-    admin:     ['admin@condoos.dev',    'admin123'],
-    resident:  ['resident@condoos.dev', 'resident123'],
-    concierge: ['porteiro@condoos.dev', 'porteiro123'],
-  };
-  const [email, password] = creds[kind];
-  const s = await loginApi(request, email, password);
+  const creds = credentialsFor(kind);
+  const s = await loginApi(request, creds.email, creds.password);
   await page.evaluate(({ token, user }) => {
     localStorage.setItem('condoos_token', token);
     localStorage.setItem('condoos_user', JSON.stringify(user));
@@ -153,7 +149,8 @@ test('Proposals: Nova proposta CTA + Análise pré-votação card on discussion 
   await expect(page.getByRole('button', { name: /Nova proposta/i })).toBeVisible();
 
   // Find a discussion proposal via the API (avoids relying on seed order)
-  const { token } = await loginApi(request, 'admin@condoos.dev', 'admin123');
+  const creds = credentialsFor('admin');
+  const { token } = await loginApi(request, creds.email, creds.password);
   const list = await request.get(`${apiURL}/proposals`, { headers: { Authorization: `Bearer ${token}` } });
   const rows = (await list.json()).data as Array<{ id: number; status: string }>;
   const discussionId = rows.find((r) => r.status === 'discussion')?.id;

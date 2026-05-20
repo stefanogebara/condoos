@@ -29,7 +29,8 @@ function boolEnv(value: string | undefined): boolean | null {
 
 export function privateCreateBuildingRequired(env: NodeJS.ProcessEnv = process.env): boolean {
   const explicit = boolEnv(env.PRIVATE_CREATE_BUILDING_REQUIRED);
-  return explicit ?? env.NODE_ENV === 'production';
+  if (explicit !== null) return explicit;
+  return !['development', 'test'].includes(String(env.NODE_ENV || '').toLowerCase());
 }
 
 export function normalizeSetupCode(code: string): string {

@@ -2,6 +2,7 @@
 // exercises the major action buttons. Each test is non-destructive on prod
 // (creates ephemeral entities; doesn't delete shared demo data).
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
+import { credentialsFor } from './support/credentials';
 
 const apiURL = process.env.E2E_API_URL
   || (process.env.E2E_BASE_URL ? `${process.env.E2E_BASE_URL.replace(/\/$/, '')}/api` : 'http://127.0.0.1:4316/api');
@@ -22,7 +23,8 @@ async function loginApi(request: APIRequestContext, email: string, password: str
 }
 
 async function adminLogin(page: Page, request: APIRequestContext) {
-  const s = await loginApi(request, 'admin@condoos.dev', 'admin123');
+  const creds = credentialsFor('admin');
+  const s = await loginApi(request, creds.email, creds.password);
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await page.evaluate(({ token, user }) => {
     localStorage.setItem('condoos_token', token);
@@ -310,7 +312,8 @@ test('admin: assemblies list shows existing AGOs', async ({ page, request }) => 
 
 test('admin: assembly detail shows agenda + lifecycle buttons in correct state', async ({ page, request }) => {
   // Create an ephemeral assembly via API so the test is deterministic
-  const { token } = await loginApi(request, 'admin@condoos.dev', 'admin123');
+  const creds = credentialsFor('admin');
+  const { token } = await loginApi(request, creds.email, creds.password);
   const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
   const future = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
   const r = await request.post(`${apiURL}/assemblies`, {

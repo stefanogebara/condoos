@@ -36,6 +36,12 @@ npm run audit:ops:backup-restore
 npm run audit:perf:prod
 ```
 
+Production-safe authenticated E2E should use private pilot automation accounts,
+not seeded demo credentials. Set `E2E_ADMIN_EMAIL`, `E2E_ADMIN_PASSWORD`,
+`E2E_RESIDENT_EMAIL`, `E2E_RESIDENT_PASSWORD`, `E2E_CONCIERGE_EMAIL`, and
+`E2E_CONCIERGE_PASSWORD` in the local shell or CI secrets before running the
+production-safe suites against real production.
+
 `audit:prod:hardening` is intentionally strict: it requires production email
 verification, Turnstile captcha, and a client CSP that allows Turnstile script,
 frame, and connection origins. Use `npm run audit:prod:hardening:warn` for
@@ -63,8 +69,8 @@ Do not add a new page or workflow unless it strengthens one of those promises.
 - Remote `origin` is `stefanogebara/condoos`.
 - No unrelated repo/account files are touched.
 - No secrets are committed.
-- Demo credentials remain disabled in real production unless the deployment is intentionally disposable.
-- Real production has `PRIVATE_CREATE_BUILDING_REQUIRED=1`; new buildings are activated through sales-issued setup codes, not public self-serve creation.
+- Demo credentials remain disabled in real production unless the deployment is intentionally disposable and both demo flags are set.
+- Real production fails closed for create-building by default; new buildings are activated through sales-issued setup codes, not public self-serve creation.
 - Public login/signup copy says private activation when setup codes are required; it must not read like open self-serve building creation.
 - New env vars are documented in `.env.example` and `docs/ops.md`.
 - Upload/storage changes work without committing secrets and fail safely when R2 is not configured.

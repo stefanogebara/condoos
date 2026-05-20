@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
+import { credentialsFor } from './support/credentials';
 import { gotoApp } from './support/navigation';
 
 const apiURL = process.env.E2E_API_URL
@@ -19,13 +20,8 @@ async function loginApi(request: APIRequestContext, email: string, password: str
 }
 
 async function seedSession(page: Page, request: APIRequestContext, kind: 'admin' | 'resident' | 'concierge') {
-  const creds: Record<typeof kind, [string, string]> = {
-    admin: ['admin@condoos.dev', 'admin123'],
-    resident: ['resident@condoos.dev', 'resident123'],
-    concierge: ['porteiro@condoos.dev', 'porteiro123'],
-  };
-  const [email, password] = creds[kind];
-  const session = await loginApi(request, email, password);
+  const creds = credentialsFor(kind);
+  const session = await loginApi(request, creds.email, creds.password);
   await gotoApp(page, '/');
   await page.evaluate(({ token, user }) => {
     localStorage.setItem('condoos_token', token);

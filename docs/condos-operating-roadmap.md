@@ -68,7 +68,7 @@ Every shipped feature must improve at least one promise:
 Enterprise-private readiness plus market hardening:
 
 - Keep production quality gates green, especially production-safe i18n sweeps.
-- Gate new building creation behind private setup codes when `PRIVATE_CREATE_BUILDING_REQUIRED=1`.
+- Gate new building creation behind private setup codes by default outside development/test.
 - Add agency records, portfolio metrics, a prioritized attention queue, pilot readiness checklist, monthly agency report, private setup-code controls with activation tracking, staff email invites, scoped staff building assignments, permission review, assigned-building switching, and role-aware scoped portfolio/operations CSV exports above existing building workflows.
 - Enforce scoped agency staff capabilities on server routes and board navigation so finance, maintenance, concierge, document/report, and building-admin access stay separated by role and assigned building.
 - Keep `/board/portfolio` as the shared agency entry point while scoped staff are redirected away from board pages outside their lane.

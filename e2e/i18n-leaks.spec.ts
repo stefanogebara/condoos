@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { credentialsFor } from './support/credentials';
 
 // Strict PT-leak detector. Runs the app in en-US/es-ES/fr-FR locale,
 // crawls every important page, and FAILS if any text node still contains
@@ -165,11 +166,7 @@ async function setLocaleAndReload(page: Page, locale: 'en-US' | 'es-ES' | 'fr-FR
 }
 
 async function loginAs(page: Page, role: 'admin' | 'resident' | 'porteiro') {
-  const creds = {
-    admin: { email: 'admin@condoos.dev', password: 'admin123' },
-    resident: { email: 'resident@condoos.dev', password: 'resident123' },
-    porteiro: { email: 'porteiro@condoos.dev', password: 'porteiro123' },
-  }[role];
+  const creds = credentialsFor(role);
 
   // Surface a clear message if the API is down. Avoids 14 specs failing
   // with cryptic `apiRequestContext.post: ECONNREFUSED 127.0.0.1:4312`.
@@ -195,8 +192,9 @@ async function loginAs(page: Page, role: 'admin' | 'resident' | 'porteiro') {
 }
 
 async function seedCommunityTicket(page: Page) {
+  const creds = credentialsFor('resident');
   const res = await page.request.post(`${apiURL}/auth/login`, {
-    data: { email: 'resident@condoos.dev', password: 'resident123' },
+    data: creds,
   });
   expect(res.ok(), 'resident login for ticket fixture should succeed').toBeTruthy();
   const body = await res.json();
