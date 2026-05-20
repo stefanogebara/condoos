@@ -286,6 +286,15 @@ This slice makes the public entry points match the private B2B sales model:
 - Onboarding landing copy is locale-aware and explains that new buildings are activated by the agency or CONDOS team with a private code.
 - The i18n leak sweep now includes signup join/create/agency public routes, closing a previous blind spot.
 
+## Completed Slice: Setup Code Activation Tracking
+
+This slice makes private activation auditable for agency sales and onboarding:
+
+- Record which setup code activated which building, who activated it, and when.
+- Show activation history on `/board/portfolio` setup-code cards so agencies can see unused vs. used codes.
+- Keep setup-code values hashed while tracking activation metadata through IDs and audit-safe references.
+- Cover code activation tracking with server tests.
+
 ## Current Execution Slice: Enterprise Operations Hardening
 
 The next implementation slice should keep building on the private-enterprise plan:

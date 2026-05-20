@@ -107,6 +107,11 @@ export interface AgencySetupCode {
   created_by_user_id: number | null;
   created_at: string;
   last_used_at: string | null;
+  activation_count: number;
+  last_activated_at: string | null;
+  last_activated_condominium_id: number | null;
+  last_activated_condominium_name: string | null;
+  last_activated_by_email: string | null;
   status: 'active' | 'disabled' | 'expired' | 'exhausted';
 }
 
@@ -781,15 +786,28 @@ export function removeAgencyStaff(input: {
   return staff;
 }
 
-function setupCodeStatus(row: Omit<AgencySetupCode, 'status'>): AgencySetupCode['status'] {
+type AgencySetupCodeRow = Omit<AgencySetupCode, 'status' | 'activation_count' | 'last_activated_at' | 'last_activated_condominium_id' | 'last_activated_condominium_name' | 'last_activated_by_email'> & Partial<Pick<
+  AgencySetupCode,
+  'activation_count' | 'last_activated_at' | 'last_activated_condominium_id' | 'last_activated_condominium_name' | 'last_activated_by_email'
+>>;
+
+function setupCodeStatus(row: AgencySetupCodeRow): AgencySetupCode['status'] {
   if (row.disabled_at) return 'disabled';
   if (row.expires_at && Date.parse(row.expires_at) <= Date.now()) return 'expired';
   if (row.used_count >= row.max_uses) return 'exhausted';
   return 'active';
 }
 
-function mapSetupCode(row: Omit<AgencySetupCode, 'status'>): AgencySetupCode {
-  return { ...row, status: setupCodeStatus(row) };
+function mapSetupCode(row: AgencySetupCodeRow): AgencySetupCode {
+  return {
+    ...row,
+    activation_count: Number(row.activation_count || 0),
+    last_activated_at: row.last_activated_at || null,
+    last_activated_condominium_id: row.last_activated_condominium_id || null,
+    last_activated_condominium_name: row.last_activated_condominium_name || null,
+    last_activated_by_email: row.last_activated_by_email || null,
+    status: setupCodeStatus(row),
+  };
 }
 
 function randomSetupCode(): string {
@@ -830,7 +848,7 @@ export function createAgencySetupCode(input: {
                 created_by_user_id, created_at, last_used_at
          FROM private_setup_codes
          WHERE id = ?`
-      ).get(Number(result.lastInsertRowid)) as Omit<AgencySetupCode, 'status'>;
+      ).get(Number(result.lastInsertRowid)) as AgencySetupCodeRow;
       return { ...mapSetupCode(created), code };
     } catch (err) {
       if (fixedCode || attempt === attempts - 1) {
@@ -845,12 +863,33 @@ export function listAgencySetupCodes(agencyId: number): AgencySetupCode[] {
   const agency = agencyById(agencyId);
   if (!agency) throw Object.assign(new Error('agency_not_found'), { status: 404 });
   const rows = db.prepare(
-    `SELECT id, label, agency_name, max_uses, used_count, expires_at, disabled_at,
-            created_by_user_id, created_at, last_used_at
-     FROM private_setup_codes
-     WHERE lower(COALESCE(agency_name, '')) = lower(?)
-     ORDER BY created_at DESC, id DESC`
-  ).all(agency.name) as Array<Omit<AgencySetupCode, 'status'>>;
+    `SELECT
+       p.id, p.label, p.agency_name, p.max_uses, p.used_count, p.expires_at,
+       p.disabled_at, p.created_by_user_id, p.created_at, p.last_used_at,
+       COALESCE(stats.activation_count, 0) AS activation_count,
+       last_activation.created_at AS last_activated_at,
+       c.id AS last_activated_condominium_id,
+       c.name AS last_activated_condominium_name,
+       u.email AS last_activated_by_email
+     FROM private_setup_codes p
+     LEFT JOIN (
+       SELECT setup_code_id, COUNT(*) AS activation_count, MAX(created_at) AS last_activated_at
+       FROM private_setup_code_activations
+       GROUP BY setup_code_id
+     ) stats ON stats.setup_code_id = p.id
+     LEFT JOIN private_setup_code_activations last_activation
+       ON last_activation.id = (
+         SELECT id
+         FROM private_setup_code_activations
+         WHERE setup_code_id = p.id
+         ORDER BY created_at DESC, id DESC
+         LIMIT 1
+       )
+     LEFT JOIN condominiums c ON c.id = last_activation.condominium_id
+     LEFT JOIN users u ON u.id = last_activation.activated_by_user_id
+     WHERE lower(COALESCE(p.agency_name, '')) = lower(?)
+     ORDER BY p.created_at DESC, p.id DESC`
+  ).all(agency.name) as AgencySetupCodeRow[];
   return rows.map(mapSetupCode);
 }
 
@@ -876,7 +915,7 @@ export function disableAgencySetupCode(agencyId: number, setupCodeId: number): A
             created_by_user_id, created_at, last_used_at
      FROM private_setup_codes
      WHERE id = ?`
-  ).get(setupCodeId) as Omit<AgencySetupCode, 'status'>;
+  ).get(setupCodeId) as AgencySetupCodeRow;
   return mapSetupCode(row);
 }
 

@@ -15,7 +15,7 @@ This document separates what is real today from what still needs production wiri
 - File upload registry with local/dev storage and Cloudflare R2-compatible presigned upload support for documents, receipts, and ticket evidence.
 - Building-level Brazil/Ecuador market settings: country, currency, timezone, locale, and governance mode. Finance defaults now follow the building currency.
 - Private B2B building activation with setup-code gate when `PRIVATE_CREATE_BUILDING_REQUIRED=1`.
-- Agency portfolio foundation: agency records, agency/building links, agency memberships, scoped staff building assignments, staff email invites with one-time manual link fallback, assigned-building switch into board workflows, `/api/agencies/portfolio`, `/board/portfolio` risk summary, recent audit preview, agency selector, private setup-code management, staff controls, portfolio CSV export, and scoped operational exports for residents, finance, tickets, work orders, and audit rows.
+- Agency portfolio foundation: agency records, agency/building links, agency memberships, scoped staff building assignments, staff email invites with one-time manual link fallback, assigned-building switch into board workflows, `/api/agencies/portfolio`, `/board/portfolio` risk summary, recent audit preview, agency selector, private setup-code management with activation tracking, staff controls, portfolio CSV export, and scoped operational exports for residents, finance, tickets, work orders, and audit rows.
 
 ## Demo-Only Or Partially Wired
 

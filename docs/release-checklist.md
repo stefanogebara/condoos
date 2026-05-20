@@ -82,4 +82,5 @@ Before showing a buyer:
 - Document vault can use uploaded files or the buyer understands that production R2 secrets are not configured yet.
 - WhatsApp/email/Google/AI status is either configured or gracefully hidden/degraded.
 - `/board/portfolio` shows integration readiness, portfolio risk summary, agency setup-code controls, agency staff invite/status controls for agency admins, assigned-building switching, and scoped portfolio/operations CSV exports.
+- Agency setup-code cards show whether a code has activated a building and who used it most recently.
 - Public i18n sweep includes `/login` and signup join/create/agency intent pages.

@@ -108,3 +108,22 @@ export function consumePrivateSetupCode(accepted: SetupCodeAccepted): SetupCodeC
   }
   return accepted;
 }
+
+export function recordPrivateSetupCodeActivation(input: {
+  setupCodeId?: number | null;
+  condominiumId: number;
+  agencyId?: number | null;
+  activatedByUserId?: number | null;
+}): void {
+  if (!input.setupCodeId) return;
+  db.prepare(
+    `INSERT INTO private_setup_code_activations (
+       setup_code_id, condominium_id, agency_id, activated_by_user_id
+     ) VALUES (?, ?, ?, ?)`
+  ).run(
+    input.setupCodeId,
+    input.condominiumId,
+    input.agencyId || null,
+    input.activatedByUserId || null,
+  );
+}

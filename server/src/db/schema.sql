@@ -68,6 +68,20 @@ CREATE TABLE IF NOT EXISTS private_setup_codes (
 CREATE INDEX IF NOT EXISTS idx_private_setup_codes_active
   ON private_setup_codes(disabled_at, expires_at, used_count);
 
+CREATE TABLE IF NOT EXISTS private_setup_code_activations (
+  id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+  setup_code_id        INTEGER NOT NULL REFERENCES private_setup_codes(id) ON DELETE CASCADE,
+  condominium_id       INTEGER NOT NULL REFERENCES condominiums(id) ON DELETE CASCADE,
+  agency_id            INTEGER REFERENCES agencies(id) ON DELETE SET NULL,
+  activated_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at           TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_private_setup_code_activations_code
+  ON private_setup_code_activations(setup_code_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_private_setup_code_activations_condo
+  ON private_setup_code_activations(condominium_id, created_at);
+
 -- Management-agency foundation. Users keep their building-level role in
 -- users.role; agency access lives in memberships so portfolio mode can sit
 -- above existing single-building workflows without breaking them.

@@ -56,6 +56,12 @@ Operators can also insert hashed rows into `private_setup_codes` with a label,
 optional `agency_name`, `max_uses`, and `expires_at`. Never store the plaintext
 sales code in production.
 
+Every DB-backed setup code activation is recorded in
+`private_setup_code_activations` with the code id, activated building, agency,
+activating user, and timestamp. `/board/portfolio` shows the latest activated
+building on each setup-code card so sales/ops can distinguish unused codes from
+codes that already launched a building.
+
 Local/SSH helper for issuing one tracked code:
 
 ```bash

@@ -14,7 +14,7 @@ import { audit } from '../lib/audit';
 import { normalizeServiceContact, serviceContactSchema } from '../lib/service-contacts';
 import { verifyCreateBuildingCaptcha } from '../lib/captcha';
 import { emailVerificationRequiredForCreateBuilding, isEmailVerified } from '../lib/email-verification';
-import { checkPrivateSetupCode, consumePrivateSetupCode } from '../lib/private-access';
+import { checkPrivateSetupCode, consumePrivateSetupCode, recordPrivateSetupCodeActivation } from '../lib/private-access';
 import { linkCondominiumToAgency } from '../lib/agencies';
 import { normalizeCondoSettingsInput } from '../lib/condo-settings';
 
@@ -329,6 +329,14 @@ router.post('/create-building', createBuildingRateLimit, requireAuth, asyncHandl
       condominiumId: condoId,
       userId: u.id,
     });
+    if (consumedSetupAccess.source === 'db') {
+      recordPrivateSetupCodeActivation({
+        setupCodeId: consumedSetupAccess.setupCodeId,
+        condominiumId: condoId,
+        agencyId: agency?.agencyId || null,
+        activatedByUserId: u.id,
+      });
+    }
 
     return { condoId, buildingId: buildingIds[0], buildingIds, inviteCode, agency };
   });

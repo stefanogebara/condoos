@@ -66,12 +66,13 @@ import {
   userAgencyMemberships,
   userCanManageAgency,
 } from '../src/lib/agencies';
-import { checkPrivateSetupCode, consumePrivateSetupCode, hashSetupCode } from '../src/lib/private-access';
+import { checkPrivateSetupCode, consumePrivateSetupCode, hashSetupCode, recordPrivateSetupCodeActivation } from '../src/lib/private-access';
 import { defaultCurrencyForCondo, getCondoSettings, updateCondoSettings } from '../src/lib/condo-settings';
 
 function resetDb() {
   const tables = [
     'agency_staff_invites',
+    'private_setup_code_activations',
     'agency_member_buildings',
     'agency_memberships',
     'agency_condominiums',
@@ -225,7 +226,19 @@ test('agency activation codes can be created, listed, consumed, and disabled by 
   assert.equal(checked.ok, true);
   if (!checked.ok) return;
   assert.equal(consumePrivateSetupCode(checked).ok, true);
-  assert.equal(listAgencySetupCodes(agency!.agencyId)[0].used_count, 1);
+  recordPrivateSetupCodeActivation({
+    setupCodeId: checked.setupCodeId,
+    condominiumId: condoId,
+    agencyId: agency!.agencyId,
+    activatedByUserId: adminId,
+  });
+  const afterUse = listAgencySetupCodes(agency!.agencyId)[0];
+  assert.equal(afterUse.used_count, 1);
+  assert.equal(afterUse.activation_count, 1);
+  assert.equal(afterUse.last_activated_condominium_id, condoId);
+  assert.equal(afterUse.last_activated_condominium_name, 'Test Condo');
+  assert.equal(afterUse.last_activated_by_email, 'agency-admin@example.com');
+  assert.ok(afterUse.last_activated_at);
 
   const disabled = disableAgencySetupCode(agency!.agencyId, created.id);
   assert.equal(disabled.status, 'disabled');

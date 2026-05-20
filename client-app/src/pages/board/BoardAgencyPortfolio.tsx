@@ -50,6 +50,11 @@ interface AgencySetupCode {
   created_by_user_id: number | null;
   created_at: string;
   last_used_at: string | null;
+  activation_count: number;
+  last_activated_at: string | null;
+  last_activated_condominium_id: number | null;
+  last_activated_condominium_name: string | null;
+  last_activated_by_email: string | null;
   status: 'active' | 'disabled' | 'expired' | 'exhausted';
   code?: string;
 }
@@ -737,6 +742,17 @@ export default function BoardAgencyPortfolio() {
                               </div>
                               <div className="text-xs text-dusk-300 mt-1">
                                 {setupCode.used_count}/{setupCode.max_uses} {t('usos')} · {t('Vence')} {formatDate(setupCode.expires_at)}
+                              </div>
+                              <div className="text-xs text-dusk-300 mt-1">
+                                {setupCode.activation_count > 0
+                                  ? (
+                                    <>
+                                      {t('Ativou')} <span data-user-content>{setupCode.last_activated_condominium_name || t('prédio')}</span>
+                                      {setupCode.last_activated_by_email && <> · <span data-user-content>{setupCode.last_activated_by_email}</span></>}
+                                      {setupCode.last_activated_at && <> · {formatDate(setupCode.last_activated_at)}</>}
+                                    </>
+                                  )
+                                  : t('Ainda não ativou nenhum prédio.')}
                               </div>
                             </div>
                             <Badge tone={codeTone(setupCode.status)}>{codeStatusLabel(setupCode.status)}</Badge>
