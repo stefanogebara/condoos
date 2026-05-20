@@ -302,6 +302,15 @@ This slice makes stalled vendor work visible before it becomes board drama:
 - Keeps the signal separate from schedule/SLA failures so agencies can tell the difference between “vendor is late” and “vendor has gone quiet.”
 - Covers the metric through the agency portfolio domain test and keeps labels localized across PT/EN/ES/FR.
 
+## Completed Slice: Multi-Building Maintenance Summaries
+
+This slice makes monthly agency reports more useful for managers comparing buildings:
+
+- Adds a per-building maintenance summary to the agency monthly report.
+- Shows tickets opened, urgent tickets opened, tickets resolved, work orders opened/completed/active/overdue, stale vendor follow-ups, maintenance spend, and top issue categories.
+- Keeps the existing report download path intact while enriching the Markdown board/agency packet.
+- Covers the summary through the agency portfolio domain test so scoped agency reporting stays reliable.
+
 ## Completed Slice: Vendor Intelligence
 
 This slice makes the saved service network feel operational instead of static:
@@ -392,7 +401,6 @@ This slice makes portfolio access safer before private pilots:
 
 The next implementation slice should keep building on the private-enterprise plan:
 
-- Package the now-real maintenance lifecycle into richer multi-building maintenance summaries.
 - Expand portfolio reporting into a true agency command center.
-- Add polished report packaging and stronger multi-building agency priorities.
+- Add polished report packaging, better visual report sections, and stronger multi-building agency priorities.
 - Keep production-safe i18n, build, server tests, and pilot smoke checks green before each push.

@@ -15,7 +15,7 @@ This document separates what is real today from what still needs production wiri
 - File upload registry with local/dev storage and Cloudflare R2-compatible presigned upload support for documents, receipts, and ticket evidence.
 - Building-level Brazil/Ecuador market settings: country, currency, timezone, locale, and governance mode. Finance defaults now follow the building currency.
 - Private B2B building activation with setup-code gate when `PRIVATE_CREATE_BUILDING_REQUIRED=1`.
-- Agency portfolio foundation: agency records, agency/building links, agency memberships, scoped staff building assignments, staff email invites with one-time manual link fallback, assigned-building switch into board workflows, `/api/agencies/portfolio`, `/board/portfolio` risk summary, recurring maintenance risk detection, vendor follow-up health, prioritized attention queue, pilot readiness checklist, monthly agency Markdown report, permission review, server-enforced role capability guardrails, frontend sidebar/route filtering for scoped staff, recent audit preview, agency selector, private setup-code management with activation tracking, staff controls, role-aware portfolio/report export controls, and scoped operational exports for residents, finance, tickets, work orders, and audit rows.
+- Agency portfolio foundation: agency records, agency/building links, agency memberships, scoped staff building assignments, staff email invites with one-time manual link fallback, assigned-building switch into board workflows, `/api/agencies/portfolio`, `/board/portfolio` risk summary, recurring maintenance risk detection, vendor follow-up health, prioritized attention queue, pilot readiness checklist, monthly agency Markdown report with per-building maintenance summaries, permission review, server-enforced role capability guardrails, frontend sidebar/route filtering for scoped staff, recent audit preview, agency selector, private setup-code management with activation tracking, staff controls, role-aware portfolio/report export controls, and scoped operational exports for residents, finance, tickets, work orders, and audit rows.
 
 ## Demo-Only Or Partially Wired
 
@@ -43,11 +43,11 @@ This document separates what is real today from what still needs production wiri
 - Production R2 bucket/CORS/secrets must pass `npm run audit:prod:uploads` before a real building uses uploads.
 - Turnstile keys are not installed in the current demo deployment, so create-building captcha is not active yet. `npm run audit:prod:hardening` should fail until those keys are set.
 - If `PRIVATE_CREATE_BUILDING_REQUIRED` is not set in production, random signed-in users can still attempt create-building. Private sales deployments should fail closed with setup codes; public login/signup copy now reflects private activation when the gate is enabled.
-- Ticket timeline events, SLA escalation rules, vendor quote comparison, quote selection/rejection decisions, recurring maintenance risk detection, and vendor follow-up health are real. Remaining maintenance hardening is more polished multi-building maintenance summaries.
+- Ticket timeline events, SLA escalation rules, vendor quote comparison, quote selection/rejection decisions, recurring maintenance risk detection, vendor follow-up health, and per-building maintenance summaries are real. Remaining maintenance hardening is more polished report packaging and visual report sections.
 - Market settings exist, but the remaining localization hardening is legal/governance wording, date/time formatting sweeps, and production seed-content cleanup per market.
 - Incident mode.
 - Portfolio dashboard is not yet a full agency command center: agency setup-code controls, staff email invites, assigned-building switching, scoped staff controls, server capability guardrails, frontend role-specific navigation, permission review, pilot readiness checklist, prioritized attention queue, monthly Markdown report, and role-aware scoped CSV exports exist, but polished report packaging and richer multi-building reporting are still pending.
 
 ## Next Pilot Upgrade
 
-The next buyer-visible upgrade should package the already-real maintenance workflow into stronger agency reporting: richer multi-building maintenance summaries and a walkthrough-ready work-order story.
+The next buyer-visible upgrade should package the already-real maintenance workflow into stronger agency reporting: polished report packaging, visual maintenance sections, and a walkthrough-ready work-order story.

@@ -39,8 +39,8 @@ Every shipped feature must improve at least one promise:
    - Defer live processors until the workflow is trusted.
 
 4. **Maintenance as work orders**
-   - Ticket timeline events, quote comparison, quote decisions, recurring problem detection, vendor follow-up health, SLA alerts, and resident-safe progress visibility are in place.
-   - Remaining work: richer multi-building maintenance summaries.
+   - Ticket timeline events, quote comparison, quote decisions, recurring problem detection, vendor follow-up health, SLA alerts, resident-safe progress visibility, and per-building monthly maintenance summaries are in place.
+   - Remaining work: polished report packaging and visual multi-building maintenance sections.
 
 5. **Brazil + Ecuador readiness**
    - Building-level country, currency, timezone, locale, and governance mode are in place.
@@ -79,3 +79,4 @@ Enterprise-private readiness plus market hardening:
 - Keep maintenance decisions auditable: one selected quote per ticket, quote decision history in the admin timeline, and residents shielded from private vendor notes.
 - Surface recurring maintenance clusters in agency portfolio metrics, attention priorities, CSV exports, and monthly reports so managers can spot repeat building issues.
 - Surface stale vendor follow-ups in agency portfolio metrics, attention priorities, CSV exports, monthly reports, and pilot-readiness checks so managers can chase quiet vendors before a board meeting.
+- Summarize each building's monthly maintenance movement in agency reports: opened/resolved tickets, urgent tickets, work-order movement, stale vendor follow-ups, spend, and top categories.

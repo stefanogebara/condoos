@@ -107,6 +107,24 @@ export interface AgencyBuildingMetrics {
   upcoming_meetings: number;
 }
 
+export interface AgencyMaintenanceCategorySummary {
+  category: string;
+  count: number;
+}
+
+export interface AgencyBuildingMaintenanceSummary {
+  tickets_opened: number;
+  urgent_tickets_opened: number;
+  tickets_resolved: number;
+  work_orders_opened: number;
+  work_orders_completed: number;
+  active_work_orders: number;
+  overdue_work_orders: number;
+  stale_vendor_follow_ups: number;
+  maintenance_spend: string;
+  top_categories: AgencyMaintenanceCategorySummary[];
+}
+
 export interface AgencyPermissionReview {
   total_staff: number;
   agency_admins: number;
@@ -145,6 +163,7 @@ export interface AgencyMonthlyReportBuilding {
   condominium_id: number;
   condominium_name: string;
   metrics: AgencyBuildingMetrics;
+  maintenance_summary: AgencyBuildingMaintenanceSummary;
   month: {
     tickets_opened: number;
     work_orders_completed: number;
@@ -1458,6 +1477,118 @@ function expenseReceiptCoverage(condominiumId: number, month: string): number {
   return Math.round((Number(row?.with_receipt || 0) / total) * 100);
 }
 
+function buildAgencyMaintenanceSummary(condominiumId: number, month: string): AgencyBuildingMaintenanceSummary {
+  const topCategories = db.prepare(
+    `SELECT LOWER(TRIM(COALESCE(NULLIF(category, ''), 'uncategorized'))) AS category,
+            COUNT(*) AS count
+     FROM tickets
+     WHERE condominium_id = ?
+       AND substr(created_at, 1, 7) = ?
+     GROUP BY LOWER(TRIM(COALESCE(NULLIF(category, ''), 'uncategorized')))
+     ORDER BY count DESC, category ASC
+     LIMIT 3`
+  ).all(condominiumId, month) as AgencyMaintenanceCategorySummary[];
+
+  return {
+    tickets_opened: count(
+      `SELECT COUNT(*) AS count
+       FROM tickets
+       WHERE condominium_id = ?
+         AND substr(created_at, 1, 7) = ?`,
+      condominiumId,
+      month,
+    ),
+    urgent_tickets_opened: count(
+      `SELECT COUNT(*) AS count
+       FROM tickets
+       WHERE condominium_id = ?
+         AND priority IN ('high','urgent')
+         AND substr(created_at, 1, 7) = ?`,
+      condominiumId,
+      month,
+    ),
+    tickets_resolved: count(
+      `SELECT COUNT(*) AS count
+       FROM tickets
+       WHERE condominium_id = ?
+         AND (
+           (resolved_at IS NOT NULL AND substr(resolved_at, 1, 7) = ?)
+           OR (closed_at IS NOT NULL AND substr(closed_at, 1, 7) = ?)
+         )`,
+      condominiumId,
+      month,
+      month,
+    ),
+    work_orders_opened: count(
+      `SELECT COUNT(*) AS count
+       FROM ticket_work_orders wo
+       JOIN tickets t ON t.id = wo.ticket_id
+       WHERE t.condominium_id = ?
+         AND substr(wo.created_at, 1, 7) = ?`,
+      condominiumId,
+      month,
+    ),
+    work_orders_completed: count(
+      `SELECT COUNT(*) AS count
+       FROM ticket_work_orders wo
+       JOIN tickets t ON t.id = wo.ticket_id
+       WHERE t.condominium_id = ?
+         AND wo.completed_at IS NOT NULL
+         AND substr(wo.completed_at, 1, 7) = ?`,
+      condominiumId,
+      month,
+    ),
+    active_work_orders: count(
+      `SELECT COUNT(*) AS count
+       FROM ticket_work_orders wo
+       JOIN tickets t ON t.id = wo.ticket_id
+       WHERE t.condominium_id = ?
+         AND wo.status IN ('scheduled','in_progress')`,
+      condominiumId,
+    ),
+    overdue_work_orders: count(
+      `SELECT COUNT(*) AS count
+       FROM ticket_work_orders wo
+       JOIN tickets t ON t.id = wo.ticket_id
+       WHERE t.condominium_id = ?
+         AND wo.status IN ('scheduled','in_progress')
+         AND wo.scheduled_for IS NOT NULL
+         AND wo.scheduled_for < CURRENT_TIMESTAMP`,
+      condominiumId,
+    ),
+    stale_vendor_follow_ups: count(
+      `SELECT COUNT(*) AS count
+       FROM ticket_work_orders wo
+       JOIN tickets t ON t.id = wo.ticket_id
+       WHERE t.condominium_id = ?
+         AND wo.service_contact_id IS NOT NULL
+         AND wo.status IN ('scheduled','in_progress')
+         AND wo.updated_at < datetime('now', '-7 day')`,
+      condominiumId,
+    ),
+    maintenance_spend: moneyByCurrency(
+      `SELECT currency, COALESCE(SUM(amount_cents), 0) AS amount_cents
+       FROM expenses
+       WHERE condominium_id = ?
+         AND category = 'maintenance'
+         AND substr(spent_at, 1, 7) = ?
+       GROUP BY currency
+       ORDER BY currency`,
+      condominiumId,
+      month,
+    ),
+    top_categories: topCategories.map((row) => ({
+      category: String(row.category || 'uncategorized'),
+      count: Number(row.count || 0),
+    })),
+  };
+}
+
+function formatTopMaintenanceCategories(categories: AgencyMaintenanceCategorySummary[]): string {
+  if (categories.length === 0) return 'none this month';
+  return categories.map((row) => `${markdownText(row.category)} (${row.count})`).join(', ');
+}
+
 function agencyNextActions(building: AgencyPortfolio['buildings'][number]): string[] {
   const actions: string[] = [];
   if (building.metrics.urgent_tickets > 0) actions.push(`Review ${building.metrics.urgent_tickets} urgent ticket(s).`);
@@ -1516,6 +1647,9 @@ function buildAgencyMonthlyReportMarkdown(report: Omit<AgencyMonthlyReport, 'mar
       '',
       `### ${markdownText(building.condominium_name)}`,
       `- Month activity: ${building.month.tickets_opened} ticket(s) opened, ${building.month.work_orders_completed} work order(s) completed.`,
+      `- Maintenance summary: ${building.maintenance_summary.tickets_opened} opened, ${building.maintenance_summary.tickets_resolved} resolved, ${building.maintenance_summary.urgent_tickets_opened} urgent.`,
+      `- Work orders: ${building.maintenance_summary.work_orders_opened} opened, ${building.maintenance_summary.work_orders_completed} completed, ${building.maintenance_summary.active_work_orders} active, ${building.maintenance_summary.overdue_work_orders} overdue.`,
+      `- Maintenance spend: ${building.maintenance_summary.maintenance_spend}; Top categories: ${formatTopMaintenanceCategories(building.maintenance_summary.top_categories)}.`,
       `- Finance: billed ${building.month.dues_billed}; received ${building.month.payments_received}; expenses ${building.month.expenses_spent}; receipt coverage ${building.month.expense_receipt_coverage_percent}%.`,
       `- Current risk: ${building.metrics.urgent_tickets} urgent ticket(s), ${building.metrics.recurring_problem_clusters} recurring problem cluster(s), ${building.metrics.vendor_follow_up_problems} vendor follow-up problem(s), ${building.metrics.vendor_sla_problems} vendor SLA problem(s), ${building.metrics.overdue_dues} overdue due(s).`,
       '- Next actions:',
@@ -1530,64 +1664,52 @@ export function buildAgencyMonthlyReport(membership: AgencyMembership, monthInpu
   const month = normalizeAgencyReportMonth(monthInput);
   const portfolio = buildAgencyPortfolio(membership);
 
-  const buildings = portfolio.buildings.map((building) => ({
-    condominium_id: building.id,
-    condominium_name: building.name,
-    metrics: building.metrics,
-    month: {
-      tickets_opened: count(
-        `SELECT COUNT(*) AS count
-         FROM tickets
-         WHERE condominium_id = ?
-           AND substr(created_at, 1, 7) = ?`,
-        building.id,
-        month,
-      ),
-      work_orders_completed: count(
-        `SELECT COUNT(*) AS count
-         FROM ticket_work_orders wo
-         JOIN tickets t ON t.id = wo.ticket_id
-         WHERE t.condominium_id = ?
-           AND wo.completed_at IS NOT NULL
-           AND substr(wo.completed_at, 1, 7) = ?`,
-        building.id,
-        month,
-      ),
-      dues_billed: moneyByCurrency(
-        `SELECT currency, COALESCE(SUM(amount_cents), 0) AS amount_cents
-         FROM invoices
-         WHERE condominium_id = ?
-           AND period = ?
-         GROUP BY currency
-         ORDER BY currency`,
-        building.id,
-        month,
-      ),
-      payments_received: moneyByCurrency(
-        `SELECT COALESCE(i.currency, 'BRL') AS currency, COALESCE(SUM(p.amount_cents), 0) AS amount_cents
-         FROM payments p
-         JOIN invoices i ON i.id = p.invoice_id
-         WHERE p.condominium_id = ?
-           AND substr(p.paid_at, 1, 7) = ?
-         GROUP BY COALESCE(i.currency, 'BRL')
-         ORDER BY COALESCE(i.currency, 'BRL')`,
-        building.id,
-        month,
-      ),
-      expenses_spent: moneyByCurrency(
-        `SELECT currency, COALESCE(SUM(amount_cents), 0) AS amount_cents
-         FROM expenses
-         WHERE condominium_id = ?
-           AND substr(spent_at, 1, 7) = ?
-         GROUP BY currency
-         ORDER BY currency`,
-        building.id,
-        month,
-      ),
-      expense_receipt_coverage_percent: expenseReceiptCoverage(building.id, month),
-    },
-    next_actions: agencyNextActions(building),
-  }));
+  const buildings = portfolio.buildings.map((building) => {
+    const maintenanceSummary = buildAgencyMaintenanceSummary(building.id, month);
+    return {
+      condominium_id: building.id,
+      condominium_name: building.name,
+      metrics: building.metrics,
+      maintenance_summary: maintenanceSummary,
+      month: {
+        tickets_opened: maintenanceSummary.tickets_opened,
+        work_orders_completed: maintenanceSummary.work_orders_completed,
+        dues_billed: moneyByCurrency(
+          `SELECT currency, COALESCE(SUM(amount_cents), 0) AS amount_cents
+           FROM invoices
+           WHERE condominium_id = ?
+             AND period = ?
+           GROUP BY currency
+           ORDER BY currency`,
+          building.id,
+          month,
+        ),
+        payments_received: moneyByCurrency(
+          `SELECT COALESCE(i.currency, 'BRL') AS currency, COALESCE(SUM(p.amount_cents), 0) AS amount_cents
+           FROM payments p
+           JOIN invoices i ON i.id = p.invoice_id
+           WHERE p.condominium_id = ?
+             AND substr(p.paid_at, 1, 7) = ?
+           GROUP BY COALESCE(i.currency, 'BRL')
+           ORDER BY COALESCE(i.currency, 'BRL')`,
+          building.id,
+          month,
+        ),
+        expenses_spent: moneyByCurrency(
+          `SELECT currency, COALESCE(SUM(amount_cents), 0) AS amount_cents
+           FROM expenses
+           WHERE condominium_id = ?
+             AND substr(spent_at, 1, 7) = ?
+           GROUP BY currency
+           ORDER BY currency`,
+          building.id,
+          month,
+        ),
+        expense_receipt_coverage_percent: expenseReceiptCoverage(building.id, month),
+      },
+      next_actions: agencyNextActions(building),
+    };
+  });
 
   const baseReport: Omit<AgencyMonthlyReport, 'markdown'> = {
     agency_id: portfolio.id,

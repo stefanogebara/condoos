@@ -282,8 +282,8 @@ test('agency portfolio CSV exports scoped building metrics', () => {
      VALUES (?, ?, 'Elevator vibration', 'Second elevator complaint', 'maintenance', 'normal', 'open')`
   ).run(condoId, residentId);
   db.prepare(
-    `INSERT INTO tickets (condominium_id, reporter_id, title, description, category, priority, status)
-     VALUES (?, ?, 'Elevator smell', 'Third elevator complaint', 'maintenance', 'normal', 'resolved')`
+    `INSERT INTO tickets (condominium_id, reporter_id, title, description, category, priority, status, resolved_at)
+     VALUES (?, ?, 'Elevator smell', 'Third elevator complaint', 'maintenance', 'normal', 'resolved', '2026-05-14T10:00:00.000Z')`
   ).run(condoId, residentId);
   const staleVendorTicketId = Number(db.prepare(
     `INSERT INTO tickets (condominium_id, reporter_id, title, description, category, priority, status)
@@ -339,11 +339,25 @@ test('agency portfolio CSV exports scoped building metrics', () => {
   assert.equal(report.buildings[0].month.payments_received, 'USD 50.00');
   assert.equal(report.buildings[0].month.expenses_spent, 'USD 30.00');
   assert.equal(report.buildings[0].month.expense_receipt_coverage_percent, 100);
+  assert.equal(report.buildings[0].maintenance_summary.tickets_opened, 4);
+  assert.equal(report.buildings[0].maintenance_summary.urgent_tickets_opened, 1);
+  assert.equal(report.buildings[0].maintenance_summary.tickets_resolved, 1);
+  assert.equal(report.buildings[0].maintenance_summary.work_orders_opened, 2);
+  assert.equal(report.buildings[0].maintenance_summary.work_orders_completed, 1);
+  assert.equal(report.buildings[0].maintenance_summary.active_work_orders, 1);
+  assert.equal(report.buildings[0].maintenance_summary.overdue_work_orders, 0);
+  assert.equal(report.buildings[0].maintenance_summary.stale_vendor_follow_ups, 1);
+  assert.equal(report.buildings[0].maintenance_summary.maintenance_spend, 'USD 30.00');
+  assert.deepEqual(report.buildings[0].maintenance_summary.top_categories[0], { category: 'maintenance', count: 3 });
   assert.match(report.markdown, /CONDOS agency report - Quito Operations - 2026-05/);
   assert.match(report.markdown, /Test Condo/);
   assert.match(report.markdown, /urgent ticket/);
   assert.match(report.markdown, /recurring problem cluster/);
   assert.match(report.markdown, /vendor follow-up problem/);
+  assert.match(report.markdown, /Maintenance summary/);
+  assert.match(report.markdown, /4 opened, 1 resolved, 1 urgent/);
+  assert.match(report.markdown, /2 opened, 1 completed, 1 active, 0 overdue/);
+  assert.match(report.markdown, /Top categories: maintenance \(3\), access_control \(1\)/);
 
   const csv = agencyPortfolioToCsv(portfolio);
   assert.match(csv, /agency_id,agency_name,building_id,building_name/);

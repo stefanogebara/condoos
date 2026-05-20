@@ -327,8 +327,8 @@ Then update `vercel.json` `rewrites` to point `/api/*` at your deployed server U
 
 ## What's next
 
-- **Maintenance lifecycle** — ticket events, vendor quotes, quote decisions, recurring problem detection, vendor follow-up health, SLA alerts, work orders, and resident-safe progress history.
-- **Agency command center** — richer multi-building priorities, pilot readiness, permission review, invite delivery, monthly reports, and packaged export packs.
+- **Maintenance lifecycle** — ticket events, vendor quotes, quote decisions, recurring problem detection, vendor follow-up health, SLA alerts, work orders, resident-safe progress history, and agency maintenance summaries.
+- **Agency command center** — richer multi-building priorities, pilot readiness, permission review, invite delivery, polished monthly report packaging, and packaged export packs.
 - **Production hardening** — production-safe i18n, upload/storage audits, private setup-code enforcement, backup checks, and smoke tests before demos.
 - **Market readiness** — Brazil/Ecuador legal wording, timezone/date sweeps, and sales/onboarding material for private B2B pilots.
 
