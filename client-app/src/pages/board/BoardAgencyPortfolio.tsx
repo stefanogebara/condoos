@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Ban, Building2, Calendar, CheckCircle2, Copy, Download, FileArchive, KeyRound, LockKeyhole, PlusCircle, RefreshCw, ShieldCheck, Trash2, UserPlus, Users, Wallet, Wrench } from 'lucide-react';
+import { AlertTriangle, Ban, Building2, Calendar, CheckCircle2, ClipboardCheck, Copy, Download, FileArchive, KeyRound, LockKeyhole, PlusCircle, RefreshCw, ShieldCheck, Trash2, UserPlus, Users, Wallet, Wrench } from 'lucide-react';
 import GlassCard from '../../components/GlassCard';
 import Badge from '../../components/Badge';
 import Button from '../../components/Button';
@@ -151,6 +151,14 @@ interface IntegrationStatus {
   observability: { sentry_configured: boolean; posthog_configured: boolean };
 }
 
+interface PilotReadinessItem {
+  id: string;
+  ready: boolean;
+  label: string;
+  okDetail: string;
+  reviewDetail: string;
+}
+
 function Metric({ icon: Icon, label, value, urgent = false }: { icon: any; label: string; value: number; urgent?: boolean }) {
   return (
     <div className={`rounded-2xl border px-3 py-2 bg-white/60 ${urgent && value > 0 ? 'border-peach-200' : 'border-white/70'}`}>
@@ -246,6 +254,80 @@ function attentionTone(severity: AgencyAttentionItem['severity']) {
   return 'sage' as const;
 }
 
+function buildPilotReadiness(
+  agency: AgencyPortfolio | null,
+  status: IntegrationStatus | null,
+  permissionReview: AgencyPermissionReview | null,
+): PilotReadinessItem[] {
+  if (!agency) return [];
+  const hasCriticalOps = agency.totals.urgent_tickets > 0 || agency.totals.vendor_sla_problems > 0;
+  const items: PilotReadinessItem[] = [
+    {
+      id: 'private-access',
+      ready: !!status?.private_access.required && !!status.private_access.configured,
+      label: 'Acesso privado obrigatório',
+      okDetail: 'Novos prédios só entram com código aprovado.',
+      reviewDetail: 'Ative PRIVATE_CREATE_BUILDING_REQUIRED e emita códigos.',
+    },
+    {
+      id: 'email',
+      ready: !!status?.email.configured,
+      label: 'Email transacional',
+      okDetail: 'Convites e resets podem sair por email.',
+      reviewDetail: 'Configure Resend e EMAIL_FROM antes do piloto.',
+    },
+    {
+      id: 'uploads',
+      ready: !!status?.uploads.configured,
+      label: 'Uploads e documentos',
+      okDetail: 'R2 está pronto para documentos, recibos e evidências.',
+      reviewDetail: 'Configure R2 para não depender de armazenamento local.',
+    },
+    {
+      id: 'backups',
+      ready: !!status?.backups.configured,
+      label: 'Backups',
+      okDetail: 'Backups estão configurados.',
+      reviewDetail: 'Configure backup antes de usar dados reais.',
+    },
+    {
+      id: 'observability',
+      ready: !!status?.observability.sentry_configured && !!status.observability.posthog_configured,
+      label: 'Observabilidade',
+      okDetail: 'Sentry/PostHog estão configurados.',
+      reviewDetail: 'Configure erro e analytics para pilotos.',
+    },
+    {
+      id: 'critical-ops',
+      ready: !hasCriticalOps,
+      label: 'Fila crítica',
+      okDetail: 'Sem chamados urgentes ou SLA crítico no portfólio.',
+      reviewDetail: 'Resolva chamados urgentes ou SLA de fornecedor antes da demo.',
+    },
+  ];
+
+  if (permissionReview) {
+    items.push(
+      {
+        id: 'agency-admins',
+        ready: permissionReview.agency_admins >= 2,
+        label: 'Dois admins da administradora',
+        okDetail: 'Há redundância de administradores.',
+        reviewDetail: 'Adicione pelo menos outro admin da administradora.',
+      },
+      {
+        id: 'building-coverage',
+        ready: permissionReview.buildings_without_direct_staff.length === 0,
+        label: 'Cobertura por prédio',
+        okDetail: 'Todo prédio tem responsável direto.',
+        reviewDetail: 'Atribua um responsável direto a cada prédio.',
+      },
+    );
+  }
+
+  return items;
+}
+
 export default function BoardAgencyPortfolio() {
   const { user } = useAuth();
   const [portfolio, setPortfolio] = useState<PortfolioResponse | null>(null);
@@ -312,6 +394,11 @@ export default function BoardAgencyPortfolio() {
     upcoming_meetings: 0,
   }, [primaryAgency]);
   const permissionReview = primaryAgency?.permission_review || null;
+  const pilotReadiness = useMemo(
+    () => buildPilotReadiness(primaryAgency, status, permissionReview),
+    [primaryAgency, status, permissionReview],
+  );
+  const pilotReadinessReady = pilotReadiness.filter((item) => item.ready).length;
 
   async function loadSetupCodes(agencyId = primaryAgency?.id) {
     if (!agencyId || primaryAgency?.role !== 'agency_admin') {
@@ -721,6 +808,39 @@ export default function BoardAgencyPortfolio() {
                 ) : (
                   <div className="text-sm text-dusk-300">{t('Carregando...')}</div>
                 )}
+              </GlassCard>
+
+              <GlassCard className="p-5 h-fit">
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <div className="flex items-center gap-2">
+                    <ClipboardCheck className="w-5 h-5 text-sage-700" />
+                    <h2 className="font-display text-xl text-dusk-500">{t('Checklist de piloto privado')}</h2>
+                  </div>
+                  <Badge tone={pilotReadinessReady === pilotReadiness.length ? 'sage' : 'warning'}>
+                    {pilotReadinessReady}/{pilotReadiness.length}
+                  </Badge>
+                </div>
+                <p className="text-sm text-dusk-300 mb-4">
+                  {t('Use esta lista antes de apresentar para uma administradora real.')}
+                </p>
+                <div className="space-y-2">
+                  {pilotReadiness.map((item) => (
+                    <div key={item.id} className="rounded-2xl border border-white/70 bg-white/60 px-3 py-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="font-medium text-dusk-500">{t(item.label)}</div>
+                          <div className="text-xs text-dusk-300 mt-1">
+                            {t(item.ready ? item.okDetail : item.reviewDetail)}
+                          </div>
+                        </div>
+                        <Badge tone={item.ready ? 'sage' : 'warning'}>
+                          {item.ready ? <CheckCircle2 className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
+                          {item.ready ? t('Pronto') : t('Revisar')}
+                        </Badge>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </GlassCard>
 
               {permissionReview && (

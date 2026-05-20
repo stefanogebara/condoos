@@ -236,6 +236,15 @@ This slice makes portfolio data easier to sell and operate:
 - Exposes the report from `/api/agencies/:agencyId/report.md?month=YYYY-MM`.
 - Adds a one-click download from `/board/portfolio` alongside CSV exports.
 
+## Completed Slice: Agency Pilot Readiness Checklist
+
+This slice gives agencies a plain pre-demo quality gate in the app:
+
+- Added a `/board/portfolio` checklist for private access, transactional email, R2 uploads, backups, observability, critical operations, admin redundancy, and building coverage.
+- Shows ready/review state with buyer-facing guidance so private pilots do not rely on memory or hidden docs.
+- Reuses the existing integration status and permission review data instead of inventing a second source of truth.
+- Keeps the checklist localized across PT/EN/ES/FR for agency demos.
+
 ## Completed Slice: Vendor Intelligence
 
 This slice makes the saved service network feel operational instead of static:

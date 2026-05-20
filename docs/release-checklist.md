@@ -84,6 +84,7 @@ Before showing a buyer:
 - `/board/portfolio` shows integration readiness, portfolio risk summary, agency setup-code controls, agency staff invite/status controls for agency admins, assigned-building switching, and scoped portfolio/operations CSV exports.
 - Agency setup-code cards show whether a code has activated a building and who used it most recently.
 - Agency permission review flags single-admin risk, failed invites, and buildings without a directly assigned staff owner.
+- Agency pilot readiness checklist flags private access, email, R2 uploads, backups, observability, staff coverage, and critical operational risk before buyer demos.
 - Agency attention queue shows urgent multi-building issues and opens the right building workflow from each item.
 - Agency monthly report downloads from `/board/portfolio` and respects the same building scope as portfolio/operations exports.
 - Public i18n sweep includes `/login` and signup join/create/agency intent pages.
