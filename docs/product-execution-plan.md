@@ -267,11 +267,21 @@ This slice turns agency staff setup from a manual pre-created-user step into a p
 - Cover invite email generation, email mismatch rejection, scoped acceptance, accepted status, and portfolio visibility with server tests.
 - Keep server tests, production build, and the full desktop i18n leak sweep green.
 
+## Completed Slice: Scoped Agency Building Switching
+
+This slice closes the gap between portfolio access and single-building board workflows:
+
+- Add a scoped agency active-building switch endpoint so staff can enter an assigned building from `/board/portfolio`.
+- Reject building switches outside the caller's agency assignment, while agency admins can switch across the linked portfolio.
+- Activate existing agency staff users as `board_admin` with an allowed active building, matching the invite acceptance path.
+- Add portfolio card actions for opening a building and marking the active building.
+- Cover allowed and forbidden switching with server tests.
+
 ## Current Execution Slice: Enterprise Operations Hardening
 
 The next implementation slice should keep building on the private-enterprise plan:
 
 - Harden maintenance into a fuller work-order timeline with quote comparison and SLA alerts.
-- Add clearer agency permission review screens and deeper page-level access checks.
+- Continue deeper agency permission review screens beyond the active-building switch.
 - Expand portfolio reporting into a true agency command center.
 - Keep production-safe i18n, build, server tests, and pilot smoke checks green before each push.

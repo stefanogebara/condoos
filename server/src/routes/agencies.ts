@@ -20,6 +20,7 @@ import {
   listAgencyStaffInvites,
   recordAgencyStaffInviteEmailDelivery,
   removeAgencyStaff,
+  switchAgencyActiveBuilding,
   updateAgencyStaff,
   upsertAgencyStaff,
   userAgencyMembership,
@@ -68,6 +69,10 @@ const staffUpdateSchema = z.object({
 
 const acceptStaffInviteSchema = z.object({
   token: z.string().trim().min(20).max(200),
+});
+
+const activeBuildingSchema = z.object({
+  condominium_id: z.coerce.number().int().positive(),
 });
 
 const auditEventsQuerySchema = z.object({
@@ -122,6 +127,33 @@ router.post('/staff-invites/accept', requireAuth, asyncHandler(async (req: Authe
        WHERE id = ?`
     ).get(req.user!.id);
     return ok(res, { invite: accepted.invite, staff: accepted.staff, user });
+  } catch (err) {
+    const status = (err as Error & { status?: number }).status || 500;
+    if (status < 500) return fail(res, (err as Error).message, status);
+    throw err;
+  }
+}));
+
+router.post('/:agencyId/active-building', requireAuth, asyncHandler(async (req: AuthedRequest, res) => {
+  const params = parseParams(agencyIdParam, req);
+  if (!params) return fail(res, 'invalid_input', 400);
+  const parsed = activeBuildingSchema.safeParse(req.body);
+  if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
+  try {
+    const user = switchAgencyActiveBuilding({
+      userId: req.user!.id,
+      agencyId: params.agencyId,
+      condominiumId: parsed.data.condominium_id,
+    });
+    audit(req, {
+      action: 'agency.active_building_switch',
+      target_type: 'condominium',
+      target_id: parsed.data.condominium_id,
+      metadata: {
+        agency_id: params.agencyId,
+      },
+    });
+    return ok(res, { user });
   } catch (err) {
     const status = (err as Error & { status?: number }).status || 500;
     if (status < 500) return fail(res, (err as Error).message, status);

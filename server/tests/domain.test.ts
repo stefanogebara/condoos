@@ -61,6 +61,7 @@ import {
   listAgencySetupCodes,
   listAgencyStaff,
   removeAgencyStaff,
+  switchAgencyActiveBuilding,
   upsertAgencyStaff,
   userAgencyMemberships,
   userCanManageAgency,
@@ -389,6 +390,59 @@ test('agency staff invites are pending until matching email accepts and then sco
   assert.equal(portfolio.buildings.length, 1);
   assert.equal(portfolio.buildings[0].id, secondCondoId);
   assert.equal(listAgencyStaffInvites(agency!.agencyId)[0].status, 'accepted');
+});
+
+test('agency active building switch is limited to assigned agency buildings', () => {
+  resetDb();
+  const { condoId } = createCondoFixture();
+  const secondCondoId = Number(db.prepare(
+    `INSERT INTO condominiums (name, address, invite_code) VALUES ('Second Condo', '2 Main', 'TEST02')`
+  ).run().lastInsertRowid);
+  const unrelatedCondoId = Number(db.prepare(
+    `INSERT INTO condominiums (name, address, invite_code) VALUES ('Unrelated Condo', '3 Main', 'TEST03')`
+  ).run().lastInsertRowid);
+  const adminId = createUser('agency-admin@example.com', 'board_admin');
+  const staffId = createUser('multi-staff@example.com', 'resident');
+  const agency = linkCondominiumToAgency({
+    agencyName: 'Andes Management',
+    condominiumId: condoId,
+    userId: adminId,
+  });
+  assert.ok(agency);
+  db.prepare(
+    `INSERT INTO agency_condominiums (agency_id, condominium_id) VALUES (?, ?)`
+  ).run(agency!.agencyId, secondCondoId);
+
+  upsertAgencyStaff({
+    agencyId: agency!.agencyId,
+    email: 'multi-staff@example.com',
+    role: 'building_admin',
+    buildingIds: [condoId, secondCondoId],
+  });
+
+  const switchedStaff = switchAgencyActiveBuilding({
+    userId: staffId,
+    agencyId: agency!.agencyId,
+    condominiumId: secondCondoId,
+  }) as { condominium_id: number; role: string };
+  assert.equal(switchedStaff.role, 'board_admin');
+  assert.equal(switchedStaff.condominium_id, secondCondoId);
+
+  const switchedAdmin = switchAgencyActiveBuilding({
+    userId: adminId,
+    agencyId: agency!.agencyId,
+    condominiumId: secondCondoId,
+  }) as { condominium_id: number; role: string };
+  assert.equal(switchedAdmin.condominium_id, secondCondoId);
+
+  assert.throws(
+    () => switchAgencyActiveBuilding({
+      userId: staffId,
+      agencyId: agency!.agencyId,
+      condominiumId: unrelatedCondoId,
+    }),
+    /agency_building_forbidden/,
+  );
 });
 
 test('agency staff removal keeps the last agency admin safe', () => {

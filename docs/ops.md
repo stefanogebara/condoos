@@ -104,10 +104,16 @@ always see the whole linked portfolio. The API endpoints are:
 - `POST /api/agencies/:agencyId/staff/:membershipId`
 - `DELETE /api/agencies/:agencyId/staff/:membershipId`
 - `POST /api/agencies/staff-invites/accept`
+- `POST /api/agencies/:agencyId/active-building`
 
 Invite acceptance requires the signed-in account email to match the invite
 email. The safeguards prevent removing the current actor and prevent
 deleting/demoting the last agency admin.
+
+Agency staff with multiple assigned buildings can switch their active building
+from `/board/portfolio`. The switch endpoint updates `users.condominium_id` only
+when the target building belongs to the caller's agency scope; unassigned
+buildings return `agency_building_forbidden`.
 
 Turnstile setup can be automated once you have a Cloudflare account ID and an
 API token with Turnstile widget write permission:

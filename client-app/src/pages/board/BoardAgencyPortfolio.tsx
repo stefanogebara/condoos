@@ -5,6 +5,7 @@ import Badge from '../../components/Badge';
 import Button from '../../components/Button';
 import { api, apiDelete, apiGet, apiPost } from '../../lib/api';
 import { t } from '../../lib/i18n';
+import { useAuth, type User } from '../../lib/auth';
 
 interface AgencyBuildingMetrics {
   pending_residents: number;
@@ -185,6 +186,7 @@ function agencyRoleLabel(role: AgencyRole | string) {
 }
 
 export default function BoardAgencyPortfolio() {
+  const { user } = useAuth();
   const [portfolio, setPortfolio] = useState<PortfolioResponse | null>(null);
   const [status, setStatus] = useState<IntegrationStatus | null>(null);
   const [selectedAgencyId, setSelectedAgencyId] = useState<number | null>(null);
@@ -202,6 +204,7 @@ export default function BoardAgencyPortfolio() {
   const [staffError, setStaffError] = useState<string | null>(null);
   const [createdStaffInvite, setCreatedStaffInvite] = useState<AgencyStaffInvite | null>(null);
   const [copiedStaffInvite, setCopiedStaffInvite] = useState(false);
+  const [switchingBuildingId, setSwitchingBuildingId] = useState<number | null>(null);
   const [auditEvents, setAuditEvents] = useState<AgencyAuditEvent[]>([]);
   const [auditEventsLoading, setAuditEventsLoading] = useState(false);
   const [staffForm, setStaffForm] = useState<{ email: string; role: AgencyRole; building_ids: number[] }>({
@@ -433,6 +436,25 @@ export default function BoardAgencyPortfolio() {
     window.setTimeout(() => setCopiedStaffInvite(false), 1600);
   }
 
+  async function switchActiveBuilding(building: AgencyBuilding) {
+    if (!primaryAgency) return;
+    if (user?.condominium_id === building.id) {
+      window.location.href = '/board';
+      return;
+    }
+    setSwitchingBuildingId(building.id);
+    try {
+      const res = await apiPost<{ user: User }>(`/agencies/${primaryAgency.id}/active-building`, {
+        condominium_id: building.id,
+      });
+      if (res.user) localStorage.setItem('condoos_user', JSON.stringify(res.user));
+      window.location.href = '/board';
+    } catch {
+      setStaffError(t('Não foi possível trocar de prédio.'));
+      setSwitchingBuildingId(null);
+    }
+  }
+
   async function removeStaffMember(staffId: number) {
     if (!primaryAgency) return;
     setStaffError(null);
@@ -532,7 +554,19 @@ export default function BoardAgencyPortfolio() {
                       <h3 className="font-display text-xl text-dusk-500" data-user-content>{building.name}</h3>
                       <p className="text-sm text-dusk-300 mt-0.5" data-user-content>{building.address}</p>
                     </div>
-                    {building.invite_code && <Badge tone="neutral">{t('Código')} {building.invite_code}</Badge>}
+                    <div className="flex items-center gap-2 flex-wrap justify-end">
+                      {user?.condominium_id === building.id && <Badge tone="sage">{t('Prédio ativo')}</Badge>}
+                      {building.invite_code && <Badge tone="neutral">{t('Código')} {building.invite_code}</Badge>}
+                      <Button
+                        type="button"
+                        variant={user?.condominium_id === building.id ? 'ghost' : 'sage'}
+                        onClick={() => switchActiveBuilding(building)}
+                        loading={switchingBuildingId === building.id}
+                        leftIcon={<Building2 className="w-4 h-4" />}
+                      >
+                        {t('Abrir prédio')}
+                      </Button>
+                    </div>
                   </div>
                   <div className="grid sm:grid-cols-4 gap-2 mt-4">
                     <Metric icon={AlertTriangle} label={t('Chamados')} value={building.metrics.unresolved_tickets} urgent />

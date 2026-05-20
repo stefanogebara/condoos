@@ -595,16 +595,40 @@ function firstBuildingForAgency(agencyId: number): number | null {
   return row?.condominium_id || null;
 }
 
-function activateAgencyStaffUser(userId: number, agencyId: number, role: AgencyRole, buildingIds: number[]): void {
-  const activeBuildingId = role === 'agency_admin'
+function selectUserFields(userId: number) {
+  return db.prepare(
+    `SELECT id, email, role, condominium_id, first_name, last_name,
+            unit_number, avatar_url, mobile_phone, home_phone, email_verified_at
+     FROM users
+     WHERE id = ?`
+  ).get(userId);
+}
+
+function activateAgencyStaffUser(userId: number, agencyId: number, role: AgencyRole, buildingIds: number[], preferredBuildingId?: number | null): void {
+  const activeBuildingId = preferredBuildingId || (role === 'agency_admin'
     ? firstBuildingForAgency(agencyId)
-    : buildingIds[0] || firstBuildingForAgency(agencyId);
+    : buildingIds[0] || firstBuildingForAgency(agencyId));
   db.prepare(
     `UPDATE users
      SET role = 'board_admin',
          condominium_id = COALESCE(?, condominium_id)
      WHERE id = ?`
   ).run(activeBuildingId, userId);
+}
+
+export function switchAgencyActiveBuilding(input: {
+  userId: number;
+  agencyId: number;
+  condominiumId: number;
+}) {
+  const membership = userAgencyMembership(input.userId, input.agencyId);
+  if (!membership) throw Object.assign(new Error('agency_membership_not_found'), { status: 404 });
+  const allowedBuildingIds = buildingIdsForMembership(membership);
+  if (!allowedBuildingIds.includes(input.condominiumId)) {
+    throw Object.assign(new Error('agency_building_forbidden'), { status: 403 });
+  }
+  activateAgencyStaffUser(input.userId, input.agencyId, membership.role, allowedBuildingIds, input.condominiumId);
+  return selectUserFields(input.userId);
 }
 
 export function acceptAgencyStaffInvite(input: {
