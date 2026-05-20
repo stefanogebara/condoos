@@ -90,6 +90,9 @@ export interface CreatedAgencySetupCode extends AgencySetupCode {
   code: string;
 }
 
+export const AGENCY_EXPORT_KINDS = ['residents', 'finance', 'tickets', 'work-orders', 'audit'] as const;
+export type AgencyExportKind = typeof AGENCY_EXPORT_KINDS[number];
+
 function count(sql: string, ...params: unknown[]): number {
   const row = db.prepare(sql).get(...params) as { count: number } | undefined;
   return Number(row?.count || 0);
@@ -625,6 +628,146 @@ function csvCell(value: unknown): string {
   const text = String(value);
   if (/[",\n\r]/.test(text)) return `"${text.replace(/"/g, '""')}"`;
   return text;
+}
+
+function rowsToCsv(headers: string[], rows: Array<Record<string, unknown>>): string {
+  const lines = [headers.join(',')];
+  for (const row of rows) {
+    lines.push(headers.map((header) => csvCell(row[header])).join(','));
+  }
+  return `${lines.join('\n')}\n`;
+}
+
+function placeholders(ids: number[]): string {
+  return ids.map(() => '?').join(',');
+}
+
+export function agencyOperationalExportToCsv(membership: AgencyMembership, kind: AgencyExportKind): string {
+  const buildingIds = buildingIdsForMembership(membership);
+  if (buildingIds.length === 0) {
+    const emptyHeaders: Record<AgencyExportKind, string[]> = {
+      residents: ['condominium_id', 'condominium_name', 'user_id', 'email', 'first_name', 'last_name', 'role', 'mobile_phone', 'home_phone', 'unit_numbers', 'active_units', 'pending_units', 'created_at'],
+      finance: ['condominium_id', 'condominium_name', 'record_type', 'record_id', 'unit_number', 'period', 'date', 'status', 'amount_cents', 'currency', 'method', 'reference', 'category', 'vendor', 'description'],
+      tickets: ['condominium_id', 'condominium_name', 'ticket_id', 'title', 'category', 'priority', 'status', 'remediation_status', 'reporter_email', 'unit_number', 'created_at', 'updated_at'],
+      'work-orders': ['condominium_id', 'condominium_name', 'work_order_id', 'ticket_id', 'title', 'status', 'vendor', 'estimated_amount_cents', 'approved_amount_cents', 'scheduled_for', 'completed_at', 'updated_at'],
+      audit: ['id', 'created_at', 'condominium_id', 'condominium_name', 'actor_user_id', 'actor_email', 'action', 'target_type', 'target_id', 'metadata', 'ip'],
+    };
+    return rowsToCsv(emptyHeaders[kind], []);
+  }
+
+  const ids = placeholders(buildingIds);
+  if (kind === 'residents') {
+    const headers = ['condominium_id', 'condominium_name', 'user_id', 'email', 'first_name', 'last_name', 'role', 'mobile_phone', 'home_phone', 'unit_numbers', 'active_units', 'pending_units', 'created_at'];
+    const rows = db.prepare(
+      `SELECT
+         c.id AS condominium_id,
+         c.name AS condominium_name,
+         u.id AS user_id,
+         u.email,
+         u.first_name,
+         u.last_name,
+         u.role,
+         u.mobile_phone,
+         u.home_phone,
+         GROUP_CONCAT(DISTINCT COALESCE(b.name || ' ', '') || un.number) AS unit_numbers,
+         SUM(CASE WHEN uu.status = 'active' THEN 1 ELSE 0 END) AS active_units,
+         SUM(CASE WHEN uu.status = 'pending' THEN 1 ELSE 0 END) AS pending_units,
+         u.created_at
+       FROM users u
+       JOIN condominiums c ON c.id = u.condominium_id
+       LEFT JOIN user_unit uu ON uu.user_id = u.id
+       LEFT JOIN units un ON un.id = uu.unit_id
+       LEFT JOIN buildings b ON b.id = un.building_id
+       WHERE c.id IN (${ids})
+       GROUP BY c.id, u.id
+       ORDER BY c.name, lower(u.last_name), lower(u.first_name), lower(u.email)`
+    ).all(...buildingIds) as Array<Record<string, unknown>>;
+    return rowsToCsv(headers, rows);
+  }
+
+  if (kind === 'finance') {
+    const headers = ['condominium_id', 'condominium_name', 'record_type', 'record_id', 'unit_number', 'period', 'date', 'status', 'amount_cents', 'currency', 'method', 'reference', 'category', 'vendor', 'description'];
+    const rows = db.prepare(
+      `SELECT * FROM (
+         SELECT c.id AS condominium_id, c.name AS condominium_name, 'invoice' AS record_type,
+                i.id AS record_id, un.number AS unit_number, i.period, i.due_date AS date,
+                i.status, i.amount_cents, i.currency, '' AS method, '' AS reference,
+                'dues' AS category, '' AS vendor, COALESCE(i.notes, '') AS description
+         FROM invoices i
+         JOIN condominiums c ON c.id = i.condominium_id
+         JOIN units un ON un.id = i.unit_id
+         WHERE i.condominium_id IN (${ids})
+         UNION ALL
+         SELECT c.id AS condominium_id, c.name AS condominium_name, 'payment' AS record_type,
+                p.id AS record_id, un.number AS unit_number, i.period, p.paid_at AS date,
+                'paid' AS status, p.amount_cents, i.currency, p.method, COALESCE(p.reference, ''),
+                'dues' AS category, '' AS vendor, 'Payment received' AS description
+         FROM payments p
+         JOIN invoices i ON i.id = p.invoice_id
+         JOIN condominiums c ON c.id = p.condominium_id
+         JOIN units un ON un.id = i.unit_id
+         WHERE p.condominium_id IN (${ids})
+         UNION ALL
+         SELECT c.id AS condominium_id, c.name AS condominium_name, 'expense' AS record_type,
+                e.id AS record_id, '' AS unit_number, '' AS period, e.spent_at AS date,
+                'spent' AS status, e.amount_cents, e.currency, '' AS method, '' AS reference,
+                e.category, COALESCE(e.vendor, ''), e.description
+         FROM expenses e
+         JOIN condominiums c ON c.id = e.condominium_id
+         WHERE e.condominium_id IN (${ids})
+       )
+       ORDER BY condominium_name, date DESC, record_type, record_id DESC`
+    ).all(...buildingIds, ...buildingIds, ...buildingIds) as Array<Record<string, unknown>>;
+    return rowsToCsv(headers, rows);
+  }
+
+  if (kind === 'tickets') {
+    const headers = ['condominium_id', 'condominium_name', 'ticket_id', 'title', 'category', 'priority', 'status', 'remediation_status', 'reporter_email', 'unit_number', 'created_at', 'updated_at'];
+    const rows = db.prepare(
+      `SELECT c.id AS condominium_id, c.name AS condominium_name, t.id AS ticket_id,
+              t.title, t.category, t.priority, t.status, t.remediation_status,
+              u.email AS reporter_email, un.number AS unit_number, t.created_at, t.updated_at
+       FROM tickets t
+       JOIN condominiums c ON c.id = t.condominium_id
+       JOIN users u ON u.id = t.reporter_id
+       LEFT JOIN units un ON un.id = t.unit_id
+       WHERE t.condominium_id IN (${ids})
+       ORDER BY c.name, t.updated_at DESC, t.id DESC`
+    ).all(...buildingIds) as Array<Record<string, unknown>>;
+    return rowsToCsv(headers, rows);
+  }
+
+  if (kind === 'work-orders') {
+    const headers = ['condominium_id', 'condominium_name', 'work_order_id', 'ticket_id', 'title', 'status', 'vendor', 'estimated_amount_cents', 'approved_amount_cents', 'scheduled_for', 'completed_at', 'updated_at'];
+    const rows = db.prepare(
+      `SELECT c.id AS condominium_id, c.name AS condominium_name, wo.id AS work_order_id,
+              t.id AS ticket_id, wo.title, wo.status, COALESCE(sc.company_name, '') AS vendor,
+              wo.estimated_amount_cents, wo.approved_amount_cents,
+              wo.scheduled_for, wo.completed_at, wo.updated_at
+       FROM ticket_work_orders wo
+       JOIN tickets t ON t.id = wo.ticket_id
+       JOIN condominiums c ON c.id = t.condominium_id
+       LEFT JOIN service_contacts sc ON sc.id = wo.service_contact_id
+       WHERE t.condominium_id IN (${ids})
+       ORDER BY c.name, wo.updated_at DESC, wo.id DESC`
+    ).all(...buildingIds) as Array<Record<string, unknown>>;
+    return rowsToCsv(headers, rows);
+  }
+
+  const headers = ['id', 'created_at', 'condominium_id', 'condominium_name', 'actor_user_id', 'actor_email', 'action', 'target_type', 'target_id', 'metadata', 'ip'];
+  const agencyNeedle = `%"agency_id":${membership.agency_id}%`;
+  const rows = db.prepare(
+    `SELECT al.id, al.created_at, al.condominium_id, c.name AS condominium_name,
+            al.actor_user_id, al.actor_email, al.action, al.target_type,
+            al.target_id, al.metadata, al.ip
+     FROM audit_log al
+     LEFT JOIN condominiums c ON c.id = al.condominium_id
+     WHERE al.condominium_id IN (${ids})
+        OR al.metadata LIKE ?
+     ORDER BY al.created_at DESC, al.id DESC
+     LIMIT 1000`
+  ).all(...buildingIds, agencyNeedle) as Array<Record<string, unknown>>;
+  return rowsToCsv(headers, rows);
 }
 
 export function agencyPortfolioToCsv(portfolio: AgencyPortfolio): string {

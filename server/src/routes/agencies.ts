@@ -5,7 +5,9 @@ import { audit } from '../lib/audit';
 import { ok, fail, asyncHandler } from '../lib/respond';
 import {
   AGENCY_ROLES,
+  AGENCY_EXPORT_KINDS,
   agencyPortfolioToCsv,
+  agencyOperationalExportToCsv,
   agencyPortfoliosForUser,
   buildAgencyPortfolio,
   createAgencySetupCode,
@@ -27,6 +29,10 @@ const agencyIdParam = z.object({
 
 const setupCodeIdParam = agencyIdParam.extend({
   codeId: z.coerce.number().int().positive(),
+});
+
+const exportParam = agencyIdParam.extend({
+  kind: z.enum(AGENCY_EXPORT_KINDS),
 });
 
 const staffMemberParam = agencyIdParam.extend({
@@ -261,6 +267,26 @@ router.get('/:agencyId/export/portfolio.csv', requireAuth, asyncHandler(async (r
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="condoos-agency-${params.agencyId}-portfolio.csv"`);
   return res.status(200).send(agencyPortfolioToCsv(portfolio));
+}));
+
+router.get('/:agencyId/export/:kind.csv', requireAuth, asyncHandler(async (req: AuthedRequest, res) => {
+  const params = parseParams(exportParam, req);
+  if (!params) return fail(res, 'invalid_input', 400);
+  const membership = agencyMembershipOrFail(req, res, params.agencyId, false);
+  if (!membership) return;
+  const csv = agencyOperationalExportToCsv(membership, params.kind);
+  audit(req, {
+    action: 'agency.export_operational',
+    target_type: 'agency',
+    target_id: params.agencyId,
+    metadata: {
+      agency_id: params.agencyId,
+      export_kind: params.kind,
+    },
+  });
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="condoos-agency-${params.agencyId}-${params.kind}.csv"`);
+  return res.status(200).send(csv);
 }));
 
 export default router;

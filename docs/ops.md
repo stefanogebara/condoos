@@ -71,6 +71,20 @@ Agency portfolio exports are available to agency members from
 `/api/agencies/:agencyId/export/portfolio.csv` and from the Export CSV button on
 `/board/portfolio`.
 
+Agency operational exports are available from `/board/portfolio` and through:
+
+- `GET /api/agencies/:agencyId/export/residents.csv`
+- `GET /api/agencies/:agencyId/export/finance.csv`
+- `GET /api/agencies/:agencyId/export/tickets.csv`
+- `GET /api/agencies/:agencyId/export/work-orders.csv`
+- `GET /api/agencies/:agencyId/export/audit.csv`
+
+Exports respect the caller's agency membership. Agency admins export all linked
+buildings. Non-admin agency staff only export their assigned buildings. The
+audit export also includes agency-level audit rows whose metadata references the
+agency, so setup-code/staff/export actions are visible even when not tied to one
+building.
+
 Agency admins can manage existing staff accounts from `/board/portfolio`:
 enter the staff email, pick an agency role, and assign the buildings they are
 allowed to see. Non-admin agency staff only see assigned buildings in

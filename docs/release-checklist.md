@@ -80,4 +80,4 @@ Before showing a buyer:
 - Finance transparency shows dues, payments, expenses, receipts, and reports.
 - Document vault can use uploaded files or the buyer understands that production R2 secrets are not configured yet.
 - WhatsApp/email/Google/AI status is either configured or gracefully hidden/degraded.
-- `/board/portfolio` shows integration readiness, portfolio risk summary, agency setup-code controls, scoped agency staff controls for agency admins, and portfolio CSV export.
+- `/board/portfolio` shows integration readiness, portfolio risk summary, agency setup-code controls, scoped agency staff controls for agency admins, and scoped portfolio/operations CSV exports.

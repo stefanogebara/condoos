@@ -54,6 +54,7 @@ interface AgencySetupCode {
 }
 
 type AgencyRole = 'agency_admin' | 'building_admin' | 'finance_manager' | 'maintenance_manager' | 'concierge_supervisor';
+type AgencyExportKind = 'residents' | 'finance' | 'tickets' | 'work-orders' | 'audit';
 
 interface AgencyStaffMember {
   id: number;
@@ -129,6 +130,14 @@ const agencyRoles: AgencyRole[] = [
   'finance_manager',
   'maintenance_manager',
   'concierge_supervisor',
+];
+
+const operationalExports: Array<{ kind: AgencyExportKind; label: string }> = [
+  { kind: 'residents', label: 'Moradores' },
+  { kind: 'finance', label: 'Financeiro' },
+  { kind: 'tickets', label: 'Chamados' },
+  { kind: 'work-orders', label: 'Ordens de serviço' },
+  { kind: 'audit', label: 'Auditoria' },
 ];
 
 function agencyRoleLabel(role: AgencyRole | string) {
@@ -285,20 +294,35 @@ export default function BoardAgencyPortfolio() {
     window.setTimeout(() => setCopiedCode(false), 1600);
   }
 
-  async function downloadPortfolioCsv() {
-    if (!primaryAgency) return;
-    const response = await api.get(`/agencies/${primaryAgency.id}/export/portfolio.csv`, { responseType: 'blob' });
+  async function downloadCsv(path: string, filename: string) {
+    const response = await api.get(path, { responseType: 'blob' });
     const blob = response.data instanceof Blob
       ? response.data
       : new Blob([response.data], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `condoos-${primaryAgency.slug}-portfolio.csv`;
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
+  }
+
+  async function downloadPortfolioCsv() {
+    if (!primaryAgency) return;
+    await downloadCsv(
+      `/agencies/${primaryAgency.id}/export/portfolio.csv`,
+      `condoos-${primaryAgency.slug}-portfolio.csv`,
+    );
+  }
+
+  async function downloadOperationalCsv(kind: AgencyExportKind) {
+    if (!primaryAgency) return;
+    await downloadCsv(
+      `/agencies/${primaryAgency.id}/export/${kind}.csv`,
+      `condoos-${primaryAgency.slug}-${kind}.csv`,
+    );
   }
 
   function toggleStaffBuilding(buildingId: number) {
@@ -461,6 +485,26 @@ export default function BoardAgencyPortfolio() {
                 ) : (
                   <div className="text-sm text-dusk-300">{t('Carregando...')}</div>
                 )}
+              </GlassCard>
+
+              <GlassCard className="p-5 h-fit">
+                <div className="flex items-center gap-2 mb-2">
+                  <FileArchive className="w-5 h-5 text-sage-700" />
+                  <h2 className="font-display text-xl text-dusk-500">{t('Exportações operacionais')}</h2>
+                </div>
+                <p className="text-sm text-dusk-300 mb-4">
+                  {t('Baixe dados do portfólio respeitando os prédios permitidos para sua função.')}
+                </p>
+                <div className="grid grid-cols-1 gap-2">
+                  <Button variant="ghost" onClick={downloadPortfolioCsv} leftIcon={<Download className="w-4 h-4" />}>
+                    {t('Resumo do portfólio')}
+                  </Button>
+                  {operationalExports.map((item) => (
+                    <Button key={item.kind} variant="ghost" onClick={() => downloadOperationalCsv(item.kind)} leftIcon={<Download className="w-4 h-4" />}>
+                      {t(item.label)}
+                    </Button>
+                  ))}
+                </div>
               </GlassCard>
 
               {primaryAgency.role === 'agency_admin' && (

@@ -48,6 +48,7 @@ import { getDashboardActions } from '../src/lib/dashboard-actions';
 import { createInAppNotification, markInAppNotificationRead } from '../src/lib/in-app-notifications';
 import { assertFileReadyForUse, canAccessFile, createPendingFile, markFileReady } from '../src/lib/files';
 import {
+  agencyOperationalExportToCsv,
   agencyPortfolioToCsv,
   buildAgencyPortfolio,
   createAgencySetupCode,
@@ -361,6 +362,115 @@ test('agency staff removal keeps the last agency admin safe', () => {
     }),
     /last_agency_admin/,
   );
+});
+
+test('agency operational exports respect staff building scope', () => {
+  resetDb();
+  const first = createCondoFixture();
+  const secondCondoId = Number(db.prepare(
+    `INSERT INTO condominiums (name, address, invite_code) VALUES ('Second Condo', '2 Main', 'TEST02')`
+  ).run().lastInsertRowid);
+  const secondBuildingId = Number(db.prepare(
+    `INSERT INTO buildings (condominium_id, name, floors) VALUES (?, 'Tower', 8)`
+  ).run(secondCondoId).lastInsertRowid);
+  const secondUnitId = Number(db.prepare(
+    `INSERT INTO units (building_id, floor, number) VALUES (?, 2, '201')`
+  ).run(secondBuildingId).lastInsertRowid);
+
+  const adminId = createUser('agency-admin@example.com', 'board_admin');
+  const staffId = createUser('finance-staff@example.com', 'resident');
+  const firstResidentId = createUser('first-resident@example.com');
+  const secondResidentId = createUser('second-resident@example.com');
+  db.prepare(`UPDATE users SET condominium_id = ? WHERE id = ?`).run(first.condoId, firstResidentId);
+  db.prepare(`UPDATE users SET condominium_id = ? WHERE id = ?`).run(secondCondoId, secondResidentId);
+  db.prepare(
+    `INSERT INTO user_unit (user_id, unit_id, relationship, status, primary_contact, voting_weight)
+     VALUES (?, ?, 'tenant', 'active', 1, 1.0)`
+  ).run(secondResidentId, secondUnitId);
+
+  const agency = linkCondominiumToAgency({
+    agencyName: 'Andes Management',
+    condominiumId: first.condoId,
+    userId: adminId,
+  });
+  assert.ok(agency);
+  db.prepare(
+    `INSERT INTO agency_condominiums (agency_id, condominium_id) VALUES (?, ?)`
+  ).run(agency!.agencyId, secondCondoId);
+  upsertAgencyStaff({
+    agencyId: agency!.agencyId,
+    email: 'finance-staff@example.com',
+    role: 'finance_manager',
+    buildingIds: [secondCondoId],
+  });
+
+  db.prepare(
+    `INSERT INTO invoices (condominium_id, unit_id, amount_cents, period, due_date, status, notes)
+     VALUES (?, ?, 10000, '2026-05', '2026-05-10', 'open', 'First invoice')`
+  ).run(first.condoId, first.unit101);
+  db.prepare(
+    `INSERT INTO invoices (condominium_id, unit_id, amount_cents, period, due_date, status, notes)
+     VALUES (?, ?, 22000, '2026-05', '2026-05-10', 'open', 'Second invoice')`
+  ).run(secondCondoId, secondUnitId);
+  db.prepare(
+    `INSERT INTO expenses (condominium_id, amount_cents, category, vendor, description, spent_at)
+     VALUES (?, 5000, 'maintenance', 'First Vendor', 'First expense', '2026-05-02')`
+  ).run(first.condoId);
+  db.prepare(
+    `INSERT INTO expenses (condominium_id, amount_cents, category, vendor, description, spent_at)
+     VALUES (?, 8000, 'security', 'Second Vendor', 'Second expense', '2026-05-03')`
+  ).run(secondCondoId);
+
+  const firstTicketId = Number(db.prepare(
+    `INSERT INTO tickets (condominium_id, unit_id, reporter_id, title, description, category, priority, status)
+     VALUES (?, ?, ?, 'First leak', 'Leak', 'maintenance', 'normal', 'open')`
+  ).run(first.condoId, first.unit101, firstResidentId).lastInsertRowid);
+  const secondTicketId = Number(db.prepare(
+    `INSERT INTO tickets (condominium_id, unit_id, reporter_id, title, description, category, priority, status)
+     VALUES (?, ?, ?, 'Second gate', 'Gate', 'security', 'urgent', 'open')`
+  ).run(secondCondoId, secondUnitId, secondResidentId).lastInsertRowid);
+  db.prepare(
+    `INSERT INTO ticket_work_orders (ticket_id, title, status, estimated_amount_cents)
+     VALUES (?, 'First repair', 'scheduled', 30000)`
+  ).run(firstTicketId);
+  db.prepare(
+    `INSERT INTO ticket_work_orders (ticket_id, title, status, estimated_amount_cents)
+     VALUES (?, 'Second repair', 'scheduled', 44000)`
+  ).run(secondTicketId);
+  db.prepare(
+    `INSERT INTO audit_log (condominium_id, actor_user_id, actor_email, action, target_type, target_id, metadata)
+     VALUES (?, ?, 'first@example.com', 'first.action', 'ticket', ?, '{}')`
+  ).run(first.condoId, adminId, firstTicketId);
+  db.prepare(
+    `INSERT INTO audit_log (condominium_id, actor_user_id, actor_email, action, target_type, target_id, metadata)
+     VALUES (?, ?, 'second@example.com', 'second.action', 'ticket', ?, '{}')`
+  ).run(secondCondoId, adminId, secondTicketId);
+  db.prepare(
+    `INSERT INTO audit_log (condominium_id, actor_user_id, actor_email, action, target_type, target_id, metadata)
+     VALUES (NULL, ?, 'agency@example.com', 'agency.action', 'agency', ?, ?)`
+  ).run(adminId, agency!.agencyId, JSON.stringify({ agency_id: agency!.agencyId }));
+
+  const membership = userAgencyMemberships(staffId)[0];
+  const residentsCsv = agencyOperationalExportToCsv(membership, 'residents');
+  assert.match(residentsCsv, /second-resident@example.com/);
+  assert.doesNotMatch(residentsCsv, /first-resident@example.com/);
+
+  const financeCsv = agencyOperationalExportToCsv(membership, 'finance');
+  assert.match(financeCsv, /Second expense/);
+  assert.doesNotMatch(financeCsv, /First expense/);
+
+  const ticketsCsv = agencyOperationalExportToCsv(membership, 'tickets');
+  assert.match(ticketsCsv, /Second gate/);
+  assert.doesNotMatch(ticketsCsv, /First leak/);
+
+  const workOrdersCsv = agencyOperationalExportToCsv(membership, 'work-orders');
+  assert.match(workOrdersCsv, /Second repair/);
+  assert.doesNotMatch(workOrdersCsv, /First repair/);
+
+  const auditCsv = agencyOperationalExportToCsv(membership, 'audit');
+  assert.match(auditCsv, /second.action/);
+  assert.match(auditCsv, /agency.action/);
+  assert.doesNotMatch(auditCsv, /first.action/);
 });
 
 function createCondoFixture() {
