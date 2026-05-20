@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import db from '../db';
-import { requireAuth, requireRole, requireActiveMembership, getActiveCondoId, AuthedRequest } from '../lib/auth';
+import { requireAuth, requireRole, requireActiveMembership, requireBoardCapability, getActiveCondoId, AuthedRequest } from '../lib/auth';
 import { ok, fail } from '../lib/respond';
 import { audit } from '../lib/audit';
 import {
@@ -90,7 +90,7 @@ const expenseSchema = z.object({
   related_proposal_id: z.number().int().positive().optional().nullable(),
 });
 
-router.get('/schedules', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.get('/schedules', requireAuth, requireRole('board_admin'), requireBoardCapability('finance'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const rows = db.prepare(
     `SELECT * FROM dues_schedules WHERE condominium_id = ? ORDER BY active DESC, created_at DESC`
@@ -98,7 +98,7 @@ router.get('/schedules', requireAuth, requireRole('board_admin'), (req: AuthedRe
   return ok(res, rows);
 });
 
-router.post('/schedules', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.post('/schedules', requireAuth, requireRole('board_admin'), requireBoardCapability('finance'), (req: AuthedRequest, res) => {
   const parsed = scheduleSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
   const condoId = getActiveCondoId(req);
@@ -119,7 +119,7 @@ router.post('/schedules', requireAuth, requireRole('board_admin'), (req: AuthedR
   return ok(res, { id }, 201);
 });
 
-router.get('/receivables', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.get('/receivables', requireAuth, requireRole('board_admin'), requireBoardCapability('finance'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const today = new Date().toISOString();
 
@@ -222,7 +222,7 @@ router.get('/receivables', requireAuth, requireRole('board_admin'), (req: Authed
   });
 });
 
-router.post('/invoices', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.post('/invoices', requireAuth, requireRole('board_admin'), requireBoardCapability('finance'), (req: AuthedRequest, res) => {
   const parsed = invoiceSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
   const condoId = getActiveCondoId(req);
@@ -290,7 +290,7 @@ router.get('/statements/:unit_id', requireAuth, (req: AuthedRequest, res) => {
   return ok(res, { unit, invoices, payments, payment_proofs, balance_cents });
 });
 
-router.post('/payments', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.post('/payments', requireAuth, requireRole('board_admin'), requireBoardCapability('finance'), (req: AuthedRequest, res) => {
   const parsed = paymentSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
   const condoId = getActiveCondoId(req);
@@ -374,7 +374,7 @@ router.post('/payment-proofs', requireAuth, requireActiveMembership, (req: Authe
   return ok(res, result, 201);
 });
 
-router.post('/payment-proofs/:id/approve', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.post('/payment-proofs/:id/approve', requireAuth, requireRole('board_admin'), requireBoardCapability('finance'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) return fail(res, 'invalid_payment_proof_id', 400);
@@ -390,7 +390,7 @@ router.post('/payment-proofs/:id/approve', requireAuth, requireRole('board_admin
   return ok(res, result);
 });
 
-router.post('/payment-proofs/:id/reject', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.post('/payment-proofs/:id/reject', requireAuth, requireRole('board_admin'), requireBoardCapability('finance'), (req: AuthedRequest, res) => {
   const parsed = paymentProofRejectSchema.safeParse(req.body || {});
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
   const condoId = getActiveCondoId(req);
@@ -421,7 +421,7 @@ router.get('/budget-summary', requireAuth, requireActiveMembership, (req: Authed
   return ok(res, getBudgetSummary(condoId, parsed.data));
 });
 
-router.post('/budget-targets/bulk', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.post('/budget-targets/bulk', requireAuth, requireRole('board_admin'), requireBoardCapability('finance'), (req: AuthedRequest, res) => {
   const parsed = budgetTargetsBulkSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
   const condoId = getActiveCondoId(req);
@@ -490,7 +490,7 @@ router.get('/expenses', requireAuth, requireActiveMembership, (req: AuthedReques
   });
 });
 
-router.post('/expenses', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.post('/expenses', requireAuth, requireRole('board_admin'), requireBoardCapability('finance'), (req: AuthedRequest, res) => {
   const parsed = expenseSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
   const condoId = getActiveCondoId(req);
@@ -562,7 +562,7 @@ router.post('/expenses', requireAuth, requireRole('board_admin'), (req: AuthedRe
   return ok(res, { id, spent_at: spentAt }, 201);
 });
 
-router.delete('/expenses/:id', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.delete('/expenses/:id', requireAuth, requireRole('board_admin'), requireBoardCapability('finance'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const id = Number(req.params.id);
   const exists = db.prepare(

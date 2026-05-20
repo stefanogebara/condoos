@@ -1,6 +1,6 @@
 import { Router, type Response } from 'express';
 import db from '../db';
-import { requireAuth, requireRole, AuthedRequest, getActiveCondoId } from '../lib/auth';
+import { requireAuth, requireRole, requireBoardCapability, AuthedRequest, getActiveCondoId } from '../lib/auth';
 import { ok, fail, asyncHandler } from '../lib/respond';
 import { createRateLimit } from '../lib/rate-limit';
 import { audit } from '../lib/audit';
@@ -206,7 +206,7 @@ router.post('/proposal-classify', requireAuth, aiRateLimit, asyncHandler(async (
 // own duplicated context-builder which missed every enhancement made to
 // the runner (vendor reputation joins, cost history from expenses,
 // mojibake fix). Now they always stay in sync.
-router.post('/admin-agent', requireAuth, aiRateLimit, aiCondoRateLimit, requireRole('board_admin'), asyncHandler(async (req: AuthedRequest, res) => {
+router.post('/admin-agent', requireAuth, aiRateLimit, aiCondoRateLimit, requireRole('board_admin'), requireBoardCapability('building_admin'), asyncHandler(async (req: AuthedRequest, res) => {
   const input = boundedText(req.body?.task, 6_000);
   if (!input.ok) return fail(res, input.error, input.error === 'text_too_long' ? 413 : 400);
   // Min-length guard. The agent is expensive (4 model calls in ReAct +
@@ -286,7 +286,7 @@ router.post('/admin-agent', requireAuth, aiRateLimit, aiCondoRateLimit, requireR
 }));
 
 // Board-admin AI operations status: credit-breaker state + condo-scoped spend.
-router.get('/usage', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.get('/usage', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const days = Math.min(365, Math.max(1, Number(req.query.days || 7)));
   return ok(res, {
@@ -301,7 +301,7 @@ router.get('/usage', requireAuth, requireRole('board_admin'), (req: AuthedReques
 // during the 30-55s ReAct wait to show what the agent is currently
 // doing instead of a blind spinner. Cheap (single row read) so polling
 // every 1-2s is fine. Stops polling when status≠running.
-router.get('/admin-agent/runs/:id', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.get('/admin-agent/runs/:id', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) return fail(res, 'invalid_id', 400);
@@ -313,7 +313,7 @@ router.get('/admin-agent/runs/:id', requireAuth, requireRole('board_admin'), (re
   return ok(res, snapshot);
 });
 
-router.get('/admin-agent/runs', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.get('/admin-agent/runs', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const adminId = req.user!.id;
   const limit = Math.min(100, Math.max(1, Number(req.query.limit || 30)));
@@ -337,7 +337,7 @@ router.get('/admin-agent/runs', requireAuth, requireRole('board_admin'), (req: A
 // List the admin's most-recent active threads. Capped at 20 — older
 // threads are still in the DB (we don't auto-archive) but the UI only
 // needs the recent window for the sidebar dropdown.
-router.get('/admin-agent/threads', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.get('/admin-agent/threads', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const adminUserId = req.user!.id;
   const rows = db.prepare(
@@ -354,7 +354,7 @@ router.get('/admin-agent/threads', requireAuth, requireRole('board_admin'), (req
 // Full thread — used when the admin opens a past conversation from the
 // sidebar. Persisted plans stay raw for audit, but the normal API response
 // strips diagnostics unless include_debug=1 is explicitly set.
-router.get('/admin-agent/threads/:id', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.get('/admin-agent/threads/:id', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const adminUserId = req.user!.id;
   const id = Number(req.params.id);
@@ -391,7 +391,7 @@ router.get('/admin-agent/threads/:id', requireAuth, requireRole('board_admin'), 
 // Archive a thread — soft delete; turns remain readable until the
 // thread itself is hard-deleted (we don't expose that path yet). Used
 // for the "delete conversation" affordance in the sidebar.
-router.post('/admin-agent/threads/:id/archive', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.post('/admin-agent/threads/:id/archive', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const adminUserId = req.user!.id;
   const id = Number(req.params.id);
@@ -418,7 +418,7 @@ router.post('/admin-agent/threads/:id/archive', requireAuth, requireRole('board_
 //   high   → admin cancels ≤ 15% of the time
 //   medium → admin cancels ~30-50%
 //   low    → we never auto-execute, so override rate is N/A
-router.get('/admin-agent/calibration', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.get('/admin-agent/calibration', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const days = Math.min(365, Math.max(7, Number(req.query.days || 90)));
 
@@ -485,7 +485,7 @@ router.get('/admin-agent/calibration', requireAuth, requireRole('board_admin'), 
 // estimated cost so the team sees the bill forming. `ai_available` reflects
 // the credit circuit breaker — false means a recent 402 tripped it and the
 // agent is serving the deterministic fallback until credits return.
-router.get('/admin-agent/usage', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.get('/admin-agent/usage', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const days = Math.min(90, Math.max(1, Number(req.query.days || 7)));
   const summary = getAiUsageSummary(days, condoId);
@@ -499,7 +499,7 @@ router.get('/admin-agent/usage', requireAuth, requireRole('board_admin'), (req: 
 });
 
 // 2. Cluster all open suggestions for the condo
-router.post('/cluster-suggestions', requireAuth, aiRateLimit, requireRole('board_admin'), asyncHandler(async (req: AuthedRequest, res) => {
+router.post('/cluster-suggestions', requireAuth, aiRateLimit, requireRole('board_admin'), requireBoardCapability('building_admin'), asyncHandler(async (req: AuthedRequest, res) => {
   const u = req.user!;
   // Per the README contract every /api/ai/* endpoint must degrade to a
   // _fallback: true response on any failure (DB, model, malformed JSON)
@@ -617,7 +617,7 @@ router.post('/proposals/:id/summarize-thread', requireAuth, aiRateLimit, asyncHa
 }));
 
 // 4. Summarize a meeting + generate action items + draft resident announcement
-router.post('/meetings/:id/summarize', requireAuth, aiRateLimit, requireRole('board_admin'), asyncHandler(async (req: AuthedRequest, res) => {
+router.post('/meetings/:id/summarize', requireAuth, aiRateLimit, requireRole('board_admin'), requireBoardCapability('building_admin'), asyncHandler(async (req: AuthedRequest, res) => {
   const u = req.user!;
   const id = Number(req.params.id);
   const m = db.prepare(
@@ -674,7 +674,7 @@ function fallbackCostAnalysis(): CostAnalysis {
   };
 }
 
-router.post('/proposals/:id/analyze-cost', requireAuth, aiRateLimit, requireRole('board_admin'), asyncHandler(async (req: AuthedRequest, res) => {
+router.post('/proposals/:id/analyze-cost', requireAuth, aiRateLimit, requireRole('board_admin'), requireBoardCapability('building_admin'), asyncHandler(async (req: AuthedRequest, res) => {
   const u = req.user!;
   const id = Number(req.params.id);
   const p = db.prepare(
@@ -740,7 +740,7 @@ router.post('/proposals/:id/explain', requireAuth, aiRateLimit, asyncHandler(asy
 }));
 
 // 6. Board-ready decision summary after vote closes
-router.post('/proposals/:id/decision-summary', requireAuth, aiRateLimit, requireRole('board_admin'), asyncHandler(async (req: AuthedRequest, res) => {
+router.post('/proposals/:id/decision-summary', requireAuth, aiRateLimit, requireRole('board_admin'), requireBoardCapability('building_admin'), asyncHandler(async (req: AuthedRequest, res) => {
   const u = req.user!;
   const id = Number(req.params.id);
   const p = db.prepare(
@@ -792,7 +792,7 @@ router.post('/proposals/:id/decision-summary', requireAuth, aiRateLimit, require
 // =========================================================================
 
 // Draft an agenda from the assembly title + condo's open proposals.
-router.post('/assemblies/:id/suggest-agenda', requireAuth, aiRateLimit, requireRole('board_admin'), asyncHandler(async (req: AuthedRequest, res) => {
+router.post('/assemblies/:id/suggest-agenda', requireAuth, aiRateLimit, requireRole('board_admin'), requireBoardCapability('building_admin'), asyncHandler(async (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const id = Number(req.params.id);
   const a = db.prepare(
@@ -838,7 +838,7 @@ router.post('/assemblies/:id/suggest-agenda', requireAuth, aiRateLimit, requireR
 }));
 
 // Polish the auto-generated ata through the LLM. Falls back to the raw markdown.
-router.post('/assemblies/:id/draft-ata', requireAuth, aiRateLimit, requireRole('board_admin'), asyncHandler(async (req: AuthedRequest, res) => {
+router.post('/assemblies/:id/draft-ata', requireAuth, aiRateLimit, requireRole('board_admin'), requireBoardCapability('building_admin'), asyncHandler(async (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const id = Number(req.params.id);
   const a = db.prepare(

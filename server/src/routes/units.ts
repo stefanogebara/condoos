@@ -7,7 +7,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import db from '../db';
-import { requireAuth, requireRole, getActiveCondoId, AuthedRequest } from '../lib/auth';
+import { requireAuth, requireRole, requireBoardCapability, getActiveCondoId, AuthedRequest } from '../lib/auth';
 import { ok, fail } from '../lib/respond';
 import { audit } from '../lib/audit';
 
@@ -36,7 +36,7 @@ function unitInCondo(unitId: number, condoId: number): UnitRow | null {
   return row || null;
 }
 
-router.patch('/:id', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.patch('/:id', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const parsed = updateSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
   const condoId = getActiveCondoId(req);
@@ -80,7 +80,7 @@ router.patch('/:id', requireAuth, requireRole('board_admin'), (req: AuthedReques
   return ok(res, { id: unitId, number: nextNumber, floor: nextFloor });
 });
 
-router.delete('/:id', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.delete('/:id', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const unitId = Number(req.params.id);
 

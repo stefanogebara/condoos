@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import db from '../db';
-import { requireAuth, requireActiveMembership, requireRole, getActiveCondoId, AuthedRequest } from '../lib/auth';
+import { requireAuth, requireActiveMembership, requireRole, requireBoardCapability, getActiveCondoId, AuthedRequest } from '../lib/auth';
 import { ok, fail } from '../lib/respond';
 import { notifyUsers } from '../lib/whatsapp';
 import { audit } from '../lib/audit';
@@ -24,7 +24,7 @@ router.get('/', requireAuth, requireActiveMembership, (req: AuthedRequest, res) 
   return ok(res, rows);
 });
 
-router.post('/:id/pickup', requireAuth, requireActiveMembership, (req: AuthedRequest, res) => {
+router.post('/:id/pickup', requireAuth, requireActiveMembership, requireBoardCapability('concierge'), (req: AuthedRequest, res) => {
   const u = req.user!;
   const id = Number(req.params.id);
   const pkg = db.prepare(
@@ -44,7 +44,7 @@ router.post('/:id/pickup', requireAuth, requireActiveMembership, (req: AuthedReq
   return ok(res, { id, status: 'picked_up' });
 });
 
-router.post('/:id/notify-resident', requireAuth, requireActiveMembership, async (req: AuthedRequest, res) => {
+router.post('/:id/notify-resident', requireAuth, requireActiveMembership, requireBoardCapability('concierge'), async (req: AuthedRequest, res) => {
   const u = req.user!;
   if (!['board_admin', 'concierge'].includes(u.role)) return fail(res, 'forbidden', 403);
   const id = Number(req.params.id);
@@ -81,7 +81,7 @@ router.post('/:id/notify-resident', requireAuth, requireActiveMembership, async 
 });
 
 // Board logs a new package
-router.post('/', requireAuth, requireActiveMembership, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.post('/', requireAuth, requireActiveMembership, requireRole('board_admin'), requireBoardCapability('concierge'), (req: AuthedRequest, res) => {
   const { recipient_id, carrier, description } = req.body || {};
   if (!recipient_id || !carrier) return fail(res, 'missing_fields');
   const u = req.user!;

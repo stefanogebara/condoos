@@ -7,7 +7,7 @@ import { Router } from 'express';
 import { randomBytes } from 'crypto';
 import { z } from 'zod';
 import db from '../db';
-import { requireAuth, requireActiveMembership, requireRole, getActiveCondoId, AuthedRequest } from '../lib/auth';
+import { requireAuth, requireActiveMembership, requireRole, requireBoardCapability, getActiveCondoId, AuthedRequest } from '../lib/auth';
 import { ok, fail, asyncHandler } from '../lib/respond';
 import { createRateLimit } from '../lib/rate-limit';
 import { audit } from '../lib/audit';
@@ -502,7 +502,7 @@ router.post('/join', onboardingWriteRateLimit, requireAuth, asyncHandler(async (
 }));
 
 // GET /api/onboarding/my-invite-code — returns invite code for the current user's condo
-router.get('/my-invite-code', requireAuth, requireActiveMembership, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.get('/my-invite-code', requireAuth, requireActiveMembership, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const row = db.prepare(
     `SELECT invite_code FROM condominiums WHERE id = ?`

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import db from '../db';
-import { requireAuth, requireRole, getActiveCondoId, AuthedRequest } from '../lib/auth';
+import { requireAuth, requireRole, requireBoardCapability, getActiveCondoId, AuthedRequest } from '../lib/auth';
 import { ok, fail, asyncHandler } from '../lib/respond';
 import { audit } from '../lib/audit';
 import { canAssignTicketToUser, listTicketTimeline, markTicketAgentFailed, recordTicketEvent } from '../lib/tickets';
@@ -856,7 +856,7 @@ router.post('/:id/verify', requireAuth, (req: AuthedRequest, res) => {
 // notification_outbox (whatsapp/email) and records the attempt in
 // ticket_dispatches for audit / response tracking. Channel='manual' lets
 // the admin record an offline contact (phone call, in person) by hand.
-router.post('/:id/dispatch', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.post('/:id/dispatch', requireAuth, requireRole('board_admin'), requireBoardCapability('maintenance'), (req: AuthedRequest, res) => {
   const parsed = dispatchSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
   const condoId = getActiveCondoId(req);
@@ -980,7 +980,7 @@ router.post('/:id/dispatch', requireAuth, requireRole('board_admin'), (req: Auth
 // the fix landed without having to go check /app/tickets. The announcement
 // reuses the existing announcements table + its WhatsApp fanout, so
 // residents who opted into notifications get a push for the resolution.
-router.post('/:id/resolve', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.post('/:id/resolve', requireAuth, requireRole('board_admin'), requireBoardCapability('maintenance'), (req: AuthedRequest, res) => {
   const parsed = resolveSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
   const condoId = getActiveCondoId(req);
@@ -1069,7 +1069,7 @@ router.post('/:id/resolve', requireAuth, requireRole('board_admin'), (req: Authe
 // to cancelled/skipped before the worker tries to send. After the window
 // elapses, the outbox row is locked from cancellation (it's either being
 // sent or already sent — calling cancel returns window_elapsed).
-router.post('/:id/dispatches/:dispatchId/cancel', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.post('/:id/dispatches/:dispatchId/cancel', requireAuth, requireRole('board_admin'), requireBoardCapability('maintenance'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const id = Number(req.params.id);
   const dispatchId = Number(req.params.dispatchId);
@@ -1171,7 +1171,7 @@ router.post('/:id/dispatches/:dispatchId/cancel', requireAuth, requireRole('boar
 // Admin records that the vendor replied — closes the awaiting_vendor loop
 // and flips the ticket to vendor_engaged. A short summary captures what
 // the vendor said so the next admin action has context.
-router.post('/:id/dispatches/:dispatchId/responded', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.post('/:id/dispatches/:dispatchId/responded', requireAuth, requireRole('board_admin'), requireBoardCapability('maintenance'), (req: AuthedRequest, res) => {
   const parsed = markRespondedSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
   const condoId = getActiveCondoId(req);
@@ -1225,7 +1225,7 @@ router.post('/:id/dispatches/:dispatchId/responded', requireAuth, requireRole('b
 // existing network and surface an outreach plan. Stores the result on the
 // ticket so the admin can review it without re-running the model (and the
 // next phase can auto-act on it).
-router.post('/:id/run-agent', requireAuth, requireRole('board_admin'), asyncHandler(async (req: AuthedRequest, res) => {
+router.post('/:id/run-agent', requireAuth, requireRole('board_admin'), requireBoardCapability('maintenance'), asyncHandler(async (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const id = Number(req.params.id);
   const ticket = getScopedTicket(id, condoId);
@@ -1272,7 +1272,7 @@ router.post('/:id/run-agent', requireAuth, requireRole('board_admin'), asyncHand
   return ok(res, { id, plan: result.plan, fallback: result.fallback });
 }));
 
-router.post('/:id/quotes', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.post('/:id/quotes', requireAuth, requireRole('board_admin'), requireBoardCapability('maintenance'), (req: AuthedRequest, res) => {
   const parsed = ticketQuoteCreateSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
   const condoId = getActiveCondoId(req);
@@ -1314,7 +1314,7 @@ router.post('/:id/quotes', requireAuth, requireRole('board_admin'), (req: Authed
   return ok(res, quote, 201);
 });
 
-router.post('/:id/work-order', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.post('/:id/work-order', requireAuth, requireRole('board_admin'), requireBoardCapability('maintenance'), (req: AuthedRequest, res) => {
   const parsed = workOrderCreateSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
   const condoId = getActiveCondoId(req);
@@ -1417,7 +1417,7 @@ router.post('/:id/work-order', requireAuth, requireRole('board_admin'), (req: Au
   return ok(res, getTicketWorkOrder(id), 201);
 });
 
-router.patch('/:id/work-order/:workOrderId', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.patch('/:id/work-order/:workOrderId', requireAuth, requireRole('board_admin'), requireBoardCapability('maintenance'), (req: AuthedRequest, res) => {
   const parsed = workOrderUpdateSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
   const condoId = getActiveCondoId(req);
@@ -1593,7 +1593,7 @@ router.get('/:id', requireAuth, (req: AuthedRequest, res) => {
   });
 });
 
-router.patch('/:id', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.patch('/:id', requireAuth, requireRole('board_admin'), requireBoardCapability('maintenance'), (req: AuthedRequest, res) => {
   const parsed = ticketUpdateSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
   const condoId = getActiveCondoId(req);
@@ -1716,7 +1716,7 @@ router.post('/:id/attachments', requireAuth, (req: AuthedRequest, res) => {
   return ok(res, { id: attachmentId }, 201);
 });
 
-router.delete('/:id/attachments/:attachmentId', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.delete('/:id/attachments/:attachmentId', requireAuth, requireRole('board_admin'), requireBoardCapability('maintenance'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const id = Number(req.params.id);
   const attachmentId = Number(req.params.attachmentId);

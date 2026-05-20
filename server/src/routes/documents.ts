@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import db from '../db';
-import { requireAuth, requireRole, getActiveCondoId, AuthedRequest } from '../lib/auth';
+import { requireAuth, requireRole, requireBoardCapability, getActiveCondoId, AuthedRequest } from '../lib/auth';
 import { ok, fail } from '../lib/respond';
 import { audit } from '../lib/audit';
 import { assertFileReadyForUse, attachFileToTarget } from '../lib/files';
@@ -100,7 +100,7 @@ router.get('/', requireAuth, (req: AuthedRequest, res) => {
   return ok(res, rows);
 });
 
-router.post('/', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.post('/', requireAuth, requireRole('board_admin'), requireBoardCapability('documents'), (req: AuthedRequest, res) => {
   const parsed = documentSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
 
@@ -150,7 +150,7 @@ router.post('/', requireAuth, requireRole('board_admin'), (req: AuthedRequest, r
   return ok(res, { id }, 201);
 });
 
-router.patch('/:id', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.patch('/:id', requireAuth, requireRole('board_admin'), requireBoardCapability('documents'), (req: AuthedRequest, res) => {
   const parsed = documentSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
 
@@ -207,7 +207,7 @@ router.patch('/:id', requireAuth, requireRole('board_admin'), (req: AuthedReques
   return ok(res, { id });
 });
 
-router.delete('/:id', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.delete('/:id', requireAuth, requireRole('board_admin'), requireBoardCapability('documents'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) return fail(res, 'invalid_id', 400);

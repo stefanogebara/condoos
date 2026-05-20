@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import db from '../db';
-import { requireAuth, requireRole, getActiveCondoId, AuthedRequest } from '../lib/auth';
+import { requireAuth, requireRole, requireBoardCapability, getActiveCondoId, AuthedRequest } from '../lib/auth';
 import { ok, fail } from '../lib/respond';
 import { audit } from '../lib/audit';
 import {
@@ -145,7 +145,7 @@ router.get('/:id', requireAuth, (req: AuthedRequest, res) => {
 
 // ------------------------------------------------------------------ admin: create / update / agenda
 
-router.post('/', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.post('/', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const { title, kind, first_call_at, second_call_at, president_user_id, secretary_user_id } = req.body || {};
   if (!title || !kind || !first_call_at) return fail(res, 'missing_fields');
@@ -167,7 +167,7 @@ router.post('/', requireAuth, requireRole('board_admin'), (req: AuthedRequest, r
   return ok(res, { id: Number(r.lastInsertRowid) }, 201);
 });
 
-router.patch('/:id', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.patch('/:id', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const id = Number(req.params.id);
   const a = getScopedAssembly(id, condoId);
@@ -195,7 +195,7 @@ router.patch('/:id', requireAuth, requireRole('board_admin'), (req: AuthedReques
 });
 
 // Admin adds an agenda item while assembly is in draft.
-router.post('/:id/agenda', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.post('/:id/agenda', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const id = Number(req.params.id);
   const a = getScopedAssembly(id, condoId);
@@ -225,7 +225,7 @@ router.post('/:id/agenda', requireAuth, requireRole('board_admin'), (req: Authed
   return ok(res, { id: Number(r.lastInsertRowid) }, 201);
 });
 
-router.delete('/:id/agenda/:itemId', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.delete('/:id/agenda/:itemId', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const id = Number(req.params.id);
   const itemId = Number(req.params.itemId);
@@ -245,7 +245,7 @@ router.delete('/:id/agenda/:itemId', requireAuth, requireRole('board_admin'), (r
 
 // ------------------------------------------------------------------ lifecycle: convoke / start / close
 
-router.post('/:id/convoke', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.post('/:id/convoke', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const id = Number(req.params.id);
   const a = getScopedAssembly(id, condoId);
@@ -273,7 +273,7 @@ router.post('/:id/convoke', requireAuth, requireRole('board_admin'), (req: Authe
   return ok(res, { id, status: 'convoked' });
 });
 
-router.post('/:id/start', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.post('/:id/start', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const id = Number(req.params.id);
   const a = getScopedAssembly(id, condoId);
@@ -292,7 +292,7 @@ router.post('/:id/start', requireAuth, requireRole('board_admin'), (req: AuthedR
   return ok(res, { id, status: 'in_session' });
 });
 
-router.post('/:id/close', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.post('/:id/close', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const id = Number(req.params.id);
   const a = getScopedAssembly(id, condoId);
@@ -385,7 +385,7 @@ router.post('/:id/attendance', requireAuth, (req: AuthedRequest, res) => {
 });
 
 // Admin marks an attendee as delinquent (blocks their votes).
-router.patch('/:id/attendance/:attId', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.patch('/:id/attendance/:attId', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const id = Number(req.params.id);
   const attId = Number(req.params.attId);
@@ -461,7 +461,7 @@ router.delete('/:id/proxies/:proxyId', requireAuth, (req: AuthedRequest, res) =>
 
 // ------------------------------------------------------------------ voting
 
-router.post('/:id/agenda/:itemId/open', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.post('/:id/agenda/:itemId/open', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const id = Number(req.params.id);
   const itemId = Number(req.params.itemId);
@@ -541,7 +541,7 @@ router.post('/:id/agenda/:itemId/vote', requireAuth, (req: AuthedRequest, res) =
   return ok(res, { tally });
 });
 
-router.post('/:id/agenda/:itemId/close', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.post('/:id/agenda/:itemId/close', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const id = Number(req.params.id);
   const itemId = Number(req.params.itemId);

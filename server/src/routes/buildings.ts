@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import db from '../db';
-import { requireAuth, requireRole, getActiveCondoId, AuthedRequest } from '../lib/auth';
+import { requireAuth, requireRole, requireBoardCapability, getActiveCondoId, AuthedRequest } from '../lib/auth';
 import { ok, fail } from '../lib/respond';
 import { audit } from '../lib/audit';
 
@@ -43,7 +43,7 @@ router.get('/', requireAuth, (req: AuthedRequest, res) => {
   return ok(res, rows);
 });
 
-router.post('/', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.post('/', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const parsed = buildingSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
   const condoId = getActiveCondoId(req);
@@ -80,7 +80,7 @@ router.post('/', requireAuth, requireRole('board_admin'), (req: AuthedRequest, r
 });
 
 // Rename a building (and optionally update floor count metadata).
-router.patch('/:id', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.patch('/:id', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const parsed = renameSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
   const condoId = getActiveCondoId(req);
@@ -101,7 +101,7 @@ router.patch('/:id', requireAuth, requireRole('board_admin'), (req: AuthedReques
 
 // Delete a building. Blocked if it still has units (admin must clear them
 // first) — keeps the cascade explicit and avoids accidental data loss.
-router.delete('/:id', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.delete('/:id', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const buildingId = Number(req.params.id);
   if (!buildingInCondo(buildingId, condoId)) return fail(res, 'not_found', 404);
@@ -132,7 +132,7 @@ router.get('/:id/units', requireAuth, (req: AuthedRequest, res) => {
 });
 
 // Add a single unit to a building.
-router.post('/:id/units', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.post('/:id/units', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const parsed = newUnitSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
   const condoId = getActiveCondoId(req);

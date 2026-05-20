@@ -33,7 +33,7 @@ import {
   submitPaymentProof,
   upsertBudgetTargets,
 } from '../src/lib/finance';
-import { requireAuth, revokeUserTokens, signToken } from '../src/lib/auth';
+import { requireAuth, requireBoardCapability, revokeUserTokens, signToken } from '../src/lib/auth';
 import { canAssignTicketToUser, listTicketTimeline, markTicketAgentFailed, recordTicketEvent } from '../src/lib/tickets';
 import { createTicketQuote, listTicketQuotes } from '../src/lib/ticket-quotes';
 import { createAgentRun, finishAgentRunFailure, finishAgentRunSuccess, reapStaleAgentRuns } from '../src/lib/agent-runs';
@@ -56,6 +56,7 @@ import {
   createAgencyStaffInvite,
   createAgencySetupCode,
   disableAgencySetupCode,
+  agencyUserCanUseBuildingCapability,
   linkCondominiumToAgency,
   listAgencyAuditEvents,
   listAgencyStaffInvites,
@@ -499,6 +500,105 @@ test('agency active building switch is limited to assigned agency buildings', ()
     }),
     /agency_building_forbidden/,
   );
+});
+
+test('agency scoped staff have explicit building capabilities', () => {
+  resetDb();
+  const { condoId } = createCondoFixture();
+  const secondCondoId = Number(db.prepare(
+    `INSERT INTO condominiums (name, address, invite_code) VALUES ('Second Condo', '2 Main', 'TEST02')`
+  ).run().lastInsertRowid);
+  const adminId = createUser('agency-admin@example.com', 'board_admin');
+  const financeId = createUser('finance-capability@example.com', 'resident');
+  const maintenanceId = createUser('maintenance-capability@example.com', 'resident');
+  const conciergeId = createUser('concierge-capability@example.com', 'resident');
+  const organicAdminId = createUser('organic-admin@example.com', 'board_admin');
+  const agency = linkCondominiumToAgency({
+    agencyName: 'Andes Management',
+    condominiumId: condoId,
+    userId: adminId,
+  });
+  assert.ok(agency);
+  db.prepare(
+    `INSERT INTO agency_condominiums (agency_id, condominium_id) VALUES (?, ?)`
+  ).run(agency!.agencyId, secondCondoId);
+
+  upsertAgencyStaff({
+    agencyId: agency!.agencyId,
+    email: 'finance-capability@example.com',
+    role: 'finance_manager',
+    buildingIds: [condoId],
+  });
+  upsertAgencyStaff({
+    agencyId: agency!.agencyId,
+    email: 'maintenance-capability@example.com',
+    role: 'maintenance_manager',
+    buildingIds: [condoId],
+  });
+  upsertAgencyStaff({
+    agencyId: agency!.agencyId,
+    email: 'concierge-capability@example.com',
+    role: 'concierge_supervisor',
+    buildingIds: [condoId],
+  });
+
+  assert.deepEqual(agencyUserCanUseBuildingCapability(financeId, condoId, 'finance'), {
+    scoped: true,
+    allowed: true,
+    roles: ['finance_manager'],
+  });
+  assert.equal(agencyUserCanUseBuildingCapability(financeId, condoId, 'maintenance').allowed, false);
+  assert.equal(agencyUserCanUseBuildingCapability(financeId, secondCondoId, 'finance').allowed, false);
+
+  assert.equal(agencyUserCanUseBuildingCapability(maintenanceId, condoId, 'maintenance').allowed, true);
+  assert.equal(agencyUserCanUseBuildingCapability(maintenanceId, condoId, 'finance').allowed, false);
+
+  assert.equal(agencyUserCanUseBuildingCapability(conciergeId, condoId, 'concierge').allowed, true);
+  assert.equal(agencyUserCanUseBuildingCapability(conciergeId, condoId, 'building_admin').allowed, false);
+
+  assert.equal(agencyUserCanUseBuildingCapability(adminId, condoId, 'building_admin').allowed, true);
+  assert.equal(agencyUserCanUseBuildingCapability(adminId, secondCondoId, 'finance').allowed, true);
+  assert.deepEqual(agencyUserCanUseBuildingCapability(organicAdminId, condoId, 'finance'), {
+    scoped: false,
+    allowed: true,
+    roles: [],
+  });
+});
+
+test('agency capability middleware blocks scoped staff outside their lane', () => {
+  resetDb();
+  const { condoId } = createCondoFixture();
+  const adminId = createUser('agency-admin@example.com', 'board_admin');
+  const financeId = createUser('finance-middleware@example.com', 'resident');
+  const agency = linkCondominiumToAgency({
+    agencyName: 'Andes Management',
+    condominiumId: condoId,
+    userId: adminId,
+  });
+  assert.ok(agency);
+  upsertAgencyStaff({
+    agencyId: agency!.agencyId,
+    email: 'finance-middleware@example.com',
+    role: 'finance_manager',
+    buildingIds: [condoId],
+  });
+  const user = db.prepare(`SELECT * FROM users WHERE id = ?`).get(financeId) as any;
+
+  let nextCalls = 0;
+  const allowed = responseRecorder();
+  requireBoardCapability('finance')({ user } as any, allowed.res, () => { nextCalls += 1; });
+  assert.equal(nextCalls, 1);
+  assert.equal(allowed.calls.statusCode, undefined);
+
+  const blocked = responseRecorder();
+  requireBoardCapability('maintenance')({ user } as any, blocked.res, () => { nextCalls += 1; });
+  assert.equal(nextCalls, 1);
+  assert.equal(blocked.calls.statusCode, 403);
+  assert.deepEqual(blocked.calls.body, {
+    success: false,
+    error: 'agency_capability_forbidden',
+    required_capability: 'maintenance',
+  });
 });
 
 test('agency staff removal keeps the last agency admin safe', () => {

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import db from '../db';
-import { requireAuth, requireRole, AuthedRequest } from '../lib/auth';
+import { requireAuth, requireRole, requireBoardCapability, AuthedRequest } from '../lib/auth';
 import { ok, fail } from '../lib/respond';
 import { audit } from '../lib/audit';
 
@@ -45,7 +45,7 @@ router.post('/', requireAuth, (req: AuthedRequest, res) => {
   return ok(res, { id: row.lastInsertRowid });
 });
 
-router.get('/clusters', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.get('/clusters', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const u = req.user!;
   const clusters = db.prepare(
     `SELECT * FROM suggestion_clusters WHERE condominium_id = ? ORDER BY created_at DESC`
@@ -61,7 +61,7 @@ router.get('/clusters', requireAuth, requireRole('board_admin'), (req: AuthedReq
   return ok(res, withMembers);
 });
 
-router.post('/:id/dismiss', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.post('/:id/dismiss', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const u = req.user!;
   const id = Number(req.params.id);
   const s = db.prepare(`SELECT id FROM suggestions WHERE id=? AND condominium_id=?`).get(id, u.condominium_id);

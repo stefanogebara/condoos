@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import db from '../db';
-import { requireAuth, requireRole, getActiveCondoId, AuthedRequest } from '../lib/auth';
+import { requireAuth, requireRole, requireBoardCapability, getActiveCondoId, AuthedRequest } from '../lib/auth';
 import { ok, fail } from '../lib/respond';
 import { audit } from '../lib/audit';
 import {
@@ -185,7 +185,7 @@ router.post('/:id/vote', requireAuth, (req: AuthedRequest, res) => {
 });
 
 // PATCH /:id/compliance — set quorum + voting window while the proposal is in discussion.
-router.patch('/:id/compliance', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.patch('/:id/compliance', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const id = Number(req.params.id);
   const p = getScopedProposal(id, condoId);
@@ -226,7 +226,7 @@ router.patch('/:id/compliance', requireAuth, requireRole('board_admin'), (req: A
 });
 
 // Admin can change who is allowed to vote, but only while the proposal is still in discussion.
-router.patch('/:id/eligibility', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.patch('/:id/eligibility', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const id = Number(req.params.id);
   const eligibility = req.body?.voter_eligibility;
@@ -248,7 +248,7 @@ router.patch('/:id/eligibility', requireAuth, requireRole('board_admin'), (req: 
   return ok(res, { id, voter_eligibility: eligibility });
 });
 
-router.post('/:id/status', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.post('/:id/status', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const id = Number(req.params.id);
   const status = req.body?.status;

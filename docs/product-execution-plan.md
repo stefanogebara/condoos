@@ -245,6 +245,15 @@ This slice gives agencies a plain pre-demo quality gate in the app:
 - Reuses the existing integration status and permission review data instead of inventing a second source of truth.
 - Keeps the checklist localized across PT/EN/ES/FR for agency demos.
 
+## Completed Slice: Agency Role Capability Guardrails
+
+This slice makes scoped agency roles enforceable on the server:
+
+- Added explicit building capabilities for agency roles: building admin, finance, maintenance, concierge, documents, and reports.
+- Added middleware that lets organic building admins keep full access while limiting agency staff to their assigned building and role lane.
+- Applied the guardrail to board-admin routes across finance, work orders/tickets, concierge/packages, residents/invites, building layout/settings, documents, governance, amenities, AI/admin ops, audit, reports, and service contacts.
+- Added tests proving finance staff can use finance but not maintenance, maintenance staff can use maintenance but not finance, concierge supervisors cannot act as building admins, and scoped staff cannot act in unassigned buildings.
+
 ## Completed Slice: Vendor Intelligence
 
 This slice makes the saved service network feel operational instead of static:
@@ -335,7 +344,7 @@ This slice makes portfolio access safer before private pilots:
 
 The next implementation slice should keep building on the private-enterprise plan:
 
+- Add frontend route/sidebar filtering for scoped agency staff so the UI matches the new server permissions.
 - Harden maintenance into a fuller work-order timeline with quote comparison and SLA alerts.
-- Continue deeper agency permission review screens beyond the active-building switch.
 - Expand portfolio reporting into a true agency command center.
 - Keep production-safe i18n, build, server tests, and pilot smoke checks green before each push.

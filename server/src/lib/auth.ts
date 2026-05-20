@@ -2,6 +2,7 @@ import jwt from 'jsonwebtoken';
 import { randomBytes } from 'crypto';
 import { Request, Response, NextFunction } from 'express';
 import db from '../db';
+import { agencyUserCanUseBuildingCapability, type AgencyBuildingCapability } from './agencies';
 
 function getJwtSecret(): string {
   const secret = process.env.JWT_SECRET;
@@ -124,6 +125,30 @@ export function requireRole(...roles: AuthUser['role'][]) {
     if (!req.user) return res.status(401).json({ success: false, error: 'not_authenticated' });
     if (!roles.includes(req.user.role)) {
       return res.status(403).json({ success: false, error: 'forbidden' });
+    }
+    next();
+  };
+}
+
+export function requireBoardCapability(capability: AgencyBuildingCapability) {
+  return (req: AuthedRequest, res: Response, next: NextFunction) => {
+    if (!req.user) return res.status(401).json({ success: false, error: 'not_authenticated' });
+    if (req.user.role !== 'board_admin') return next();
+
+    let condoId: number;
+    try {
+      condoId = getActiveCondoId(req);
+    } catch {
+      return res.status(403).json({ success: false, error: 'no_active_membership' });
+    }
+
+    const access = agencyUserCanUseBuildingCapability(req.user.id, condoId, capability);
+    if (!access.allowed) {
+      return res.status(403).json({
+        success: false,
+        error: 'agency_capability_forbidden',
+        required_capability: capability,
+      });
     }
     next();
   };

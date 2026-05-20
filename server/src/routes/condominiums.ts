@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { AuthedRequest, getActiveCondoId, requireAuth, requireRole } from '../lib/auth';
+import { AuthedRequest, getActiveCondoId, requireAuth, requireRole, requireBoardCapability } from '../lib/auth';
 import { audit } from '../lib/audit';
 import { ok, fail } from '../lib/respond';
 import { getCondoSettings, normalizeCondoSettingsInput, updateCondoSettings } from '../lib/condo-settings';
@@ -22,7 +22,7 @@ router.get('/current', requireAuth, (req: AuthedRequest, res) => {
   return ok(res, settings);
 });
 
-router.patch('/current/settings', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.patch('/current/settings', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const parsed = settingsSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
   const condoId = getActiveCondoId(req);

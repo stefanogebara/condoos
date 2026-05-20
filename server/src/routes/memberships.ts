@@ -2,7 +2,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import db from '../db';
-import { requireAuth, requireRole, AuthedRequest } from '../lib/auth';
+import { requireAuth, requireRole, requireBoardCapability, AuthedRequest } from '../lib/auth';
 import { ok, fail, asyncHandler } from '../lib/respond';
 import { EmailDeliveryResult, sendInviteEmail } from '../lib/email';
 import { createRateLimit } from '../lib/rate-limit';
@@ -20,7 +20,7 @@ const router = Router();
 const inviteWriteRateLimit = createRateLimit({ keyPrefix: 'membership_invites', windowMs: 60 * 60_000, max: 30 });
 
 // GET /api/memberships/pending — all pending claims in admin's condo
-router.get('/pending', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.get('/pending', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const u = req.user!;
   const rows = db.prepare(
     `SELECT uu.id, uu.relationship, uu.primary_contact, uu.created_at,
@@ -39,7 +39,7 @@ router.get('/pending', requireAuth, requireRole('board_admin'), (req: AuthedRequ
 });
 
 // POST /api/memberships/:id/approve
-router.post('/:id/approve', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.post('/:id/approve', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const id = Number(req.params.id);
   const u = req.user!;
 
@@ -77,7 +77,7 @@ router.post('/:id/approve', requireAuth, requireRole('board_admin'), (req: Authe
 });
 
 // POST /api/memberships/:id/deny
-router.post('/:id/deny', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.post('/:id/deny', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const id = Number(req.params.id);
   const u = req.user!;
   const row = db.prepare(
@@ -132,7 +132,7 @@ function persistInviteEmailStatus(inviteId: number, delivery: EmailDeliveryResul
   ).run(delivery.status, delivery.status, delivery.error || null, inviteId);
 }
 
-router.post('/import-csv', inviteWriteRateLimit, requireAuth, requireRole('board_admin'), asyncHandler(async (req: AuthedRequest, res) => {
+router.post('/import-csv', inviteWriteRateLimit, requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), asyncHandler(async (req: AuthedRequest, res) => {
   const parsed = csvSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
   const u = req.user!;
@@ -223,7 +223,7 @@ router.post('/import-csv', inviteWriteRateLimit, requireAuth, requireRole('board
 }));
 
 // GET /api/memberships/invites — list pending invites so admin can see who's expected.
-router.get('/invites', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.get('/invites', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const u = req.user!;
   const rows = db.prepare(
     `SELECT i.id, i.email, i.status, i.relationship, i.primary_contact, i.voting_weight,
@@ -239,7 +239,7 @@ router.get('/invites', requireAuth, requireRole('board_admin'), (req: AuthedRequ
   return ok(res, rows);
 });
 
-router.post('/invites/:id/send-email', inviteWriteRateLimit, requireAuth, requireRole('board_admin'), asyncHandler(async (req: AuthedRequest, res) => {
+router.post('/invites/:id/send-email', inviteWriteRateLimit, requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), asyncHandler(async (req: AuthedRequest, res) => {
   const u = req.user!;
   const id = Number(req.params.id);
   const row = db.prepare(
@@ -276,7 +276,7 @@ router.post('/invites/:id/send-email', inviteWriteRateLimit, requireAuth, requir
   return fail(res, delivery.error || 'email_delivery_failed', delivery.status === 'skipped' ? 503 : 502, delivery);
 }));
 
-router.post('/transfer-unit', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.post('/transfer-unit', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const parsed = transferSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
   const condoId = req.user!.condominium_id!;
@@ -301,7 +301,7 @@ router.post('/transfer-unit', requireAuth, requireRole('board_admin'), (req: Aut
   return ok(res, result);
 });
 
-router.get('/history', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.get('/history', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const condoId = req.user!.condominium_id!;
   const unitId = Number(req.query.unit_id);
   if (!Number.isInteger(unitId) || unitId <= 0) return fail(res, 'invalid_unit_id', 400);
@@ -309,7 +309,7 @@ router.get('/history', requireAuth, requireRole('board_admin'), (req: AuthedRequ
   return ok(res, listUnitMembershipHistory(unitId, condoId));
 });
 
-router.post('/:id/move-out', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.post('/:id/move-out', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const parsed = moveOutSchema.safeParse(req.body || {});
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
   const result = moveOutMembership(
@@ -328,7 +328,7 @@ router.post('/:id/move-out', requireAuth, requireRole('board_admin'), (req: Auth
   return ok(res, result);
 });
 
-router.post('/:id/reactivate', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.post('/:id/reactivate', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const result = reactivateMembership(Number(req.params.id), req.user!.condominium_id!);
   if (!result.ok) return fail(res, result.error, result.status);
   audit(req, {
@@ -343,7 +343,7 @@ router.post('/:id/reactivate', requireAuth, requireRole('board_admin'), (req: Au
 
 // POST /api/memberships/:id/reassign  — move a pending claim to a different unit
 const reassignSchema = z.object({ unit_id: z.number().int() });
-router.post('/:id/reassign', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.post('/:id/reassign', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const parsed = reassignSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
   const id = Number(req.params.id);

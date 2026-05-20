@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { requireAuth, requireRole, getActiveCondoId, AuthedRequest } from '../lib/auth';
+import { requireAuth, requireRole, requireBoardCapability, getActiveCondoId, AuthedRequest } from '../lib/auth';
 import { ok, fail } from '../lib/respond';
 import { auditRowsToCsv, listAuditRows } from '../lib/audit';
 
@@ -20,7 +20,7 @@ function parseQuery(req: AuthedRequest) {
   return { ok: true as const, data: parsed.data };
 }
 
-router.get('/', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.get('/', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const parsed = parseQuery(req);
   if (!parsed.ok) return fail(res, 'invalid_input', 400, parsed.error);
   const rows = listAuditRows({
@@ -30,7 +30,7 @@ router.get('/', requireAuth, requireRole('board_admin'), (req: AuthedRequest, re
   return ok(res, rows);
 });
 
-router.get('/export', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.get('/export', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const parsed = parseQuery(req);
   if (!parsed.ok) return fail(res, 'invalid_input', 400, parsed.error);
   const rows = listAuditRows({

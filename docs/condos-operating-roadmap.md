@@ -69,6 +69,7 @@ Enterprise-private readiness plus market hardening:
 - Keep production quality gates green, especially production-safe i18n sweeps.
 - Gate new building creation behind private setup codes when `PRIVATE_CREATE_BUILDING_REQUIRED=1`.
 - Add agency records, portfolio metrics, a prioritized attention queue, pilot readiness checklist, monthly agency report, private setup-code controls with activation tracking, staff email invites, scoped staff building assignments, permission review, assigned-building switching, and scoped portfolio/operations CSV exports above existing building workflows.
+- Enforce scoped agency staff capabilities on server routes so finance, maintenance, concierge, document/report, and building-admin access stay separated by role and assigned building.
 - Add building-level Brazil/Ecuador market settings and currency defaults.
 - Surface production integration readiness from `/board/portfolio`.
 - Keep public login available, but remove the assumption that anyone can freely create a real production building.

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import db from '../db';
-import { requireAuth, requireRole, getActiveCondoId, AuthedRequest } from '../lib/auth';
+import { requireAuth, requireRole, requireBoardCapability, getActiveCondoId, AuthedRequest } from '../lib/auth';
 import { ok, fail } from '../lib/respond';
 import { audit } from '../lib/audit';
 
@@ -31,7 +31,7 @@ router.get('/:id', requireAuth, (req: AuthedRequest, res) => {
   return ok(res, { ...m, action_items: actions });
 });
 
-router.post('/', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.post('/', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const { title, scheduled_for, agenda } = req.body || {};
   if (!title || !scheduled_for) return fail(res, 'missing_fields');
@@ -47,7 +47,7 @@ router.post('/', requireAuth, requireRole('board_admin'), (req: AuthedRequest, r
   return ok(res, { id: row.lastInsertRowid });
 });
 
-router.patch('/:id/notes', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.patch('/:id/notes', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const id = Number(req.params.id);
   if (!getScopedMeeting(id, condoId)) return fail(res, 'not_found', 404);
@@ -62,7 +62,7 @@ router.patch('/:id/notes', requireAuth, requireRole('board_admin'), (req: Authed
   return ok(res, { id });
 });
 
-router.post('/:id/complete', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.post('/:id/complete', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const id = Number(req.params.id);
   if (!getScopedMeeting(id, condoId)) return fail(res, 'not_found', 404);
@@ -76,7 +76,7 @@ router.post('/:id/complete', requireAuth, requireRole('board_admin'), (req: Auth
   return ok(res, { id, status: 'completed' });
 });
 
-router.post('/:id/action-items', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.post('/:id/action-items', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const id = Number(req.params.id);
   if (!getScopedMeeting(id, condoId)) return fail(res, 'not_found', 404);
@@ -95,7 +95,7 @@ router.post('/:id/action-items', requireAuth, requireRole('board_admin'), (req: 
   return ok(res, { id: row.lastInsertRowid });
 });
 
-router.post('/action-items/:id/toggle', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.post('/action-items/:id/toggle', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const id = Number(req.params.id);
   const row = db.prepare(

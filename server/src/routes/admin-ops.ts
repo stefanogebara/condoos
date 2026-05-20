@@ -4,7 +4,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import db from '../db';
-import { requireAuth, requireRole, AuthedRequest } from '../lib/auth';
+import { requireAuth, requireRole, requireBoardCapability, AuthedRequest } from '../lib/auth';
 import { ok, fail, asyncHandler } from '../lib/respond';
 import { createRateLimit } from '../lib/rate-limit';
 import { audit } from '../lib/audit';
@@ -24,11 +24,11 @@ const backupRateLimit = createRateLimit({
   key: (req) => String((req as AuthedRequest).user?.id || req.ip || 'unknown'),
 });
 
-router.get('/backup/status', requireAuth, requireRole('board_admin'), (_req: AuthedRequest, res) => {
+router.get('/backup/status', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (_req: AuthedRequest, res) => {
   return ok(res, getBackupStatus());
 });
 
-router.get('/integrations/status', requireAuth, requireRole('board_admin'), (_req: AuthedRequest, res) => {
+router.get('/integrations/status', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (_req: AuthedRequest, res) => {
   const activeSetupCodes = db.prepare(
     `SELECT COUNT(*) AS count
      FROM private_setup_codes
@@ -80,7 +80,7 @@ router.get('/integrations/status', requireAuth, requireRole('board_admin'), (_re
   });
 });
 
-router.post('/backup/run', requireAuth, requireRole('board_admin'), backupRateLimit, asyncHandler(async (req: AuthedRequest, res) => {
+router.post('/backup/run', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), backupRateLimit, asyncHandler(async (req: AuthedRequest, res) => {
   if (!backupConfigured()) return fail(res, 'backup_not_configured', 503);
   const result = await runBackup();
   audit(req, {
@@ -111,7 +111,7 @@ const killSwitchRateLimit = createRateLimit({
   key: (req) => String((req as AuthedRequest).user?.id || req.ip || 'unknown'),
 });
 
-router.get('/agent/kill-switch', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.get('/agent/kill-switch', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const condoId = req.user?.condominium_id;
   if (!condoId) return fail(res, 'no_active_condo', 400);
   const row = db.prepare(
@@ -126,7 +126,7 @@ const killSwitchSchema = z.object({
   auto_dispatch_enabled: z.boolean(),
 });
 
-router.patch('/agent/kill-switch', requireAuth, requireRole('board_admin'), killSwitchRateLimit, (req: AuthedRequest, res) => {
+router.patch('/agent/kill-switch', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), killSwitchRateLimit, (req: AuthedRequest, res) => {
   const condoId = req.user?.condominium_id;
   if (!condoId) return fail(res, 'no_active_condo', 400);
   const parsed = killSwitchSchema.safeParse(req.body);

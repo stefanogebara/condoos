@@ -18,8 +18,28 @@ export const AGENCY_ROLES: AgencyRole[] = [
   'concierge_supervisor',
 ];
 
+export type AgencyBuildingCapability =
+  | 'building_admin'
+  | 'finance'
+  | 'maintenance'
+  | 'concierge'
+  | 'documents'
+  | 'reports';
+
+const AGENCY_ROLE_CAPABILITIES: Record<AgencyRole, AgencyBuildingCapability[]> = {
+  agency_admin: ['building_admin', 'finance', 'maintenance', 'concierge', 'documents', 'reports'],
+  building_admin: ['building_admin', 'finance', 'maintenance', 'concierge', 'documents', 'reports'],
+  finance_manager: ['finance', 'documents', 'reports'],
+  maintenance_manager: ['maintenance', 'documents', 'reports'],
+  concierge_supervisor: ['concierge'],
+};
+
 export function isAgencyRole(value: unknown): value is AgencyRole {
   return typeof value === 'string' && (AGENCY_ROLES as string[]).includes(value);
+}
+
+export function agencyRoleCanUseCapability(role: AgencyRole, capability: AgencyBuildingCapability): boolean {
+  return AGENCY_ROLE_CAPABILITIES[role]?.includes(capability) || false;
 }
 
 export interface AgencyLinkResult {
@@ -333,6 +353,50 @@ export function userAgencyMembership(userId: number, agencyId: number): AgencyMe
 
 export function userCanManageAgency(userId: number, agencyId: number): boolean {
   return userAgencyMembership(userId, agencyId)?.role === 'agency_admin';
+}
+
+export function agencyRolesForBuilding(userId: number, condominiumId: number): AgencyRole[] {
+  const rows = db.prepare(
+    `SELECT DISTINCT am.role
+     FROM agency_memberships am
+     JOIN agency_condominiums ac
+       ON ac.agency_id = am.agency_id
+      AND ac.condominium_id = ?
+     LEFT JOIN agency_member_buildings amb
+       ON amb.agency_membership_id = am.id
+      AND amb.condominium_id = ?
+     WHERE am.user_id = ?
+       AND (am.role = 'agency_admin' OR amb.id IS NOT NULL)
+     ORDER BY
+       CASE am.role
+         WHEN 'agency_admin' THEN 0
+         WHEN 'building_admin' THEN 1
+         WHEN 'finance_manager' THEN 2
+         WHEN 'maintenance_manager' THEN 3
+         ELSE 4
+       END`
+  ).all(condominiumId, condominiumId, userId) as Array<{ role: AgencyRole }>;
+  return rows.map((row) => row.role).filter(isAgencyRole);
+}
+
+export function agencyUserCanUseBuildingCapability(
+  userId: number,
+  condominiumId: number,
+  capability: AgencyBuildingCapability,
+): { scoped: boolean; allowed: boolean; roles: AgencyRole[] } {
+  const roles = agencyRolesForBuilding(userId, condominiumId);
+  if (roles.length === 0) {
+    const hasAgencyMembership = count(
+      `SELECT COUNT(*) AS count FROM agency_memberships WHERE user_id = ?`,
+      userId,
+    ) > 0;
+    return { scoped: hasAgencyMembership, allowed: !hasAgencyMembership, roles };
+  }
+  return {
+    scoped: true,
+    allowed: roles.some((role) => agencyRoleCanUseCapability(role, capability)),
+    roles,
+  };
 }
 
 function zeroMetrics(): AgencyBuildingMetrics {

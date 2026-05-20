@@ -1,11 +1,11 @@
 import { Router } from 'express';
-import { AuthedRequest, getActiveCondoId, requireAuth, requireRole } from '../lib/auth';
+import { AuthedRequest, getActiveCondoId, requireAuth, requireRole, requireBoardCapability } from '../lib/auth';
 import { fail, ok } from '../lib/respond';
 import { getBoardPacket, normalizeBoardPacketMonth } from '../lib/board-packet';
 
 const router = Router();
 
-router.get('/board-packet', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.get('/board-packet', requireAuth, requireRole('board_admin'), requireBoardCapability('reports'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const rawMonth = typeof req.query.month === 'string' ? req.query.month : undefined;
   let month: string;

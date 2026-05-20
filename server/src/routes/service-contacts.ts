@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import db from '../db';
-import { requireAuth, requireRole, getActiveCondoId, AuthedRequest } from '../lib/auth';
+import { requireAuth, requireRole, requireBoardCapability, getActiveCondoId, AuthedRequest } from '../lib/auth';
 import { ok, fail } from '../lib/respond';
 import { audit } from '../lib/audit';
 import { normalizeServiceContact, serviceContactSchema } from '../lib/service-contacts';
@@ -81,7 +81,7 @@ function rewireBlockedTickets(
 // actually reachable, so the admin doesn't trust a fake "Mensagem enviada"
 // toast when the provider can't actually deliver. Cached so the UI can
 // poll cheaply (every 30-60s) from a header pill.
-router.get('/whatsapp/health', requireAuth, requireRole('board_admin'), async (_req: AuthedRequest, res) => {
+router.get('/whatsapp/health', requireAuth, requireRole('board_admin'), requireBoardCapability('maintenance'), async (_req: AuthedRequest, res) => {
   const health = await getWhatsAppHealth();
   return ok(res, health);
 });
@@ -93,7 +93,7 @@ router.get('/whatsapp/health', requireAuth, requireRole('board_admin'), async (_
 // to prevent the endpoint becoming a generic "send WhatsApp to anyone"
 // utility — that's a spam vector. Same outbox + immediate worker tick as
 // real outreach; returns outbox_id for status polling.
-router.post('/test-whatsapp', requireAuth, requireRole('board_admin'), async (req: AuthedRequest, res) => {
+router.post('/test-whatsapp', requireAuth, requireRole('board_admin'), requireBoardCapability('maintenance'), async (req: AuthedRequest, res) => {
   const parsed = testWhatsAppSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
   const condoId = getActiveCondoId(req);
@@ -133,7 +133,7 @@ router.post('/test-whatsapp', requireAuth, requireRole('board_admin'), async (re
 // every 2s after send to evolve "queued → sent / failed" honestly instead
 // of fake-success on HTTP 201. Admin-scoped to its own condo's outbox
 // rows (we don't expose other condos' rows).
-router.get('/outbox/:id', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.get('/outbox/:id', requireAuth, requireRole('board_admin'), requireBoardCapability('maintenance'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) return fail(res, 'invalid_id', 400);
@@ -161,14 +161,14 @@ router.get('/outbox/:id', requireAuth, requireRole('board_admin'), (req: AuthedR
   return ok(res, row);
 });
 
-router.get('/', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.get('/', requireAuth, requireRole('board_admin'), requireBoardCapability('maintenance'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const includeInactive = req.query.include_inactive === '1' || req.query.include_inactive === 'true';
   const rows = listServiceContactsWithScorecards(condoId, includeInactive);
   return ok(res, rows);
 });
 
-router.post('/', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.post('/', requireAuth, requireRole('board_admin'), requireBoardCapability('maintenance'), (req: AuthedRequest, res) => {
   const parsed = serviceContactSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
   const condoId = getActiveCondoId(req);
@@ -221,7 +221,7 @@ router.post('/', requireAuth, requireRole('board_admin'), (req: AuthedRequest, r
   return ok(res, { id, rewired_ticket_ids: rewired.rewiredIds }, 201);
 });
 
-router.patch('/:id', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.patch('/:id', requireAuth, requireRole('board_admin'), requireBoardCapability('maintenance'), (req: AuthedRequest, res) => {
   const parsed = serviceContactSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
   const condoId = getActiveCondoId(req);
@@ -290,7 +290,7 @@ router.patch('/:id', requireAuth, requireRole('board_admin'), (req: AuthedReques
 // records a ticket_dispatch row; this one is intentionally lightweight —
 // no ticket context, just an outbox row + audit entry + an immediate
 // processWhatsAppOutbox tick so the message actually leaves.
-router.post('/:id/outreach', requireAuth, requireRole('board_admin'), async (req: AuthedRequest, res) => {
+router.post('/:id/outreach', requireAuth, requireRole('board_admin'), requireBoardCapability('maintenance'), async (req: AuthedRequest, res) => {
   const parsed = outreachSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
   const condoId = getActiveCondoId(req);
@@ -356,7 +356,7 @@ router.post('/:id/outreach', requireAuth, requireRole('board_admin'), async (req
   }, 201);
 });
 
-router.delete('/:id', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.delete('/:id', requireAuth, requireRole('board_admin'), requireBoardCapability('maintenance'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) return fail(res, 'invalid_id', 400);

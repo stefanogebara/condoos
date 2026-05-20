@@ -10,7 +10,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import db from '../db';
-import { requireAuth, requireRole, getActiveCondoId, AuthedRequest, revokeUserTokens } from '../lib/auth';
+import { requireAuth, requireRole, requireBoardCapability, getActiveCondoId, AuthedRequest, revokeUserTokens } from '../lib/auth';
 import { ok, fail } from '../lib/respond';
 import { audit } from '../lib/audit';
 import { notifyUsers } from '../lib/whatsapp';
@@ -21,7 +21,7 @@ const router = Router();
 // Concierges and admins both see the queue. Residents do not.
 const requireConciergeOrAdmin = requireRole('concierge', 'board_admin');
 
-router.get('/today', requireAuth, requireConciergeOrAdmin, (req: AuthedRequest, res) => {
+router.get('/today', requireAuth, requireConciergeOrAdmin, requireBoardCapability('concierge'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
 
   // Day-bracket: today 00:00 → tomorrow 00:00 in server TZ. Visitors with no
@@ -126,7 +126,7 @@ const walkupSchema = z.object({
   notes: z.string().max(500).optional().nullable(),
 });
 
-router.post('/walkup', requireAuth, requireConciergeOrAdmin, async (req: AuthedRequest, res) => {
+router.post('/walkup', requireAuth, requireConciergeOrAdmin, requireBoardCapability('concierge'), async (req: AuthedRequest, res) => {
   const parsed = walkupSchema.safeParse(req.body || {});
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
   const condoId = getActiveCondoId(req);
@@ -187,7 +187,7 @@ router.post('/walkup', requireAuth, requireConciergeOrAdmin, async (req: AuthedR
   return ok(res, { id: visitorId, status: 'pending', notified_user_id: resident.id }, 201);
 });
 
-router.post('/notify', requireAuth, requireConciergeOrAdmin, async (req: AuthedRequest, res) => {
+router.post('/notify', requireAuth, requireConciergeOrAdmin, requireBoardCapability('concierge'), async (req: AuthedRequest, res) => {
   const parsed = notifySchema.safeParse(req.body || {});
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
   const condoId = getActiveCondoId(req);
@@ -264,7 +264,7 @@ const resetPasswordSchema = z.object({
   password: z.string().min(12).max(120),
 });
 
-router.post('/invite', requireAuth, requireRole('board_admin'), async (req: AuthedRequest, res) => {
+router.post('/invite', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), async (req: AuthedRequest, res) => {
   const parsed = inviteSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
   const condoId = getActiveCondoId(req);
@@ -296,7 +296,7 @@ router.post('/invite', requireAuth, requireRole('board_admin'), async (req: Auth
   return ok(res, { id, email: data.email, role: 'concierge' }, 201);
 });
 
-router.get('/staff', requireAuth, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.get('/staff', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const rows = db.prepare(
     `SELECT id, email, first_name, last_name, created_at
@@ -307,7 +307,7 @@ router.get('/staff', requireAuth, requireRole('board_admin'), (req: AuthedReques
   return ok(res, rows);
 });
 
-router.post('/staff/:id/password', requireAuth, requireRole('board_admin'), async (req: AuthedRequest, res) => {
+router.post('/staff/:id/password', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), async (req: AuthedRequest, res) => {
   const parsed = resetPasswordSchema.safeParse(req.body || {});
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
   const condoId = getActiveCondoId(req);

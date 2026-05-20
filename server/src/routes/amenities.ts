@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import db from '../db';
-import { requireAuth, requireActiveMembership, requireRole, AuthedRequest } from '../lib/auth';
+import { requireAuth, requireActiveMembership, requireRole, requireBoardCapability, AuthedRequest } from '../lib/auth';
 import { ok, fail } from '../lib/respond';
 import { audit } from '../lib/audit';
 import { notifyUsers } from '../lib/whatsapp';
@@ -118,7 +118,7 @@ router.get('/', requireAuth, requireActiveMembership, (req: AuthedRequest, res) 
   return ok(res, rows);
 });
 
-router.post('/', requireAuth, requireActiveMembership, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.post('/', requireAuth, requireActiveMembership, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const cleaned = cleanAmenityInput(req.body || {});
   if ('error' in cleaned) return fail(res, String(cleaned.error), 400);
   const a = cleaned.data;
@@ -142,7 +142,7 @@ router.post('/', requireAuth, requireActiveMembership, requireRole('board_admin'
   return ok(res, { id: row.lastInsertRowid, ...a });
 });
 
-router.patch('/:id', requireAuth, requireActiveMembership, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.patch('/:id', requireAuth, requireActiveMembership, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const id = Number(req.params.id);
   const existing = db.prepare(
     `SELECT * FROM amenities WHERE id = ? AND condominium_id = ?`
@@ -171,7 +171,7 @@ router.patch('/:id', requireAuth, requireActiveMembership, requireRole('board_ad
   return ok(res, { id, ...a });
 });
 
-router.delete('/:id', requireAuth, requireActiveMembership, requireRole('board_admin'), (req: AuthedRequest, res) => {
+router.delete('/:id', requireAuth, requireActiveMembership, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const id = Number(req.params.id);
   const existing = db.prepare(
     `SELECT * FROM amenities WHERE id = ? AND condominium_id = ?`
