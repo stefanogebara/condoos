@@ -116,7 +116,8 @@ test('Onboarding API: multi-block condo creates units across all towers', async 
   expect(out.inviteCode).toMatch(/^[A-Z2-9]{6}$/);
 
   // Cross-check: lookup by invite code should expose the uneven per-floor layout.
-  const lookup = await request.get(`${apiURL}/onboarding/by-code/${out.inviteCode}`);
+  const lookup = await request.get(`${apiURL}/onboarding/by-code/${out.inviteCode}`, { headers });
+  expect(lookup.ok(), `lookup failed: ${lookup.status()} ${await lookup.text()}`).toBeTruthy();
   const info = (await lookup.json()).data;
   expect(info.units.length).toBe(47);
   const byNumber = new Set(info.units.map((u: any) => u.number));

@@ -52,7 +52,9 @@ async function createPendingMembership(
   const code        = await getInviteCode(request, adminToken);
 
   // Look up the condo details + available units by invite code.
-  const lookupRes = await request.get(`${apiURL}/onboarding/by-code/${code}`);
+  const lookupRes = await request.get(`${apiURL}/onboarding/by-code/${code}`, {
+    headers: { Authorization: `Bearer ${userSession.token}` },
+  });
   expect(lookupRes.ok(), `code lookup failed: ${lookupRes.status()}`).toBeTruthy();
   const units = (await lookupRes.json()).data?.units as any[] | undefined;
   expect(units && units.length > 0, 'no units found for invite code').toBeTruthy();
