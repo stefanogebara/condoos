@@ -59,10 +59,41 @@ const privateCreateIntentCopy = {
 };
 
 export default function Login() {
-  const { login, loginWithGoogle } = useAuth();
+  const { login, loginWithGoogle, user, loading: authLoading, hasActiveMembership } = useAuth();
   const { locale } = useLocale();
   const tr = (key: string) => t(key, locale);
   const navigate = useNavigate();
+
+  // If a returning user lands on /login while still authenticated
+  // (kept the tab open, followed a stale bookmark, clicked "Entrar"
+  // from the landing after a Sou-síndico CTA cached the route),
+  // send them straight to their dashboard. No reason to re-show the
+  // login form to someone who already has a session. The wait on
+  // `authLoading` + `hasActiveMembership !== null` avoids a flash —
+  // we only route once the auth context has finished hydrating
+  // (which includes /onboarding/me).
+  React.useEffect(() => {
+    if (authLoading) return;
+    if (!user) return;
+    if (user.role === 'concierge') {
+      navigate('/concierge', { replace: true });
+      return;
+    }
+    // A board_admin who started signup but never finished creating
+    // their condo has condominium_id=null — sending them to /board
+    // would render a broken-looking dashboard with empty data. Push
+    // them to onboarding/create so they can finish setup.
+    if (user.role === 'board_admin') {
+      navigate(user.condominium_id ? '/board' : '/onboarding/create', { replace: true });
+      return;
+    }
+    // Residents need the membership signal to know whether to go to
+    // /app or to onboarding. The auth context sets hasActiveMembership
+    // to null while the /onboarding/me request is in flight; wait
+    // for it to resolve.
+    if (hasActiveMembership === null) return;
+    navigate(hasActiveMembership ? '/app' : '/onboarding', { replace: true });
+  }, [authLoading, user, hasActiveMembership, navigate]);
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading]   = useState(false);
@@ -134,11 +165,20 @@ export default function Login() {
   //     regardless of intent (a returning síndico clicking "Sou síndico" on the
   //     marketing page shouldn't be sent through the create wizard again).
   //   - Otherwise route by intent. No intent → choose-your-path /onboarding.
-  async function routeAfterLogin(u: { role: string; first_name: string }) {
+  async function routeAfterLogin(u: { role: string; first_name: string; condominium_id?: number | null }) {
     // Staff (board_admin / concierge) skip the membership check — they don't
     // own a unit, but their condominium_id is set when they're created.
     if (u.role === 'concierge') {
       navigate('/concierge');
+      return;
+    }
+
+    // A board_admin who started signup but never finished creating their
+    // condo has condominium_id=null — /board would render a broken
+    // dashboard. Push them to /onboarding/create regardless of intent so
+    // they actually finish setting up.
+    if (u.role === 'board_admin') {
+      navigate(u.condominium_id ? '/board' : '/onboarding/create');
       return;
     }
 
@@ -148,11 +188,15 @@ export default function Login() {
       hasActive = memberships.some((m) => m.status === 'active');
     } catch { /* treat as no membership */ }
 
-    if (hasActive || u.role === 'board_admin') {
-      navigate(u.role === 'board_admin' ? '/board' : '/app');
+    // Resident WITH a building → /app, regardless of the intent param
+    // they arrived through. A returning morador who clicked "Sou
+    // morador" shouldn't be sent through the join wizard again.
+    if (hasActive) {
+      navigate('/app');
       return;
     }
 
+    // Resident with no membership → route by their intent.
     if (intent === 'create') {
       navigate('/onboarding/create');
     } else if (intent === 'join') {

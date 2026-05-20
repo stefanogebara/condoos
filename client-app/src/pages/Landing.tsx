@@ -79,6 +79,24 @@ export default function Landing() {
               </Link>
             </div>
 
+            {/* Returning-user lane. The three CTAs above are signup-
+                flavored ("Sou síndico — montar", "Sou morador — tenho
+                código") — a returning admin or resident shouldn't have
+                to read them as their path. The login route already
+                auto-routes authenticated users to their dashboard
+                (Login.tsx auto-redirect effect), so this just gives
+                them an obvious starting point. */}
+            <p className="mt-5 text-sm text-dusk-300">
+              Já tem conta?{' '}
+              <Link
+                to="/login"
+                onClick={() => track('cta_clicked', { location: 'hero', label: 'entrar' })}
+                className="font-medium text-dusk-500 underline underline-offset-4 hover:text-dusk-400"
+              >
+                Entre direto no seu prédio
+              </Link>
+            </p>
+
             <div className="mt-14 flex items-center gap-6 flex-wrap text-xs uppercase tracking-[0.14em] text-dusk-200 font-medium">
               <span>Claude Haiku</span>
               <span className="w-1 h-1 rounded-full bg-dusk-200/60" />
