@@ -12,7 +12,7 @@
 // Re-parenting units between blocks is out of scope for v1.
 import React, { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
-import { Building2, Plus, Trash2, Pencil, Check, X, AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Building2, Check, Globe2, Pencil, Plus, Save, Trash2, X } from 'lucide-react';
 import { pluralize, t } from '../../lib/i18n';
 import PageHeader from '../../components/PageHeader';
 import GlassCard from '../../components/GlassCard';
@@ -34,17 +34,49 @@ interface Unit {
   active_claims: number;
 }
 
+interface CondoSettings {
+  id: number;
+  name: string;
+  address: string;
+  invite_code: string | null;
+  country: 'BR' | 'EC';
+  currency: 'BRL' | 'USD';
+  timezone: string;
+  locale: 'pt-BR' | 'es-ES' | 'en-US' | 'fr-FR';
+  governance_mode: 'brazil_condominium' | 'ecuador_condominium' | 'neutral';
+}
+
+const MARKET_DEFAULTS: Record<CondoSettings['country'], Pick<CondoSettings, 'currency' | 'timezone' | 'locale' | 'governance_mode'>> = {
+  BR: {
+    currency: 'BRL',
+    timezone: 'America/Sao_Paulo',
+    locale: 'pt-BR',
+    governance_mode: 'brazil_condominium',
+  },
+  EC: {
+    currency: 'USD',
+    timezone: 'America/Guayaquil',
+    locale: 'es-ES',
+    governance_mode: 'ecuador_condominium',
+  },
+};
+
 export default function BoardEdificio() {
   const [buildings, setBuildings] = useState<Building[]>([]);
   const [unitsByBuilding, setUnitsByBuilding] = useState<Record<number, Unit[]>>({});
+  const [settings, setSettings] = useState<CondoSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [showNewBlock, setShowNewBlock] = useState(false);
 
   async function loadAll() {
     setLoading(true);
     try {
-      const list = await apiGet<Building[]>('/buildings');
+      const [list, currentSettings] = await Promise.all([
+        apiGet<Building[]>('/buildings'),
+        apiGet<CondoSettings>('/condominiums/current'),
+      ]);
       setBuildings(list);
+      setSettings(currentSettings);
       const map: Record<number, Unit[]> = {};
       await Promise.all(list.map(async (b) => {
         try {
@@ -74,6 +106,13 @@ export default function BoardEdificio() {
         }
       />
 
+      {settings && (
+        <MarketSettingsPanel
+          settings={settings}
+          onSaved={(next) => setSettings(next)}
+        />
+      )}
+
       {showNewBlock && (
         <NewBlockForm onCreated={() => { setShowNewBlock(false); loadAll(); }} />
       )}
@@ -95,6 +134,114 @@ export default function BoardEdificio() {
         </GlassCard>
       )}
     </>
+  );
+}
+
+function MarketSettingsPanel({
+  settings,
+  onSaved,
+}: {
+  settings: CondoSettings;
+  onSaved: (settings: CondoSettings) => void;
+}) {
+  const [form, setForm] = useState(settings);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => { setForm(settings); }, [settings]);
+
+  function setCountry(country: CondoSettings['country']) {
+    setForm((current) => ({
+      ...current,
+      country,
+      ...MARKET_DEFAULTS[country],
+    }));
+  }
+
+  async function save() {
+    setSaving(true);
+    try {
+      const next = await apiPatch<CondoSettings>('/condominiums/current/settings', {
+        country: form.country,
+        currency: form.currency,
+        timezone: form.timezone,
+        locale: form.locale,
+        governance_mode: form.governance_mode,
+      });
+      onSaved(next);
+      toast.success(t('Configuração de mercado salva'));
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || t('Não foi possível salvar a configuração de mercado'));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <GlassCard variant="clay-sage" className="p-5 mb-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-sage-200 text-sage-800 flex items-center justify-center shrink-0">
+            <Globe2 className="w-5 h-5" />
+          </div>
+          <div>
+            <h2 className="font-display text-xl text-dusk-500">{t('Mercado e regras do prédio')}</h2>
+            <p className="text-sm text-dusk-300 mt-1">
+              {t('Defina país, moeda, idioma base e fuso horário para que finanças, relatórios e regras não misturem Brasil com Equador.')}
+            </p>
+          </div>
+        </div>
+        <Button
+          variant="primary"
+          leftIcon={<Save className="w-4 h-4" />}
+          loading={saving}
+          onClick={save}
+        >
+          {t('Salvar configuração')}
+        </Button>
+      </div>
+
+      <div className="grid md:grid-cols-5 gap-3 mt-5">
+        <label className="block text-xs text-dusk-300 font-medium">
+          {t('País')}
+          <select className="input mt-1" value={form.country} onChange={(e) => setCountry(e.target.value as CondoSettings['country'])}>
+            <option value="BR">{t('Brasil')}</option>
+            <option value="EC">{t('Ecuador')}</option>
+          </select>
+        </label>
+        <label className="block text-xs text-dusk-300 font-medium">
+          {t('Moeda')}
+          <select className="input mt-1" value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value as CondoSettings['currency'] })}>
+            <option value="BRL">BRL</option>
+            <option value="USD">USD</option>
+          </select>
+        </label>
+        <label className="block text-xs text-dusk-300 font-medium">
+          {t('Idioma base')}
+          <select className="input mt-1" value={form.locale} onChange={(e) => setForm({ ...form, locale: e.target.value as CondoSettings['locale'] })}>
+            <option value="pt-BR">Português</option>
+            <option value="es-ES">Español</option>
+            <option value="en-US">English</option>
+            <option value="fr-FR">Français</option>
+          </select>
+        </label>
+        <label className="block text-xs text-dusk-300 font-medium">
+          {t('Fuso horário')}
+          <select className="input mt-1" value={form.timezone} onChange={(e) => setForm({ ...form, timezone: e.target.value })}>
+            <option value="America/Sao_Paulo">America/Sao_Paulo</option>
+            <option value="America/Guayaquil">America/Guayaquil</option>
+            <option value="America/New_York">America/New_York</option>
+          </select>
+        </label>
+        <label className="block text-xs text-dusk-300 font-medium">
+          {t('Governança')}
+          <select className="input mt-1" value={form.governance_mode} onChange={(e) => setForm({ ...form, governance_mode: e.target.value as CondoSettings['governance_mode'] })}>
+            <option value="brazil_condominium">{t('Condomínio Brasil')}</option>
+            <option value="ecuador_condominium">{t('Condomínio Equador')}</option>
+            <option value="neutral">{t('Neutral')}</option>
+          </select>
+        </label>
+      </div>
+    </GlassCard>
   );
 }
 

@@ -7,6 +7,11 @@ CREATE TABLE IF NOT EXISTS condominiums (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   name          TEXT NOT NULL,
   address       TEXT NOT NULL,
+  country       TEXT NOT NULL DEFAULT 'BR',
+  currency      TEXT NOT NULL DEFAULT 'BRL',
+  timezone      TEXT NOT NULL DEFAULT 'America/Sao_Paulo',
+  locale        TEXT NOT NULL DEFAULT 'pt-BR',
+  governance_mode TEXT NOT NULL DEFAULT 'brazil_condominium',
   created_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 

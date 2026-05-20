@@ -310,6 +310,10 @@ export function initSchema() {
   addColumnIfMissing('condominiums', 'voting_model',       `TEXT NOT NULL DEFAULT 'one_per_unit'`);
   addColumnIfMissing('condominiums', 'require_approval',   `INTEGER NOT NULL DEFAULT 1`);
   addColumnIfMissing('condominiums', 'created_by_user_id', `INTEGER REFERENCES users(id)`);
+  addColumnIfMissing('condominiums', 'country',            `TEXT NOT NULL DEFAULT 'BR'`);
+  addColumnIfMissing('condominiums', 'currency',           `TEXT NOT NULL DEFAULT 'BRL'`);
+  addColumnIfMissing('condominiums', 'locale',             `TEXT NOT NULL DEFAULT 'pt-BR'`);
+  addColumnIfMissing('condominiums', 'governance_mode',    `TEXT NOT NULL DEFAULT 'brazil_condominium'`);
   // IANA timezone for the building. Used by the agent's after-hours
   // detection so an admin in Acre (UTC-5) doesn't get a 21h-is-late
   // warning at 19h local. Default to São Paulo because the product is

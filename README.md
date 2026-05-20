@@ -327,10 +327,10 @@ Then update `vercel.json` `rewrites` to point `/api/*` at your deployed server U
 
 ## What's next
 
-- **Realtime** — Socket.io for live vote counts and new-suggestion toasts.
-- **Mobile nav** — bottom-bar treatment for resident + board apps on phones.
-- **Multi-tenant** — every table carries `condominium_id`; a condo picker + signup would unlock this.
-- **Cron** — weekly resident digest (AI-composed) + amenity reminders.
+- **Maintenance timeline** — ticket events, vendor quotes, SLA alerts, and resident-safe progress history.
+- **Agency command center** — richer multi-building priorities, permission review, invite delivery, and packaged exports.
+- **Production hardening** — production-safe i18n, upload/storage audits, private setup-code enforcement, backup checks, and smoke tests before demos.
+- **Market readiness** — Brazil/Ecuador legal wording, timezone/date sweeps, and sales/onboarding material for private B2B pilots.
 
 ---
 

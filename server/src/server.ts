@@ -47,6 +47,7 @@ import webhooksRoutes from './routes/webhooks';
 import vendorPortalRoutes from './routes/vendor-portal';
 import serviceContactsRoutes from './routes/service-contacts';
 import agenciesRoutes from './routes/agencies';
+import condominiumsRoutes from './routes/condominiums';
 import { processWhatsAppOutbox } from './lib/whatsapp';
 import { startScheduledInvoiceGenerator } from './lib/finance';
 
@@ -168,6 +169,7 @@ app.use('/api/memberships',   scoped, membershipsRoutes);
 app.use('/api/assemblies',    scoped, assembliesRoutes);
 app.use('/api/audit',         scoped, auditRoutes);
 app.use('/api/buildings',     scoped, buildingsRoutes);
+app.use('/api/condominiums',  scoped, condominiumsRoutes);
 app.use('/api/units',         scoped, unitsRoutes);
 app.use('/api/concierge',     scoped, conciergeRoutes);
 app.use('/api/finance',       scoped, financeRoutes);

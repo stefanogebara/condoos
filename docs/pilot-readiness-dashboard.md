@@ -10,8 +10,10 @@ This document separates what is real today from what still needs production wiri
 - Guard dashboard for visitors, parties, packages, resident contact fallback, walk-up visitor notification, package handoff, and search.
 - Admin residents, pending approvals, proposals, assemblies, meetings, announcements, amenities, building layout, services, tickets, finance, documents, Building Memory, reports, and concierge staff.
 - Manual dues/invoices/payments, expense transparency, vendor scorecards, work orders, audit log, and monthly board packet Markdown export.
+- Resident payment-proof upload plus admin approval/rejection queue. Approved proofs create payment records and overpayment is blocked.
 - In-app dashboard actions for resident/admin/guard command centers.
 - File upload registry with local/dev storage and Cloudflare R2-compatible presigned upload support for documents, receipts, and ticket evidence.
+- Building-level Brazil/Ecuador market settings: country, currency, timezone, locale, and governance mode. Finance defaults now follow the building currency.
 - Private B2B building activation with setup-code gate when `PRIVATE_CREATE_BUILDING_REQUIRED=1`.
 - Agency portfolio foundation: agency records, agency/building links, agency memberships, scoped staff building assignments, `/api/agencies/portfolio`, `/board/portfolio` risk summary, recent audit preview, agency selector, private setup-code management, staff controls, portfolio CSV export, and scoped operational exports for residents, finance, tickets, work orders, and audit rows.
 
@@ -41,12 +43,11 @@ This document separates what is real today from what still needs production wiri
 - Production R2 bucket/CORS/secrets must pass `npm run audit:prod:uploads` before a real building uses uploads.
 - Turnstile keys are not installed in the current demo deployment, so create-building captcha is not active yet. `npm run audit:prod:hardening` should fail until those keys are set.
 - If `PRIVATE_CREATE_BUILDING_REQUIRED` is not set in production, random signed-in users can still attempt create-building. Private sales deployments should fail closed with setup codes.
-- Resident payment-proof upload/approval.
-- Full ticket timeline events and vendor quote comparison.
-- Building-level Brazil/Ecuador country, currency, timezone, locale, and governance mode.
+- Full ticket timeline events, SLA escalation rules, and vendor quote comparison.
+- Market settings exist, but the remaining localization hardening is legal/governance wording, date/time formatting sweeps, and production seed-content cleanup per market.
 - Incident mode.
 - Portfolio dashboard is not yet a full agency command center: agency setup-code controls, scoped staff controls, and scoped CSV exports exist, but agency staff invite delivery, permissions review screens, and richer multi-building reporting are still pending.
 
 ## Next Pilot Upgrade
 
-The next buyer-visible upgrade after the upload foundation should be resident payment-proof submission and admin approval, because payment receipts now have a real place to live.
+The next buyer-visible upgrade should harden maintenance into a full work-order timeline: ticket events, vendor quotes, SLA alerts, and resident-safe progress history. That is the next place where a buyer will judge whether CONDOS can run a real building, not just record requests.

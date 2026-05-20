@@ -17,13 +17,14 @@ import {
   userCanSeeUnit,
 } from '../lib/finance';
 import { assertFileReadyForUse, attachFileToTarget, fileDownloadPath } from '../lib/files';
+import { defaultCurrencyForCondo } from '../lib/condo-settings';
 
 const router = Router();
 
 const scheduleSchema = z.object({
   name: z.string().min(1).max(120),
   amount_cents: z.number().int().positive(),
-  currency: z.string().min(3).max(3).default('BRL'),
+  currency: z.string().min(3).max(3).optional(),
   frequency: z.enum(['monthly', 'quarterly', 'annual', 'one_time']).default('monthly'),
   due_day: z.number().int().min(1).max(28).default(10),
 });
@@ -63,7 +64,7 @@ const budgetMonthSchema = z.string().regex(/^\d{4}-\d{2}$/);
 
 const budgetTargetsBulkSchema = z.object({
   month: budgetMonthSchema,
-  currency: z.string().min(3).max(3).default('BRL'),
+  currency: z.string().min(3).max(3).optional(),
   targets: z.array(z.object({
     category: z.enum(FINANCE_EXPENSE_CATEGORIES),
     amount_cents: z.number().int().min(0),
@@ -73,7 +74,7 @@ const budgetTargetsBulkSchema = z.object({
 
 const expenseSchema = z.object({
   amount_cents: z.number().int().positive(),
-  currency: z.string().min(3).max(3).optional().default('BRL'),
+  currency: z.string().min(3).max(3).optional(),
   category: z.enum(FINANCE_EXPENSE_CATEGORIES),
   vendor: z.string().min(0).max(120).optional().nullable(),
   description: z.string().min(1).max(500),
@@ -102,17 +103,18 @@ router.post('/schedules', requireAuth, requireRole('board_admin'), (req: AuthedR
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
   const condoId = getActiveCondoId(req);
   const body = parsed.data;
+  const currency = (body.currency || defaultCurrencyForCondo(condoId)).toUpperCase();
   const result = db.prepare(
     `INSERT INTO dues_schedules (condominium_id, name, amount_cents, currency, frequency, due_day)
      VALUES (?, ?, ?, ?, ?, ?)`
-  ).run(condoId, body.name, body.amount_cents, body.currency, body.frequency, body.due_day);
+  ).run(condoId, body.name, body.amount_cents, currency, body.frequency, body.due_day);
   const id = Number(result.lastInsertRowid);
   audit(req, {
     action: 'finance.schedule_create',
     target_type: 'dues_schedule',
     target_id: id,
     condominium_id: condoId,
-    metadata: { amount_cents: body.amount_cents, frequency: body.frequency },
+    metadata: { amount_cents: body.amount_cents, currency, frequency: body.frequency },
   });
   return ok(res, { id }, 201);
 });
@@ -224,7 +226,11 @@ router.post('/invoices', requireAuth, requireRole('board_admin'), (req: AuthedRe
   const parsed = invoiceSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
   const condoId = getActiveCondoId(req);
-  const result = generateInvoices({ condoId, ...parsed.data });
+  const result = generateInvoices({
+    condoId,
+    ...parsed.data,
+    currency: parsed.data.currency || defaultCurrencyForCondo(condoId),
+  });
   if (!result.ok) return fail(res, result.error, result.status, result.details);
 
   audit(req, {
@@ -419,7 +425,11 @@ router.post('/budget-targets/bulk', requireAuth, requireRole('board_admin'), (re
   const parsed = budgetTargetsBulkSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
   const condoId = getActiveCondoId(req);
-  const result = upsertBudgetTargets({ condoId, ...parsed.data });
+  const result = upsertBudgetTargets({
+    condoId,
+    ...parsed.data,
+    currency: parsed.data.currency || defaultCurrencyForCondo(condoId),
+  });
   if (!result.ok) return fail(res, result.error, result.status, result.details);
   audit(req, {
     action: 'finance.budget_targets_update',
@@ -476,7 +486,7 @@ router.get('/expenses', requireAuth, requireActiveMembership, (req: AuthedReques
     expenses: rows,
     totals_by_category: totalsByCategory,
     total_cents: totalCents,
-    currency: 'BRL',
+    currency: defaultCurrencyForCondo(condoId),
   });
 });
 
@@ -485,6 +495,7 @@ router.post('/expenses', requireAuth, requireRole('board_admin'), (req: AuthedRe
   if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
   const condoId = getActiveCondoId(req);
   const body = parsed.data;
+  const currency = (body.currency || defaultCurrencyForCondo(condoId)).toUpperCase();
 
   // Normalize spent_at — accept both ISO datetime and YYYY-MM-DD.
   const spentAt = /^\d{4}-\d{2}-\d{2}$/.test(body.spent_at)
@@ -535,7 +546,7 @@ router.post('/expenses', requireAuth, requireRole('board_admin'), (req: AuthedRe
       description, admin_explanation, spent_at, receipt_url, receipt_file_id, related_proposal_id, created_by_user_id
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
-    condoId, body.amount_cents, body.currency, body.category, body.vendor || null,
+    condoId, body.amount_cents, currency, body.category, body.vendor || null,
     body.description, body.admin_explanation?.trim() || null, spentAt, receiptUrl, receiptFile?.id || null, body.related_proposal_id || null,
     req.user!.id,
   );
@@ -546,7 +557,7 @@ router.post('/expenses', requireAuth, requireRole('board_admin'), (req: AuthedRe
     target_type: 'expense',
     target_id: id,
     condominium_id: condoId,
-    metadata: { amount_cents: body.amount_cents, category: body.category, has_receipt: !!receiptUrl },
+    metadata: { amount_cents: body.amount_cents, currency, category: body.category, has_receipt: !!receiptUrl },
   });
   return ok(res, { id, spent_at: spentAt }, 201);
 });

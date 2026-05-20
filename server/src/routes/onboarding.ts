@@ -16,6 +16,7 @@ import { verifyCreateBuildingCaptcha } from '../lib/captcha';
 import { emailVerificationRequiredForCreateBuilding, isEmailVerified } from '../lib/email-verification';
 import { checkPrivateSetupCode, consumePrivateSetupCode } from '../lib/private-access';
 import { linkCondominiumToAgency } from '../lib/agencies';
+import { normalizeCondoSettingsInput } from '../lib/condo-settings';
 
 const router = Router();
 const lookupRateLimit = createRateLimit({ keyPrefix: 'onboarding_lookup', windowMs: 60_000, max: 60 });
@@ -128,6 +129,11 @@ const createSchema = z.object({
   serviceContacts: z.array(serviceContactSchema).max(40).optional(),
   requireApproval: z.boolean().default(true),
   votingModel: z.enum(['one_per_unit', 'weighted_by_sqft']).default('one_per_unit'),
+  country: z.enum(['BR', 'EC']).default('BR'),
+  currency: z.enum(['BRL', 'USD']).optional(),
+  timezone: z.string().min(1).max(80).optional(),
+  locale: z.enum(['pt-BR', 'es-ES', 'en-US', 'fr-FR']).optional(),
+  governance_mode: z.enum(['brazil_condominium', 'ecuador_condominium', 'neutral']).optional(),
   captchaToken: z.string().max(2048).optional(),
   setupCode: z.string().max(80).optional(),
 }).superRefine((body, ctx) => {
@@ -168,6 +174,14 @@ router.post('/create-building', createBuildingRateLimit, requireAuth, asyncHandl
   const setupAccess = checkPrivateSetupCode(body.setupCode);
   if (!setupAccess.ok) return fail(res, setupAccess.error, setupAccess.status);
 
+  const marketSettings = normalizeCondoSettingsInput({
+    country: body.country,
+    currency: body.currency,
+    timezone: body.timezone,
+    locale: body.locale,
+    governance_mode: body.governance_mode,
+  });
+
   const tx = db.transaction(() => {
     const consumedSetupAccess = consumePrivateSetupCode(setupAccess);
     if (!consumedSetupAccess.ok) {
@@ -180,9 +194,24 @@ router.post('/create-building', createBuildingRateLimit, requireAuth, asyncHandl
     const inviteCode = uniqueRandomCode();
     const condoId = Number(
       db.prepare(
-        `INSERT INTO condominiums (name, address, invite_code, voting_model, require_approval, created_by_user_id)
-         VALUES (?, ?, ?, ?, ?, ?)`
-      ).run(body.condoName, body.address, inviteCode, body.votingModel, body.requireApproval ? 1 : 0, u.id).lastInsertRowid
+        `INSERT INTO condominiums (
+           name, address, invite_code, voting_model, require_approval, created_by_user_id,
+           country, currency, timezone, locale, governance_mode
+         )
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run(
+        body.condoName,
+        body.address,
+        inviteCode,
+        body.votingModel,
+        body.requireApproval ? 1 : 0,
+        u.id,
+        marketSettings.country,
+        marketSettings.currency,
+        marketSettings.timezone,
+        marketSettings.locale,
+        marketSettings.governance_mode,
+      ).lastInsertRowid
     );
 
     // 2. Create building(s)
@@ -327,6 +356,11 @@ router.post('/create-building', createBuildingRateLimit, requireAuth, asyncHandl
       setup_code_id: setupAccess.source === 'db' ? setupAccess.setupCodeId : undefined,
       agency_id: out.agency?.agencyId,
       agency_name: out.agency?.agencyName,
+      country: marketSettings.country,
+      currency: marketSettings.currency,
+      timezone: marketSettings.timezone,
+      locale: marketSettings.locale,
+      governance_mode: marketSettings.governance_mode,
     },
   });
   return ok(res, out);

@@ -181,9 +181,9 @@ The first implementation slice focuses on Phase 1:
 - Add guard search and faster front-desk filtering.
 - Run build and targeted language checks.
 
-## Current Execution Slice: Payment Proofs And Budget Trust
+## Completed Slice: Payment Proofs And Budget Trust
 
-The next implementation slice should use the upload foundation to make money workflows real:
+This slice used the upload foundation to make money workflows more real:
 
 - Let residents upload payment receipts/proofs against open invoices.
 - Add an admin review queue for approving or rejecting payment proofs.
@@ -237,11 +237,30 @@ This slice turns the operating data already in CONDOS into a board-ready report:
 - Let admins copy, download, or print the packet without leaving the app.
 - Keep all queries scoped to the active condominium and cover the report with domain and E2E tests.
 
-## Current Execution Slice: Role Command Centers
+## Completed Slice: Role Command Centers
 
-This slice starts the new multi-week roadmap in `docs/condos-operating-roadmap.md`:
+This slice started the new multi-week roadmap in `docs/condos-operating-roadmap.md`:
 
 - Add a shared role-scoped `/api/dashboard/actions` contract for resident, admin, and guard command centers.
 - Add in-app notification records plus read tracking so arrivals/packages can become durable app alerts.
 - Wire the resident, admin, and guard home screens to the shared action feed instead of page-local guesses.
 - Add release and pilot-readiness docs so every future push has the same quality gate.
+
+## Completed Slice: Brazil And Ecuador Market Settings
+
+This slice gives every building a market identity instead of assuming one country forever:
+
+- Add building-level country, currency, timezone, locale, and governance mode.
+- Add onboarding controls so new buildings start as Brazil/BRL/PT-BR or Ecuador/USD/Spanish.
+- Add an admin Edificio settings panel to adjust country, currency, language, timezone, and governance mode later.
+- Make invoices, dues schedules, expenses, and budget summaries default to the building currency.
+- Cover Ecuador currency defaults with server tests and keep the full local i18n sweep green.
+
+## Current Execution Slice: Enterprise Operations Hardening
+
+The next implementation slice should keep building on the private-enterprise plan:
+
+- Harden maintenance into a fuller work-order timeline with quote comparison and SLA alerts.
+- Add agency staff invite delivery and clearer permission review screens.
+- Expand portfolio reporting into a true agency command center.
+- Keep production-safe i18n, build, server tests, and pilot smoke checks green before each push.

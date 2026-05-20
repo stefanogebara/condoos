@@ -63,6 +63,7 @@ import {
   userCanManageAgency,
 } from '../src/lib/agencies';
 import { checkPrivateSetupCode, consumePrivateSetupCode, hashSetupCode } from '../src/lib/private-access';
+import { defaultCurrencyForCondo, getCondoSettings, updateCondoSettings } from '../src/lib/condo-settings';
 
 function resetDb() {
   const tables = [
@@ -477,6 +478,38 @@ test('agency operational exports respect staff building scope', () => {
   assert.ok(events.some((event) => event.action === 'second.action'));
   assert.ok(events.some((event) => event.action === 'agency.action'));
   assert.ok(!events.some((event) => event.action === 'first.action'));
+});
+
+test('condo market settings drive Ecuador currency defaults', () => {
+  resetDb();
+  const { condoId, unit101 } = createCondoFixture();
+
+  const updated = updateCondoSettings(condoId, {
+    country: 'EC',
+    timezone: 'America/Guayaquil',
+  });
+  assert.equal(updated?.country, 'EC');
+  assert.equal(updated?.currency, 'USD');
+  assert.equal(updated?.locale, 'es-ES');
+  assert.equal(updated?.governance_mode, 'ecuador_condominium');
+  assert.equal(defaultCurrencyForCondo(condoId), 'USD');
+
+  const invoices = generateInvoices({
+    condoId,
+    amount_cents: 12500,
+    period: '2026-05',
+    unit_ids: [unit101],
+  });
+  assert.equal(invoices.ok, true);
+  const invoice = db.prepare(`SELECT currency FROM invoices WHERE unit_id = ?`).get(unit101) as { currency: string };
+  assert.equal(invoice.currency, 'USD');
+
+  const emptyBudget = getBudgetSummary(condoId, '2026-05');
+  assert.equal(emptyBudget.currency, 'USD');
+
+  const brSettings = updateCondoSettings(condoId, { country: 'BR' });
+  assert.equal(brSettings?.currency, 'BRL');
+  assert.equal(getCondoSettings(condoId)?.timezone, 'America/Sao_Paulo');
 });
 
 function createCondoFixture() {

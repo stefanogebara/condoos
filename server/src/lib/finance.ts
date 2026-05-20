@@ -1,4 +1,5 @@
 import db from '../db';
+import { defaultCurrencyForCondo } from './condo-settings';
 
 interface FinanceError {
   ok: false;
@@ -211,7 +212,7 @@ export function upsertBudgetTargets(input: BudgetTargetWriteInput): BudgetTarget
   } catch {
     return { ok: false, error: 'invalid_month', status: 400 };
   }
-  const currency = (input.currency || 'BRL').toUpperCase();
+  const currency = (input.currency || defaultCurrencyForCondo(input.condoId)).toUpperCase();
   if (!/^[A-Z]{3}$/.test(currency)) return { ok: false, error: 'invalid_currency', status: 400 };
 
   let saved = 0;
@@ -295,7 +296,7 @@ export function getBudgetSummary(condoId: number, month: string): BudgetSummary 
 
   const actualByCategory = new Map(actualRows.map((row) => [row.category, row]));
   const targetByCategory = new Map(targetRows.map((row) => [row.category, row]));
-  const fallbackCurrency = targetRows[0]?.currency || actualRows[0]?.currency || 'BRL';
+  const fallbackCurrency = targetRows[0]?.currency || actualRows[0]?.currency || defaultCurrencyForCondo(condoId);
 
   const categories = FINANCE_EXPENSE_CATEGORIES.map((category) => {
     const actual = actualByCategory.get(category);
@@ -356,7 +357,7 @@ export function generateInvoices(input: InvoiceGenerationInput): InvoiceGenerati
 
   const amount = input.amount_cents || schedule?.amount_cents;
   if (!amount) return { ok: false, error: 'missing_amount_cents', status: 400 };
-  const currency = input.currency || schedule?.currency || 'BRL';
+  const currency = input.currency || schedule?.currency || defaultCurrencyForCondo(input.condoId);
   const dueDate = input.due_date || `${input.period}-10T12:00:00.000Z`;
 
   let units = db.prepare(

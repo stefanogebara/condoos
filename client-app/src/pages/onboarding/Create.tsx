@@ -51,6 +51,31 @@ interface AuthConfig {
   create_building_captcha_required?: boolean;
 }
 
+type MarketCountry = 'BR' | 'EC';
+type MarketCurrency = 'BRL' | 'USD';
+type MarketLocale = 'pt-BR' | 'es-ES' | 'en-US' | 'fr-FR';
+type GovernanceMode = 'brazil_condominium' | 'ecuador_condominium' | 'neutral';
+
+const MARKET_DEFAULTS: Record<MarketCountry, {
+  currency: MarketCurrency;
+  timezone: string;
+  locale: MarketLocale;
+  governance_mode: GovernanceMode;
+}> = {
+  BR: {
+    currency: 'BRL',
+    timezone: 'America/Sao_Paulo',
+    locale: 'pt-BR',
+    governance_mode: 'brazil_condominium',
+  },
+  EC: {
+    currency: 'USD',
+    timezone: 'America/Guayaquil',
+    locale: 'es-ES',
+    governance_mode: 'ecuador_condominium',
+  },
+};
+
 declare global {
   interface Window {
     turnstile?: {
@@ -306,9 +331,22 @@ export default function Create() {
     ] as ServiceContactDraft[],
     requireApproval: true,
     votingModel: 'one_per_unit' as 'one_per_unit' | 'weighted_by_sqft',
+    country: 'BR' as MarketCountry,
+    currency: 'BRL' as MarketCurrency,
+    timezone: 'America/Sao_Paulo',
+    locale: 'pt-BR' as MarketLocale,
+    governance_mode: 'brazil_condominium' as GovernanceMode,
   });
   const up = <K extends keyof typeof form>(key: K, val: typeof form[K]) =>
     setForm((f) => ({ ...f, [key]: val }));
+
+  function updateMarket(country: MarketCountry) {
+    setForm((f) => ({
+      ...f,
+      country,
+      ...MARKET_DEFAULTS[country],
+    }));
+  }
 
   useEffect(() => {
     apiGet<AuthConfig>('/auth/config')
@@ -498,6 +536,11 @@ export default function Create() {
         serviceContacts: serviceContactsToSave.map(normalizeServiceContact),
         requireApproval: form.requireApproval,
         votingModel: form.votingModel,
+        country: form.country,
+        currency: form.currency,
+        timezone: form.timezone,
+        locale: form.locale,
+        governance_mode: form.governance_mode,
         captchaToken: captchaToken || undefined,
         setupCode: privateCreateBuildingRequired ? setupCode.trim() : undefined,
       };
@@ -513,6 +556,8 @@ export default function Create() {
         service_contact_count: serviceContactsToSave.length,
         voting_model: form.votingModel,
         admin_lives_in_building: form.adminLivesInBuilding,
+        country: form.country,
+        currency: form.currency,
       });
       setInviteCode(res.inviteCode);
       setStep(5);
@@ -633,6 +678,28 @@ export default function Create() {
                 <h1 className="font-display text-3xl text-dusk-500 tracking-tight">Como o prédio se chama?</h1>
                 <p className="text-dusk-300 mt-2 text-sm">Os moradores vão ver esse nome ao entrar.</p>
                 <div className="mt-6 space-y-3">
+                  <div className="grid sm:grid-cols-2 gap-3 p-4 rounded-2xl bg-white/60 border border-white/70">
+                    <label className="block text-xs text-dusk-300 font-medium">
+                      Mercado inicial
+                      <select className="input mt-1" value={form.country} onChange={(e) => updateMarket(e.target.value as MarketCountry)}>
+                        <option value="BR">Brasil · BRL · PT-BR</option>
+                        <option value="EC">Equador · USD · Espanhol</option>
+                      </select>
+                      <span className="text-[11px] text-dusk-200 mt-1 block">
+                        Você pode mudar moeda, idioma e fuso horário depois em Edifício.
+                      </span>
+                    </label>
+                    <label className="block text-xs text-dusk-300 font-medium">
+                      Moeda base
+                      <select className="input mt-1" value={form.currency} onChange={(e) => up('currency', e.target.value as MarketCurrency)}>
+                        <option value="BRL">BRL</option>
+                        <option value="USD">USD</option>
+                      </select>
+                      <span className="text-[11px] text-dusk-200 mt-1 block">
+                        Usada por padrão em cobranças, orçamentos e despesas.
+                      </span>
+                    </label>
+                  </div>
                   <label className="block text-xs text-dusk-300 font-medium">
                     Nome do condomínio
                     <input className="input mt-1" value={form.condoName} onChange={(e) => up('condoName', e.target.value)} maxLength={120} />

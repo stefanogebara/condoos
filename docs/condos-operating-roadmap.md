@@ -42,8 +42,10 @@ Every shipped feature must improve at least one promise:
    - Add ticket timeline events, quote comparison, SLA alerts, recurring problem detection, and resident-safe progress visibility.
 
 5. **Brazil + Ecuador readiness**
-   - Add building-level country, currency, timezone, locale, and governance mode.
-   - Keep Portuguese, Spanish, and English clean, with no cross-language leak.
+   - Building-level country, currency, timezone, locale, and governance mode are in place.
+   - Finance defaults now follow the building currency.
+   - Remaining work: legal/governance copy, date/time formatting sweeps, production seed-content cleanup, and market-specific sales/onboarding material.
+   - Keep Portuguese, Spanish, English, and French clean, with no cross-language leak.
 
 6. **Concierge and visitor operations 2.0**
    - Add arrival/check-in history, resident notification fallback, party guest search, and package/delivery handoff audit.
@@ -62,10 +64,11 @@ Every shipped feature must improve at least one promise:
 
 ## Current Slice
 
-Enterprise-private readiness:
+Enterprise-private readiness plus market hardening:
 
 - Keep production quality gates green, especially production-safe i18n sweeps.
 - Gate new building creation behind private setup codes when `PRIVATE_CREATE_BUILDING_REQUIRED=1`.
 - Add agency records, portfolio metrics, private setup-code controls, scoped staff building assignments, and scoped portfolio/operations CSV exports above existing building workflows.
+- Add building-level Brazil/Ecuador market settings and currency defaults.
 - Surface production integration readiness from `/board/portfolio`.
 - Keep public login available, but remove the assumption that anyone can freely create a real production building.

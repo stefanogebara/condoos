@@ -2892,6 +2892,28 @@ const phrases: Copy[] = [
   c('Diagnóstico técnico', 'Technical diagnostics', 'Diagnóstico técnico', 'Diagnostic technique'),
   c('Confiança técnica', 'Technical confidence', 'Confianza técnica', 'Confiance technique'),
   c('Detalhes de auditoria disponíveis apenas quando o modo debug é solicitado pela API.', 'Audit details are available only when debug mode is requested from the API.', 'Los detalles de auditoría solo están disponibles cuando se solicita el modo debug desde la API.', 'Les détails d’audit ne sont disponibles que lorsque le mode debug est demandé à l’API.'),
+  // Building market configuration.
+  c('Mercado e regras do prédio', 'Market and building rules', 'Mercado y reglas del edificio', 'Marché et règles de l’immeuble'),
+  c('Defina país, moeda, idioma base e fuso horário para que finanças, relatórios e regras não misturem Brasil com Equador.', 'Set country, currency, base language, and timezone so finances, reports, and rules do not mix Brazil with Ecuador.', 'Define país, moneda, idioma base y zona horaria para que finanzas, reportes y reglas no mezclen Brasil con Ecuador.', 'Définissez le pays, la devise, la langue de base et le fuseau horaire pour éviter de mélanger Brésil et Équateur.'),
+  c('Configuração de mercado salva', 'Market settings saved', 'Configuración de mercado guardada', 'Configuration de marché enregistrée'),
+  c('Não foi possível salvar a configuração de mercado', 'Could not save market settings', 'No se pudo guardar la configuración de mercado', 'Impossible d’enregistrer la configuration de marché'),
+  c('Salvar configuração', 'Save settings', 'Guardar configuración', 'Enregistrer la configuration'),
+  c('País', 'Country', 'País', 'Pays'),
+  c('Brasil', 'Brazil', 'Brasil', 'Brésil'),
+  c('Ecuador', 'Ecuador', 'Ecuador', 'Équateur'),
+  c('Equador', 'Ecuador', 'Ecuador', 'Équateur'),
+  c('Moeda', 'Currency', 'Moneda', 'Devise'),
+  c('Moeda base', 'Base currency', 'Moneda base', 'Devise de base'),
+  c('Idioma base', 'Base language', 'Idioma base', 'Langue de base'),
+  c('Fuso horário', 'Timezone', 'Zona horaria', 'Fuseau horaire'),
+  c('Governança', 'Governance', 'Gobernanza', 'Gouvernance'),
+  c('Condomínio Brasil', 'Brazil condominium', 'Condominio Brasil', 'Copropriété Brésil'),
+  c('Condomínio Equador', 'Ecuador condominium', 'Condominio Ecuador', 'Copropriété Équateur'),
+  c('Neutral', 'Neutral', 'Neutral', 'Neutre'),
+  c('Mercado inicial', 'Initial market', 'Mercado inicial', 'Marché initial'),
+  c('Equador · USD · Espanhol', 'Ecuador · USD · Spanish', 'Ecuador · USD · Español', 'Équateur · USD · Espagnol'),
+  c('Você pode mudar moeda, idioma e fuso horário depois em Edifício.', 'You can change currency, language, and timezone later in Building.', 'Puedes cambiar moneda, idioma y zona horaria después en Edificio.', 'Vous pourrez modifier devise, langue et fuseau horaire plus tard dans Immeuble.'),
+  c('Usada por padrão em cobranças, orçamentos e despesas.', 'Used by default for dues, budgets, and expenses.', 'Se usa por defecto en cobros, presupuestos y gastos.', 'Utilisée par défaut pour appels, budgets et dépenses.'),
 ];
 
 function c(pt: string, en: string, es: string, fr: string): Copy {

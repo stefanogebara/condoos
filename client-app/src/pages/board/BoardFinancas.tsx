@@ -368,7 +368,7 @@ export default function BoardFinancas() {
         />
       )}
 
-      <CategorySummary totals={data?.totals_by_category || []} totalCents={data?.total_cents || 0} />
+      <CategorySummary totals={data?.totals_by_category || []} totalCents={data?.total_cents || 0} currency={data?.currency || 'BRL'} />
 
       <h2 className="font-display text-xl text-dusk-500 mb-3">{t('Lançamentos')}</h2>
       {!data ? (
@@ -959,7 +959,6 @@ function ScheduleForm({ onCreated }: { onCreated: () => void }) {
       await apiPost('/finance/schedules', {
         name: form.name.trim(),
         amount_cents: cents,
-        currency: 'BRL',
         frequency: form.frequency,
         due_day: form.due_day,
       });
@@ -1054,7 +1053,6 @@ function GenerateInvoicesForm({
         return;
       }
       body.amount_cents = cents;
-      body.currency = 'BRL';
     } else {
       body.schedule_id = Number(form.schedule_id);
     }
@@ -1207,7 +1205,7 @@ function PaymentModal({
   );
 }
 
-function CategorySummary({ totals, totalCents }: { totals: CategoryTotal[]; totalCents: number }) {
+function CategorySummary({ totals, totalCents, currency }: { totals: CategoryTotal[]; totalCents: number; currency: string }) {
   if (totals.length < 2) return null;
   const max = Math.max(...totals.map((row) => row.total_cents), 1);
   return (
@@ -1215,7 +1213,7 @@ function CategorySummary({ totals, totalCents }: { totals: CategoryTotal[]; tota
       <div className="flex items-center gap-2 mb-3">
         <Wallet className="w-5 h-5 text-dusk-400" />
         <h3 className="font-display text-lg text-dusk-500">{t('Resumo por categoria')}</h3>
-        <Badge tone="dark" className="ml-auto">{formatCurrency(totalCents / 100)}</Badge>
+        <Badge tone="dark" className="ml-auto">{formatCurrency(totalCents / 100, currency)}</Badge>
       </div>
       <div className="space-y-1.5">
         {totals.map((row) => (
@@ -1224,7 +1222,7 @@ function CategorySummary({ totals, totalCents }: { totals: CategoryTotal[]; tota
             <div className="flex-1 h-2 rounded-full bg-white/40 overflow-hidden">
               <div className="h-full bg-sage-400" style={{ width: `${(row.total_cents / max) * 100}%` }} />
             </div>
-            <span className="w-28 text-right text-dusk-400 font-mono text-[13px]">{formatCurrency(row.total_cents / 100)}</span>
+            <span className="w-28 text-right text-dusk-400 font-mono text-[13px]">{formatCurrency(row.total_cents / 100, currency)}</span>
             <span className="w-12 text-right text-[11px] text-dusk-200">{row.count}</span>
           </div>
         ))}
