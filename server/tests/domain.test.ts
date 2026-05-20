@@ -1179,6 +1179,83 @@ test('building_documents: concierge filter excludes financial/legal/governance c
   assert.equal(adminRows.length, 9);
 });
 
+test('agent-plan-finalize: decorate binds SEC-2, caps confidence; persist is transactional', async () => {
+  resetDb();
+  const { condoId } = createCondoFixture();
+  const adminId = createUser('finalize-admin@example.com', 'board_admin');
+  const otisId = Number(db.prepare(
+    `INSERT INTO service_contacts (condominium_id, category, company_name, whatsapp, preferred, active)
+     VALUES (?, 'elevator', 'Otis Elevadores SP', '+551199900001', 1, 1)`
+  ).run(condoId).lastInsertRowid);
+
+  const { decorateAgentPlan, persistAgentTurn } = await import('../src/lib/agent-plan-finalize');
+  const { loadVendorBundle } = await import('../src/lib/agent-vendor-repo');
+  const { buildBuildingMemory } = await import('../src/lib/agent-building-memory');
+
+  const vendorBundle = loadVendorBundle(condoId);
+  const buildingMemory = buildBuildingMemory({
+    condoId, task: 'elevador ruído', inferredCategory: 'elevator',
+    taskKeywords: ['elevador', 'ruido'], scoreOverlap: () => 0, timezone: 'America/Sao_Paulo',
+  });
+
+  // Plan with one real + one hallucinated fit. SEC-2 drops the
+  // hallucinated one; the real one survives + gets service_contact_id.
+  const decorated = decorateAgentPlan({
+    plan: {
+      summary: 'Test', task_type: 'repair', assumptions: [], recommended_next_step: '',
+      existing_network_fit: [
+        { company_name: 'Otis Elevadores SP', category: 'elevator', reason: 'real', contact_method: 'WhatsApp' },
+        { company_name: 'Ghost Vendor', category: 'elevator', reason: 'hallucinated', contact_method: 'WhatsApp' },
+      ] as any,
+      options: [], vendor_search_plan: { search_queries: [], shortlisting_criteria: [], outreach_message: '' },
+      action_plan: [], resident_update: { title: '', body: '' }, proposal_draft: null, risks: [],
+      confidence: { score: 0.95, tier: 'high', reasoning: ['model thinks so'] },
+    } as any,
+    adminInput: { task: 'elevador ruído', locale: 'pt-BR', service_contacts: [] },
+    vendorBundle, costByVendor: vendorBundle.costByVendor, buildingMemory,
+    attachmentAnalysis: [], toolTrace: [], usedFallback: false,
+    condoId, locale: 'pt-BR', summariseToolOutput: () => '',
+  });
+  assert.equal(decorated.existing_network_fit.length, 1, 'hallucinated vendor dropped');
+  assert.equal(decorated.existing_network_fit[0].service_contact_id, otisId);
+  // Named vendor present → cap rule doesn't fire → high tier preserved.
+  assert.equal(decorated.confidence?.tier, 'high');
+
+  // No named vendor + no past_ticket evidence → cap to medium.
+  const capped = decorateAgentPlan({
+    plan: {
+      summary: 'Test', task_type: 'repair', assumptions: [], recommended_next_step: '',
+      existing_network_fit: [{ company_name: 'Ghost', category: 'elevator', reason: 'fake', contact_method: 'WhatsApp' }] as any,
+      options: [], vendor_search_plan: { search_queries: [], shortlisting_criteria: [], outreach_message: '' },
+      action_plan: [], resident_update: { title: '', body: '' }, proposal_draft: null, risks: [],
+      confidence: { score: 0.95, tier: 'high', reasoning: ['vibe-rated'] },
+    } as any,
+    adminInput: { task: 'elevador ruído', locale: 'pt-BR', service_contacts: [] },
+    vendorBundle, costByVendor: vendorBundle.costByVendor, buildingMemory,
+    attachmentAnalysis: [], toolTrace: [], usedFallback: false,
+    condoId, locale: 'pt-BR', summariseToolOutput: () => '',
+  });
+  assert.equal(capped.existing_network_fit.length, 0);
+  assert.equal(capped.confidence?.tier, 'medium');
+  assert.ok(capped.confidence!.score <= 0.7);
+
+  // persistAgentTurn — no-op when threadId or adminUserId is missing.
+  assert.equal(persistAgentTurn({ threadId: null, adminUserId: adminId, task: 'x', plan: decorated, usedFallback: false }), undefined);
+  assert.equal(persistAgentTurn({ threadId: 1, adminUserId: null, task: 'x', plan: decorated, usedFallback: false }), undefined);
+
+  // Real persistence — turn_index increments cleanly within the
+  // transaction, fallback flag passed through correctly.
+  const threadId = Number(db.prepare(
+    `INSERT INTO agent_threads (condominium_id, admin_user_id, title, mode, status) VALUES (?, ?, 'test', 'general', 'active')`
+  ).run(condoId, adminId).lastInsertRowid);
+  assert.equal(persistAgentTurn({ threadId, adminUserId: adminId, task: 'first', plan: decorated, usedFallback: false }), 0);
+  assert.equal(persistAgentTurn({ threadId, adminUserId: adminId, task: 'second', plan: decorated, usedFallback: true }), 1);
+  const persistedCount = (db.prepare(`SELECT COUNT(*) AS n FROM agent_turns WHERE thread_id = ?`).get(threadId) as any).n;
+  assert.equal(persistedCount, 2);
+  const fallbackRow = db.prepare(`SELECT fallback FROM agent_turns WHERE thread_id = ? AND turn_index = 1`).get(threadId) as any;
+  assert.equal(fallbackRow.fallback, 1);
+});
+
 test('agent-vendor-repo: loadVendorBundle returns contacts + cost map + id-by-name', async () => {
   resetDb();
   const { condoId } = createCondoFixture();

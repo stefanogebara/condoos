@@ -24,6 +24,7 @@ import { appendAgentRunProgress, createAgentRun, finishAgentRunFailure, finishAg
 import { buildAgentEvidenceSources } from '../lib/agent-evidence';
 import { loadVendorBundle, type VendorBundle } from '../lib/agent-vendor-repo';
 import { buildBuildingMemory } from '../lib/agent-building-memory';
+import { decorateAgentPlan, persistAgentTurn } from '../lib/agent-plan-finalize';
 
 function clip(value: unknown, max: number): string {
   return String(value || '').slice(0, max);
@@ -733,158 +734,38 @@ async function runAdminAgentInner(args: RunAdminAgentArgs): Promise<RunAdminAgen
   // sanitizer doesn't have to read `_fallback` from the model's raw
   // output (which it would emit on a real LLM response after seeing
   // the field in prompt examples).
-  const plan = sanitizeAdminAgentOutput(raw, adminInput, usedFallback);
+  // ARC-R4 — Final-stage plan shaping extracted to
+  // lib/agent-plan-finalize.ts:
+  //   1) decorateAgentPlan applies all server-side decoration:
+  //      SEC-2 vendor binding, cost_history, building_memory,
+  //      attachment_analysis, agent_trace, evidence_sources, and the
+  //      confidence-cap rule (high → medium when vibe-rated).
+  //   2) persistAgentTurn appends the turn row to agent_turns when
+  //      the caller passes threadId + adminUserId (COR-M1 transaction).
+  // The runner is now ~150 lines lighter; the extracted modules are
+  // independently testable. Behavior is identical to the inline
+  // version — verified by the existing 118-test suite.
+  const plan = decorateAgentPlan({
+    plan: sanitizeAdminAgentOutput(raw, adminInput, usedFallback),
+    adminInput,
+    vendorBundle,
+    costByVendor,
+    buildingMemory,
+    attachmentAnalysis,
+    toolTrace,
+    usedFallback,
+    condoId: args.condoId,
+    locale: args.locale,
+    summariseToolOutput,
+  });
 
-  // SEC-2 — Bind each model-emitted network fit back to a real
-  // service_contacts row via DB id, and DROP any fit whose company_name
-  // doesn't match a saved contact in this condo. The model only ever
-  // sees company_name strings (which could be hallucinated or planted
-  // via prompt injection); the auto-dispatch path will dispatch by id,
-  // so an unmatched fit becomes a no-op rather than a possible
-  // attacker-controlled outreach. The build map (vendorBundle.idByName)
-  // is built case-insensitively (also fixes COR-H5).
-  if (plan.existing_network_fit?.length) {
-    plan.existing_network_fit = plan.existing_network_fit
-      .map((fit) => {
-        const id = vendorBundle.idByName.get(String(fit.company_name || '').toLowerCase()) ?? null;
-        if (!id) {
-          // Model named a vendor that doesn't exist in this condo. Could
-          // be a hallucination or a prompt-injection attempt. Either way,
-          // we cannot dispatch to it — return with id=null so callers
-          // can refuse, and log the event.
-          console.warn(`[agent] dropping unmatched fit company_name="${fit.company_name}" for condo ${args.condoId}`);
-        }
-        return { ...fit, service_contact_id: id };
-      })
-      // Drop entries with no matching DB row entirely — the UI doesn't
-      // need to show ghosts, and the dispatch path is no longer the only
-      // line of defense.
-      .filter((fit) => fit.service_contact_id != null);
-  }
-
-  // Decorate the existing_network_fit entries with cost history from the
-  // expenses ledger. The model may or may not echo the cost data back; we
-  // always have it from the DB, so the UI gets reliable numbers either
-  // way. Done after sanitize so we layer on a typed, validated payload.
-  if (plan.existing_network_fit?.length) {
-    plan.existing_network_fit = plan.existing_network_fit.map((fit) => {
-      const cost = costByVendor.get(String(fit.company_name || '').toLowerCase());
-      if (!cost) return { ...fit, cost_history: null };
-      const centsToBrl = (n: number | null | undefined): number | null =>
-        n == null ? null : Math.round(Number(n)) / 100;
-      const count = Number(cost.expense_count || 0);
-      return {
-        ...fit,
-        cost_history: {
-          expense_count: count,
-          last_amount_brl: centsToBrl(cost.last_amount_cents),
-          last_spent_at: cost.last_spent_at,
-          avg_brl: centsToBrl(cost.avg_cents),
-          min_brl: centsToBrl(cost.min_cents),
-          max_brl: centsToBrl(cost.max_cents),
-          confidence: count >= 3 ? ('high' as const) : ('low' as const),
-        },
-      };
-    });
-  }
-  // Attach the same building_memory the prompt context received, so the
-  // UI can render past resolutions / pattern badges / after-hours
-  // warnings independently of whether the model echoed them in prose.
-  // Filter out empty memory to keep payload size sensible.
-  if (buildingMemory.similar_resolved_tickets.length > 0
-      || buildingMemory.open_similar_count > 0
-      || buildingMemory.is_outside_business_hours) {
-    plan.building_memory = buildingMemory;
-  } else {
-    plan.building_memory = null;
-  }
-
-  // Attach vision results so the UI doesn't have to fetch attachments
-  // separately. Empty array stays out of the response payload.
-  if (attachmentAnalysis.length > 0) {
-    plan.attachment_analysis = attachmentAnalysis;
-  }
-
-  // Surface the ReAct tool trace so the UI can render a "thinking" view
-  // ("checked past elevator tickets... pulled Otis history..."). Only
-  // present on the ReAct path; the single-shot path returns []. Cheap
-  // to include — even a 5-tool trace is a few KB.
-  if (toolTrace.length > 0) {
-    plan.agent_trace = toolTrace.map((t) => ({
-      tool: t.name,
-      input_keys: Object.keys(t.input || {}),
-      output_summary: summariseToolOutput(t.name, t.output),
-    }));
-  }
-
-  // First-class evidence cards. The trace tells the admin what the agent
-  // looked up; evidence_sources shows the concrete facts/citations used.
-  plan.evidence_sources = buildAgentEvidenceSources(plan, toolTrace, args.locale);
-
-  // Confidence-inflation cross-check. A "high" rating triggers the
-  // platform's auto-execute path (see prompts.ts confidence rules + the
-  // veto window in tickets.ts). If the model claims high but produced
-  // NEITHER a saved-vendor citation NOR a past_ticket evidence source,
-  // it's rating itself on vibes — cap to medium so auto-dispatch can't
-  // fire on a forged score. Scope refusal (looksOutOfScope) explicitly
-  // sets high with no fit/options; honour that case.
-  if (
-    plan.confidence
-    && plan.confidence.tier === 'high'
-    && !usedFallback
-    && plan.task_type !== 'general'
-  ) {
-    const hasNamedVendor = (plan.existing_network_fit?.length || 0) > 0;
-    const hasPastTicket = Array.isArray(plan.evidence_sources)
-      && plan.evidence_sources.some((e) => e?.type === 'past_ticket');
-    if (!hasNamedVendor && !hasPastTicket) {
-      console.warn(`[agent] capping high→medium confidence: no vendor + no past ticket cited (task_type=${plan.task_type})`);
-      plan.confidence.score = Math.min(plan.confidence.score, 0.7);
-      plan.confidence.tier = 'medium';
-      plan.confidence.reasoning = [
-        agentLanguage(adminInput) === 'pt'
-          ? 'Sem fornecedor citado nem ticket resolvido — confiança rebaixada para medium.'
-          : 'No vendor cited and no past ticket — confidence capped at medium.',
-        ...(plan.confidence.reasoning || []),
-      ].slice(0, 4);
-    }
-  }
-
-  // Persist the turn to agent_turns when we have a thread + admin. The
-  // route is responsible for creating the thread row before calling this
-  // helper if it's a fresh conversation; here we just append.
-  //
-  // COR-M1 — SELECT MAX + INSERT could race when two tabs hit the same
-  // thread simultaneously: both reads see the same MAX → both insert
-  // with the same turn_index → the second turn is silently dropped by
-  // any consumer that paginates by index. Wrap the read-then-write in
-  // a SQLite transaction so concurrent calls serialize at the writer.
-  // Even though better-sqlite3 is synchronous within a process, the
-  // transaction makes the invariant explicit and survives an
-  // accidental async refactor.
-  let persistedTurnIndex: number | undefined;
-  if (args.threadId && args.adminUserId) {
-    persistedTurnIndex = db.transaction(() => {
-      const next = (db.prepare(
-        `SELECT COALESCE(MAX(turn_index), -1) + 1 AS next_index FROM agent_turns WHERE thread_id = ?`
-      ).get(args.threadId) as { next_index: number }).next_index;
-      db.prepare(
-        `INSERT INTO agent_turns (thread_id, turn_index, user_task, agent_summary, agent_plan, fallback)
-         VALUES (?, ?, ?, ?, ?, ?)`
-      ).run(
-        args.threadId,
-        next,
-        args.task,
-        String(plan.summary || '').slice(0, 800),
-        JSON.stringify(plan),
-        usedFallback ? 1 : 0,
-      );
-      db.prepare(
-        `UPDATE agent_threads SET updated_at = CURRENT_TIMESTAMP WHERE id = ?`
-      ).run(args.threadId);
-      return next;
-    })();
-  }
+  const persistedTurnIndex = persistAgentTurn({
+    threadId: args.threadId,
+    adminUserId: args.adminUserId,
+    task: args.task,
+    plan,
+    usedFallback,
+  });
 
   return { plan, fallback: usedFallback, thread_id: args.threadId, turn_index: persistedTurnIndex };
 }
