@@ -125,6 +125,16 @@ export interface AgencyBuildingMaintenanceSummary {
   top_categories: AgencyMaintenanceCategorySummary[];
 }
 
+export interface AgencyMonthlyReportSummary {
+  risk_level: 'healthy' | 'watch' | 'critical';
+  portfolio_health_score: number;
+  headline: string;
+  total_attention_items: number;
+  buildings_with_critical_attention: number;
+  receipt_coverage_average_percent: number;
+  top_risks: string[];
+}
+
 export interface AgencyPermissionReview {
   total_staff: number;
   agency_admins: number;
@@ -182,6 +192,7 @@ export interface AgencyMonthlyReport {
   month: string;
   generated_at: string;
   totals: AgencyBuildingMetrics;
+  summary: AgencyMonthlyReportSummary;
   attention: AgencyPortfolioAttentionItem[];
   buildings: AgencyMonthlyReportBuilding[];
   markdown: string;
@@ -1444,6 +1455,10 @@ function markdownText(value: unknown): string {
     .trim() || 'N/A';
 }
 
+function markdownTableCell(value: unknown): string {
+  return markdownText(value).replace(/\|/g, '\\|');
+}
+
 function formatMoneyByCurrency(rows: Array<{ currency: string | null; amount_cents: number | null }>): string {
   const parts = rows
     .map((row) => {
@@ -1589,6 +1604,56 @@ function formatTopMaintenanceCategories(categories: AgencyMaintenanceCategorySum
   return categories.map((row) => `${markdownText(row.category)} (${row.count})`).join(', ');
 }
 
+function buildAgencyMonthlyReportSummary(input: {
+  agencyName: string;
+  totals: AgencyBuildingMetrics;
+  attention: AgencyPortfolioAttentionItem[];
+  buildings: AgencyMonthlyReportBuilding[];
+}): AgencyMonthlyReportSummary {
+  const totals = input.totals;
+  const weightedRisk =
+    totals.urgent_tickets * 8
+    + totals.vendor_sla_problems * 8
+    + totals.vendor_follow_up_problems * 5
+    + totals.recurring_problem_clusters * 6
+    + totals.overdue_dues * 4
+    + totals.pending_payment_proofs * 3
+    + totals.pending_residents * 2
+    + totals.proposals_missing_budget * 3
+    + Math.min(totals.unresolved_tickets, 25);
+  const portfolioHealthScore = Math.max(0, Math.min(100, 100 - weightedRisk));
+  const buildingsWithCriticalAttention = new Set(
+    input.attention.filter((item) => item.severity === 'critical').map((item) => item.condominium_id),
+  ).size;
+  const receiptCoverageAverage = input.buildings.length === 0
+    ? 100
+    : Math.round(
+      input.buildings.reduce((sum, building) => sum + building.month.expense_receipt_coverage_percent, 0)
+      / input.buildings.length,
+    );
+  const riskLevel = buildingsWithCriticalAttention > 0 || totals.urgent_tickets > 0 || totals.vendor_sla_problems > 0
+    ? 'critical'
+    : input.attention.length > 0
+      ? 'watch'
+      : 'healthy';
+  const topRisks = input.attention.slice(0, 5).map((item) => (
+    `${item.condominium_name}: ${item.count} ${item.kind.replace(/_/g, ' ')}`
+  ));
+  const headline = topRisks.length === 0
+    ? `${input.agencyName} has no urgent portfolio actions flagged for this report.`
+    : `${input.agencyName} has ${input.attention.length} portfolio attention item(s); start with ${topRisks[0]}.`;
+
+  return {
+    risk_level: riskLevel,
+    portfolio_health_score: portfolioHealthScore,
+    headline,
+    total_attention_items: input.attention.length,
+    buildings_with_critical_attention: buildingsWithCriticalAttention,
+    receipt_coverage_average_percent: receiptCoverageAverage,
+    top_risks: topRisks,
+  };
+}
+
 function agencyNextActions(building: AgencyPortfolio['buildings'][number]): string[] {
   const actions: string[] = [];
   if (building.metrics.urgent_tickets > 0) actions.push(`Review ${building.metrics.urgent_tickets} urgent ticket(s).`);
@@ -1609,6 +1674,14 @@ function buildAgencyMonthlyReportMarkdown(report: Omit<AgencyMonthlyReport, 'mar
     '',
     `Generated: ${report.generated_at}`,
     `Scope: ${report.buildings.length} building(s) visible to ${report.role}`,
+    '',
+    '## Executive snapshot',
+    `- Portfolio health score: ${report.summary.portfolio_health_score}/100 (${report.summary.risk_level})`,
+    `- Headline: ${markdownText(report.summary.headline)}`,
+    `- Attention items: ${report.summary.total_attention_items}`,
+    `- Buildings with critical attention: ${report.summary.buildings_with_critical_attention}`,
+    `- Average receipt coverage: ${report.summary.receipt_coverage_average_percent}%`,
+    `- Top risks: ${report.summary.top_risks.length > 0 ? report.summary.top_risks.map(markdownText).join('; ') : 'none'}`,
     '',
     '## Portfolio attention',
   ];
@@ -1634,6 +1707,32 @@ function buildAgencyMonthlyReportMarkdown(report: Omit<AgencyMonthlyReport, 'mar
     `- Vendor SLA problems: ${report.totals.vendor_sla_problems}`,
     `- Proposals missing budget: ${report.totals.proposals_missing_budget}`,
     `- Upcoming meetings: ${report.totals.upcoming_meetings}`,
+    '',
+    '## Maintenance scoreboard',
+    '| Building | Tickets opened | Resolved | Urgent | Work orders active | Work orders overdue | Stale vendor follow-ups | Maintenance spend | Top categories |',
+    '| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |',
+    ...report.buildings.map((building) => [
+      markdownTableCell(building.condominium_name),
+      building.maintenance_summary.tickets_opened,
+      building.maintenance_summary.tickets_resolved,
+      building.maintenance_summary.urgent_tickets_opened,
+      building.maintenance_summary.active_work_orders,
+      building.maintenance_summary.overdue_work_orders,
+      building.maintenance_summary.stale_vendor_follow_ups,
+      markdownTableCell(building.maintenance_summary.maintenance_spend),
+      markdownTableCell(formatTopMaintenanceCategories(building.maintenance_summary.top_categories)),
+    ].join(' | ')).map((row) => `| ${row} |`),
+    '',
+    '## Finance transparency scoreboard',
+    '| Building | Dues billed | Payments received | Expenses spent | Receipt coverage |',
+    '| --- | ---: | ---: | ---: | ---: |',
+    ...report.buildings.map((building) => `| ${[
+      markdownTableCell(building.condominium_name),
+      markdownTableCell(building.month.dues_billed),
+      markdownTableCell(building.month.payments_received),
+      markdownTableCell(building.month.expenses_spent),
+      `${building.month.expense_receipt_coverage_percent}%`,
+    ].join(' | ')} |`),
     '',
     '## Buildings',
   );
@@ -1710,6 +1809,12 @@ export function buildAgencyMonthlyReport(membership: AgencyMembership, monthInpu
       next_actions: agencyNextActions(building),
     };
   });
+  const summary = buildAgencyMonthlyReportSummary({
+    agencyName: portfolio.name,
+    totals: portfolio.totals,
+    attention: portfolio.attention,
+    buildings,
+  });
 
   const baseReport: Omit<AgencyMonthlyReport, 'markdown'> = {
     agency_id: portfolio.id,
@@ -1718,6 +1823,7 @@ export function buildAgencyMonthlyReport(membership: AgencyMembership, monthInpu
     month,
     generated_at: new Date().toISOString(),
     totals: portfolio.totals,
+    summary,
     attention: portfolio.attention,
     buildings,
   };

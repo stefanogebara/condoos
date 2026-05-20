@@ -308,6 +308,7 @@ This slice makes monthly agency reports more useful for managers comparing build
 
 - Adds a per-building maintenance summary to the agency monthly report.
 - Shows tickets opened, urgent tickets opened, tickets resolved, work orders opened/completed/active/overdue, stale vendor follow-ups, maintenance spend, and top issue categories.
+- Adds an executive monthly agency snapshot with portfolio health score, risk level, top risks, maintenance scoreboard, and finance transparency scoreboard.
 - Keeps the existing report download path intact while enriching the Markdown board/agency packet.
 - Covers the summary through the agency portfolio domain test so scoped agency reporting stays reliable.
 
@@ -402,5 +403,5 @@ This slice makes portfolio access safer before private pilots:
 The next implementation slice should keep building on the private-enterprise plan:
 
 - Expand portfolio reporting into a true agency command center.
-- Add polished report packaging, better visual report sections, and stronger multi-building agency priorities.
+- Add PDF report packaging, trend charts, and stronger multi-building agency priorities.
 - Keep production-safe i18n, build, server tests, and pilot smoke checks green before each push.

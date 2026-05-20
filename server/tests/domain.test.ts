@@ -333,6 +333,13 @@ test('agency portfolio CSV exports scoped building metrics', () => {
 
   const report = buildAgencyMonthlyReport(membership, '2026-05');
   assert.equal(report.month, '2026-05');
+  assert.equal(report.summary.risk_level, 'critical');
+  assert.equal(report.summary.portfolio_health_score, 72);
+  assert.equal(report.summary.total_attention_items, 5);
+  assert.equal(report.summary.buildings_with_critical_attention, 1);
+  assert.equal(report.summary.receipt_coverage_average_percent, 100);
+  assert.match(report.summary.headline, /Quito Operations has 5 portfolio attention item/);
+  assert.match(report.summary.top_risks[0], /Test Condo: 1 urgent tickets/);
   assert.equal(report.buildings.length, 1);
   assert.equal(report.buildings[0].month.work_orders_completed, 1);
   assert.equal(report.buildings[0].month.dues_billed, 'USD 120.00');
@@ -354,6 +361,12 @@ test('agency portfolio CSV exports scoped building metrics', () => {
   assert.match(report.markdown, /urgent ticket/);
   assert.match(report.markdown, /recurring problem cluster/);
   assert.match(report.markdown, /vendor follow-up problem/);
+  assert.match(report.markdown, /Executive snapshot/);
+  assert.match(report.markdown, /Portfolio health score: 72\/100 \(critical\)/);
+  assert.match(report.markdown, /Maintenance scoreboard/);
+  assert.match(report.markdown, /\| Test Condo \| 4 \| 1 \| 1 \| 1 \| 0 \| 1 \| USD 30.00 \| maintenance \(3\), access_control \(1\) \|/);
+  assert.match(report.markdown, /Finance transparency scoreboard/);
+  assert.match(report.markdown, /\| Test Condo \| USD 120.00 \| USD 50.00 \| USD 30.00 \| 100% \|/);
   assert.match(report.markdown, /Maintenance summary/);
   assert.match(report.markdown, /4 opened, 1 resolved, 1 urgent/);
   assert.match(report.markdown, /2 opened, 1 completed, 1 active, 0 overdue/);
