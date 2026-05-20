@@ -85,6 +85,127 @@ test('admin: document vault page renders', async ({ page, request }) => {
   await expect(page.getByText(/document vault|cofre de documentos|bóveda de documentos/i).first()).toBeVisible();
 });
 
+test('admin: agency portfolio renders trends and work-order story', async ({ page, request }) => {
+  await adminLogin(page, request);
+  const metrics = {
+    pending_residents: 1,
+    unresolved_tickets: 3,
+    urgent_tickets: 1,
+    recurring_problem_clusters: 1,
+    vendor_follow_up_problems: 1,
+    overdue_dues: 1,
+    pending_payment_proofs: 0,
+    vendor_sla_problems: 0,
+    proposals_missing_budget: 0,
+    upcoming_meetings: 1,
+  };
+  const portfolio = {
+    agencies: [{
+      id: 77,
+      name: 'Quito Operations',
+      slug: 'quito-operations',
+      role: 'agency_admin',
+      capabilities: ['building_admin', 'finance', 'maintenance', 'concierge', 'documents', 'reports'],
+      totals: metrics,
+      permission_review: {
+        total_staff: 2,
+        agency_admins: 1,
+        scoped_staff: 1,
+        unassigned_staff: 0,
+        pending_invites: 0,
+        expired_invites: 0,
+        failed_invite_emails: 0,
+        buildings_without_direct_staff: [],
+      },
+      attention: [],
+      trends: [
+        { month: '2025-12', tickets_opened: 1, tickets_resolved: 1, work_orders_opened: 0, work_orders_completed: 0, maintenance_spend_cents: 0, maintenance_spend: 'USD 0.00', overdue_dues: 0 },
+        { month: '2026-01', tickets_opened: 2, tickets_resolved: 1, work_orders_opened: 1, work_orders_completed: 0, maintenance_spend_cents: 10000, maintenance_spend: 'USD 100.00', overdue_dues: 0 },
+        { month: '2026-02', tickets_opened: 2, tickets_resolved: 2, work_orders_opened: 1, work_orders_completed: 1, maintenance_spend_cents: 18000, maintenance_spend: 'USD 180.00', overdue_dues: 0 },
+        { month: '2026-03', tickets_opened: 3, tickets_resolved: 2, work_orders_opened: 2, work_orders_completed: 1, maintenance_spend_cents: 24000, maintenance_spend: 'USD 240.00', overdue_dues: 1 },
+        { month: '2026-04', tickets_opened: 4, tickets_resolved: 3, work_orders_opened: 2, work_orders_completed: 2, maintenance_spend_cents: 31000, maintenance_spend: 'USD 310.00', overdue_dues: 1 },
+        { month: '2026-05', tickets_opened: 4, tickets_resolved: 1, work_orders_opened: 2, work_orders_completed: 1, maintenance_spend_cents: 42000, maintenance_spend: 'USD 420.00', overdue_dues: 1 },
+      ],
+      work_order_story: [{
+        id: 901,
+        condominium_id: 45,
+        condominium_name: 'Test Condo',
+        ticket_id: 701,
+        ticket_title: 'Garage gate vendor follow-up',
+        title: 'Garage gate repair',
+        scope: 'Repair sensor and verify closing cycle',
+        status: 'in_progress',
+        vendor_name: 'Lift Vendor',
+        estimated_amount_cents: 39000,
+        approved_amount_cents: 42000,
+        scheduled_for: '2026-05-24T10:00:00.000Z',
+        completed_at: null,
+        updated_at: '2026-05-20T10:00:00.000Z',
+        quote_count: 2,
+        selected_quote_count: 1,
+        route: '/board/tickets',
+      }],
+      buildings: [{
+        id: 45,
+        name: 'Test Condo',
+        address: '1 Main',
+        invite_code: 'TEST01',
+        metrics,
+      }],
+    }],
+  };
+
+  await page.route('**/api/agencies/portfolio', async (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ data: portfolio }),
+  }));
+  await page.route('**/api/admin/integrations/status', async (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      data: {
+        private_access: { configured: true, required: true, active_setup_codes: 1, env_setup_codes: 1 },
+        email: { configured: true, provider: 'smtp', from_configured: true },
+        google_login: { configured: true },
+        whatsapp: { configured: true, provider: 'waha', from: '+5511999002121' },
+        uploads: { configured: true, driver: 'r2', bucket_configured: true },
+        ai: { configured: true, model: 'openrouter' },
+        backups: { configured: true, retention_days: 7, last_attempt_at: '2026-05-20T09:00:00.000Z' },
+        observability: { sentry_configured: true, posthog_configured: true },
+      },
+    }),
+  }));
+  await page.route('**/api/agencies/77/setup-codes', async (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ data: { setup_codes: [] } }),
+  }));
+  await page.route('**/api/agencies/77/staff', async (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ data: { staff: [], invites: [] } }),
+  }));
+  await page.route('**/api/agencies/77/audit-events**', async (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ data: { events: [] } }),
+  }));
+
+  await page.goto('/board/portfolio');
+  await expect(page.getByRole('heading', { name: /Operational pace|Ritmo operacional/i })).toBeVisible();
+  await expect(page.getByText(/6-month trend|Tendência de 6 meses/i)).toBeVisible();
+  await expect(page.getByText('USD 420.00')).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Ticket to completion|Chamado até conclusão/i })).toBeVisible();
+  await expect(page.getByText('Garage gate repair')).toBeVisible();
+  await expect(page.getByText('Garage gate vendor follow-up')).toBeVisible();
+  await expect(page.getByText(/Vendor selected|Fornecedor definido/i)).toBeVisible();
+  await expect(page.getByText(/Work order scheduled|Ordem agendada/i)).toBeVisible();
+  await expect(page.getByText('Lift Vendor')).toBeVisible();
+  await expect(page.getByText(/2 cotações|2 quotes/i)).toBeVisible();
+  await expect(page.getByRole('button', { name: /Open tickets|Abrir chamados/i })).toBeVisible();
+});
+
 test('admin: AI agent generates an operational plan', async ({ page, request }) => {
   await adminLogin(page, request);
   await page.goto('/board/agent');

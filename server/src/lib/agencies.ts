@@ -136,6 +136,37 @@ export interface AgencyMonthlyReportSummary {
   top_risks: string[];
 }
 
+export interface AgencyPortfolioTrendPoint {
+  month: string;
+  tickets_opened: number;
+  tickets_resolved: number;
+  work_orders_opened: number;
+  work_orders_completed: number;
+  maintenance_spend_cents: number;
+  maintenance_spend: string;
+  overdue_dues: number;
+}
+
+export interface AgencyWorkOrderStory {
+  id: number;
+  condominium_id: number;
+  condominium_name: string;
+  ticket_id: number;
+  ticket_title: string;
+  title: string;
+  scope: string | null;
+  status: 'draft' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
+  vendor_name: string | null;
+  estimated_amount_cents: number | null;
+  approved_amount_cents: number | null;
+  scheduled_for: string | null;
+  completed_at: string | null;
+  updated_at: string;
+  quote_count: number;
+  selected_quote_count: number;
+  route: string;
+}
+
 export interface AgencyPermissionReview {
   total_staff: number;
   agency_admins: number;
@@ -195,6 +226,7 @@ export interface AgencyMonthlyReport {
   totals: AgencyBuildingMetrics;
   summary: AgencyMonthlyReportSummary;
   attention: AgencyPortfolioAttentionItem[];
+  trends: AgencyPortfolioTrendPoint[];
   buildings: AgencyMonthlyReportBuilding[];
   markdown: string;
 }
@@ -210,6 +242,8 @@ export interface AgencyPortfolio {
   totals: AgencyBuildingMetrics;
   permission_review: AgencyPermissionReview | null;
   attention: AgencyPortfolioAttentionItem[];
+  trends: AgencyPortfolioTrendPoint[];
+  work_order_story: AgencyWorkOrderStory[];
   buildings: Array<{
     id: number;
     name: string;
@@ -598,6 +632,152 @@ function buildAgencyAttentionQueue(
     .slice(0, 12);
 }
 
+function monthSequenceEnding(endMonth: string, months = 6): string[] {
+  const [year, month] = endMonth.split('-').map(Number);
+  const end = new Date(Date.UTC(year, month - 1, 1));
+  const out: string[] = [];
+  for (let offset = months - 1; offset >= 0; offset -= 1) {
+    const date = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth() - offset, 1));
+    out.push(date.toISOString().slice(0, 7));
+  }
+  return out;
+}
+
+function sumCents(sql: string, ...params: unknown[]): number {
+  const row = db.prepare(sql).get(...params) as { amount_cents: number | null } | undefined;
+  return Number(row?.amount_cents || 0);
+}
+
+function buildAgencyPortfolioTrends(condominiumIds: number[], endMonth?: string | null): AgencyPortfolioTrendPoint[] {
+  const month = normalizeAgencyReportMonth(endMonth);
+  const months = monthSequenceEnding(month, 6);
+  if (condominiumIds.length === 0) {
+    return months.map((pointMonth) => ({
+      month: pointMonth,
+      tickets_opened: 0,
+      tickets_resolved: 0,
+      work_orders_opened: 0,
+      work_orders_completed: 0,
+      maintenance_spend_cents: 0,
+      maintenance_spend: '0.00',
+      overdue_dues: 0,
+    }));
+  }
+
+  const placeholders = condominiumIds.map(() => '?').join(',');
+  return months.map((pointMonth) => {
+    const scope = [...condominiumIds, pointMonth];
+    return {
+      month: pointMonth,
+      tickets_opened: count(
+        `SELECT COUNT(*) AS count
+         FROM tickets
+         WHERE condominium_id IN (${placeholders})
+           AND substr(created_at, 1, 7) = ?`,
+        ...scope,
+      ),
+      tickets_resolved: count(
+        `SELECT COUNT(*) AS count
+         FROM tickets
+         WHERE condominium_id IN (${placeholders})
+           AND (
+             (resolved_at IS NOT NULL AND substr(resolved_at, 1, 7) = ?)
+             OR (closed_at IS NOT NULL AND substr(closed_at, 1, 7) = ?)
+           )`,
+        ...condominiumIds,
+        pointMonth,
+        pointMonth,
+      ),
+      work_orders_opened: count(
+        `SELECT COUNT(*) AS count
+         FROM ticket_work_orders wo
+         JOIN tickets t ON t.id = wo.ticket_id
+         WHERE t.condominium_id IN (${placeholders})
+           AND substr(wo.created_at, 1, 7) = ?`,
+        ...scope,
+      ),
+      work_orders_completed: count(
+        `SELECT COUNT(*) AS count
+         FROM ticket_work_orders wo
+         JOIN tickets t ON t.id = wo.ticket_id
+         WHERE t.condominium_id IN (${placeholders})
+           AND wo.completed_at IS NOT NULL
+           AND substr(wo.completed_at, 1, 7) = ?`,
+        ...scope,
+      ),
+      maintenance_spend_cents: sumCents(
+        `SELECT COALESCE(SUM(amount_cents), 0) AS amount_cents
+         FROM expenses
+         WHERE condominium_id IN (${placeholders})
+           AND category = 'maintenance'
+           AND substr(spent_at, 1, 7) = ?`,
+        ...scope,
+      ),
+      maintenance_spend: moneyByCurrency(
+        `SELECT currency, COALESCE(SUM(amount_cents), 0) AS amount_cents
+         FROM expenses
+         WHERE condominium_id IN (${placeholders})
+           AND category = 'maintenance'
+           AND substr(spent_at, 1, 7) = ?
+         GROUP BY currency
+         ORDER BY currency`,
+        ...scope,
+      ),
+      overdue_dues: count(
+        `SELECT COUNT(*) AS count
+         FROM invoices
+         WHERE condominium_id IN (${placeholders})
+           AND status IN ('open','overdue')
+           AND substr(due_date, 1, 7) = ?
+           AND due_date < date('now')`,
+        ...scope,
+      ),
+    };
+  });
+}
+
+function buildAgencyWorkOrderStory(condominiumIds: number[]): AgencyWorkOrderStory[] {
+  if (condominiumIds.length === 0) return [];
+  const placeholders = condominiumIds.map(() => '?').join(',');
+  const rows = db.prepare(
+    `SELECT wo.id, t.condominium_id, c.name AS condominium_name,
+            wo.ticket_id, t.title AS ticket_title, wo.title, wo.scope, wo.status,
+            sc.company_name AS vendor_name,
+            wo.estimated_amount_cents, wo.approved_amount_cents,
+            wo.scheduled_for, wo.completed_at, wo.updated_at,
+            COUNT(q.id) AS quote_count,
+            SUM(CASE WHEN q.status = 'selected' THEN 1 ELSE 0 END) AS selected_quote_count
+     FROM ticket_work_orders wo
+     JOIN tickets t ON t.id = wo.ticket_id
+     JOIN condominiums c ON c.id = t.condominium_id
+     LEFT JOIN service_contacts sc ON sc.id = wo.service_contact_id
+     LEFT JOIN ticket_vendor_quotes q ON q.ticket_id = t.id
+     WHERE t.condominium_id IN (${placeholders})
+     GROUP BY wo.id
+     ORDER BY
+       CASE
+         WHEN wo.status IN ('scheduled','in_progress') THEN 0
+         WHEN wo.status = 'completed' THEN 1
+         WHEN wo.status = 'draft' THEN 2
+         ELSE 3
+       END,
+       COALESCE(wo.scheduled_for, wo.completed_at, wo.updated_at, wo.created_at) DESC
+     LIMIT 5`
+  ).all(...condominiumIds) as AgencyWorkOrderStory[];
+
+  return rows.map((row) => ({
+    ...row,
+    id: Number(row.id),
+    condominium_id: Number(row.condominium_id),
+    ticket_id: Number(row.ticket_id),
+    estimated_amount_cents: row.estimated_amount_cents == null ? null : Number(row.estimated_amount_cents),
+    approved_amount_cents: row.approved_amount_cents == null ? null : Number(row.approved_amount_cents),
+    quote_count: Number(row.quote_count || 0),
+    selected_quote_count: Number(row.selected_quote_count || 0),
+    route: '/board/tickets',
+  }));
+}
+
 export function buildAgencyPortfolio(membership: AgencyMembership): AgencyPortfolio {
   const allowedBuildingIds = buildingIdsForMembership(membership);
   const placeholders = allowedBuildingIds.map(() => '?').join(',');
@@ -742,6 +922,8 @@ export function buildAgencyPortfolio(membership: AgencyMembership): AgencyPortfo
       ? buildAgencyPermissionReview(membership.agency_id, buildings)
       : null,
     attention: buildAgencyAttentionQueue(buildings),
+    trends: buildAgencyPortfolioTrends(allowedBuildingIds),
+    work_order_story: buildAgencyWorkOrderStory(allowedBuildingIds),
     buildings,
   };
 }
@@ -1711,6 +1893,19 @@ function buildAgencyMonthlyReportMarkdown(report: Omit<AgencyMonthlyReport, 'mar
     `- Proposals missing budget: ${report.totals.proposals_missing_budget}`,
     `- Upcoming meetings: ${report.totals.upcoming_meetings}`,
     '',
+    '## Six-month trend',
+    '| Month | Tickets opened | Resolved | Work orders opened | Work orders completed | Maintenance spend | Overdue dues |',
+    '| --- | ---: | ---: | ---: | ---: | ---: | ---: |',
+    ...report.trends.map((trend) => `| ${[
+      trend.month,
+      trend.tickets_opened,
+      trend.tickets_resolved,
+      trend.work_orders_opened,
+      trend.work_orders_completed,
+      markdownTableCell(trend.maintenance_spend),
+      trend.overdue_dues,
+    ].join(' | ')} |`),
+    '',
     '## Maintenance scoreboard',
     '| Building | Tickets opened | Resolved | Urgent | Work orders active | Work orders overdue | Stale vendor follow-ups | Maintenance spend | Top categories |',
     '| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |',
@@ -1837,6 +2032,14 @@ export async function buildAgencyMonthlyReportPdf(report: AgencyMonthlyReport): 
     `Upcoming meetings: ${report.totals.upcoming_meetings}`,
   ].forEach((line) => writePdfBullet(doc, line));
 
+  writePdfHeading(doc, 'Six-month trend');
+  for (const trend of report.trends) {
+    writePdfBullet(
+      doc,
+      `${trend.month}: ${trend.tickets_opened} opened, ${trend.tickets_resolved} resolved, ${trend.work_orders_completed} work order(s) completed, maintenance spend ${trend.maintenance_spend}, ${trend.overdue_dues} overdue due(s).`,
+    );
+  }
+
   writePdfHeading(doc, 'Building scorecards');
   if (report.buildings.length === 0) {
     writePdfBullet(doc, 'No buildings in scope for this report.');
@@ -1938,6 +2141,7 @@ export function buildAgencyMonthlyReport(membership: AgencyMembership, monthInpu
     totals: portfolio.totals,
     summary,
     attention: portfolio.attention,
+    trends: buildAgencyPortfolioTrends(portfolio.buildings.map((building) => building.id), month),
     buildings,
   };
 

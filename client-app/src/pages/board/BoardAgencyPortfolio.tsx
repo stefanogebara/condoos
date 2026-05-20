@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Ban, Building2, Calendar, CheckCircle2, ClipboardCheck, Copy, Download, FileArchive, FileText, KeyRound, LockKeyhole, PlusCircle, RefreshCw, ShieldCheck, Trash2, UserPlus, Users, Wallet, Wrench } from 'lucide-react';
+import { AlertTriangle, Ban, BarChart3, Building2, Calendar, CheckCircle2, ClipboardCheck, Copy, Download, FileArchive, FileText, KeyRound, ListChecks, LockKeyhole, PlusCircle, RefreshCw, ShieldCheck, Trash2, UserPlus, Users, Wallet, Wrench } from 'lucide-react';
 import GlassCard from '../../components/GlassCard';
 import Badge from '../../components/Badge';
 import Button from '../../components/Button';
 import { api, apiDelete, apiGet, apiPost } from '../../lib/api';
-import { t } from '../../lib/i18n';
+import { formatCurrency, formatDateTime, t } from '../../lib/i18n';
 import { useAuth, type User } from '../../lib/auth';
 import { capabilitiesForAgencyRole, type AgencyBuildingCapability, type AgencyRole } from '../../lib/agencyAccess';
 
@@ -63,6 +63,39 @@ interface AgencyAttentionItem {
   route: string;
 }
 
+interface AgencyTrendPoint {
+  month: string;
+  tickets_opened: number;
+  tickets_resolved: number;
+  work_orders_opened: number;
+  work_orders_completed: number;
+  maintenance_spend_cents: number;
+  maintenance_spend: string;
+  overdue_dues: number;
+}
+
+type WorkOrderStatus = 'draft' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
+
+interface AgencyWorkOrderStory {
+  id: number;
+  condominium_id: number;
+  condominium_name: string;
+  ticket_id: number;
+  ticket_title: string;
+  title: string;
+  scope: string | null;
+  status: WorkOrderStatus;
+  vendor_name: string | null;
+  estimated_amount_cents: number | null;
+  approved_amount_cents: number | null;
+  scheduled_for: string | null;
+  completed_at: string | null;
+  updated_at: string;
+  quote_count: number;
+  selected_quote_count: number;
+  route: string;
+}
+
 interface AgencyPortfolio {
   id: number;
   name: string;
@@ -72,6 +105,8 @@ interface AgencyPortfolio {
   totals: AgencyBuildingMetrics;
   permission_review: AgencyPermissionReview | null;
   attention: AgencyAttentionItem[];
+  trends: AgencyTrendPoint[];
+  work_order_story: AgencyWorkOrderStory[];
   buildings: AgencyBuilding[];
 }
 
@@ -230,6 +265,19 @@ const operationalExports: Array<{ kind: AgencyExportKind; label: string; capabil
   { kind: 'audit', label: 'Auditoria', capability: 'building_admin' },
 ];
 
+const zeroBuildingMetrics: AgencyBuildingMetrics = {
+  pending_residents: 0,
+  unresolved_tickets: 0,
+  urgent_tickets: 0,
+  recurring_problem_clusters: 0,
+  vendor_follow_up_problems: 0,
+  overdue_dues: 0,
+  pending_payment_proofs: 0,
+  vendor_sla_problems: 0,
+  proposals_missing_budget: 0,
+  upcoming_meetings: 0,
+};
+
 function agencyRoleLabel(role: AgencyRole | string) {
   const labels: Record<string, string> = {
     agency_admin: 'Admin de administradora',
@@ -259,6 +307,46 @@ function attentionTone(severity: AgencyAttentionItem['severity']) {
   if (severity === 'critical') return 'peach' as const;
   if (severity === 'warning') return 'warning' as const;
   return 'sage' as const;
+}
+
+function workOrderStatusLabel(status: WorkOrderStatus) {
+  const labels: Record<WorkOrderStatus, string> = {
+    draft: 'rascunho',
+    scheduled: 'agendada',
+    in_progress: 'em execução',
+    completed: 'concluída',
+    cancelled: 'cancelada',
+  };
+  return t(labels[status] || status);
+}
+
+function monthLabel(month: string) {
+  const date = new Date(`${month}-01T00:00:00`);
+  if (Number.isNaN(date.getTime())) return month;
+  return date.toLocaleDateString(undefined, { month: 'short' }).replace('.', '');
+}
+
+function storyAmount(story: AgencyWorkOrderStory) {
+  const cents = story.approved_amount_cents ?? story.estimated_amount_cents;
+  if (cents == null) return t('Sem valor');
+  return formatCurrency(cents / 100);
+}
+
+function storyDate(story: AgencyWorkOrderStory) {
+  const value = story.completed_at || story.scheduled_for || story.updated_at;
+  if (!value) return t('Sem data');
+  return formatDateTime(value);
+}
+
+function StoryStep({ label, done }: { label: string; done: boolean }) {
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium border ${
+      done ? 'bg-sage-100/70 border-sage-200 text-sage-700' : 'bg-white/45 border-white/70 text-dusk-300'
+    }`}>
+      {done ? <CheckCircle2 className="w-3 h-3" /> : <span className="w-1.5 h-1.5 rounded-full bg-dusk-200" />}
+      {t(label)}
+    </span>
+  );
 }
 
 function buildPilotReadiness(
@@ -424,6 +512,19 @@ export default function BoardAgencyPortfolio() {
     [primaryAgency, status, permissionReview],
   );
   const pilotReadinessReady = pilotReadiness.filter((item) => item.ready).length;
+  const trendMax = useMemo(() => Math.max(
+    1,
+    ...((primaryAgency?.trends || []).flatMap((point) => [
+      point.tickets_opened,
+      point.tickets_resolved,
+      point.work_orders_opened,
+      point.work_orders_completed,
+    ])),
+  ), [primaryAgency?.trends]);
+  const spendMax = useMemo(() => Math.max(
+    1,
+    ...((primaryAgency?.trends || []).map((point) => point.maintenance_spend_cents)),
+  ), [primaryAgency?.trends]);
 
   async function loadSetupCodes(agencyId = primaryAgency?.id) {
     if (!agencyId || primaryAgency?.role !== 'agency_admin') {
@@ -748,6 +849,135 @@ export default function BoardAgencyPortfolio() {
               <Metric icon={Calendar} label={t('Reuniões')} value={totals.upcoming_meetings} />
             </div>
           </GlassCard>
+
+          <div className="grid lg:grid-cols-[1.15fr,0.85fr] gap-5 mb-6">
+            <GlassCard className="p-5 overflow-hidden">
+              <div className="flex items-start justify-between gap-3 flex-wrap mb-5">
+                <div>
+                  <div className="text-xs uppercase tracking-[0.14em] text-dusk-300 flex items-center gap-2">
+                    <BarChart3 className="w-4 h-4" /> {t('Tendência de 6 meses')}
+                  </div>
+                  <h2 className="font-display text-2xl text-dusk-500 mt-1">{t('Ritmo operacional')}</h2>
+                  <p className="text-sm text-dusk-300 mt-1">
+                    {t('Visão por mês dos chamados, ordens e gasto de manutenção.')}
+                  </p>
+                </div>
+                <Badge tone="neutral">{primaryAgency.trends?.length || 0} {t('meses')}</Badge>
+              </div>
+              {(primaryAgency.trends || []).length === 0 ? (
+                <div className="rounded-2xl border border-white/70 bg-white/50 px-3 py-4 text-sm text-dusk-300">
+                  {t('Sem histórico suficiente para tendência.')}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {(primaryAgency.trends || []).map((point) => (
+                    <div key={point.month} className="grid grid-cols-[54px,1fr] items-center gap-3">
+                      <div className="text-xs font-medium text-dusk-300 uppercase">{monthLabel(point.month)}</div>
+                      <div className="rounded-2xl bg-white/55 border border-white/70 p-2.5">
+                        <div className="grid grid-cols-5 gap-2 items-end">
+                          {[
+                            { label: 'Chamados abertos', value: point.tickets_opened, color: 'bg-peach-300' },
+                            { label: 'Resolvidos', value: point.tickets_resolved, color: 'bg-sage-400' },
+                            { label: 'Ordens abertas', value: point.work_orders_opened, color: 'bg-dusk-300' },
+                            { label: 'Ordens concluídas', value: point.work_orders_completed, color: 'bg-sage-600' },
+                            { label: 'Gasto manutenção', value: point.maintenance_spend_cents, color: 'bg-clay-400', spend: true },
+                          ].map((bar) => (
+                            <div key={bar.label} className="min-w-0">
+                              <div className="h-10 flex items-end">
+                                <div
+                                  className={`w-full rounded-full ${bar.color}`}
+                                  style={{ height: `${bar.value > 0 ? Math.max(8, Math.round(((bar.spend ? bar.value / spendMax : bar.value / trendMax) || 0) * 40)) : 3}px` }}
+                                  title={`${t(bar.label)}: ${bar.spend ? point.maintenance_spend : bar.value}`}
+                                />
+                              </div>
+                              <div className="text-[10px] text-dusk-300 mt-1 truncate">{t(bar.label)}</div>
+                              <div className="text-xs font-semibold text-dusk-500 truncate">
+                                {bar.spend ? point.maintenance_spend : bar.value}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </GlassCard>
+
+            <GlassCard className="p-5">
+              <div className="flex items-start justify-between gap-3 flex-wrap mb-4">
+                <div>
+                  <div className="text-xs uppercase tracking-[0.14em] text-dusk-300 flex items-center gap-2">
+                    <ListChecks className="w-4 h-4" /> {t('História de obra')}
+                  </div>
+                  <h2 className="font-display text-2xl text-dusk-500 mt-1">{t('Chamado até conclusão')}</h2>
+                  <p className="text-sm text-dusk-300 mt-1">
+                    {t('Mostra o caminho que uma administradora consegue explicar: chamado, cotação, agendamento e fechamento.')}
+                  </p>
+                </div>
+              </div>
+              {(primaryAgency.work_order_story || []).length === 0 ? (
+                <div className="rounded-2xl border border-white/70 bg-white/50 px-3 py-4 text-sm text-dusk-300">
+                  {t('Nenhuma ordem de serviço ainda.')}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {(primaryAgency.work_order_story || []).map((story) => (
+                    <div key={story.id} className="rounded-3xl border border-white/70 bg-white/60 p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Badge tone={story.status === 'completed' ? 'sage' : story.status === 'cancelled' ? 'warning' : 'peach'}>
+                              {workOrderStatusLabel(story.status)}
+                            </Badge>
+                            <span className="text-xs text-dusk-300" data-user-content>{story.condominium_name}</span>
+                          </div>
+                          <h3 className="font-semibold text-dusk-500 mt-2 truncate" data-user-content>{story.title}</h3>
+                          <p className="text-xs text-dusk-300 mt-1 truncate" data-user-content>{story.ticket_title}</p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => switchActiveBuilding(
+                            { id: story.condominium_id, name: story.condominium_name, address: '', invite_code: null, metrics: zeroBuildingMetrics },
+                            story.route,
+                          )}
+                          loading={switchingBuildingId === story.condominium_id}
+                        >
+                          {t('Abrir chamados')}
+                        </Button>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-1.5">
+                        <StoryStep label="Chamado aberto" done />
+                        <StoryStep label="Fornecedor definido" done={!!story.vendor_name || story.quote_count > 0} />
+                        <StoryStep label="Ordem agendada" done={!!story.scheduled_for || story.status === 'in_progress' || story.status === 'completed'} />
+                        <StoryStep label="Comprovado" done={story.status === 'completed'} />
+                      </div>
+                      <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-dusk-300">
+                        <div className="rounded-2xl bg-white/55 px-2.5 py-2">
+                          <div className="uppercase tracking-[0.1em] text-[10px]">{t('Fornecedor')}</div>
+                          <div className="font-medium text-dusk-500 truncate" data-user-content>{story.vendor_name || t('Sem fornecedor')}</div>
+                        </div>
+                        <div className="rounded-2xl bg-white/55 px-2.5 py-2">
+                          <div className="uppercase tracking-[0.1em] text-[10px]">{t('Valor')}</div>
+                          <div className="font-medium text-dusk-500 truncate">{storyAmount(story)}</div>
+                        </div>
+                        <div className="rounded-2xl bg-white/55 px-2.5 py-2">
+                          <div className="uppercase tracking-[0.1em] text-[10px]">{t('Quando')}</div>
+                          <div className="font-medium text-dusk-500 truncate">{storyDate(story)}</div>
+                        </div>
+                      </div>
+                      <div className="mt-2 text-[11px] text-dusk-300">
+                        {story.quote_count} {t(story.quote_count === 1 ? 'cotação' : 'cotações')}
+                        {story.selected_quote_count > 0 && ` · ${story.selected_quote_count} ${t('selecionada')}`}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </GlassCard>
+          </div>
 
           <div className="grid lg:grid-cols-[1fr,360px] gap-5">
             <div className="space-y-3">

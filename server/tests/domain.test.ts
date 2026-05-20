@@ -298,6 +298,10 @@ test('agency portfolio CSV exports scoped building metrics', async () => {
     `INSERT INTO ticket_work_orders (ticket_id, service_contact_id, title, status, updated_at)
      VALUES (?, ?, 'Garage gate repair', 'in_progress', datetime('now', '-8 day'))`
   ).run(staleVendorTicketId, vendorId);
+  db.prepare(
+    `INSERT INTO ticket_vendor_quotes (condominium_id, ticket_id, service_contact_id, vendor_name, quote_amount_cents, currency, status)
+     VALUES (?, ?, ?, 'Lift Vendor', 42000, 'USD', 'selected')`
+  ).run(condoId, staleVendorTicketId, vendorId);
   const invoiceId = Number(db.prepare(
     `INSERT INTO invoices (condominium_id, unit_id, amount_cents, currency, period, due_date, status)
      VALUES (?, ?, 12000, 'USD', '2026-05', date('now', '-3 day'), 'overdue')`
@@ -331,6 +335,22 @@ test('agency portfolio CSV exports scoped building metrics', async () => {
   assert.equal(portfolio.attention[2].route, '/board/tickets');
   assert.equal(portfolio.attention[3].route, '/board/financas');
   assert.equal(portfolio.attention[4].condominium_name, 'Test Condo');
+  assert.equal(portfolio.trends.length, 6);
+  const portfolioMayTrend = portfolio.trends.find((point) => point.month === '2026-05');
+  assert.ok(portfolioMayTrend);
+  assert.equal(portfolioMayTrend.tickets_opened, 4);
+  assert.equal(portfolioMayTrend.tickets_resolved, 1);
+  assert.equal(portfolioMayTrend.work_orders_opened, 2);
+  assert.equal(portfolioMayTrend.work_orders_completed, 1);
+  assert.equal(portfolioMayTrend.maintenance_spend_cents, 3000);
+  assert.equal(portfolioMayTrend.maintenance_spend, 'USD 30.00');
+  assert.equal(portfolioMayTrend.overdue_dues, 1);
+  assert.equal(portfolio.work_order_story.length, 2);
+  assert.equal(portfolio.work_order_story[0].title, 'Garage gate repair');
+  assert.equal(portfolio.work_order_story[0].condominium_name, 'Test Condo');
+  assert.equal(portfolio.work_order_story[0].quote_count, 1);
+  assert.equal(portfolio.work_order_story[0].selected_quote_count, 1);
+  assert.equal(portfolio.work_order_story[0].route, '/board/tickets');
 
   const report = buildAgencyMonthlyReport(membership, '2026-05');
   assert.equal(report.month, '2026-05');
@@ -341,6 +361,11 @@ test('agency portfolio CSV exports scoped building metrics', async () => {
   assert.equal(report.summary.receipt_coverage_average_percent, 100);
   assert.match(report.summary.headline, /Quito Operations has 5 portfolio attention item/);
   assert.match(report.summary.top_risks[0], /Test Condo: 1 urgent tickets/);
+  const reportMayTrend = report.trends.find((point) => point.month === '2026-05');
+  assert.ok(reportMayTrend);
+  assert.equal(reportMayTrend.tickets_opened, 4);
+  assert.equal(reportMayTrend.work_orders_completed, 1);
+  assert.equal(reportMayTrend.maintenance_spend, 'USD 30.00');
   assert.equal(report.buildings.length, 1);
   assert.equal(report.buildings[0].month.work_orders_completed, 1);
   assert.equal(report.buildings[0].month.dues_billed, 'USD 120.00');
@@ -364,6 +389,8 @@ test('agency portfolio CSV exports scoped building metrics', async () => {
   assert.match(report.markdown, /vendor follow-up problem/);
   assert.match(report.markdown, /Executive snapshot/);
   assert.match(report.markdown, /Portfolio health score: 72\/100 \(critical\)/);
+  assert.match(report.markdown, /Six-month trend/);
+  assert.match(report.markdown, /\| 2026-05 \| 4 \| 1 \| 2 \| 1 \| USD 30.00 \| 1 \|/);
   assert.match(report.markdown, /Maintenance scoreboard/);
   assert.match(report.markdown, /\| Test Condo \| 4 \| 1 \| 1 \| 1 \| 0 \| 1 \| USD 30.00 \| maintenance \(3\), access_control \(1\) \|/);
   assert.match(report.markdown, /Finance transparency scoreboard/);
