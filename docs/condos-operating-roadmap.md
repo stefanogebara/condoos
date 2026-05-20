@@ -72,3 +72,4 @@ Enterprise-private readiness plus market hardening:
 - Add building-level Brazil/Ecuador market settings and currency defaults.
 - Surface production integration readiness from `/board/portfolio`.
 - Keep public login available, but remove the assumption that anyone can freely create a real production building.
+- Keep login/signup/onboarding language aligned with private activation whenever setup codes are required.

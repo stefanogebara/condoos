@@ -51,6 +51,13 @@ const intentCopy: Record<Exclude<Intent, null>, { badge: string; icon: typeof Pl
   },
 };
 
+const privateCreateIntentCopy = {
+  badge: 'Acesso privado aprovado',
+  icon: Plus,
+  title: 'Ative seu prédio aprovado',
+  subtitle: 'Entre com Google ou email. Depois use o código privado enviado pela equipe CONDOS para ativar o prédio.',
+};
+
 export default function Login() {
   const { login, loginWithGoogle } = useAuth();
   const { locale } = useLocale();
@@ -65,6 +72,7 @@ export default function Login() {
   const [loadingKind, setLoadingKind] = useState<'admin' | 'resident' | null>(null);
   const [googleClientId, setGoogleClientId] = useState<string | null>(null);
   const [demoEnabled, setDemoEnabled] = useState(false);
+  const [privateCreateBuildingRequired, setPrivateCreateBuildingRequired] = useState(false);
 
   // Read intent + invite code from the URL once. The hero CTAs on the landing
   // forward both — so by the time we route after login we know exactly where
@@ -88,10 +96,11 @@ export default function Login() {
     if (envClientId) {
       setGoogleClientId(envClientId);
     }
-    apiGet<{ google_client_id: string | null; google_enabled: boolean; demo_enabled?: boolean }>('/auth/config')
+    apiGet<{ google_client_id: string | null; google_enabled: boolean; demo_enabled?: boolean; private_create_building_required?: boolean }>('/auth/config')
       .then((cfg) => {
         if (!envClientId && cfg.google_enabled && cfg.google_client_id) setGoogleClientId(cfg.google_client_id);
         setDemoEnabled(!!cfg.demo_enabled);
+        setPrivateCreateBuildingRequired(!!cfg.private_create_building_required);
       })
       .catch(() => {});
   }, [intent, inviteCode]);
@@ -194,7 +203,7 @@ export default function Login() {
     }
   }
 
-  const intentBanner = intent ? intentCopy[intent] : null;
+  const intentBanner = intent ? (intent === 'create' && privateCreateBuildingRequired ? privateCreateIntentCopy : intentCopy[intent]) : null;
   const signupJoinHref = inviteCode
     ? `/signup?intent=join&code=${encodeURIComponent(inviteCode)}`
     : '/signup?intent=join';
@@ -345,8 +354,12 @@ export default function Login() {
                   <Plus className="w-5 h-5" />
                 </span>
                 <span className="min-w-0">
-                  <span className="block text-sm font-semibold text-dusk-500">{tr('Criar um prédio')}</span>
-                  <span className="block text-xs text-dusk-300">{tr('Comece como administrador.')}</span>
+                  <span className="block text-sm font-semibold text-dusk-500">
+                    {tr(privateCreateBuildingRequired ? 'Ativar prédio aprovado' : 'Criar um prédio')}
+                  </span>
+                  <span className="block text-xs text-dusk-300">
+                    {tr(privateCreateBuildingRequired ? 'Use código privado da equipe CONDOS.' : 'Comece como administrador.')}
+                  </span>
                 </span>
               </Link>
             </div>

@@ -12,6 +12,11 @@ import { track } from '../lib/analytics';
 import { t } from '../lib/i18n';
 
 type SignupIntent = 'join' | 'create' | 'agency';
+interface AuthConfig {
+  google_client_id: string | null;
+  google_enabled: boolean;
+  private_create_building_required?: boolean;
+}
 
 function signupErrorMessage(err: any): string {
   const status = err?.response?.status;
@@ -54,6 +59,7 @@ export default function Signup() {
   const [code, setCode] = useState(initialCode);
   const [loading, setLoading] = useState(false);
   const [googleClientId, setGoogleClientId] = useState<string | null>(null);
+  const [privateCreateBuildingRequired, setPrivateCreateBuildingRequired] = useState(false);
   const submittingRef = useRef(false);
 
   useEffect(() => {
@@ -62,9 +68,10 @@ export default function Signup() {
     if (envClientId) {
       setGoogleClientId(envClientId);
     }
-    apiGet<{ google_client_id: string | null; google_enabled: boolean }>('/auth/config')
+    apiGet<AuthConfig>('/auth/config')
       .then((cfg) => {
         if (!envClientId && cfg.google_enabled && cfg.google_client_id) setGoogleClientId(cfg.google_client_id);
+        setPrivateCreateBuildingRequired(!!cfg.private_create_building_required);
       })
       .catch(() => {});
   }, [intent, initialCode, agencyInvite]);
@@ -156,10 +163,12 @@ export default function Signup() {
         <div className="relative p-12 text-cream-50 max-w-lg">
           <Link to="/"><Logo size={32} /></Link>
           <h2 className="font-display text-4xl mt-16 leading-tight">
-            Entre no seu prédio sem pedir ajuda na portaria.
+            {t('Entre no seu prédio sem pedir ajuda na portaria.')}
           </h2>
           <p className="mt-4 text-cream-50/80 text-base">
-            Crie sua conta, use o código do administrador e escolha sua unidade.
+            {t(intent === 'create' && privateCreateBuildingRequired
+              ? 'Ative apenas prédios aprovados com código privado CONDOS.'
+              : 'Crie sua conta, use o código do administrador e escolha sua unidade.')}
           </p>
         </div>
       </div>
@@ -168,7 +177,7 @@ export default function Signup() {
         <div className="w-full max-w-md animate-fade-up">
           <Link to="/" className="lg:hidden inline-block mb-8"><Logo size={28} /></Link>
           <Link to="/login" className="inline-flex items-center gap-2 text-sm text-dusk-300 hover:text-dusk-500 mb-5">
-            <ArrowLeft className="w-4 h-4" /> Voltar para entrar
+            <ArrowLeft className="w-4 h-4" /> {t('Voltar para entrar')}
           </Link>
 
           <GlassCard className="p-5 mb-6">
@@ -178,17 +187,23 @@ export default function Signup() {
               </div>
               <div>
                 <div className="text-[11px] uppercase tracking-[0.14em] text-dusk-300 font-semibold mb-1">
-                  {intent === 'create' ? 'Novo administrador' : intent === 'agency' ? 'Novo membro da equipe' : 'Novo morador'}
+                  {t(intent === 'create'
+                    ? privateCreateBuildingRequired ? 'Acesso privado aprovado' : 'Novo administrador'
+                    : intent === 'agency' ? 'Novo membro da equipe' : 'Novo morador')}
                 </div>
                 <h1 className="font-display text-3xl text-dusk-500 leading-tight tracking-tight">
-                  {intent === 'create' ? 'Crie sua conta de administrador' : intent === 'agency' ? 'Crie sua conta para aceitar o convite' : 'Crie sua conta para entrar'}
+                  {t(intent === 'create'
+                    ? privateCreateBuildingRequired ? 'Crie sua conta para ativar o prédio' : 'Crie sua conta de administrador'
+                    : intent === 'agency' ? 'Crie sua conta para aceitar o convite' : 'Crie sua conta para entrar')}
                 </h1>
                 <p className="text-sm text-dusk-300 mt-2 leading-relaxed">
-                  {intent === 'create'
-                    ? 'Depois de criar sua conta, configuramos o prédio e geramos o código para moradores.'
+                  {t(intent === 'create'
+                    ? privateCreateBuildingRequired
+                      ? 'Depois de criar sua conta, use o código privado da equipe CONDOS para configurar o prédio aprovado.'
+                      : 'Depois de criar sua conta, configuramos o prédio e geramos o código para moradores.'
                     : intent === 'agency'
                       ? 'Depois de criar sua conta, ativamos seu acesso à administradora e aos prédios permitidos.'
-                    : 'Depois de criar sua conta, insira o código do administrador e escolha sua unidade.'}
+                      : 'Depois de criar sua conta, insira o código do administrador e escolha sua unidade.')}
                 </p>
               </div>
             </div>
@@ -209,7 +224,7 @@ export default function Signup() {
               </div>
               <div className="flex items-center gap-3 my-4">
                 <div className="flex-1 h-px bg-dusk-100/40" />
-                <span className="text-xs text-dusk-200">ou com email</span>
+                <span className="text-xs text-dusk-200">{t('ou com email')}</span>
                 <div className="flex-1 h-px bg-dusk-100/40" />
               </div>
             </>
@@ -244,22 +259,26 @@ export default function Signup() {
               rightIcon={<ArrowRight className="w-4 h-4" />}
               className="w-full"
             >
-              {intent === 'create' ? 'Criar conta e prédio' : intent === 'agency' ? 'Criar conta e aceitar convite' : 'Criar conta e entrar'}
+              {t(intent === 'create'
+                ? privateCreateBuildingRequired ? 'Criar conta e continuar para ativação' : 'Criar conta e prédio'
+                : intent === 'agency' ? 'Criar conta e aceitar convite' : 'Criar conta e entrar')}
             </Button>
           </form>
 
           <p className="mt-6 text-xs text-dusk-200 flex items-center gap-2">
             <Building2 className="w-3.5 h-3.5" />
-            Já tem conta? <Link to="/login" className="underline hover:text-dusk-400">Entrar</Link>
+            {t('Já tem conta?')} <Link to="/login" className="underline hover:text-dusk-400">{t('Entrar')}</Link>
           </p>
 
           <div className="mt-5 flex items-center gap-2 text-xs text-dusk-200">
             <UserPlus className="w-3.5 h-3.5" />
-            {intent === 'join'
+            {t(intent === 'join'
               ? 'O administrador aprova seu acesso se o prédio exigir.'
               : intent === 'agency'
                 ? 'Você receberá acesso somente aos prédios autorizados pela administradora.'
-                : 'Você pode administrar mesmo sem morar no prédio.'}
+                : privateCreateBuildingRequired
+                  ? 'Apenas prédios aprovados por CONDOS ou pela administradora podem ser ativados.'
+                  : 'Você pode administrar mesmo sem morar no prédio.')}
           </div>
         </div>
       </div>

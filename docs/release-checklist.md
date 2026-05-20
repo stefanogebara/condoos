@@ -65,6 +65,7 @@ Do not add a new page or workflow unless it strengthens one of those promises.
 - No secrets are committed.
 - Demo credentials remain disabled in real production unless the deployment is intentionally disposable.
 - Real production has `PRIVATE_CREATE_BUILDING_REQUIRED=1`; new buildings are activated through sales-issued setup codes, not public self-serve creation.
+- Public login/signup copy says private activation when setup codes are required; it must not read like open self-serve building creation.
 - New env vars are documented in `.env.example` and `docs/ops.md`.
 - Upload/storage changes work without committing secrets and fail safely when R2 is not configured.
 - New data writes are scoped by `condominium_id`.
@@ -81,3 +82,4 @@ Before showing a buyer:
 - Document vault can use uploaded files or the buyer understands that production R2 secrets are not configured yet.
 - WhatsApp/email/Google/AI status is either configured or gracefully hidden/degraded.
 - `/board/portfolio` shows integration readiness, portfolio risk summary, agency setup-code controls, agency staff invite/status controls for agency admins, assigned-building switching, and scoped portfolio/operations CSV exports.
+- Public i18n sweep includes `/login` and signup join/create/agency intent pages.

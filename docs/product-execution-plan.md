@@ -277,6 +277,15 @@ This slice closes the gap between portfolio access and single-building board wor
 - Add portfolio card actions for opening a building and marking the active building.
 - Cover allowed and forbidden switching with server tests.
 
+## Completed Slice: Private Public Entry Polish
+
+This slice makes the public entry points match the private B2B sales model:
+
+- Login and signup now show private activation language when setup codes are required.
+- Signup create intent tells approved admins to use the CONDOS private activation code instead of implying anyone can create a production building.
+- Onboarding landing copy is locale-aware and explains that new buildings are activated by the agency or CONDOS team with a private code.
+- The i18n leak sweep now includes signup join/create/agency public routes, closing a previous blind spot.
+
 ## Current Execution Slice: Enterprise Operations Hardening
 
 The next implementation slice should keep building on the private-enterprise plan:

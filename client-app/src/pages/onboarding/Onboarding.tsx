@@ -7,6 +7,7 @@ import Badge from '../../components/Badge';
 import { apiGet } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { track } from '../../lib/analytics';
+import { t } from '../../lib/i18n';
 
 interface Membership {
   id: number;
@@ -19,6 +20,10 @@ interface Membership {
 }
 interface AuthConfig {
   private_create_building_required?: boolean;
+}
+
+function relationshipLabel(value: Membership['relationship']) {
+  return t(value);
 }
 
 export default function Onboarding() {
@@ -46,7 +51,7 @@ export default function Onboarding() {
   }, [user, navigate]);
 
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center text-dusk-300">Carregando…</div>;
+    return <div className="min-h-screen flex items-center justify-center text-dusk-300">{t('Carregando…')}</div>;
   }
 
   const pending = memberships.find((m) => m.status === 'pending');
@@ -55,31 +60,32 @@ export default function Onboarding() {
     <div className="min-h-screen flex flex-col">
       <nav className="px-6 lg:px-12 py-5 flex items-center justify-between">
         <Link to="/"><Logo /></Link>
-        <span className="text-sm text-dusk-300">Olá, {user?.first_name} · <button onClick={() => { localStorage.clear(); window.location.href = '/login'; }} className="text-dusk-400 hover:text-dusk-500">Sair</button></span>
+        <span className="text-sm text-dusk-300">{t('Olá')}, {user?.first_name} · <button onClick={() => { localStorage.clear(); window.location.href = '/login'; }} className="text-dusk-400 hover:text-dusk-500">{t('Sair')}</button></span>
       </nav>
 
       <main className="flex-1 flex items-center justify-center px-6 py-16">
         <div className="w-full max-w-3xl animate-fade-up">
           <div className="text-center mb-10">
-            <Badge tone="sage" className="mb-4">Passo 1 de 2</Badge>
+            <Badge tone="sage" className="mb-4">{t('Passo 1 de 2')}</Badge>
             <h1 className="font-display text-4xl md:text-5xl text-dusk-500 tracking-tight leading-tight">
-              Vamos encontrar seu prédio.
+              {t('Vamos encontrar seu prédio.')}
             </h1>
             <p className="mt-4 text-dusk-300 text-lg max-w-xl mx-auto">
-              Se seu prédio já está no CondoOS, entre com o código que o síndico mandou.
-              {privateCreateBuildingRequired
-                ? ' Novos prédios são ativados pela administradora ou equipe CONDOS com código privado.'
-                : ' Se não, monte um novo — você é o primeiro síndico.'}
+              {t('Se seu prédio já está no CondoOS, entre com o código que o síndico mandou.')}
+              {' '}
+              {t(privateCreateBuildingRequired
+                ? 'Novos prédios são ativados pela administradora ou equipe CONDOS com código privado.'
+                : 'Se não, monte um novo — você é o primeiro síndico.')}
             </p>
           </div>
 
           {pending && (
             <GlassCard variant="clay-peach" className="p-6 mb-8 text-center">
               <Clock className="w-6 h-6 mx-auto mb-3 text-peach-500" />
-              <div className="font-display text-xl text-dusk-500">Aguardando aprovação</div>
+              <div className="font-display text-xl text-dusk-500">{t('Aguardando aprovação')}</div>
               <p className="text-dusk-400 text-sm mt-2">
-                Você reivindicou <span className="font-semibold">Unidade {pending.unit_number}</span> em {pending.condo_name} como {pending.relationship}.
-                O síndico vai analisar em breve.
+                {t('Você reivindicou')} <span className="font-semibold">{t('Unidade')} {pending.unit_number}</span> {t('em')} {pending.condo_name} {t('como')} {relationshipLabel(pending.relationship)}.
+                {' '}{t('O administrador vai analisar em breve.')}
               </p>
             </GlassCard>
           )}
@@ -90,12 +96,12 @@ export default function Onboarding() {
                 <div className="w-14 h-14 rounded-2xl bg-sage-200 text-sage-700 flex items-center justify-center mb-5">
                   <LogIn className="w-7 h-7" />
                 </div>
-                <h2 className="font-display text-2xl text-dusk-500 tracking-tight">Entrar num prédio</h2>
+                <h2 className="font-display text-2xl text-dusk-500 tracking-tight">{t('Entrar num prédio')}</h2>
                 <p className="text-sm text-dusk-300 mt-2 leading-relaxed">
-                  Tenho um código de convite de 6 caracteres do meu síndico. Vou inserir, escolher minha unidade e ocupar meu lugar.
+                  {t('Tenho um código de convite de 6 caracteres do meu administrador. Vou inserir, escolher minha unidade e ocupar meu lugar.')}
                 </p>
                 <div className="mt-5 inline-flex items-center gap-1 text-sm font-semibold text-dusk-500">
-                  Inserir código <ArrowRight className="w-4 h-4" />
+                  {t('Inserir código')} <ArrowRight className="w-4 h-4" />
                 </div>
               </GlassCard>
             </Link>
@@ -105,14 +111,14 @@ export default function Onboarding() {
                 <div className="w-14 h-14 rounded-2xl bg-dusk-400/90 text-cream-50 flex items-center justify-center mb-5">
                   <Plus className="w-7 h-7" />
                 </div>
-                <h2 className="font-display text-2xl text-dusk-500 tracking-tight">Montar um novo prédio</h2>
+                <h2 className="font-display text-2xl text-dusk-500 tracking-tight">{t(privateCreateBuildingRequired ? 'Ativar prédio aprovado' : 'Montar um novo prédio')}</h2>
                 <p className="text-sm text-dusk-300 mt-2 leading-relaxed">
-                  {privateCreateBuildingRequired
+                  {t(privateCreateBuildingRequired
                     ? 'Criação privada para administradoras e prédios aprovados. Tenha em mãos o código de ativação antes de começar.'
-                    : 'Meu condomínio ainda não está no sistema. Me guie pelo cadastro: nome, unidades e código de convite.'}
+                    : 'Meu condomínio ainda não está no sistema. Me guie pelo cadastro: nome, unidades e código de convite.')}
                 </p>
                 <div className="mt-5 inline-flex items-center gap-1 text-sm font-semibold text-dusk-500">
-                  {privateCreateBuildingRequired ? 'Ativar com código privado' : 'Começar o cadastro'} <ArrowRight className="w-4 h-4" />
+                  {t(privateCreateBuildingRequired ? 'Ativar com código privado' : 'Começar o cadastro')} <ArrowRight className="w-4 h-4" />
                 </div>
               </GlassCard>
             </Link>
@@ -120,7 +126,7 @@ export default function Onboarding() {
 
           <div className="mt-10 text-center text-xs text-dusk-200">
             <Building2 className="w-3.5 h-3.5 inline-block mr-1 align-[-2px]" />
-            Só explorando? <Link to="/login?intent=demo" className="underline hover:text-dusk-400">Entre como demo (síndico ou morador)</Link>.
+            {t('Só explorando?')} <Link to="/login?intent=demo" className="underline hover:text-dusk-400">{t('Entre como demo (administrador ou morador)')}</Link>.
           </div>
         </div>
       </main>

@@ -297,6 +297,9 @@ const PORTEIRO_ROUTES = [
 const PUBLIC_ROUTES = [
   '/',
   '/login',
+  '/signup?intent=join',
+  '/signup?intent=create',
+  '/signup?intent=agency&agency_invite=ui-only-token',
 ];
 
 const PUBLIC_LOGIN_HEADINGS: Record<'en-US' | 'es-ES' | 'fr-FR', string> = {
