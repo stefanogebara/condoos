@@ -26,12 +26,27 @@ interface AgencyBuilding {
   metrics: AgencyBuildingMetrics;
 }
 
+interface AgencyPermissionReview {
+  total_staff: number;
+  agency_admins: number;
+  scoped_staff: number;
+  unassigned_staff: number;
+  pending_invites: number;
+  expired_invites: number;
+  failed_invite_emails: number;
+  buildings_without_direct_staff: Array<{
+    id: number;
+    name: string;
+  }>;
+}
+
 interface AgencyPortfolio {
   id: number;
   name: string;
   slug: string;
   role: string;
   totals: AgencyBuildingMetrics;
+  permission_review: AgencyPermissionReview | null;
   buildings: AgencyBuilding[];
 }
 
@@ -255,6 +270,7 @@ export default function BoardAgencyPortfolio() {
     proposals_missing_budget: 0,
     upcoming_meetings: 0,
   }, [primaryAgency]);
+  const permissionReview = primaryAgency?.permission_review || null;
 
   async function loadSetupCodes(agencyId = primaryAgency?.id) {
     if (!agencyId || primaryAgency?.role !== 'agency_admin') {
@@ -535,7 +551,7 @@ export default function BoardAgencyPortfolio() {
                     ))}
                   </select>
                 )}
-                <Badge tone="neutral">{primaryAgency.role}</Badge>
+                <Badge tone="neutral">{agencyRoleLabel(primaryAgency.role)}</Badge>
               </div>
             </div>
             <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-5">
@@ -604,6 +620,72 @@ export default function BoardAgencyPortfolio() {
                   <div className="text-sm text-dusk-300">{t('Carregando...')}</div>
                 )}
               </GlassCard>
+
+              {permissionReview && (
+                <GlassCard className="p-5 h-fit">
+                  <div className="flex items-center gap-2 mb-2">
+                    <LockKeyhole className="w-5 h-5 text-sage-700" />
+                    <h2 className="font-display text-xl text-dusk-500">{t('Revisão de permissões')}</h2>
+                  </div>
+                  <p className="text-sm text-dusk-300 mb-4">
+                    {t('Confirme que a administradora tem cobertura real por prédio antes de vender ou pilotar.')}
+                  </p>
+                  <div className="space-y-2">
+                    <StatusPill label={t('Admins da administradora')} ok={permissionReview.agency_admins >= 2} />
+                    <StatusPill label={t('Convites de equipe')} ok={permissionReview.failed_invite_emails === 0 && permissionReview.expired_invites === 0} />
+                    <StatusPill label={t('Cobertura por prédio')} ok={permissionReview.buildings_without_direct_staff.length === 0} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 mt-4 text-sm">
+                    <div>
+                      <div className="text-xs uppercase tracking-[0.12em] text-dusk-300">{t('Equipe')}</div>
+                      <div className="font-display text-2xl text-dusk-500">{permissionReview.total_staff}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs uppercase tracking-[0.12em] text-dusk-300">{t('Escopo definido')}</div>
+                      <div className="font-display text-2xl text-dusk-500">{permissionReview.scoped_staff}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs uppercase tracking-[0.12em] text-dusk-300">{t('Pendentes')}</div>
+                      <div className="font-display text-2xl text-dusk-500">{permissionReview.pending_invites}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs uppercase tracking-[0.12em] text-dusk-300">{t('Falhas')}</div>
+                      <div className={`font-display text-2xl ${permissionReview.failed_invite_emails > 0 ? 'text-peach-600' : 'text-dusk-500'}`}>
+                        {permissionReview.failed_invite_emails}
+                      </div>
+                    </div>
+                  </div>
+                  {permissionReview.agency_admins < 2 && (
+                    <div className="mt-4 rounded-2xl border border-peach-200 bg-peach-100/60 px-3 py-3 text-sm text-peach-700">
+                      {t('Somente um administrador da agência. Adicione outro antes de pilotos reais.')}
+                    </div>
+                  )}
+                  {permissionReview.buildings_without_direct_staff.length > 0 ? (
+                    <div className="mt-4">
+                      <div className="text-xs uppercase tracking-[0.12em] text-dusk-300 mb-2">{t('Sem responsável direto')}</div>
+                      <div className="space-y-1">
+                        {permissionReview.buildings_without_direct_staff.slice(0, 4).map((building) => (
+                          <div key={building.id} className="text-sm text-dusk-400 truncate" data-user-content>{building.name}</div>
+                        ))}
+                        {permissionReview.buildings_without_direct_staff.length > 4 && (
+                          <div className="text-xs text-dusk-300">
+                            +{permissionReview.buildings_without_direct_staff.length - 4} {t('mais')}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-4 text-sm text-sage-700">
+                      {t('Todos os prédios têm pelo menos uma pessoa responsável.')}
+                    </div>
+                  )}
+                  {permissionReview.expired_invites > 0 && (
+                    <div className="mt-3 text-xs text-dusk-300">
+                      {permissionReview.expired_invites} {t('convites expirados')}
+                    </div>
+                  )}
+                </GlassCard>
+              )}
 
               <GlassCard className="p-5 h-fit">
                 <div className="flex items-center gap-2 mb-2">

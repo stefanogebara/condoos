@@ -295,6 +295,15 @@ This slice makes private activation auditable for agency sales and onboarding:
 - Keep setup-code values hashed while tracking activation metadata through IDs and audit-safe references.
 - Cover code activation tracking with server tests.
 
+## Completed Slice: Agency Permission Review
+
+This slice makes portfolio access safer before private pilots:
+
+- Compute a permission review summary for agency admins: total staff, agency admins, scoped staff, pending/expired/failed invites, and buildings with no directly assigned staff owner.
+- Show the review on `/board/portfolio` so an agency can fix single-admin risk, failed invites, and uncovered buildings before a buyer walkthrough.
+- Keep non-admin agency staff scoped: they can use their assigned building view, but do not receive the agency-wide permission review.
+- Cover the permission review with server tests.
+
 ## Current Execution Slice: Enterprise Operations Hardening
 
 The next implementation slice should keep building on the private-enterprise plan:

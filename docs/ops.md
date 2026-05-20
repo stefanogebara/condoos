@@ -116,6 +116,12 @@ Invite acceptance requires the signed-in account email to match the invite
 email. The safeguards prevent removing the current actor and prevent
 deleting/demoting the last agency admin.
 
+The same portfolio page includes a permission review for agency admins. It
+flags single-admin agencies, failed staff invite emails, expired/pending invite
+counts, and buildings with no directly assigned staff owner. Non-admin agency
+staff keep their scoped building access but do not receive the agency-wide
+permission review.
+
 Agency staff with multiple assigned buildings can switch their active building
 from `/board/portfolio`. The switch endpoint updates `users.condominium_id` only
 when the target building belongs to the caller's agency scope; unassigned

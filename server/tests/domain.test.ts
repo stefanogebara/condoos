@@ -324,10 +324,19 @@ test('agency staff assignments scope portfolio building access', () => {
   assert.equal(activatedStaff.role, 'board_admin');
   assert.equal(activatedStaff.condominium_id, secondCondoId);
 
+  const adminPortfolio = buildAgencyPortfolio(userAgencyMemberships(adminId)[0]);
+  assert.ok(adminPortfolio.permission_review);
+  assert.equal(adminPortfolio.permission_review.total_staff, 2);
+  assert.equal(adminPortfolio.permission_review.agency_admins, 1);
+  assert.equal(adminPortfolio.permission_review.scoped_staff, 1);
+  assert.equal(adminPortfolio.permission_review.buildings_without_direct_staff.length, 1);
+  assert.equal(adminPortfolio.permission_review.buildings_without_direct_staff[0].name, 'Test Condo');
+
   const membership = userAgencyMemberships(staffId)[0];
   const portfolio = buildAgencyPortfolio(membership);
   assert.equal(portfolio.buildings.length, 1);
   assert.equal(portfolio.buildings[0].name, 'Second Condo');
+  assert.equal(portfolio.permission_review, null);
   assert.doesNotMatch(agencyPortfolioToCsv(portfolio), /Test Condo/);
 
   assert.throws(

@@ -81,12 +81,27 @@ export interface AgencyBuildingMetrics {
   upcoming_meetings: number;
 }
 
+export interface AgencyPermissionReview {
+  total_staff: number;
+  agency_admins: number;
+  scoped_staff: number;
+  unassigned_staff: number;
+  pending_invites: number;
+  expired_invites: number;
+  failed_invite_emails: number;
+  buildings_without_direct_staff: Array<{
+    id: number;
+    name: string;
+  }>;
+}
+
 export interface AgencyPortfolio {
   id: number;
   name: string;
   slug: string;
   role: AgencyRole;
   totals: AgencyBuildingMetrics;
+  permission_review: AgencyPermissionReview | null;
   buildings: Array<{
     id: number;
     name: string;
@@ -309,6 +324,31 @@ function buildingIdsForMembership(membership: AgencyMembership): number[] {
   return assigned.map((row) => Number(row.condominium_id));
 }
 
+function buildAgencyPermissionReview(
+  agencyId: number,
+  buildings: AgencyPortfolio['buildings'],
+): AgencyPermissionReview {
+  const staff = listAgencyStaff(agencyId);
+  const invites = listAgencyStaffInvites(agencyId);
+  const directStaff = staff.filter((member) => member.role !== 'agency_admin');
+  const scopedStaff = directStaff.filter((member) => member.assigned_building_ids.length > 0);
+  const unassignedStaff = directStaff.filter((member) => member.assigned_building_ids.length === 0);
+  const buildingsWithoutDirectStaff = buildings
+    .filter((building) => !directStaff.some((member) => member.assigned_building_ids.includes(building.id)))
+    .map((building) => ({ id: building.id, name: building.name }));
+
+  return {
+    total_staff: staff.length,
+    agency_admins: staff.filter((member) => member.role === 'agency_admin').length,
+    scoped_staff: scopedStaff.length,
+    unassigned_staff: unassignedStaff.length,
+    pending_invites: invites.filter((invite) => invite.status === 'pending').length,
+    expired_invites: invites.filter((invite) => invite.status === 'expired').length,
+    failed_invite_emails: invites.filter((invite) => invite.email_status === 'failed').length,
+    buildings_without_direct_staff: buildingsWithoutDirectStaff,
+  };
+}
+
 export function buildAgencyPortfolio(membership: AgencyMembership): AgencyPortfolio {
   const allowedBuildingIds = buildingIdsForMembership(membership);
   const placeholders = allowedBuildingIds.map(() => '?').join(',');
@@ -422,6 +462,9 @@ export function buildAgencyPortfolio(membership: AgencyMembership): AgencyPortfo
     slug: membership.slug,
     role: membership.role,
     totals,
+    permission_review: membership.role === 'agency_admin'
+      ? buildAgencyPermissionReview(membership.agency_id, buildings)
+      : null,
     buildings,
   };
 }
