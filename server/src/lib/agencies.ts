@@ -9,16 +9,41 @@ export type AgencyRole =
   | 'maintenance_manager'
   | 'concierge_supervisor';
 
+export const AGENCY_ROLES: AgencyRole[] = [
+  'agency_admin',
+  'building_admin',
+  'finance_manager',
+  'maintenance_manager',
+  'concierge_supervisor',
+];
+
+export function isAgencyRole(value: unknown): value is AgencyRole {
+  return typeof value === 'string' && (AGENCY_ROLES as string[]).includes(value);
+}
+
 export interface AgencyLinkResult {
   agencyId: number;
   agencyName: string;
 }
 
 export interface AgencyMembership {
+  id: number;
   agency_id: number;
   agency_name: string;
   slug: string;
+  user_id: number;
   role: AgencyRole;
+}
+
+export interface AgencyStaffMember {
+  id: number;
+  user_id: number;
+  email: string;
+  first_name: string;
+  last_name: string;
+  role: AgencyRole;
+  created_at: string;
+  assigned_building_ids: number[];
 }
 
 export interface AgencyBuildingMetrics {
@@ -104,6 +129,56 @@ export function findOrCreateAgency(name: string): AgencyLinkResult {
   return { agencyId: Number(result.lastInsertRowid), agencyName: cleanName };
 }
 
+function agencyById(agencyId: number): { id: number; name: string; slug: string } | null {
+  const row = db.prepare(
+    `SELECT id, name, slug FROM agencies WHERE id = ? LIMIT 1`
+  ).get(agencyId) as { id: number; name: string; slug: string } | undefined;
+  return row || null;
+}
+
+function agencyMembershipById(agencyId: number, membershipId: number): AgencyMembership | null {
+  const row = db.prepare(
+    `SELECT am.id, a.id AS agency_id, a.name AS agency_name, a.slug, am.user_id, am.role
+     FROM agency_memberships am
+     JOIN agencies a ON a.id = am.agency_id
+     WHERE am.id = ? AND am.agency_id = ?
+     LIMIT 1`
+  ).get(membershipId, agencyId) as AgencyMembership | undefined;
+  return row || null;
+}
+
+function normalizeBuildingIds(buildingIds: number[] | undefined | null): number[] {
+  return Array.from(new Set((buildingIds || [])
+    .map((id) => Math.floor(Number(id)))
+    .filter((id) => Number.isInteger(id) && id > 0)));
+}
+
+function validateAgencyBuildingIds(agencyId: number, buildingIds: number[]): number[] {
+  const normalized = normalizeBuildingIds(buildingIds);
+  if (normalized.length === 0) return [];
+  const placeholders = normalized.map(() => '?').join(',');
+  const rows = db.prepare(
+    `SELECT condominium_id
+     FROM agency_condominiums
+     WHERE agency_id = ? AND condominium_id IN (${placeholders})`
+  ).all(agencyId, ...normalized) as Array<{ condominium_id: number }>;
+  const valid = new Set(rows.map((row) => Number(row.condominium_id)));
+  if (valid.size !== normalized.length) {
+    throw Object.assign(new Error('invalid_building_scope'), { status: 400 });
+  }
+  return normalized;
+}
+
+function setAgencyMemberBuildings(agencyId: number, membershipId: number, buildingIds: number[]) {
+  const normalized = validateAgencyBuildingIds(agencyId, buildingIds);
+  db.prepare(`DELETE FROM agency_member_buildings WHERE agency_membership_id = ?`).run(membershipId);
+  const insert = db.prepare(
+    `INSERT OR IGNORE INTO agency_member_buildings (agency_membership_id, condominium_id)
+     VALUES (?, ?)`
+  );
+  for (const buildingId of normalized) insert.run(membershipId, buildingId);
+}
+
 export function linkCondominiumToAgency(input: {
   agencyName: string | null | undefined;
   condominiumId: number;
@@ -120,12 +195,18 @@ export function linkCondominiumToAgency(input: {
   db.prepare(
     `INSERT OR IGNORE INTO agency_memberships (agency_id, user_id, role) VALUES (?, ?, ?)`
   ).run(agency.agencyId, input.userId, input.role || 'agency_admin');
+  const membership = db.prepare(
+    `SELECT id, role FROM agency_memberships WHERE agency_id = ? AND user_id = ? LIMIT 1`
+  ).get(agency.agencyId, input.userId) as { id: number; role: AgencyRole } | undefined;
+  if (membership && membership.role !== 'agency_admin') {
+    setAgencyMemberBuildings(agency.agencyId, membership.id, [input.condominiumId]);
+  }
   return agency;
 }
 
 export function userAgencyMemberships(userId: number) {
   return db.prepare(
-    `SELECT a.id AS agency_id, a.name AS agency_name, a.slug, am.role
+    `SELECT am.id, a.id AS agency_id, a.name AS agency_name, a.slug, am.user_id, am.role
      FROM agency_memberships am
      JOIN agencies a ON a.id = am.agency_id
      WHERE am.user_id = ?
@@ -135,7 +216,7 @@ export function userAgencyMemberships(userId: number) {
 
 export function userAgencyMembership(userId: number, agencyId: number): AgencyMembership | null {
   const row = db.prepare(
-    `SELECT a.id AS agency_id, a.name AS agency_name, a.slug, am.role
+    `SELECT am.id, a.id AS agency_id, a.name AS agency_name, a.slug, am.user_id, am.role
      FROM agency_memberships am
      JOIN agencies a ON a.id = am.agency_id
      WHERE am.user_id = ? AND a.id = ?
@@ -146,13 +227,6 @@ export function userAgencyMembership(userId: number, agencyId: number): AgencyMe
 
 export function userCanManageAgency(userId: number, agencyId: number): boolean {
   return userAgencyMembership(userId, agencyId)?.role === 'agency_admin';
-}
-
-function agencyById(agencyId: number): { id: number; name: string; slug: string } | null {
-  const row = db.prepare(
-    `SELECT id, name, slug FROM agencies WHERE id = ? LIMIT 1`
-  ).get(agencyId) as { id: number; name: string; slug: string } | undefined;
-  return row || null;
 }
 
 function zeroMetrics(): AgencyBuildingMetrics {
@@ -168,14 +242,40 @@ function zeroMetrics(): AgencyBuildingMetrics {
   };
 }
 
-export function buildAgencyPortfolio(membership: AgencyMembership): AgencyPortfolio {
-  const condos = db.prepare(
-    `SELECT c.id, c.name, c.address, c.invite_code
+function buildingIdsForMembership(membership: AgencyMembership): number[] {
+  const rows = db.prepare(
+    `SELECT ac.condominium_id
      FROM agency_condominiums ac
-     JOIN condominiums c ON c.id = ac.condominium_id
      WHERE ac.agency_id = ?
-     ORDER BY c.name`
-  ).all(membership.agency_id) as Array<{
+     ORDER BY ac.condominium_id`
+  ).all(membership.agency_id) as Array<{ condominium_id: number }>;
+  const allAgencyBuildingIds = rows.map((row) => Number(row.condominium_id));
+  if (membership.role === 'agency_admin') return allAgencyBuildingIds;
+
+  const assigned = db.prepare(
+    `SELECT amb.condominium_id
+     FROM agency_member_buildings amb
+     JOIN agency_condominiums ac
+       ON ac.condominium_id = amb.condominium_id
+      AND ac.agency_id = ?
+     WHERE amb.agency_membership_id = ?
+     ORDER BY amb.condominium_id`
+  ).all(membership.agency_id, membership.id) as Array<{ condominium_id: number }>;
+  return assigned.map((row) => Number(row.condominium_id));
+}
+
+export function buildAgencyPortfolio(membership: AgencyMembership): AgencyPortfolio {
+  const allowedBuildingIds = buildingIdsForMembership(membership);
+  const placeholders = allowedBuildingIds.map(() => '?').join(',');
+  const condos = allowedBuildingIds.length === 0
+    ? []
+    : db.prepare(
+      `SELECT c.id, c.name, c.address, c.invite_code
+       FROM agency_condominiums ac
+       JOIN condominiums c ON c.id = ac.condominium_id
+       WHERE ac.agency_id = ? AND c.id IN (${placeholders})
+       ORDER BY c.name`
+    ).all(membership.agency_id, ...allowedBuildingIds) as Array<{
     id: number;
     name: string;
     address: string;
@@ -283,6 +383,142 @@ export function buildAgencyPortfolio(membership: AgencyMembership): AgencyPortfo
 
 export function agencyPortfoliosForUser(userId: number): AgencyPortfolio[] {
   return userAgencyMemberships(userId).map(buildAgencyPortfolio);
+}
+
+function countAgencyAdmins(agencyId: number): number {
+  return count(
+    `SELECT COUNT(*) AS count FROM agency_memberships WHERE agency_id = ? AND role = 'agency_admin'`,
+    agencyId,
+  );
+}
+
+function mapStaffMember(row: Omit<AgencyStaffMember, 'assigned_building_ids'>): AgencyStaffMember {
+  const assigned = db.prepare(
+    `SELECT condominium_id
+     FROM agency_member_buildings
+     WHERE agency_membership_id = ?
+     ORDER BY condominium_id`
+  ).all(row.id) as Array<{ condominium_id: number }>;
+  return {
+    ...row,
+    assigned_building_ids: assigned.map((item) => Number(item.condominium_id)),
+  };
+}
+
+export function listAgencyStaff(agencyId: number): AgencyStaffMember[] {
+  if (!agencyById(agencyId)) throw Object.assign(new Error('agency_not_found'), { status: 404 });
+  const rows = db.prepare(
+    `SELECT am.id, am.user_id, u.email, u.first_name, u.last_name, am.role, am.created_at
+     FROM agency_memberships am
+     JOIN users u ON u.id = am.user_id
+     WHERE am.agency_id = ?
+     ORDER BY
+       CASE am.role WHEN 'agency_admin' THEN 0 ELSE 1 END,
+       lower(u.email)`
+  ).all(agencyId) as Array<Omit<AgencyStaffMember, 'assigned_building_ids'>>;
+  return rows.map(mapStaffMember);
+}
+
+export function upsertAgencyStaff(input: {
+  agencyId: number;
+  email: string;
+  role: AgencyRole;
+  buildingIds?: number[] | null;
+}): AgencyStaffMember {
+  if (!agencyById(input.agencyId)) throw Object.assign(new Error('agency_not_found'), { status: 404 });
+  if (!isAgencyRole(input.role)) throw Object.assign(new Error('invalid_agency_role'), { status: 400 });
+
+  const user = db.prepare(
+    `SELECT id FROM users WHERE lower(email) = lower(?) LIMIT 1`
+  ).get(input.email.trim()) as { id: number } | undefined;
+  if (!user) throw Object.assign(new Error('staff_user_not_found'), { status: 404 });
+
+  const existing = db.prepare(
+    `SELECT id, role FROM agency_memberships WHERE agency_id = ? AND user_id = ? LIMIT 1`
+  ).get(input.agencyId, user.id) as { id: number; role: AgencyRole } | undefined;
+  if (existing?.role === 'agency_admin' && input.role !== 'agency_admin' && countAgencyAdmins(input.agencyId) <= 1) {
+    throw Object.assign(new Error('last_agency_admin'), { status: 400 });
+  }
+
+  const buildingIds = normalizeBuildingIds(input.buildingIds);
+  if (input.role !== 'agency_admin' && buildingIds.length === 0) {
+    throw Object.assign(new Error('building_assignment_required'), { status: 400 });
+  }
+
+  if (existing) {
+    db.prepare(`UPDATE agency_memberships SET role = ? WHERE id = ?`).run(input.role, existing.id);
+  } else {
+    db.prepare(
+      `INSERT INTO agency_memberships (agency_id, user_id, role) VALUES (?, ?, ?)`
+    ).run(input.agencyId, user.id, input.role);
+  }
+
+  const membership = db.prepare(
+    `SELECT id FROM agency_memberships WHERE agency_id = ? AND user_id = ? LIMIT 1`
+  ).get(input.agencyId, user.id) as { id: number };
+  setAgencyMemberBuildings(input.agencyId, membership.id, input.role === 'agency_admin' ? [] : buildingIds);
+
+  const row = db.prepare(
+    `SELECT am.id, am.user_id, u.email, u.first_name, u.last_name, am.role, am.created_at
+     FROM agency_memberships am
+     JOIN users u ON u.id = am.user_id
+     WHERE am.id = ?`
+  ).get(membership.id) as Omit<AgencyStaffMember, 'assigned_building_ids'>;
+  return mapStaffMember(row);
+}
+
+export function updateAgencyStaff(input: {
+  agencyId: number;
+  membershipId: number;
+  role?: AgencyRole | null;
+  buildingIds?: number[] | null;
+}): AgencyStaffMember {
+  const membership = agencyMembershipById(input.agencyId, input.membershipId);
+  if (!membership) throw Object.assign(new Error('agency_staff_not_found'), { status: 404 });
+
+  const nextRole = input.role || membership.role;
+  if (!isAgencyRole(nextRole)) throw Object.assign(new Error('invalid_agency_role'), { status: 400 });
+  if (membership.role === 'agency_admin' && nextRole !== 'agency_admin' && countAgencyAdmins(input.agencyId) <= 1) {
+    throw Object.assign(new Error('last_agency_admin'), { status: 400 });
+  }
+
+  const nextBuildings = input.buildingIds === undefined
+    ? buildingIdsForMembership(membership)
+    : normalizeBuildingIds(input.buildingIds);
+  if (nextRole !== 'agency_admin' && nextBuildings.length === 0) {
+    throw Object.assign(new Error('building_assignment_required'), { status: 400 });
+  }
+
+  db.prepare(`UPDATE agency_memberships SET role = ? WHERE id = ?`).run(nextRole, input.membershipId);
+  setAgencyMemberBuildings(input.agencyId, input.membershipId, nextRole === 'agency_admin' ? [] : nextBuildings);
+
+  const row = db.prepare(
+    `SELECT am.id, am.user_id, u.email, u.first_name, u.last_name, am.role, am.created_at
+     FROM agency_memberships am
+     JOIN users u ON u.id = am.user_id
+     WHERE am.id = ?`
+  ).get(input.membershipId) as Omit<AgencyStaffMember, 'assigned_building_ids'>;
+  return mapStaffMember(row);
+}
+
+export function removeAgencyStaff(input: {
+  agencyId: number;
+  membershipId: number;
+  actorUserId?: number | null;
+}): AgencyStaffMember {
+  const membership = agencyMembershipById(input.agencyId, input.membershipId);
+  if (!membership) throw Object.assign(new Error('agency_staff_not_found'), { status: 404 });
+  if (input.actorUserId && membership.user_id === input.actorUserId) {
+    throw Object.assign(new Error('cannot_remove_self'), { status: 400 });
+  }
+  if (membership.role === 'agency_admin' && countAgencyAdmins(input.agencyId) <= 1) {
+    throw Object.assign(new Error('last_agency_admin'), { status: 400 });
+  }
+
+  const staff = listAgencyStaff(input.agencyId).find((item) => item.id === input.membershipId);
+  db.prepare(`DELETE FROM agency_memberships WHERE id = ?`).run(input.membershipId);
+  if (!staff) throw Object.assign(new Error('agency_staff_not_found'), { status: 404 });
+  return staff;
 }
 
 function setupCodeStatus(row: Omit<AgencySetupCode, 'status'>): AgencySetupCode['status'] {

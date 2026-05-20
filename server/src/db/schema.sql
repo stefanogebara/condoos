@@ -99,6 +99,17 @@ CREATE TABLE IF NOT EXISTS agency_condominiums (
 CREATE INDEX IF NOT EXISTS idx_agency_condominiums_condo
   ON agency_condominiums(condominium_id, agency_id);
 
+CREATE TABLE IF NOT EXISTS agency_member_buildings (
+  id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+  agency_membership_id  INTEGER NOT NULL REFERENCES agency_memberships(id) ON DELETE CASCADE,
+  condominium_id        INTEGER NOT NULL REFERENCES condominiums(id) ON DELETE CASCADE,
+  created_at            TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(agency_membership_id, condominium_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_agency_member_buildings_member
+  ON agency_member_buildings(agency_membership_id, condominium_id);
+
 -- Packages waiting at front desk
 CREATE TABLE IF NOT EXISTS packages (
   id               INTEGER PRIMARY KEY AUTOINCREMENT,

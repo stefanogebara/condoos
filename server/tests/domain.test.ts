@@ -54,6 +54,9 @@ import {
   disableAgencySetupCode,
   linkCondominiumToAgency,
   listAgencySetupCodes,
+  listAgencyStaff,
+  removeAgencyStaff,
+  upsertAgencyStaff,
   userAgencyMemberships,
   userCanManageAgency,
 } from '../src/lib/agencies';
@@ -61,6 +64,7 @@ import { checkPrivateSetupCode, consumePrivateSetupCode, hashSetupCode } from '.
 
 function resetDb() {
   const tables = [
+    'agency_member_buildings',
     'agency_memberships',
     'agency_condominiums',
     'agencies',
@@ -263,6 +267,100 @@ test('agency portfolio CSV exports scoped building metrics', () => {
   assert.match(csv, /Quito Operations/);
   assert.match(csv, /Test Condo/);
   assert.match(csv, /,1,1,1,1,/);
+});
+
+test('agency staff assignments scope portfolio building access', () => {
+  resetDb();
+  const { condoId } = createCondoFixture();
+  const secondCondoId = Number(db.prepare(
+    `INSERT INTO condominiums (name, address, invite_code) VALUES ('Second Condo', '2 Main', 'TEST02')`
+  ).run().lastInsertRowid);
+  const unrelatedCondoId = Number(db.prepare(
+    `INSERT INTO condominiums (name, address, invite_code) VALUES ('Unrelated Condo', '3 Main', 'TEST03')`
+  ).run().lastInsertRowid);
+  const adminId = createUser('agency-admin@example.com', 'board_admin');
+  const staffId = createUser('maintenance@example.com', 'resident');
+  const agency = linkCondominiumToAgency({
+    agencyName: 'Andes Management',
+    condominiumId: condoId,
+    userId: adminId,
+  });
+  assert.ok(agency);
+  db.prepare(
+    `INSERT INTO agency_condominiums (agency_id, condominium_id) VALUES (?, ?)`
+  ).run(agency!.agencyId, secondCondoId);
+
+  const staff = upsertAgencyStaff({
+    agencyId: agency!.agencyId,
+    email: 'maintenance@example.com',
+    role: 'maintenance_manager',
+    buildingIds: [secondCondoId],
+  });
+  assert.equal(staff.user_id, staffId);
+  assert.deepEqual(staff.assigned_building_ids, [secondCondoId]);
+  assert.equal(listAgencyStaff(agency!.agencyId).length, 2);
+
+  const membership = userAgencyMemberships(staffId)[0];
+  const portfolio = buildAgencyPortfolio(membership);
+  assert.equal(portfolio.buildings.length, 1);
+  assert.equal(portfolio.buildings[0].name, 'Second Condo');
+  assert.doesNotMatch(agencyPortfolioToCsv(portfolio), /Test Condo/);
+
+  assert.throws(
+    () => upsertAgencyStaff({
+      agencyId: agency!.agencyId,
+      email: 'maintenance@example.com',
+      role: 'maintenance_manager',
+      buildingIds: [unrelatedCondoId],
+    }),
+    /invalid_building_scope/,
+  );
+  assert.throws(
+    () => upsertAgencyStaff({
+      agencyId: agency!.agencyId,
+      email: 'agency-admin@example.com',
+      role: 'finance_manager',
+      buildingIds: [condoId],
+    }),
+    /last_agency_admin/,
+  );
+});
+
+test('agency staff removal keeps the last agency admin safe', () => {
+  resetDb();
+  const { condoId } = createCondoFixture();
+  const adminId = createUser('agency-admin@example.com', 'board_admin');
+  const staffId = createUser('finance@example.com', 'resident');
+  const agency = linkCondominiumToAgency({
+    agencyName: 'Andes Management',
+    condominiumId: condoId,
+    userId: adminId,
+  });
+  assert.ok(agency);
+  const staff = upsertAgencyStaff({
+    agencyId: agency!.agencyId,
+    email: 'finance@example.com',
+    role: 'finance_manager',
+    buildingIds: [condoId],
+  });
+  assert.equal(userAgencyMemberships(staffId).length, 1);
+  const removed = removeAgencyStaff({
+    agencyId: agency!.agencyId,
+    membershipId: staff.id,
+    actorUserId: adminId,
+  });
+  assert.equal(removed.email, 'finance@example.com');
+  assert.equal(userAgencyMemberships(staffId).length, 0);
+
+  const adminMembership = userAgencyMemberships(adminId)[0];
+  assert.throws(
+    () => removeAgencyStaff({
+      agencyId: agency!.agencyId,
+      membershipId: adminMembership.id,
+      actorUserId: staffId,
+    }),
+    /last_agency_admin/,
+  );
 });
 
 function createCondoFixture() {

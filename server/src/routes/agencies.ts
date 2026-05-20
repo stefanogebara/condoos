@@ -4,14 +4,20 @@ import { AuthedRequest, requireAuth } from '../lib/auth';
 import { audit } from '../lib/audit';
 import { ok, fail, asyncHandler } from '../lib/respond';
 import {
+  AGENCY_ROLES,
   agencyPortfolioToCsv,
   agencyPortfoliosForUser,
   buildAgencyPortfolio,
   createAgencySetupCode,
   disableAgencySetupCode,
   listAgencySetupCodes,
+  listAgencyStaff,
+  removeAgencyStaff,
+  updateAgencyStaff,
+  upsertAgencyStaff,
   userAgencyMembership,
 } from '../lib/agencies';
+import type { AgencyRole } from '../lib/agencies';
 
 const router = Router();
 
@@ -23,11 +29,28 @@ const setupCodeIdParam = agencyIdParam.extend({
   codeId: z.coerce.number().int().positive(),
 });
 
+const staffMemberParam = agencyIdParam.extend({
+  membershipId: z.coerce.number().int().positive(),
+});
+
+const agencyRoleSchema = z.enum(AGENCY_ROLES as [AgencyRole, ...AgencyRole[]]);
+
 const setupCodeSchema = z.object({
   label: z.string().trim().min(1).max(120).optional(),
   code: z.string().trim().min(6).max(80).optional(),
   max_uses: z.coerce.number().int().min(1).max(500).optional(),
   expires_at: z.string().datetime().nullable().optional(),
+});
+
+const staffSchema = z.object({
+  email: z.string().trim().email().max(255),
+  role: agencyRoleSchema,
+  building_ids: z.array(z.coerce.number().int().positive()).default([]),
+});
+
+const staffUpdateSchema = z.object({
+  role: agencyRoleSchema.optional(),
+  building_ids: z.array(z.coerce.number().int().positive()).optional(),
 });
 
 function parseParams<T extends z.ZodTypeAny>(schema: T, req: AuthedRequest): z.infer<T> | null {
@@ -51,6 +74,108 @@ function agencyMembershipOrFail(req: AuthedRequest, res: any, agencyId: number, 
 
 router.get('/portfolio', requireAuth, asyncHandler(async (req: AuthedRequest, res) => {
   return ok(res, { agencies: agencyPortfoliosForUser(req.user!.id) });
+}));
+
+router.get('/:agencyId/staff', requireAuth, asyncHandler(async (req: AuthedRequest, res) => {
+  const params = parseParams(agencyIdParam, req);
+  if (!params) return fail(res, 'invalid_input', 400);
+  if (!agencyMembershipOrFail(req, res, params.agencyId, true)) return;
+  return ok(res, { staff: listAgencyStaff(params.agencyId) });
+}));
+
+router.post('/:agencyId/staff', requireAuth, asyncHandler(async (req: AuthedRequest, res) => {
+  const params = parseParams(agencyIdParam, req);
+  if (!params) return fail(res, 'invalid_input', 400);
+  const parsed = staffSchema.safeParse(req.body);
+  if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
+  if (!agencyMembershipOrFail(req, res, params.agencyId, true)) return;
+
+  try {
+    const staff = upsertAgencyStaff({
+      agencyId: params.agencyId,
+      email: parsed.data.email,
+      role: parsed.data.role,
+      buildingIds: parsed.data.building_ids,
+    });
+    audit(req, {
+      action: 'agency.staff_upsert',
+      target_type: 'agency_membership',
+      target_id: staff.id,
+      metadata: {
+        agency_id: params.agencyId,
+        staff_user_id: staff.user_id,
+        role: staff.role,
+        building_ids: staff.assigned_building_ids,
+      },
+    });
+    return ok(res, { staff }, 201);
+  } catch (err) {
+    const status = (err as Error & { status?: number }).status || 500;
+    if (status < 500) return fail(res, (err as Error).message, status);
+    throw err;
+  }
+}));
+
+router.post('/:agencyId/staff/:membershipId', requireAuth, asyncHandler(async (req: AuthedRequest, res) => {
+  const params = parseParams(staffMemberParam, req);
+  if (!params) return fail(res, 'invalid_input', 400);
+  const parsed = staffUpdateSchema.safeParse(req.body);
+  if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
+  if (!agencyMembershipOrFail(req, res, params.agencyId, true)) return;
+
+  try {
+    const staff = updateAgencyStaff({
+      agencyId: params.agencyId,
+      membershipId: params.membershipId,
+      role: parsed.data.role,
+      buildingIds: parsed.data.building_ids,
+    });
+    audit(req, {
+      action: 'agency.staff_update',
+      target_type: 'agency_membership',
+      target_id: staff.id,
+      metadata: {
+        agency_id: params.agencyId,
+        staff_user_id: staff.user_id,
+        role: staff.role,
+        building_ids: staff.assigned_building_ids,
+      },
+    });
+    return ok(res, { staff });
+  } catch (err) {
+    const status = (err as Error & { status?: number }).status || 500;
+    if (status < 500) return fail(res, (err as Error).message, status);
+    throw err;
+  }
+}));
+
+router.delete('/:agencyId/staff/:membershipId', requireAuth, asyncHandler(async (req: AuthedRequest, res) => {
+  const params = parseParams(staffMemberParam, req);
+  if (!params) return fail(res, 'invalid_input', 400);
+  if (!agencyMembershipOrFail(req, res, params.agencyId, true)) return;
+
+  try {
+    const staff = removeAgencyStaff({
+      agencyId: params.agencyId,
+      membershipId: params.membershipId,
+      actorUserId: req.user!.id,
+    });
+    audit(req, {
+      action: 'agency.staff_remove',
+      target_type: 'agency_membership',
+      target_id: staff.id,
+      metadata: {
+        agency_id: params.agencyId,
+        staff_user_id: staff.user_id,
+        role: staff.role,
+      },
+    });
+    return ok(res, { staff });
+  } catch (err) {
+    const status = (err as Error & { status?: number }).status || 500;
+    if (status < 500) return fail(res, (err as Error).message, status);
+    throw err;
+  }
 }));
 
 router.get('/:agencyId/setup-codes', requireAuth, asyncHandler(async (req: AuthedRequest, res) => {

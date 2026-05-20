@@ -71,6 +71,22 @@ Agency portfolio exports are available to agency members from
 `/api/agencies/:agencyId/export/portfolio.csv` and from the Export CSV button on
 `/board/portfolio`.
 
+Agency admins can manage existing staff accounts from `/board/portfolio`:
+enter the staff email, pick an agency role, and assign the buildings they are
+allowed to see. Non-admin agency staff only see assigned buildings in
+`/api/agencies/portfolio` and portfolio CSV exports. Agency admins always see
+the whole linked portfolio. The API endpoints are:
+
+- `GET /api/agencies/:agencyId/staff`
+- `POST /api/agencies/:agencyId/staff`
+- `POST /api/agencies/:agencyId/staff/:membershipId`
+- `DELETE /api/agencies/:agencyId/staff/:membershipId`
+
+Staff accounts must already exist. For now, create or invite the user through
+the normal account flow first, then attach them to the agency. The safeguards
+prevent removing the current actor and prevent deleting/demoting the last
+agency admin.
+
 Turnstile setup can be automated once you have a Cloudflare account ID and an
 API token with Turnstile widget write permission:
 

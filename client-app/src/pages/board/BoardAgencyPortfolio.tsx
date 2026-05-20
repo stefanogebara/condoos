@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Ban, Building2, Calendar, CheckCircle2, Copy, Download, FileArchive, KeyRound, LockKeyhole, PlusCircle, RefreshCw, ShieldCheck, Users, Wallet, Wrench } from 'lucide-react';
+import { AlertTriangle, Ban, Building2, Calendar, CheckCircle2, Copy, Download, FileArchive, KeyRound, LockKeyhole, PlusCircle, RefreshCw, ShieldCheck, Trash2, UserPlus, Users, Wallet, Wrench } from 'lucide-react';
 import GlassCard from '../../components/GlassCard';
 import Badge from '../../components/Badge';
 import Button from '../../components/Button';
-import { api, apiGet, apiPost } from '../../lib/api';
+import { api, apiDelete, apiGet, apiPost } from '../../lib/api';
 import { t } from '../../lib/i18n';
 
 interface AgencyBuildingMetrics {
@@ -51,6 +51,19 @@ interface AgencySetupCode {
   last_used_at: string | null;
   status: 'active' | 'disabled' | 'expired' | 'exhausted';
   code?: string;
+}
+
+type AgencyRole = 'agency_admin' | 'building_admin' | 'finance_manager' | 'maintenance_manager' | 'concierge_supervisor';
+
+interface AgencyStaffMember {
+  id: number;
+  user_id: number;
+  email: string;
+  first_name: string;
+  last_name: string;
+  role: AgencyRole;
+  created_at: string;
+  assigned_building_ids: number[];
 }
 
 interface IntegrationStatus {
@@ -110,6 +123,25 @@ function codeStatusLabel(status: AgencySetupCode['status']) {
   return t(labels[status]);
 }
 
+const agencyRoles: AgencyRole[] = [
+  'agency_admin',
+  'building_admin',
+  'finance_manager',
+  'maintenance_manager',
+  'concierge_supervisor',
+];
+
+function agencyRoleLabel(role: AgencyRole | string) {
+  const labels: Record<string, string> = {
+    agency_admin: 'Admin de administradora',
+    building_admin: 'Admin de edifício',
+    finance_manager: 'Finanças',
+    maintenance_manager: 'Manutenção',
+    concierge_supervisor: 'Supervisor de portaria',
+  };
+  return t(labels[role] || role);
+}
+
 export default function BoardAgencyPortfolio() {
   const [portfolio, setPortfolio] = useState<PortfolioResponse | null>(null);
   const [status, setStatus] = useState<IntegrationStatus | null>(null);
@@ -121,6 +153,15 @@ export default function BoardAgencyPortfolio() {
   const [copiedCode, setCopiedCode] = useState(false);
   const [setupCodeError, setSetupCodeError] = useState<string | null>(null);
   const [form, setForm] = useState({ label: '', max_uses: '1', expires_at: '' });
+  const [staff, setStaff] = useState<AgencyStaffMember[]>([]);
+  const [staffLoading, setStaffLoading] = useState(false);
+  const [staffSaving, setStaffSaving] = useState(false);
+  const [staffError, setStaffError] = useState<string | null>(null);
+  const [staffForm, setStaffForm] = useState<{ email: string; role: AgencyRole; building_ids: number[] }>({
+    email: '',
+    role: 'building_admin',
+    building_ids: [],
+  });
   const [loading, setLoading] = useState(true);
 
   async function load() {
@@ -181,6 +222,32 @@ export default function BoardAgencyPortfolio() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [primaryAgency?.id, primaryAgency?.role]);
 
+  async function loadStaff(agencyId = primaryAgency?.id) {
+    if (!agencyId || primaryAgency?.role !== 'agency_admin') {
+      setStaff([]);
+      return;
+    }
+    setStaffLoading(true);
+    setStaffError(null);
+    try {
+      const res = await apiGet<{ staff: AgencyStaffMember[] }>(`/agencies/${agencyId}/staff`);
+      setStaff(res.staff);
+    } catch {
+      setStaffError(t('Não foi possível carregar a equipe.'));
+    } finally {
+      setStaffLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadStaff().catch(() => {});
+    setStaffForm((prev) => ({
+      ...prev,
+      building_ids: primaryAgency?.buildings.length === 1 ? [primaryAgency.buildings[0].id] : [],
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [primaryAgency?.id, primaryAgency?.role]);
+
   async function createCode(e: React.FormEvent) {
     e.preventDefault();
     if (!primaryAgency) return;
@@ -232,6 +299,56 @@ export default function BoardAgencyPortfolio() {
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
+  }
+
+  function toggleStaffBuilding(buildingId: number) {
+    setStaffForm((prev) => {
+      const next = prev.building_ids.includes(buildingId)
+        ? prev.building_ids.filter((id) => id !== buildingId)
+        : [...prev.building_ids, buildingId];
+      return { ...prev, building_ids: next };
+    });
+  }
+
+  async function saveStaff(e: React.FormEvent) {
+    e.preventDefault();
+    if (!primaryAgency) return;
+    setStaffSaving(true);
+    setStaffError(null);
+    try {
+      await apiPost(`/agencies/${primaryAgency.id}/staff`, {
+        email: staffForm.email,
+        role: staffForm.role,
+        building_ids: staffForm.role === 'agency_admin' ? [] : staffForm.building_ids,
+      });
+      setStaffForm({
+        email: '',
+        role: 'building_admin',
+        building_ids: primaryAgency.buildings.length === 1 ? [primaryAgency.buildings[0].id] : [],
+      });
+      await loadStaff(primaryAgency.id);
+      await load();
+    } catch {
+      setStaffError(t('Não foi possível salvar a equipe. Verifique se a conta já existe e se há prédios selecionados.'));
+    } finally {
+      setStaffSaving(false);
+    }
+  }
+
+  async function removeStaffMember(staffId: number) {
+    if (!primaryAgency) return;
+    setStaffError(null);
+    try {
+      await apiDelete(`/agencies/${primaryAgency.id}/staff/${staffId}`);
+      await loadStaff(primaryAgency.id);
+    } catch {
+      setStaffError(t('Não foi possível remover este membro da equipe.'));
+    }
+  }
+
+  function buildingNames(ids: number[]) {
+    const byId = new Map((primaryAgency?.buildings || []).map((building) => [building.id, building.name]));
+    return ids.map((id) => byId.get(id)).filter(Boolean).join(', ');
   }
 
   return (
@@ -434,6 +551,107 @@ export default function BoardAgencyPortfolio() {
                           {setupCode.status === 'active' && (
                             <Button type="button" variant="ghost" size="sm" className="mt-3" onClick={() => disableCode(setupCode.id)} leftIcon={<Ban className="w-4 h-4" />}>
                               {t('Desativar')}
+                            </Button>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </GlassCard>
+              )}
+
+              {primaryAgency.role === 'agency_admin' && (
+                <GlassCard className="p-5 h-fit">
+                  <div className="flex items-center gap-2 mb-2">
+                    <UserPlus className="w-5 h-5 text-sage-700" />
+                    <h2 className="font-display text-xl text-dusk-500">{t('Equipe da administradora')}</h2>
+                  </div>
+                  <p className="text-sm text-dusk-300 mb-4">
+                    {t('Adicione contas existentes à administradora e limite cada pessoa aos prédios certos. Use o mesmo email para atualizar função ou prédios.')}
+                  </p>
+
+                  {staffError && (
+                    <div className="rounded-2xl bg-peach-100/70 border border-peach-200 text-sm text-peach-600 px-3 py-2 mb-4">
+                      {staffError}
+                    </div>
+                  )}
+
+                  <form onSubmit={saveStaff} className="space-y-3">
+                    <label className="block">
+                      <span className="text-xs uppercase tracking-[0.12em] text-dusk-300">{t('Email da equipe')}</span>
+                      <input
+                        type="email"
+                        value={staffForm.email}
+                        onChange={(event) => setStaffForm((prev) => ({ ...prev, email: event.target.value }))}
+                        placeholder="maria@empresa.com"
+                        className="mt-1 w-full rounded-2xl bg-white/60 border border-white/70 px-3 py-2 text-sm text-dusk-500 outline-none"
+                        required
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-xs uppercase tracking-[0.12em] text-dusk-300">{t('Função')}</span>
+                      <select
+                        value={staffForm.role}
+                        onChange={(event) => setStaffForm((prev) => ({ ...prev, role: event.target.value as AgencyRole }))}
+                        className="mt-1 w-full rounded-2xl bg-white/60 border border-white/70 px-3 py-2 text-sm text-dusk-500 outline-none"
+                      >
+                        {agencyRoles.map((role) => (
+                          <option key={role} value={role}>{agencyRoleLabel(role)}</option>
+                        ))}
+                      </select>
+                    </label>
+                    {staffForm.role !== 'agency_admin' && (
+                      <div>
+                        <div className="text-xs uppercase tracking-[0.12em] text-dusk-300 mb-2">{t('Prédios permitidos')}</div>
+                        <div className="space-y-2 max-h-44 overflow-auto pr-1">
+                          {primaryAgency.buildings.map((building) => (
+                            <label key={building.id} className="flex items-center gap-2 rounded-2xl bg-white/55 border border-white/70 px-3 py-2 text-sm text-dusk-400">
+                              <input
+                                type="checkbox"
+                                checked={staffForm.building_ids.includes(building.id)}
+                                onChange={() => toggleStaffBuilding(building.id)}
+                              />
+                              <span className="truncate" data-user-content>{building.name}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    <Button type="submit" variant="sage" className="w-full" loading={staffSaving} leftIcon={<UserPlus className="w-4 h-4" />}>
+                      {t('Salvar equipe')}
+                    </Button>
+                  </form>
+
+                  <div className="mt-5 space-y-2">
+                    <div className="text-xs uppercase tracking-[0.12em] text-dusk-300">{t('Membros')}</div>
+                    {staffLoading ? (
+                      <div className="text-sm text-dusk-300">{t('Carregando...')}</div>
+                    ) : staff.length === 0 ? (
+                      <div className="rounded-2xl border border-white/70 bg-white/50 px-3 py-3 text-sm text-dusk-300">
+                        {t('Nenhum membro de equipe vinculado ainda.')}
+                      </div>
+                    ) : (
+                      staff.map((member) => (
+                        <div key={member.id} className="rounded-2xl border border-white/70 bg-white/55 px-3 py-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="font-medium text-dusk-500 truncate" data-user-content>
+                                {member.first_name} {member.last_name}
+                              </div>
+                              <div className="text-xs text-dusk-300 truncate" data-user-content>{member.email}</div>
+                              <div className="text-xs text-dusk-300 mt-1">
+                                {member.role === 'agency_admin'
+                                  ? t('Todos os prédios')
+                                  : buildingNames(member.assigned_building_ids) || t('Sem prédios')}
+                              </div>
+                            </div>
+                            <Badge tone={member.role === 'agency_admin' ? 'sage' : 'neutral'}>
+                              {agencyRoleLabel(member.role)}
+                            </Badge>
+                          </div>
+                          {member.role !== 'agency_admin' && (
+                            <Button type="button" variant="ghost" size="sm" className="mt-3" onClick={() => removeStaffMember(member.id)} leftIcon={<Trash2 className="w-4 h-4" />}>
+                              {t('Remover')}
                             </Button>
                           )}
                         </div>

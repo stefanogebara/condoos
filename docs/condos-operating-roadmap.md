@@ -66,6 +66,6 @@ Enterprise-private readiness:
 
 - Keep production quality gates green, especially production-safe i18n sweeps.
 - Gate new building creation behind private setup codes when `PRIVATE_CREATE_BUILDING_REQUIRED=1`.
-- Add agency records, portfolio metrics, private setup-code controls, and portfolio CSV export above existing building workflows.
+- Add agency records, portfolio metrics, private setup-code controls, scoped staff building assignments, and portfolio CSV export above existing building workflows.
 - Surface production integration readiness from `/board/portfolio`.
 - Keep public login available, but remove the assumption that anyone can freely create a real production building.
