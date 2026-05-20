@@ -2,6 +2,15 @@
 
 This document separates what is real today from what still needs production wiring. Use it when preparing a buyer demo or deciding the next implementation slice.
 
+## Currently Green On Prod (2026-05-20)
+
+- `npm run audit:prod:hardening` — 5/5 checks pass, 0 warnings (health, email verification, private setup code, Turnstile config, Turnstile CSP).
+- `npm run audit:prod:uploads` (with `PROD_UPLOAD_EMAIL`/`PASSWORD`) — R2 PUT presign roundtrip verified.
+- Nightly Production E2E workflow at 06:00 UTC runs `safe-desktop` against the deployed stack with private pilot creds (6 GitHub secrets wired).
+- Three private pilot accounts seeded in prod: `e2e-admin@condoos.test`, `e2e-resident@condoos.test`, `e2e-concierge@condoos.test` (live in "E2E Test Condo" with default amenities + 2 buildings + units).
+- Strong agent audit shipped end-to-end: prompt-injection delimiter, vendor binding by DB id (SEC-2), urgent-safety evidence gate (SEC-5), SSRF guard, separate `VENDOR_TOKEN_SECRET`, durable dispatch queue (ARC-R2), orphaned-run reaper, per-condo kill switch with audit-logged toggle, BoardAgent ops panel with auto-refreshing queue health (`/api/admin/agent/queue/status`).
+- Login auto-routing — returning admin/resident with an existing condo skips onboarding wizards regardless of which hero CTA they clicked.
+
 ## Real Today
 
 - Admin onboarding with building layout, residents, service contacts, amenities, and invite/share link.
@@ -19,7 +28,7 @@ This document separates what is real today from what still needs production wiri
 
 ## Demo-Only Or Partially Wired
 
-- Document vault supports both external HTTPS links and uploaded files. Production needs Cloudflare R2 env secrets before relying on durable storage.
+- Document vault supports both external HTTPS links and uploaded files. Cloudflare R2 env secrets are now wired on prod (`npm run audit:prod:uploads` passes — confirmed 94-byte roundtrip via PUT presign on 2026-05-20). Schema enforces "external link OR uploaded file" via the Phase 1 migration.
 - Payments are manual. Live payment providers are deferred.
 - WhatsApp/email/Google/AI depend on environment secrets and must degrade gracefully when missing.
 - Building-level board packet PDF export, Markdown copy/download, and print are implemented. Agency monthly reports also have a PDF download for private management-company reviews.
@@ -40,9 +49,7 @@ This document separates what is real today from what still needs production wiri
 
 ## Not Production-Ready Yet
 
-- Production R2 bucket/CORS/secrets must pass `npm run audit:prod:uploads` before a real building uses uploads.
-- Turnstile keys are not installed in the current demo deployment, so create-building captcha is not active yet. `npm run audit:prod:hardening` should fail until those keys are set.
-- Production create-building now fails closed when `PRIVATE_CREATE_BUILDING_REQUIRED` is unset. Only set `PRIVATE_CREATE_BUILDING_REQUIRED=0` on disposable demo/e2e deployments; public login/signup copy reflects private activation when the gate is enabled.
+- Production create-building fails closed when `PRIVATE_CREATE_BUILDING_REQUIRED` is unset. Only set `PRIVATE_CREATE_BUILDING_REQUIRED=0` on disposable demo/e2e deployments; public login/signup copy reflects private activation when the gate is enabled.
 - Ticket timeline events, SLA escalation rules, vendor quote comparison, quote selection/rejection decisions, recurring maintenance risk detection, vendor follow-up health, per-building maintenance summaries, executive report snapshots, agency/building PDF reports, and maintenance/finance scoreboards are real. Remaining maintenance hardening is richer report packaging such as trend charts and deeper visual scorecards.
 - Market settings exist, but the remaining localization hardening is legal/governance wording, date/time formatting sweeps, and production seed-content cleanup per market.
 - Incident mode.
