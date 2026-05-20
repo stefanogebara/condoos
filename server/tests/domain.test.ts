@@ -292,6 +292,7 @@ test('agency portfolio CSV exports scoped building metrics', () => {
 
   const membership = userAgencyMemberships(adminId)[0];
   const portfolio = buildAgencyPortfolio(membership);
+  assert.deepEqual(portfolio.capabilities, ['building_admin', 'finance', 'maintenance', 'concierge', 'documents', 'reports']);
   assert.equal(portfolio.totals.pending_residents, 1);
   assert.equal(portfolio.totals.unresolved_tickets, 1);
   assert.equal(portfolio.totals.urgent_tickets, 1);
@@ -371,6 +372,7 @@ test('agency staff assignments scope portfolio building access', () => {
   const portfolio = buildAgencyPortfolio(membership);
   assert.equal(portfolio.buildings.length, 1);
   assert.equal(portfolio.buildings[0].name, 'Second Condo');
+  assert.deepEqual(portfolio.capabilities, ['maintenance', 'documents', 'reports']);
   assert.equal(portfolio.permission_review, null);
   assert.doesNotMatch(agencyPortfolioToCsv(portfolio), /Test Condo/);
 
@@ -446,6 +448,7 @@ test('agency staff invites are pending until matching email accepts and then sco
   const portfolio = buildAgencyPortfolio(membership);
   assert.equal(portfolio.buildings.length, 1);
   assert.equal(portfolio.buildings[0].id, secondCondoId);
+  assert.deepEqual(portfolio.capabilities, ['maintenance', 'documents', 'reports']);
   assert.equal(listAgencyStaffInvites(agency!.agencyId)[0].status, 'accepted');
 });
 

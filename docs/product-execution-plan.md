@@ -254,6 +254,17 @@ This slice makes scoped agency roles enforceable on the server:
 - Applied the guardrail to board-admin routes across finance, work orders/tickets, concierge/packages, residents/invites, building layout/settings, documents, governance, amenities, AI/admin ops, audit, reports, and service contacts.
 - Added tests proving finance staff can use finance but not maintenance, maintenance staff can use maintenance but not finance, concierge supervisors cannot act as building admins, and scoped staff cannot act in unassigned buildings.
 
+## Completed Slice: Agency Frontend Permission Filtering
+
+This slice makes the board UI match the server-side agency lanes:
+
+- Exposed each agency role's building capabilities through `/api/agencies/portfolio`.
+- Added a shared client capability helper so the board shell can filter links and redirect scoped staff away from blocked routes.
+- Hid unrelated board pages for finance, maintenance, document/report, and concierge-scoped agency staff instead of letting them discover server 403s by clicking around.
+- Kept `/board/portfolio` available to scoped agency staff for assigned-building switching, audit preview, portfolio metrics, reports, and exports.
+- Made the portfolio page load even when enterprise integration status is admin-only, so scoped staff can still use their allowed portfolio view.
+- Tightened remaining read endpoints for memory, documents, finance transparency, and ticket views so manually typing a URL does not bypass agency capability checks.
+
 ## Completed Slice: Vendor Intelligence
 
 This slice makes the saved service network feel operational instead of static:
@@ -344,7 +355,7 @@ This slice makes portfolio access safer before private pilots:
 
 The next implementation slice should keep building on the private-enterprise plan:
 
-- Add frontend route/sidebar filtering for scoped agency staff so the UI matches the new server permissions.
 - Harden maintenance into a fuller work-order timeline with quote comparison and SLA alerts.
 - Expand portfolio reporting into a true agency command center.
+- Add role-aware operational export limits so scoped staff download only the export families that match their lane.
 - Keep production-safe i18n, build, server tests, and pilot smoke checks green before each push.

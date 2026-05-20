@@ -26,7 +26,7 @@ export type AgencyBuildingCapability =
   | 'documents'
   | 'reports';
 
-const AGENCY_ROLE_CAPABILITIES: Record<AgencyRole, AgencyBuildingCapability[]> = {
+export const AGENCY_ROLE_CAPABILITIES: Record<AgencyRole, AgencyBuildingCapability[]> = {
   agency_admin: ['building_admin', 'finance', 'maintenance', 'concierge', 'documents', 'reports'],
   building_admin: ['building_admin', 'finance', 'maintenance', 'concierge', 'documents', 'reports'],
   finance_manager: ['finance', 'documents', 'reports'],
@@ -40,6 +40,10 @@ export function isAgencyRole(value: unknown): value is AgencyRole {
 
 export function agencyRoleCanUseCapability(role: AgencyRole, capability: AgencyBuildingCapability): boolean {
   return AGENCY_ROLE_CAPABILITIES[role]?.includes(capability) || false;
+}
+
+export function agencyCapabilitiesForRole(role: AgencyRole): AgencyBuildingCapability[] {
+  return [...(AGENCY_ROLE_CAPABILITIES[role] || [])];
 }
 
 export interface AgencyLinkResult {
@@ -165,6 +169,7 @@ export interface AgencyPortfolio {
   name: string;
   slug: string;
   role: AgencyRole;
+  capabilities: AgencyBuildingCapability[];
   totals: AgencyBuildingMetrics;
   permission_review: AgencyPermissionReview | null;
   attention: AgencyPortfolioAttentionItem[];
@@ -625,6 +630,7 @@ export function buildAgencyPortfolio(membership: AgencyMembership): AgencyPortfo
     name: membership.agency_name,
     slug: membership.slug,
     role: membership.role,
+    capabilities: agencyCapabilitiesForRole(membership.role),
     totals,
     permission_review: membership.role === 'agency_admin'
       ? buildAgencyPermissionReview(membership.agency_id, buildings)

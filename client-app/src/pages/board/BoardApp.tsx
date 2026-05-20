@@ -1,9 +1,17 @@
-import React, { lazy, Suspense, useEffect, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AlertTriangle, Bot, Home, Inbox, Vote, Calendar, Megaphone, Users, UserCheck, Gavel, Building2, Wallet, Waves, Wrench, ShieldCheck, FileText, BookOpenText, ClipboardList, Briefcase } from 'lucide-react';
 import Sidebar, { NavItem } from '../../components/Sidebar';
 import WhatsAppHealthPill from '../../components/WhatsAppHealthPill';
 import { apiGet } from '../../lib/api';
+import {
+  type AgencyAccessPortfolio,
+  type AgencyBuildingCapability,
+  boardAccessContext,
+  canUseBoardCapability,
+  firstAllowedBoardPath,
+} from '../../lib/agencyAccess';
+import { useAuth } from '../../lib/auth';
 import { t } from '../../lib/i18n';
 
 const BoardOverview = lazy(() => import('./BoardOverview'));
@@ -37,16 +45,91 @@ interface TicketSummary {
   awaiting_verification: number;
 }
 
+interface PortfolioResponse {
+  agencies: AgencyAccessPortfolio[];
+}
+
+type BoardNavItem = NavItem & {
+  capability?: AgencyBuildingCapability;
+};
+
+function LoadingBoard() {
+  return <div className="py-16 text-center text-sm text-dusk-300">{t('Carregando...')}</div>;
+}
+
+function BoardIndex({ access }: { access: ReturnType<typeof boardAccessContext> }) {
+  if (access.loading) return <LoadingBoard />;
+  if (access.scoped && !canUseBoardCapability(access, 'building_admin')) {
+    return <Navigate to={firstAllowedBoardPath(access)} replace />;
+  }
+  return <BoardOverview />;
+}
+
+function ProtectedBoardRoute({
+  access,
+  capability,
+  children,
+}: {
+  access: ReturnType<typeof boardAccessContext>;
+  capability?: AgencyBuildingCapability;
+  children: React.ReactNode;
+}) {
+  if (access.loading) return <LoadingBoard />;
+  if (!canUseBoardCapability(access, capability)) {
+    return <Navigate to={firstAllowedBoardPath(access)} replace />;
+  }
+  return <>{children}</>;
+}
+
 export default function BoardApp() {
+  const { user } = useAuth();
   const [pendingCount, setPendingCount] = useState<number>(0);
   // Inbox badge — anything that wants an admin click: blocked-needs-admin
   // + verified-but-not-dispatched + awaiting-community-verification. Polled
   // every 30s alongside the pending memberships count to stay cheap.
   const [ticketSummary, setTicketSummary] = useState<TicketSummary | null>(null);
+  const [agencyPortfolios, setAgencyPortfolios] = useState<AgencyAccessPortfolio[] | null>(null);
+  const [portfolioLoading, setPortfolioLoading] = useState(true);
 
   useEffect(() => {
-    const loadPending = () => apiGet<any[]>('/memberships/pending').then((r) => setPendingCount(r.length)).catch(() => {});
-    const loadTickets = () => apiGet<TicketSummary>('/tickets/summary').then(setTicketSummary).catch(() => {});
+    let alive = true;
+    apiGet<PortfolioResponse>('/agencies/portfolio')
+      .then((res) => {
+        if (alive) setAgencyPortfolios(res.agencies || []);
+      })
+      .catch(() => {
+        if (alive) setAgencyPortfolios([]);
+      })
+      .finally(() => {
+        if (alive) setPortfolioLoading(false);
+      });
+    return () => { alive = false; };
+  }, []);
+
+  const access = useMemo(
+    () => boardAccessContext(agencyPortfolios, user?.condominium_id, portfolioLoading),
+    [agencyPortfolios, user?.condominium_id, portfolioLoading],
+  );
+
+  const canUseBuildingAdmin = canUseBoardCapability(access, 'building_admin');
+  const canUseMaintenance = canUseBoardCapability(access, 'maintenance');
+
+  useEffect(() => {
+    if (access.loading) return;
+    const loadPending = () => {
+      if (!canUseBuildingAdmin) {
+        setPendingCount(0);
+        return Promise.resolve();
+      }
+      return apiGet<any[]>('/memberships/pending').then((r) => setPendingCount(r.length)).catch(() => {});
+    };
+    const loadTickets = () => {
+      if (!canUseMaintenance) {
+        setTicketSummary(null);
+        return Promise.resolve();
+      }
+      return apiGet<TicketSummary>('/tickets/summary').then(setTicketSummary).catch(() => {});
+    };
     loadPending();
     loadTickets();
     const id = setInterval(() => {
@@ -54,7 +137,7 @@ export default function BoardApp() {
       loadTickets();
     }, 30000);
     return () => clearInterval(id);
-  }, []);
+  }, [access.loading, canUseBuildingAdmin, canUseMaintenance]);
 
   // Sidebar shows a badge with the total "needs your eyes" count. Includes
   // blocked tickets first (those literally can't progress without the admin),
@@ -65,56 +148,63 @@ export default function BoardApp() {
     ? ticketSummary.needs_admin + ticketSummary.verified_ready
     : 0;
 
-  const nav: NavItem[] = [
-    { to: '/board',               label: 'Visão geral',   icon: Home },
-    { to: '/board/portfolio',     label: 'Portfólio',     icon: Briefcase },
-    { to: '/board/suggestions',   label: 'Sugestões',     icon: Inbox },
-    { to: '/board/agent',         label: 'Agente IA',     icon: Bot },
-    { to: '/board/memory',        label: 'Memória',       icon: BookOpenText },
-    { to: '/board/reports',       label: 'Relatórios',    icon: ClipboardList },
-    { to: '/board/pending',       label: 'Pendentes',     icon: UserCheck, badge: pendingCount || undefined },
-    { to: '/board/proposals',     label: 'Propostas',     icon: Vote },
-    { to: '/board/assemblies',    label: 'Assembleias',   icon: Gavel },
-    { to: '/board/meetings',      label: 'Reuniões',      icon: Calendar },
-    { to: '/board/announcements', label: 'Comunicados',   icon: Megaphone },
-    { to: '/board/residents',     label: 'Moradores',     icon: Users },
-    { to: '/board/concierge',     label: 'Portaria',      icon: ShieldCheck },
-    { to: '/board/amenities',     label: 'Áreas comuns',  icon: Waves },
-    { to: '/board/documents',     label: 'Documentos',    icon: FileText },
-    { to: '/board/edificio',      label: 'Edifício',      icon: Building2 },
-    { to: '/board/services',      label: 'Operação',      icon: Wrench },
-    { to: '/board/tickets',       label: 'Chamados',      icon: AlertTriangle, badge: ticketBadge || undefined },
-    { to: '/board/financas',      label: 'Finanças',      icon: Wallet },
-  ];
+  const nav: NavItem[] = useMemo(() => {
+    const items: BoardNavItem[] = [
+      { to: '/board',               label: 'Visão geral',   icon: Home, capability: 'building_admin' },
+      { to: '/board/portfolio',     label: 'Portfólio',     icon: Briefcase },
+      { to: '/board/suggestions',   label: 'Sugestões',     icon: Inbox, capability: 'building_admin' },
+      { to: '/board/agent',         label: 'Agente IA',     icon: Bot, capability: 'building_admin' },
+      { to: '/board/memory',        label: 'Memória',       icon: BookOpenText, capability: 'building_admin' },
+      { to: '/board/reports',       label: 'Relatórios',    icon: ClipboardList, capability: 'reports' },
+      { to: '/board/pending',       label: 'Pendentes',     icon: UserCheck, badge: pendingCount || undefined, capability: 'building_admin' },
+      { to: '/board/proposals',     label: 'Propostas',     icon: Vote, capability: 'building_admin' },
+      { to: '/board/assemblies',    label: 'Assembleias',   icon: Gavel, capability: 'building_admin' },
+      { to: '/board/meetings',      label: 'Reuniões',      icon: Calendar, capability: 'building_admin' },
+      { to: '/board/announcements', label: 'Comunicados',   icon: Megaphone, capability: 'building_admin' },
+      { to: '/board/residents',     label: 'Moradores',     icon: Users, capability: 'building_admin' },
+      { to: '/board/concierge',     label: 'Portaria',      icon: ShieldCheck, capability: 'building_admin' },
+      { to: '/board/amenities',     label: 'Áreas comuns',  icon: Waves, capability: 'building_admin' },
+      { to: '/board/documents',     label: 'Documentos',    icon: FileText, capability: 'documents' },
+      { to: '/board/edificio',      label: 'Edifício',      icon: Building2, capability: 'building_admin' },
+      { to: '/board/services',      label: 'Operação',      icon: Wrench, capability: 'maintenance' },
+      { to: '/board/tickets',       label: 'Chamados',      icon: AlertTriangle, badge: ticketBadge || undefined, capability: 'maintenance' },
+      { to: '/board/financas',      label: 'Finanças',      icon: Wallet, capability: 'finance' },
+    ];
+    return items.filter((item) => canUseBoardCapability(access, item.capability));
+  }, [access, pendingCount, ticketBadge]);
 
   return (
     <div className="min-h-screen lg:flex">
-      <Sidebar items={nav} title="Síndico" headerSlot={<WhatsAppHealthPill />} />
+      <Sidebar
+        items={nav}
+        title="Síndico"
+        headerSlot={canUseMaintenance ? <WhatsAppHealthPill /> : undefined}
+      />
       <main className="w-full min-w-0 flex-1 px-4 sm:px-6 lg:px-10 py-8 max-w-6xl animate-fade-up">
         <Suspense fallback={<div className="py-16 text-center text-sm text-dusk-300">{t('Carregando...')}</div>}>
           <Routes>
-            <Route index                   element={<BoardOverview />} />
+            <Route index                   element={<BoardIndex access={access} />} />
             <Route path="portfolio"        element={<BoardAgencyPortfolio />} />
-            <Route path="suggestions"      element={<Suggestions />} />
-            <Route path="agent"            element={<BoardAgent />} />
-            <Route path="memory"           element={<BoardMemory />} />
-            <Route path="reports"          element={<BoardReports />} />
-            <Route path="pending"          element={<Pending />} />
-            <Route path="proposals"        element={<BoardProposals />} />
-            <Route path="proposals/:id"    element={<BoardProposalDetail />} />
-            <Route path="meetings"         element={<BoardMeetings />} />
-            <Route path="meetings/:id"     element={<BoardMeetingDetail />} />
-            <Route path="assemblies"       element={<BoardAssemblies />} />
-            <Route path="assemblies/:id"   element={<BoardAssemblyDetail />} />
-            <Route path="announcements"    element={<BoardAnnouncements />} />
-            <Route path="residents"        element={<Residents />} />
-            <Route path="concierge"        element={<BoardConciergeStaff />} />
-            <Route path="amenities"        element={<BoardAmenities />} />
-            <Route path="documents"        element={<BoardDocuments />} />
-            <Route path="edificio"         element={<BoardEdificio />} />
-            <Route path="services"         element={<BoardServices />} />
-            <Route path="tickets"          element={<BoardTickets />} />
-            <Route path="financas"         element={<BoardFinancas />} />
+            <Route path="suggestions"      element={<ProtectedBoardRoute access={access} capability="building_admin"><Suggestions /></ProtectedBoardRoute>} />
+            <Route path="agent"            element={<ProtectedBoardRoute access={access} capability="building_admin"><BoardAgent /></ProtectedBoardRoute>} />
+            <Route path="memory"           element={<ProtectedBoardRoute access={access} capability="building_admin"><BoardMemory /></ProtectedBoardRoute>} />
+            <Route path="reports"          element={<ProtectedBoardRoute access={access} capability="reports"><BoardReports /></ProtectedBoardRoute>} />
+            <Route path="pending"          element={<ProtectedBoardRoute access={access} capability="building_admin"><Pending /></ProtectedBoardRoute>} />
+            <Route path="proposals"        element={<ProtectedBoardRoute access={access} capability="building_admin"><BoardProposals /></ProtectedBoardRoute>} />
+            <Route path="proposals/:id"    element={<ProtectedBoardRoute access={access} capability="building_admin"><BoardProposalDetail /></ProtectedBoardRoute>} />
+            <Route path="meetings"         element={<ProtectedBoardRoute access={access} capability="building_admin"><BoardMeetings /></ProtectedBoardRoute>} />
+            <Route path="meetings/:id"     element={<ProtectedBoardRoute access={access} capability="building_admin"><BoardMeetingDetail /></ProtectedBoardRoute>} />
+            <Route path="assemblies"       element={<ProtectedBoardRoute access={access} capability="building_admin"><BoardAssemblies /></ProtectedBoardRoute>} />
+            <Route path="assemblies/:id"   element={<ProtectedBoardRoute access={access} capability="building_admin"><BoardAssemblyDetail /></ProtectedBoardRoute>} />
+            <Route path="announcements"    element={<ProtectedBoardRoute access={access} capability="building_admin"><BoardAnnouncements /></ProtectedBoardRoute>} />
+            <Route path="residents"        element={<ProtectedBoardRoute access={access} capability="building_admin"><Residents /></ProtectedBoardRoute>} />
+            <Route path="concierge"        element={<ProtectedBoardRoute access={access} capability="building_admin"><BoardConciergeStaff /></ProtectedBoardRoute>} />
+            <Route path="amenities"        element={<ProtectedBoardRoute access={access} capability="building_admin"><BoardAmenities /></ProtectedBoardRoute>} />
+            <Route path="documents"        element={<ProtectedBoardRoute access={access} capability="documents"><BoardDocuments /></ProtectedBoardRoute>} />
+            <Route path="edificio"         element={<ProtectedBoardRoute access={access} capability="building_admin"><BoardEdificio /></ProtectedBoardRoute>} />
+            <Route path="services"         element={<ProtectedBoardRoute access={access} capability="maintenance"><BoardServices /></ProtectedBoardRoute>} />
+            <Route path="tickets"          element={<ProtectedBoardRoute access={access} capability="maintenance"><BoardTickets /></ProtectedBoardRoute>} />
+            <Route path="financas"         element={<ProtectedBoardRoute access={access} capability="finance"><BoardFinancas /></ProtectedBoardRoute>} />
             <Route path="*"                element={<Navigate to="/board" replace />} />
           </Routes>
         </Suspense>

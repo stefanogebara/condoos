@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { AuthedRequest, getActiveCondoId, requireAuth } from '../lib/auth';
+import { AuthedRequest, getActiveCondoId, requireAuth, requireBoardCapability } from '../lib/auth';
 import { ok, fail } from '../lib/respond';
 import { MEMORY_TYPES, MemoryType, searchBuildingMemory } from '../lib/memory';
 
@@ -15,7 +15,7 @@ function parseTypes(value: unknown): MemoryType[] {
     .filter((item): item is MemoryType => allowed.has(item));
 }
 
-router.get('/', requireAuth, (req: AuthedRequest, res) => {
+router.get('/', requireAuth, requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   if (!condoId) return fail(res, 'missing_condo', 400);
   if (req.user!.role === 'concierge') return fail(res, 'forbidden', 403);

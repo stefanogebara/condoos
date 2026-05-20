@@ -6,6 +6,7 @@ import Button from '../../components/Button';
 import { api, apiDelete, apiGet, apiPost } from '../../lib/api';
 import { t } from '../../lib/i18n';
 import { useAuth, type User } from '../../lib/auth';
+import type { AgencyBuildingCapability, AgencyRole } from '../../lib/agencyAccess';
 
 interface AgencyBuildingMetrics {
   pending_residents: number;
@@ -62,7 +63,8 @@ interface AgencyPortfolio {
   id: number;
   name: string;
   slug: string;
-  role: string;
+  role: AgencyRole | string;
+  capabilities?: AgencyBuildingCapability[];
   totals: AgencyBuildingMetrics;
   permission_review: AgencyPermissionReview | null;
   attention: AgencyAttentionItem[];
@@ -93,7 +95,6 @@ interface AgencySetupCode {
   code?: string;
 }
 
-type AgencyRole = 'agency_admin' | 'building_admin' | 'finance_manager' | 'maintenance_manager' | 'concierge_supervisor';
 type AgencyExportKind = 'residents' | 'finance' | 'tickets' | 'work-orders' | 'audit';
 
 interface AgencyStaffMember {
@@ -360,16 +361,15 @@ export default function BoardAgencyPortfolio() {
   async function load() {
     setLoading(true);
     try {
-      const [nextPortfolio, nextStatus] = await Promise.all([
-        apiGet<PortfolioResponse>('/agencies/portfolio'),
-        apiGet<IntegrationStatus>('/admin/integrations/status'),
-      ]);
+      const nextPortfolio = await apiGet<PortfolioResponse>('/agencies/portfolio');
       setPortfolio(nextPortfolio);
-      setStatus(nextStatus);
       setSelectedAgencyId((current) => {
         if (current && nextPortfolio.agencies.some((agency) => agency.id === current)) return current;
         return nextPortfolio.agencies[0]?.id || null;
       });
+      apiGet<IntegrationStatus>('/admin/integrations/status')
+        .then(setStatus)
+        .catch(() => setStatus(null));
     } finally {
       setLoading(false);
     }
@@ -394,6 +394,9 @@ export default function BoardAgencyPortfolio() {
     upcoming_meetings: 0,
   }, [primaryAgency]);
   const permissionReview = primaryAgency?.permission_review || null;
+  const canReviewEnterprise = !!primaryAgency?.capabilities?.includes('building_admin')
+    || primaryAgency?.role === 'agency_admin'
+    || primaryAgency?.role === 'building_admin';
   const pilotReadiness = useMemo(
     () => buildPilotReadiness(primaryAgency, status, permissionReview),
     [primaryAgency, status, permissionReview],
@@ -789,59 +792,63 @@ export default function BoardAgencyPortfolio() {
             </div>
 
             <div className="space-y-5">
-              <GlassCard className="p-5 h-fit">
-                <div className="flex items-center gap-2 mb-4">
-                  <ShieldCheck className="w-5 h-5 text-sage-700" />
-                  <h2 className="font-display text-xl text-dusk-500">{t('Estado enterprise')}</h2>
-                </div>
-                {status ? (
-                  <div className="space-y-2">
-                    <StatusPill label={t('Acesso privado')} ok={status.private_access.configured} />
-                    <StatusPill label={t('Email')} ok={status.email.configured} />
-                    <StatusPill label={t('Google login')} ok={status.google_login.configured} />
-                    <StatusPill label={t('WhatsApp')} ok={status.whatsapp.configured} />
-                    <StatusPill label={t('Uploads R2')} ok={status.uploads.configured} />
-                    <StatusPill label={t('IA')} ok={status.ai.configured} />
-                    <StatusPill label={t('Backups')} ok={status.backups.configured} />
-                    <StatusPill label={t('Sentry/PostHog')} ok={status.observability.sentry_configured && status.observability.posthog_configured} />
-                  </div>
-                ) : (
-                  <div className="text-sm text-dusk-300">{t('Carregando...')}</div>
-                )}
-              </GlassCard>
+              {canReviewEnterprise && (
+                <>
+                  <GlassCard className="p-5 h-fit">
+                    <div className="flex items-center gap-2 mb-4">
+                      <ShieldCheck className="w-5 h-5 text-sage-700" />
+                      <h2 className="font-display text-xl text-dusk-500">{t('Estado enterprise')}</h2>
+                    </div>
+                    {status ? (
+                      <div className="space-y-2">
+                        <StatusPill label={t('Acesso privado')} ok={status.private_access.configured} />
+                        <StatusPill label={t('Email')} ok={status.email.configured} />
+                        <StatusPill label={t('Google login')} ok={status.google_login.configured} />
+                        <StatusPill label={t('WhatsApp')} ok={status.whatsapp.configured} />
+                        <StatusPill label={t('Uploads R2')} ok={status.uploads.configured} />
+                        <StatusPill label={t('IA')} ok={status.ai.configured} />
+                        <StatusPill label={t('Backups')} ok={status.backups.configured} />
+                        <StatusPill label={t('Sentry/PostHog')} ok={status.observability.sentry_configured && status.observability.posthog_configured} />
+                      </div>
+                    ) : (
+                      <div className="text-sm text-dusk-300">{t('Carregando...')}</div>
+                    )}
+                  </GlassCard>
 
-              <GlassCard className="p-5 h-fit">
-                <div className="flex items-start justify-between gap-3 mb-3">
-                  <div className="flex items-center gap-2">
-                    <ClipboardCheck className="w-5 h-5 text-sage-700" />
-                    <h2 className="font-display text-xl text-dusk-500">{t('Checklist de piloto privado')}</h2>
-                  </div>
-                  <Badge tone={pilotReadinessReady === pilotReadiness.length ? 'sage' : 'warning'}>
-                    {pilotReadinessReady}/{pilotReadiness.length}
-                  </Badge>
-                </div>
-                <p className="text-sm text-dusk-300 mb-4">
-                  {t('Use esta lista antes de apresentar para uma administradora real.')}
-                </p>
-                <div className="space-y-2">
-                  {pilotReadiness.map((item) => (
-                    <div key={item.id} className="rounded-2xl border border-white/70 bg-white/60 px-3 py-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="font-medium text-dusk-500">{t(item.label)}</div>
-                          <div className="text-xs text-dusk-300 mt-1">
-                            {t(item.ready ? item.okDetail : item.reviewDetail)}
+                  <GlassCard className="p-5 h-fit">
+                    <div className="flex items-start justify-between gap-3 mb-3">
+                      <div className="flex items-center gap-2">
+                        <ClipboardCheck className="w-5 h-5 text-sage-700" />
+                        <h2 className="font-display text-xl text-dusk-500">{t('Checklist de piloto privado')}</h2>
+                      </div>
+                      <Badge tone={pilotReadinessReady === pilotReadiness.length ? 'sage' : 'warning'}>
+                        {pilotReadinessReady}/{pilotReadiness.length}
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-dusk-300 mb-4">
+                      {t('Use esta lista antes de apresentar para uma administradora real.')}
+                    </p>
+                    <div className="space-y-2">
+                      {pilotReadiness.map((item) => (
+                        <div key={item.id} className="rounded-2xl border border-white/70 bg-white/60 px-3 py-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="font-medium text-dusk-500">{t(item.label)}</div>
+                              <div className="text-xs text-dusk-300 mt-1">
+                                {t(item.ready ? item.okDetail : item.reviewDetail)}
+                              </div>
+                            </div>
+                            <Badge tone={item.ready ? 'sage' : 'warning'}>
+                              {item.ready ? <CheckCircle2 className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
+                              {item.ready ? t('Pronto') : t('Revisar')}
+                            </Badge>
                           </div>
                         </div>
-                        <Badge tone={item.ready ? 'sage' : 'warning'}>
-                          {item.ready ? <CheckCircle2 className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
-                          {item.ready ? t('Pronto') : t('Revisar')}
-                        </Badge>
-                      </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              </GlassCard>
+                  </GlassCard>
+                </>
+              )}
 
               {permissionReview && (
                 <GlassCard className="p-5 h-fit">

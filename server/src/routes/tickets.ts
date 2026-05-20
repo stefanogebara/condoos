@@ -545,7 +545,7 @@ function canSeeTicket(req: AuthedRequest, ticket: any): boolean {
 // 30s to drive the "Chamados" badge without re-fetching the full list.
 // Public to any board_admin in the condo; private/empty for residents (a
 // resident hitting this gets zeros).
-router.get('/summary', requireAuth, (req: AuthedRequest, res) => {
+router.get('/summary', requireAuth, requireBoardCapability('maintenance'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   if (req.user!.role !== 'board_admin') {
     return ok(res, { needs_admin: 0, blocked_no_vendor: 0, blocked_no_response: 0, verified_ready: 0, awaiting_verification: 0 });
@@ -575,7 +575,7 @@ router.get('/summary', requireAuth, (req: AuthedRequest, res) => {
 // invisible behind the tickets page. Returns the 5 most-recent events
 // across (verified, agent_dispatched, awaiting_vendor → vendor_engaged,
 // blocked, resolved) for the active condo. Residents get an empty list.
-router.get('/recent-auto-actions', requireAuth, (req: AuthedRequest, res) => {
+router.get('/recent-auto-actions', requireAuth, requireBoardCapability('maintenance'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   if (req.user!.role !== 'board_admin') return ok(res, []);
   // We synthesise the event type from whichever timestamp is most recent
@@ -599,7 +599,7 @@ router.get('/recent-auto-actions', requireAuth, (req: AuthedRequest, res) => {
   return ok(res, rows);
 });
 
-router.get('/', requireAuth, (req: AuthedRequest, res) => {
+router.get('/', requireAuth, requireBoardCapability('maintenance'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const status = typeof req.query.status === 'string' ? req.query.status : null;
   const clauses = ['t.condominium_id = ?'];
@@ -1476,7 +1476,7 @@ router.patch('/:id/work-order/:workOrderId', requireAuth, requireRole('board_adm
   return ok(res, getTicketWorkOrder(id));
 });
 
-router.get('/:id', requireAuth, (req: AuthedRequest, res) => {
+router.get('/:id', requireAuth, requireBoardCapability('maintenance'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const id = Number(req.params.id);
   const ticket = getScopedTicket(id, condoId);

@@ -50,7 +50,7 @@ function cleanText(value: string | null | undefined) {
   return trimmed || null;
 }
 
-router.get('/', requireAuth, (req: AuthedRequest, res) => {
+router.get('/', requireAuth, requireBoardCapability('documents'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const isAdmin = req.user?.role === 'board_admin';
   const isConcierge = req.user?.role === 'concierge';

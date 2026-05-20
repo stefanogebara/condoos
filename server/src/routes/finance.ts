@@ -317,7 +317,7 @@ router.post('/payments', requireAuth, requireRole('board_admin'), requireBoardCa
   }, result.duplicate ? 200 : 201);
 });
 
-router.get('/payment-proofs', requireAuth, requireActiveMembership, (req: AuthedRequest, res) => {
+router.get('/payment-proofs', requireAuth, requireActiveMembership, requireBoardCapability('finance'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const status = String(req.query.status || '').trim();
   const statusClause = ['pending', 'approved', 'rejected'].includes(status) ? `AND pp.status = ?` : '';
@@ -413,7 +413,7 @@ router.post('/payment-proofs/:id/reject', requireAuth, requireRole('board_admin'
   return ok(res, result);
 });
 
-router.get('/budget-summary', requireAuth, requireActiveMembership, (req: AuthedRequest, res) => {
+router.get('/budget-summary', requireAuth, requireActiveMembership, requireBoardCapability('finance'), (req: AuthedRequest, res) => {
   const month = String(req.query.month || '').trim() || new Date().toISOString().slice(0, 7);
   const parsed = budgetMonthSchema.safeParse(month);
   if (!parsed.success) return fail(res, 'invalid_month', 400);
@@ -445,7 +445,7 @@ router.post('/budget-targets/bulk', requireAuth, requireRole('board_admin'), req
 // GET is open to all members (residents see where the money goes).
 // POST/DELETE require board_admin.
 // ---------------------------------------------------------------------------
-router.get('/expenses', requireAuth, requireActiveMembership, (req: AuthedRequest, res) => {
+router.get('/expenses', requireAuth, requireActiveMembership, requireBoardCapability('finance'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   // Optional filters: ?since=2026-01-01 (limits history, default = 12 months).
   const sinceParam = String(req.query.since || '').trim();
