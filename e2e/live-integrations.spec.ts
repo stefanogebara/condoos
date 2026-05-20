@@ -1,4 +1,5 @@
 import { expect, test, type APIRequestContext } from '@playwright/test';
+import { credentialsFor } from './support/credentials';
 
 const apiURL = process.env.E2E_API_URL
   || (process.env.E2E_BASE_URL ? `${process.env.E2E_BASE_URL.replace(/\/$/, '')}/api` : 'http://127.0.0.1:4312/api');
@@ -42,7 +43,8 @@ test('production integrations are configured', async ({ request }) => {
     expect(authData.google_client_id, 'Google client id should be exposed to the login UI').toBeTruthy();
   }
 
-  const admin = await loginApi(request, 'admin@condoos.dev', 'admin123');
+  const adminCreds = credentialsFor('admin');
+  const admin = await loginApi(request, adminCreds.email, adminCreds.password);
   const whatsapp = await request.get(`${apiURL}/users/whatsapp/status`, {
     headers: { Authorization: `Bearer ${admin.token}` },
   });
@@ -58,7 +60,8 @@ test('live Resend invite delivery works when explicitly write-enabled', async ({
   test.skip(process.env.E2E_ALLOW_PROD_WRITES !== '1', 'Set E2E_ALLOW_PROD_WRITES=1 to send live email.');
   test.skip(!process.env.E2E_LIVE_EMAIL_TO, 'Set E2E_LIVE_EMAIL_TO to the verified recipient email.');
 
-  const admin = await loginApi(request, 'admin@condoos.dev', 'admin123');
+  const adminCreds = credentialsFor('admin');
+  const admin = await loginApi(request, adminCreds.email, adminCreds.password);
   const email = taggedEmail(process.env.E2E_LIVE_EMAIL_TO!);
   const csv = `email,unit,relationship,primary_contact,voting_weight\n${email},101,tenant,no,1`;
   const res = await request.post(`${apiURL}/memberships/import-csv`, {
@@ -75,8 +78,10 @@ test('live WhatsApp notification path accepts a send trigger when explicitly wri
   test.skip(process.env.E2E_ALLOW_PROD_WRITES !== '1', 'Set E2E_ALLOW_PROD_WRITES=1 to trigger live WhatsApp.');
   test.skip(!process.env.E2E_LIVE_WHATSAPP_TO, 'Set E2E_LIVE_WHATSAPP_TO to the recipient phone in E.164 format.');
 
-  const admin = await loginApi(request, 'admin@condoos.dev', 'admin123');
-  const resident = await loginApi(request, 'resident@condoos.dev', 'resident123');
+  const adminCreds = credentialsFor('admin');
+  const residentCreds = credentialsFor('resident');
+  const admin = await loginApi(request, adminCreds.email, adminCreds.password);
+  const resident = await loginApi(request, residentCreds.email, residentCreds.password);
 
   const patch = await request.patch(`${apiURL}/users/me`, {
     headers: { Authorization: `Bearer ${resident.token}` },

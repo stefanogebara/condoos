@@ -1,6 +1,7 @@
 // Party guest-list (#10): amenity reservations now accept expected_guests +
 // guest_list + notes so the porteiro can admit by name without phoning.
 import { expect, test, type APIRequestContext, type APIResponse } from '@playwright/test';
+import { credentialsFor } from './support/credentials';
 
 const apiURL = process.env.E2E_API_URL
   || (process.env.E2E_BASE_URL ? `${process.env.E2E_BASE_URL.replace(/\/$/, '')}/api` : 'http://127.0.0.1:4316/api');
@@ -20,8 +21,9 @@ type Slot = {
 };
 
 async function residentToken(request: APIRequestContext): Promise<string> {
+  const creds = credentialsFor('resident');
   const r = await request.post(`${apiURL}/auth/login`, {
-    data: { email: 'resident@condoos.dev', password: 'resident123' },
+    data: creds,
   });
   await expectOk(r, 'resident login');
   return (await r.json()).data.token;

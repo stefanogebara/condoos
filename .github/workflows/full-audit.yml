@@ -80,6 +80,12 @@ jobs:
     env:
       VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
       E2E_RATE_LIMIT_BYPASS_SECRET: ${{ secrets.E2E_RATE_LIMIT_BYPASS_SECRET }}
+      E2E_ADMIN_EMAIL: ${{ secrets.E2E_ADMIN_EMAIL }}
+      E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
+      E2E_RESIDENT_EMAIL: ${{ secrets.E2E_RESIDENT_EMAIL }}
+      E2E_RESIDENT_PASSWORD: ${{ secrets.E2E_RESIDENT_PASSWORD }}
+      E2E_CONCIERGE_EMAIL: ${{ secrets.E2E_CONCIERGE_EMAIL }}
+      E2E_CONCIERGE_PASSWORD: ${{ secrets.E2E_CONCIERGE_PASSWORD }}
     steps:
       - uses: actions/checkout@v6
 
@@ -106,6 +112,17 @@ jobs:
             exit 1
           fi
 
+      - name: Check private production E2E credentials
+        run: |
+          missing=0
+          for name in E2E_ADMIN_EMAIL E2E_ADMIN_PASSWORD E2E_RESIDENT_EMAIL E2E_RESIDENT_PASSWORD E2E_CONCIERGE_EMAIL E2E_CONCIERGE_PASSWORD; do
+            if [ -z "${!name}" ]; then
+              echo "$name is required so production-safe E2E does not depend on seeded demo credentials."
+              missing=1
+            fi
+          done
+          exit "$missing"
+
       - name: Lighthouse production budgets
         run: npm run audit:perf:prod
 
@@ -131,6 +148,12 @@ jobs:
     env:
       VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
       E2E_RATE_LIMIT_BYPASS_SECRET: ${{ secrets.E2E_RATE_LIMIT_BYPASS_SECRET }}
+      E2E_ADMIN_EMAIL: ${{ secrets.E2E_ADMIN_EMAIL }}
+      E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
+      E2E_RESIDENT_EMAIL: ${{ secrets.E2E_RESIDENT_EMAIL }}
+      E2E_RESIDENT_PASSWORD: ${{ secrets.E2E_RESIDENT_PASSWORD }}
+      E2E_CONCIERGE_EMAIL: ${{ secrets.E2E_CONCIERGE_EMAIL }}
+      E2E_CONCIERGE_PASSWORD: ${{ secrets.E2E_CONCIERGE_PASSWORD }}
       E2E_EXPECT_GOOGLE: ${{ vars.E2E_EXPECT_GOOGLE }}
       E2E_EXPECT_WHATSAPP: ${{ vars.E2E_EXPECT_WHATSAPP }}
       E2E_ALLOW_PROD_WRITES: ${{ secrets.E2E_ALLOW_PROD_WRITES }}

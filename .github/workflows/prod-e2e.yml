@@ -32,6 +32,12 @@ jobs:
     env:
       VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
       E2E_RATE_LIMIT_BYPASS_SECRET: ${{ secrets.E2E_RATE_LIMIT_BYPASS_SECRET }}
+      E2E_ADMIN_EMAIL: ${{ secrets.E2E_ADMIN_EMAIL }}
+      E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
+      E2E_RESIDENT_EMAIL: ${{ secrets.E2E_RESIDENT_EMAIL }}
+      E2E_RESIDENT_PASSWORD: ${{ secrets.E2E_RESIDENT_PASSWORD }}
+      E2E_CONCIERGE_EMAIL: ${{ secrets.E2E_CONCIERGE_EMAIL }}
+      E2E_CONCIERGE_PASSWORD: ${{ secrets.E2E_CONCIERGE_PASSWORD }}
     steps:
       - uses: actions/checkout@v6
 
@@ -58,6 +64,17 @@ jobs:
             echo "E2E_RATE_LIMIT_BYPASS_SECRET is required so production E2E does not trip live auth rate limits."
             exit 1
           fi
+
+      - name: Check private production E2E credentials
+        run: |
+          missing=0
+          for name in E2E_ADMIN_EMAIL E2E_ADMIN_PASSWORD E2E_RESIDENT_EMAIL E2E_RESIDENT_PASSWORD E2E_CONCIERGE_EMAIL E2E_CONCIERGE_PASSWORD; do
+            if [ -z "${!name}" ]; then
+              echo "$name is required so production E2E does not depend on seeded demo credentials."
+              missing=1
+            fi
+          done
+          exit "$missing"
 
       - name: Run production API regression
         if: ${{ inputs.suite == 'api' }}
