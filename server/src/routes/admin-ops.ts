@@ -12,6 +12,7 @@ import { runBackup, getBackupStatus, backupConfigured } from '../lib/backup';
 import { getWhatsAppStatus } from '../lib/whatsapp';
 import { privateCreateBuildingRequired } from '../lib/private-access';
 import { getQueueStatusSnapshot } from '../lib/agent-dispatch-queue';
+import { captureMessage } from '../lib/sentry';
 
 const router = Router();
 
@@ -145,6 +146,16 @@ router.patch('/agent/kill-switch', requireAuth, requireRole('board_admin'), requ
     target_id: condoId,
     condominium_id: condoId,
     metadata: { auto_dispatch_enabled: !!next },
+  });
+
+  // Ops event — surfaces in the Sentry dashboard so a spike of
+  // pauses (e.g. an admin reacting to a bad dispatch) gets noticed.
+  // info severity because this is informational; the audit log
+  // remains the source of truth for who/when.
+  captureMessage('agent.kill_switch.toggled', 'info', {
+    condo_id: condoId,
+    auto_dispatch_enabled: !!next,
+    actor_user_id: req.user?.id,
   });
 
   return ok(res, { auto_dispatch_enabled: !!next });

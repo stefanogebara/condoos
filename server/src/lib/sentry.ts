@@ -26,3 +26,24 @@ export function captureException(error: unknown) {
   if (!initialized || !sentry) return;
   sentry.captureException(error);
 }
+
+// Ops-event helper. Use for things that are NOT exceptions but want
+// to surface in the dashboard for trend analysis — failed dispatches,
+// kill-switch flips, lag thresholds tripped, etc. Severity defaults
+// to 'warning' which is the right tone for "something needs attention
+// but it's not an error". `extras` lands on the event so dashboards
+// can group by ticket_id, condo_id, etc. No-op when Sentry is unconfigured
+// so local dev + CI runs stay silent.
+export function captureMessage(
+  message: string,
+  level: 'fatal' | 'error' | 'warning' | 'info' | 'debug' = 'warning',
+  extras?: Record<string, unknown>,
+) {
+  if (!initialized || !sentry) return;
+  sentry.withScope((scope) => {
+    if (extras) {
+      for (const [k, v] of Object.entries(extras)) scope.setExtra(k, v);
+    }
+    sentry!.captureMessage(message, level);
+  });
+}

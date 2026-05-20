@@ -35,6 +35,7 @@
 
 import db from '../db';
 import os from 'os';
+import { captureMessage } from './sentry';
 
 export type DispatchQueueStatus = 'queued' | 'claimed' | 'done' | 'failed';
 
@@ -185,6 +186,22 @@ export function markDispatchFailed(id: number, error: unknown): number {
             last_error = ?
       WHERE id = ? AND status = 'claimed'`
   ).run(msg.slice(0, 500), id);
+  // Fire an ops event only when the UPDATE actually flipped a row.
+  // Returning 0 means the row was already transitioned (e.g. by the
+  // reaper) — no need to double-report. Includes the queue row id +
+  // ticket id so the dashboard can drill into a specific failure.
+  if (Number(result.changes) > 0) {
+    const row = db.prepare(
+      `SELECT ticket_id, condominium_id, attempt_count FROM agent_dispatch_queue WHERE id = ?`
+    ).get(id) as { ticket_id: number; condominium_id: number; attempt_count: number } | undefined;
+    captureMessage('agent.dispatch.failed', 'warning', {
+      queue_id: id,
+      ticket_id: row?.ticket_id,
+      condo_id: row?.condominium_id,
+      attempt: row?.attempt_count,
+      error: msg.slice(0, 500),
+    });
+  }
   return Number(result.changes);
 }
 
@@ -317,7 +334,18 @@ export function reapStaleDispatches(maxAgeSec = 600): number {
       WHERE status = 'claimed'
         AND claimed_at < datetime('now', ?)`
   ).run(`-${Math.max(60, Math.round(maxAgeSec))} seconds`);
-  return Number(result.changes);
+  const changes = Number(result.changes);
+  if (changes > 0) {
+    // A reaper hit means at least one worker crashed or hung mid-run.
+    // Surface as an ops event so a spike (e.g. OpenRouter outage
+    // killing many runs at once) shows up as a trend, not just a
+    // single Fly log line.
+    captureMessage('agent.dispatch.reaped', 'warning', {
+      count: changes,
+      max_age_sec: maxAgeSec,
+    });
+  }
+  return changes;
 }
 
 // Drain worker: process one row per tick. Caller is expected to be a
