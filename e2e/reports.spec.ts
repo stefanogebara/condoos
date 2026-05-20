@@ -1,4 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
+import { credentialsFor } from './support/credentials';
 
 const apiURL = process.env.E2E_API_URL
   || (process.env.E2E_BASE_URL ? `${process.env.E2E_BASE_URL.replace(/\/$/, '')}/api` : 'http://127.0.0.1:4316/api');
@@ -17,7 +18,8 @@ async function loginApi(request: APIRequestContext, email: string, password: str
 }
 
 async function adminLogin(page: Page, request: APIRequestContext) {
-  const s = await loginApi(request, 'admin@condoos.dev', 'admin123');
+  const credentials = credentialsFor('admin');
+  const s = await loginApi(request, credentials.email, credentials.password);
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await page.evaluate(({ token, user }) => {
     localStorage.setItem('condoos_token', token);
@@ -38,4 +40,11 @@ test('admin: monthly board packet renders and exports', async ({ page, request }
   await page.getByTestId('board-packet-copy').click();
   await expect(page.getByText(/Packet copied|Pacote copiado|Paquete copiado/i)).toBeVisible();
   await expect(page.getByTestId('board-packet-download')).toBeVisible();
+  await expect(page.getByTestId('board-packet-pdf')).toBeVisible();
+
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByTestId('board-packet-pdf').click(),
+  ]);
+  expect(download.suggestedFilename()).toMatch(/condoos-board-packet-.+\.pdf$/);
 });
