@@ -13,6 +13,7 @@ import {
   createAgencySetupCode,
   disableAgencySetupCode,
   listAgencySetupCodes,
+  listAgencyAuditEvents,
   listAgencyStaff,
   removeAgencyStaff,
   updateAgencyStaff,
@@ -59,6 +60,10 @@ const staffUpdateSchema = z.object({
   building_ids: z.array(z.coerce.number().int().positive()).optional(),
 });
 
+const auditEventsQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+});
+
 function parseParams<T extends z.ZodTypeAny>(schema: T, req: AuthedRequest): z.infer<T> | null {
   const parsed = schema.safeParse(req.params);
   if (!parsed.success) return null;
@@ -80,6 +85,16 @@ function agencyMembershipOrFail(req: AuthedRequest, res: any, agencyId: number, 
 
 router.get('/portfolio', requireAuth, asyncHandler(async (req: AuthedRequest, res) => {
   return ok(res, { agencies: agencyPortfoliosForUser(req.user!.id) });
+}));
+
+router.get('/:agencyId/audit-events', requireAuth, asyncHandler(async (req: AuthedRequest, res) => {
+  const params = parseParams(agencyIdParam, req);
+  if (!params) return fail(res, 'invalid_input', 400);
+  const parsed = auditEventsQuerySchema.safeParse(req.query);
+  if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
+  const membership = agencyMembershipOrFail(req, res, params.agencyId, false);
+  if (!membership) return;
+  return ok(res, { events: listAgencyAuditEvents(membership, parsed.data.limit || 25) });
 }));
 
 router.get('/:agencyId/staff', requireAuth, asyncHandler(async (req: AuthedRequest, res) => {

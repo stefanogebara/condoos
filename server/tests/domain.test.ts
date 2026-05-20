@@ -54,6 +54,7 @@ import {
   createAgencySetupCode,
   disableAgencySetupCode,
   linkCondominiumToAgency,
+  listAgencyAuditEvents,
   listAgencySetupCodes,
   listAgencyStaff,
   removeAgencyStaff,
@@ -471,6 +472,11 @@ test('agency operational exports respect staff building scope', () => {
   assert.match(auditCsv, /second.action/);
   assert.match(auditCsv, /agency.action/);
   assert.doesNotMatch(auditCsv, /first.action/);
+
+  const events = listAgencyAuditEvents(membership);
+  assert.ok(events.some((event) => event.action === 'second.action'));
+  assert.ok(events.some((event) => event.action === 'agency.action'));
+  assert.ok(!events.some((event) => event.action === 'first.action'));
 });
 
 function createCondoFixture() {

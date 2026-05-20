@@ -67,6 +67,19 @@ interface AgencyStaffMember {
   assigned_building_ids: number[];
 }
 
+interface AgencyAuditEvent {
+  id: number;
+  created_at: string;
+  condominium_id: number | null;
+  condominium_name: string | null;
+  actor_user_id: number | null;
+  actor_email: string | null;
+  action: string;
+  target_type: string | null;
+  target_id: number | null;
+  metadata: string | null;
+}
+
 interface IntegrationStatus {
   private_access: { configured: boolean; required: boolean; active_setup_codes: number; env_setup_codes: number };
   email: { configured: boolean; provider: string; from_configured: boolean };
@@ -166,6 +179,8 @@ export default function BoardAgencyPortfolio() {
   const [staffLoading, setStaffLoading] = useState(false);
   const [staffSaving, setStaffSaving] = useState(false);
   const [staffError, setStaffError] = useState<string | null>(null);
+  const [auditEvents, setAuditEvents] = useState<AgencyAuditEvent[]>([]);
+  const [auditEventsLoading, setAuditEventsLoading] = useState(false);
   const [staffForm, setStaffForm] = useState<{ email: string; role: AgencyRole; building_ids: number[] }>({
     email: '',
     role: 'building_admin',
@@ -231,6 +246,25 @@ export default function BoardAgencyPortfolio() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [primaryAgency?.id, primaryAgency?.role]);
 
+  async function loadAuditEvents(agencyId = primaryAgency?.id) {
+    if (!agencyId) {
+      setAuditEvents([]);
+      return;
+    }
+    setAuditEventsLoading(true);
+    try {
+      const res = await apiGet<{ events: AgencyAuditEvent[] }>(`/agencies/${agencyId}/audit-events?limit=8`);
+      setAuditEvents(res.events);
+    } finally {
+      setAuditEventsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadAuditEvents().catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [primaryAgency?.id]);
+
   async function loadStaff(agencyId = primaryAgency?.id) {
     if (!agencyId || primaryAgency?.role !== 'agency_admin') {
       setStaff([]);
@@ -273,6 +307,7 @@ export default function BoardAgencyPortfolio() {
       setCreatedCode(res.setup_code.code);
       setForm({ label: '', max_uses: '1', expires_at: '' });
       await loadSetupCodes(primaryAgency.id);
+      await loadAuditEvents(primaryAgency.id);
     } catch {
       setSetupCodeError(t('Não foi possível criar o código privado.'));
     } finally {
@@ -285,6 +320,7 @@ export default function BoardAgencyPortfolio() {
     setSetupCodeError(null);
     await apiPost(`/agencies/${primaryAgency.id}/setup-codes/${codeId}/disable`);
     await loadSetupCodes(primaryAgency.id);
+    await loadAuditEvents(primaryAgency.id);
   }
 
   async function copyCreatedCode() {
@@ -315,6 +351,7 @@ export default function BoardAgencyPortfolio() {
       `/agencies/${primaryAgency.id}/export/portfolio.csv`,
       `condoos-${primaryAgency.slug}-portfolio.csv`,
     );
+    await loadAuditEvents(primaryAgency.id);
   }
 
   async function downloadOperationalCsv(kind: AgencyExportKind) {
@@ -323,6 +360,7 @@ export default function BoardAgencyPortfolio() {
       `/agencies/${primaryAgency.id}/export/${kind}.csv`,
       `condoos-${primaryAgency.slug}-${kind}.csv`,
     );
+    await loadAuditEvents(primaryAgency.id);
   }
 
   function toggleStaffBuilding(buildingId: number) {
@@ -352,6 +390,7 @@ export default function BoardAgencyPortfolio() {
       });
       await loadStaff(primaryAgency.id);
       await load();
+      await loadAuditEvents(primaryAgency.id);
     } catch {
       setStaffError(t('Não foi possível salvar a equipe. Verifique se a conta já existe e se há prédios selecionados.'));
     } finally {
@@ -365,6 +404,7 @@ export default function BoardAgencyPortfolio() {
     try {
       await apiDelete(`/agencies/${primaryAgency.id}/staff/${staffId}`);
       await loadStaff(primaryAgency.id);
+      await loadAuditEvents(primaryAgency.id);
     } catch {
       setStaffError(t('Não foi possível remover este membro da equipe.'));
     }
@@ -373,6 +413,10 @@ export default function BoardAgencyPortfolio() {
   function buildingNames(ids: number[]) {
     const byId = new Map((primaryAgency?.buildings || []).map((building) => [building.id, building.name]));
     return ids.map((id) => byId.get(id)).filter(Boolean).join(', ');
+  }
+
+  function auditEventTarget(event: AgencyAuditEvent) {
+    return [event.target_type, event.target_id].filter(Boolean).join(' #');
   }
 
   return (
@@ -505,6 +549,42 @@ export default function BoardAgencyPortfolio() {
                     </Button>
                   ))}
                 </div>
+              </GlassCard>
+
+              <GlassCard className="p-5 h-fit">
+                <div className="flex items-center gap-2 mb-2">
+                  <ShieldCheck className="w-5 h-5 text-sage-700" />
+                  <h2 className="font-display text-xl text-dusk-500">{t('Auditoria recente')}</h2>
+                </div>
+                <p className="text-sm text-dusk-300 mb-4">
+                  {t('Últimas ações sensíveis visíveis para sua administradora e seus prédios permitidos.')}
+                </p>
+                {auditEventsLoading ? (
+                  <div className="text-sm text-dusk-300">{t('Carregando...')}</div>
+                ) : auditEvents.length === 0 ? (
+                  <div className="rounded-2xl border border-white/70 bg-white/50 px-3 py-3 text-sm text-dusk-300">
+                    {t('Nenhum evento de auditoria ainda.')}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {auditEvents.map((event) => (
+                      <div key={event.id} className="rounded-2xl border border-white/70 bg-white/55 px-3 py-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="font-medium text-dusk-500 truncate">{event.action}</div>
+                            <div className="text-xs text-dusk-300 truncate" data-user-content>
+                              {event.actor_email || t('Sistema')} · {event.condominium_name || t('Administradora')}
+                            </div>
+                            {auditEventTarget(event) && (
+                              <div className="text-xs text-dusk-300 mt-1 truncate">{auditEventTarget(event)}</div>
+                            )}
+                          </div>
+                          <Badge tone="neutral">{formatDate(event.created_at)}</Badge>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </GlassCard>
 
               {primaryAgency.role === 'agency_admin' && (

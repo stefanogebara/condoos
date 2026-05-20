@@ -13,7 +13,7 @@ This document separates what is real today from what still needs production wiri
 - In-app dashboard actions for resident/admin/guard command centers.
 - File upload registry with local/dev storage and Cloudflare R2-compatible presigned upload support for documents, receipts, and ticket evidence.
 - Private B2B building activation with setup-code gate when `PRIVATE_CREATE_BUILDING_REQUIRED=1`.
-- Agency portfolio foundation: agency records, agency/building links, agency memberships, scoped staff building assignments, `/api/agencies/portfolio`, `/board/portfolio` risk summary, agency selector, private setup-code management, staff controls, portfolio CSV export, and scoped operational exports for residents, finance, tickets, work orders, and audit rows.
+- Agency portfolio foundation: agency records, agency/building links, agency memberships, scoped staff building assignments, `/api/agencies/portfolio`, `/board/portfolio` risk summary, recent audit preview, agency selector, private setup-code management, staff controls, portfolio CSV export, and scoped operational exports for residents, finance, tickets, work orders, and audit rows.
 
 ## Demo-Only Or Partially Wired
 

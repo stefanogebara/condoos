@@ -93,6 +93,19 @@ export interface CreatedAgencySetupCode extends AgencySetupCode {
 export const AGENCY_EXPORT_KINDS = ['residents', 'finance', 'tickets', 'work-orders', 'audit'] as const;
 export type AgencyExportKind = typeof AGENCY_EXPORT_KINDS[number];
 
+export interface AgencyAuditEvent {
+  id: number;
+  created_at: string;
+  condominium_id: number | null;
+  condominium_name: string | null;
+  actor_user_id: number | null;
+  actor_email: string | null;
+  action: string;
+  target_type: string | null;
+  target_id: number | null;
+  metadata: string | null;
+}
+
 function count(sql: string, ...params: unknown[]): number {
   const row = db.prepare(sql).get(...params) as { count: number } | undefined;
   return Number(row?.count || 0);
@@ -768,6 +781,27 @@ export function agencyOperationalExportToCsv(membership: AgencyMembership, kind:
      LIMIT 1000`
   ).all(...buildingIds, agencyNeedle) as Array<Record<string, unknown>>;
   return rowsToCsv(headers, rows);
+}
+
+export function listAgencyAuditEvents(membership: AgencyMembership, limitInput = 25): AgencyAuditEvent[] {
+  const buildingIds = buildingIdsForMembership(membership);
+  const limit = Math.max(1, Math.min(100, Math.floor(Number(limitInput) || 25)));
+  const agencyNeedle = `%"agency_id":${membership.agency_id}%`;
+  const buildingClause = buildingIds.length > 0
+    ? `al.condominium_id IN (${placeholders(buildingIds)})`
+    : '0 = 1';
+  const rows = db.prepare(
+    `SELECT al.id, al.created_at, al.condominium_id, c.name AS condominium_name,
+            al.actor_user_id, al.actor_email, al.action, al.target_type,
+            al.target_id, al.metadata
+     FROM audit_log al
+     LEFT JOIN condominiums c ON c.id = al.condominium_id
+     WHERE ${buildingClause}
+        OR al.metadata LIKE ?
+     ORDER BY al.created_at DESC, al.id DESC
+     LIMIT ?`
+  ).all(...buildingIds, agencyNeedle, limit) as AgencyAuditEvent[];
+  return rows;
 }
 
 export function agencyPortfolioToCsv(portfolio: AgencyPortfolio): string {

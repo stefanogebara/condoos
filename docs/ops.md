@@ -85,6 +85,11 @@ audit export also includes agency-level audit rows whose metadata references the
 agency, so setup-code/staff/export actions are visible even when not tied to one
 building.
 
+The portfolio page also shows a recent audit preview from
+`GET /api/agencies/:agencyId/audit-events?limit=25`. It uses the same scope as
+the CSV exports, so staff see only their allowed buildings plus agency-level
+events.
+
 Agency admins can manage existing staff accounts from `/board/portfolio`:
 enter the staff email, pick an agency role, and assign the buildings they are
 allowed to see. Non-admin agency staff only see assigned buildings in
