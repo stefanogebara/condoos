@@ -294,9 +294,29 @@ function TicketCard({
               <span className="font-semibold text-dusk-500">{ticket.title}</span>
               <Badge tone={PRIORITY_TONE[ticket.priority]}>{priorityLabel(ticket.priority)}</Badge>
               {verified && <Badge tone="sage"><CheckCircle2 className="w-3 h-3" /> {t('verificado')}</Badge>}
+              {/* Resident-side observability for the dispatch queue. A
+                  verified ticket spends ≤60s in "queued/claimed" state
+                  before the queue worker either dispatches or holds.
+                  Without a badge the resident sees only "verificado"
+                  for that minute and may think nothing's happening.
+                  We synthesize "Agente analisando" when verified=true
+                  AND remediation_status is still 'verified' (the queue
+                  worker transitions it to agent_dispatched / awaiting_vendor
+                  / blocked_needs_admin as soon as the run completes). */}
+              {verified && ticket.remediation_status === 'verified' && (
+                <Badge tone="peach">{t('Agente analisando')}</Badge>
+              )}
               {ticket.remediation_status === 'agent_dispatched' && <Badge tone="peach">{t('IA acionada')}</Badge>}
               {ticket.remediation_status === 'awaiting_vendor' && <Badge tone="peach">{t('aguardando fornecedor')}</Badge>}
               {ticket.remediation_status === 'vendor_engaged' && <Badge tone="sage">{t('fornecedor respondeu')}</Badge>}
+              {/* SEC-H4 — vendor self-completion now goes through admin
+                  confirmation rather than auto-closing. The resident
+                  should see that the vendor reported done, but the
+                  ticket isn't formally resolved until the admin signs
+                  off. */}
+              {ticket.remediation_status === 'vendor_claims_complete' && (
+                <Badge tone="sage"><CheckCircle2 className="w-3 h-3" /> {t('fornecedor concluiu (aguarda síndico)')}</Badge>
+              )}
               {(detail?.work_order?.status || ticket.work_order_status) && (
                 <Badge tone={(detail?.work_order?.status || ticket.work_order_status) === 'completed' ? 'sage' : 'peach'}>
                   <ClipboardCheck className="w-3 h-3" /> {t(WORK_ORDER_STATUS_LABEL[(detail?.work_order?.status || ticket.work_order_status)!])}
