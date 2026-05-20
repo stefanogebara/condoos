@@ -52,6 +52,7 @@ import {
   agencyPortfolioToCsv,
   acceptAgencyStaffInvite,
   buildAgencyMonthlyReport,
+  buildAgencyMonthlyReportPdf,
   buildAgencyPortfolio,
   createAgencyStaffInvite,
   createAgencySetupCode,
@@ -253,7 +254,7 @@ test('agency activation codes can be created, listed, consumed, and disabled by 
   });
 });
 
-test('agency portfolio CSV exports scoped building metrics', () => {
+test('agency portfolio CSV exports scoped building metrics', async () => {
   resetDb();
   const { condoId, unit101 } = createCondoFixture();
   const adminId = createUser('portfolio-admin@example.com', 'board_admin');
@@ -371,6 +372,9 @@ test('agency portfolio CSV exports scoped building metrics', () => {
   assert.match(report.markdown, /4 opened, 1 resolved, 1 urgent/);
   assert.match(report.markdown, /2 opened, 1 completed, 1 active, 0 overdue/);
   assert.match(report.markdown, /Top categories: maintenance \(3\), access_control \(1\)/);
+  const pdf = await buildAgencyMonthlyReportPdf(report);
+  assert.equal(pdf.subarray(0, 4).toString('utf8'), '%PDF');
+  assert.ok(pdf.length > 1000);
 
   const csv = agencyPortfolioToCsv(portfolio);
   assert.match(csv, /agency_id,agency_name,building_id,building_name/);

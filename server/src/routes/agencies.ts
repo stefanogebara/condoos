@@ -12,6 +12,7 @@ import {
   assertAgencyMembershipCanUseCapability,
   agencyPortfoliosForUser,
   buildAgencyMonthlyReport,
+  buildAgencyMonthlyReportPdf,
   buildAgencyPortfolio,
   createAgencyStaffInvite,
   createAgencySetupCode,
@@ -444,6 +445,36 @@ router.get('/:agencyId/report.md', requireAuth, asyncHandler(async (req: AuthedR
   res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="condoos-agency-${params.agencyId}-${report.month}.md"`);
   return res.status(200).send(report.markdown);
+}));
+
+router.get('/:agencyId/report.pdf', requireAuth, asyncHandler(async (req: AuthedRequest, res) => {
+  const params = parseParams(agencyIdParam, req);
+  if (!params) return fail(res, 'invalid_input', 400);
+  const parsed = agencyReportQuerySchema.safeParse(req.query);
+  if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
+  const membership = agencyMembershipOrFail(req, res, params.agencyId, false);
+  if (!membership) return;
+  try {
+    assertAgencyMembershipCanUseCapability(membership, 'reports');
+  } catch (err) {
+    if (failAgencyAccess(res, err)) return;
+    throw err;
+  }
+  const report = buildAgencyMonthlyReport(membership, parsed.data.month);
+  const pdf = await buildAgencyMonthlyReportPdf(report);
+  audit(req, {
+    action: 'agency.export_monthly_report_pdf',
+    target_type: 'agency',
+    target_id: params.agencyId,
+    metadata: {
+      agency_id: params.agencyId,
+      month: report.month,
+      buildings: report.buildings.length,
+    },
+  });
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="condoos-agency-${params.agencyId}-${report.month}.pdf"`);
+  return res.status(200).send(pdf);
 }));
 
 router.get('/:agencyId/export/:kind.csv', requireAuth, asyncHandler(async (req: AuthedRequest, res) => {

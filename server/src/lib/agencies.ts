@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from 'crypto';
+import PDFDocument from 'pdfkit';
 import db from '../db';
 import type { EmailDeliveryResult } from './email';
 import { hashSetupCode, normalizeSetupCode } from './private-access';
@@ -197,6 +198,8 @@ export interface AgencyMonthlyReport {
   buildings: AgencyMonthlyReportBuilding[];
   markdown: string;
 }
+
+type PdfChunk = Buffer | Uint8Array | string;
 
 export interface AgencyPortfolio {
   id: number;
@@ -1757,6 +1760,116 @@ function buildAgencyMonthlyReportMarkdown(report: Omit<AgencyMonthlyReport, 'mar
   }
 
   return `${lines.join('\n')}\n`;
+}
+
+function writePdfHeading(doc: PDFKit.PDFDocument, text: string, size = 15) {
+  doc.moveDown(0.8);
+  doc.font('Helvetica-Bold').fontSize(size).fillColor('#332725').text(text, { width: 500 });
+  doc.moveDown(0.25);
+}
+
+function writePdfBullet(doc: PDFKit.PDFDocument, text: string) {
+  doc.font('Helvetica').fontSize(10).fillColor('#5f504c').text(`- ${text}`, { width: 500 });
+}
+
+function writePdfPageIfNeeded(doc: PDFKit.PDFDocument, minSpace = 120) {
+  if (doc.y > doc.page.height - doc.page.margins.bottom - minSpace) {
+    doc.addPage();
+  }
+}
+
+function finishPdf(doc: PDFKit.PDFDocument): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    doc.on('data', (chunk: PdfChunk) => {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    });
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
+    doc.end();
+  });
+}
+
+export async function buildAgencyMonthlyReportPdf(report: AgencyMonthlyReport): Promise<Buffer> {
+  const doc = new PDFDocument({
+    size: 'LETTER',
+    margin: 48,
+    bufferPages: true,
+    info: {
+      Title: `CONDOS agency report - ${report.agency_name} - ${report.month}`,
+      Author: 'CONDOS',
+      Subject: 'Agency portfolio monthly report',
+    },
+  });
+
+  doc.font('Helvetica-Bold').fontSize(20).fillColor('#332725').text('CONDOS agency report', { width: 500 });
+  doc.font('Helvetica').fontSize(11).fillColor('#6c5a55').text(`${report.agency_name} - ${report.month}`);
+  doc.fontSize(9).fillColor('#8a7a74').text(`Generated ${report.generated_at} - ${report.buildings.length} building(s) visible to ${report.role}`);
+
+  writePdfHeading(doc, 'Executive snapshot');
+  writePdfBullet(doc, `Portfolio health score: ${report.summary.portfolio_health_score}/100 (${report.summary.risk_level})`);
+  writePdfBullet(doc, report.summary.headline);
+  writePdfBullet(doc, `Attention items: ${report.summary.total_attention_items}`);
+  writePdfBullet(doc, `Buildings with critical attention: ${report.summary.buildings_with_critical_attention}`);
+  writePdfBullet(doc, `Average receipt coverage: ${report.summary.receipt_coverage_average_percent}%`);
+  writePdfBullet(doc, `Top risks: ${report.summary.top_risks.length > 0 ? report.summary.top_risks.join('; ') : 'none'}`);
+
+  writePdfHeading(doc, 'Portfolio attention');
+  if (report.attention.length === 0) {
+    writePdfBullet(doc, 'No urgent portfolio actions right now.');
+  } else {
+    for (const item of report.attention.slice(0, 12)) {
+      writePdfBullet(doc, `${item.condominium_name}: ${item.count} ${item.kind.replace(/_/g, ' ')} (${item.severity})`);
+    }
+  }
+
+  writePdfHeading(doc, 'Portfolio totals');
+  [
+    `Pending residents: ${report.totals.pending_residents}`,
+    `Open tickets: ${report.totals.unresolved_tickets}`,
+    `Urgent tickets: ${report.totals.urgent_tickets}`,
+    `Recurring problem clusters: ${report.totals.recurring_problem_clusters}`,
+    `Vendor follow-up problems: ${report.totals.vendor_follow_up_problems}`,
+    `Overdue dues: ${report.totals.overdue_dues}`,
+    `Pending payment proofs: ${report.totals.pending_payment_proofs}`,
+    `Vendor SLA problems: ${report.totals.vendor_sla_problems}`,
+    `Proposals missing budget: ${report.totals.proposals_missing_budget}`,
+    `Upcoming meetings: ${report.totals.upcoming_meetings}`,
+  ].forEach((line) => writePdfBullet(doc, line));
+
+  writePdfHeading(doc, 'Building scorecards');
+  if (report.buildings.length === 0) {
+    writePdfBullet(doc, 'No buildings in scope for this report.');
+  }
+
+  for (const building of report.buildings) {
+    writePdfPageIfNeeded(doc, 170);
+    doc.moveDown(0.45);
+    doc.font('Helvetica-Bold').fontSize(12).fillColor('#332725').text(building.condominium_name, { width: 500 });
+    doc.font('Helvetica').fontSize(9).fillColor('#6c5a55').text([
+      `Finance: billed ${building.month.dues_billed}; received ${building.month.payments_received}; expenses ${building.month.expenses_spent}; receipts ${building.month.expense_receipt_coverage_percent}%.`,
+      `Maintenance: ${building.maintenance_summary.tickets_opened} opened, ${building.maintenance_summary.tickets_resolved} resolved, ${building.maintenance_summary.urgent_tickets_opened} urgent, ${building.maintenance_summary.active_work_orders} active work order(s), ${building.maintenance_summary.overdue_work_orders} overdue.`,
+      `Vendor follow-ups: ${building.maintenance_summary.stale_vendor_follow_ups}; maintenance spend: ${building.maintenance_summary.maintenance_spend}; top categories: ${formatTopMaintenanceCategories(building.maintenance_summary.top_categories) || 'none'}.`,
+    ].join('\n'), { width: 500, lineGap: 2 });
+    if (building.next_actions.length > 0) {
+      doc.moveDown(0.25);
+      doc.font('Helvetica-Bold').fontSize(9).fillColor('#5f504c').text('Next actions');
+      building.next_actions.forEach((action) => writePdfBullet(doc, action));
+    }
+  }
+
+  const range = doc.bufferedPageRange();
+  for (let pageIndex = range.start; pageIndex < range.start + range.count; pageIndex += 1) {
+    doc.switchToPage(pageIndex);
+    doc.font('Helvetica').fontSize(8).fillColor('#9a8d88').text(
+      `CONDOS private agency report - page ${pageIndex + 1} of ${range.count}`,
+      48,
+      doc.page.height - 36,
+      { width: 500, align: 'center' },
+    );
+  }
+
+  return finishPdf(doc);
 }
 
 export function buildAgencyMonthlyReport(membership: AgencyMembership, monthInput?: string | null): AgencyMonthlyReport {

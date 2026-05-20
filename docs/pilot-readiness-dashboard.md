@@ -22,8 +22,8 @@ This document separates what is real today from what still needs production wiri
 - Document vault supports both external HTTPS links and uploaded files. Production needs Cloudflare R2 env secrets before relying on durable storage.
 - Payments are manual. Live payment providers are deferred.
 - WhatsApp/email/Google/AI depend on environment secrets and must degrade gracefully when missing.
-- Board packet PDF export is not implemented yet; Markdown copy/download/print exists.
-- Management-company portfolio mode is still early. Agency admins can manage private activation codes, invite or scope staff accounts to buildings, see permission review and pilot-readiness flags, act on a prioritized portfolio attention queue, download a monthly Markdown agency report with board-ready tables, and export key operational CSVs. Server-side capability checks, frontend board navigation, and export-family limits now respect scoped agency lanes, but richer multi-building reporting still needs hardening.
+- Building-level board packet PDF export is not implemented yet; Markdown copy/download/print exists. Agency monthly reports now have a PDF download for private management-company reviews.
+- Management-company portfolio mode is still early. Agency admins can manage private activation codes, invite or scope staff accounts to buildings, see permission review and pilot-readiness flags, act on a prioritized portfolio attention queue, download monthly Markdown/PDF agency reports with board-ready tables, and export key operational CSVs. Server-side capability checks, frontend board navigation, and export-family limits now respect scoped agency lanes, but richer multi-building reporting still needs hardening.
 
 ## Env Secrets To Verify Before A Real Demo
 
@@ -43,11 +43,11 @@ This document separates what is real today from what still needs production wiri
 - Production R2 bucket/CORS/secrets must pass `npm run audit:prod:uploads` before a real building uses uploads.
 - Turnstile keys are not installed in the current demo deployment, so create-building captcha is not active yet. `npm run audit:prod:hardening` should fail until those keys are set.
 - Production create-building now fails closed when `PRIVATE_CREATE_BUILDING_REQUIRED` is unset. Only set `PRIVATE_CREATE_BUILDING_REQUIRED=0` on disposable demo/e2e deployments; public login/signup copy reflects private activation when the gate is enabled.
-- Ticket timeline events, SLA escalation rules, vendor quote comparison, quote selection/rejection decisions, recurring maintenance risk detection, vendor follow-up health, per-building maintenance summaries, executive report snapshots, and maintenance/finance scoreboards are real. Remaining maintenance hardening is richer report packaging such as PDF export and deeper trend charts.
+- Ticket timeline events, SLA escalation rules, vendor quote comparison, quote selection/rejection decisions, recurring maintenance risk detection, vendor follow-up health, per-building maintenance summaries, executive report snapshots, agency PDF reports, and maintenance/finance scoreboards are real. Remaining maintenance hardening is richer report packaging such as building-level PDF export and deeper trend charts.
 - Market settings exist, but the remaining localization hardening is legal/governance wording, date/time formatting sweeps, and production seed-content cleanup per market.
 - Incident mode.
-- Portfolio dashboard is not yet a full agency command center: agency setup-code controls, staff email invites, assigned-building switching, scoped staff controls, server capability guardrails, frontend role-specific navigation, permission review, pilot readiness checklist, prioritized attention queue, monthly Markdown report, and role-aware scoped CSV exports exist, but PDF packaging and richer multi-building reporting are still pending.
+- Portfolio dashboard is not yet a full agency command center: agency setup-code controls, staff email invites, assigned-building switching, scoped staff controls, server capability guardrails, frontend role-specific navigation, permission review, pilot readiness checklist, prioritized attention queue, monthly Markdown/PDF report, and role-aware scoped CSV exports exist, but richer trend reporting is still pending.
 
 ## Next Pilot Upgrade
 
-The next buyer-visible upgrade should keep strengthening agency reporting with PDF packaging, trend charts, and a walkthrough-ready work-order story.
+The next buyer-visible upgrade should keep strengthening agency reporting with trend charts and a walkthrough-ready work-order story.

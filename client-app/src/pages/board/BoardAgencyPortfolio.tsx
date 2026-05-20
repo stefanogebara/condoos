@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Ban, Building2, Calendar, CheckCircle2, ClipboardCheck, Copy, Download, FileArchive, KeyRound, LockKeyhole, PlusCircle, RefreshCw, ShieldCheck, Trash2, UserPlus, Users, Wallet, Wrench } from 'lucide-react';
+import { AlertTriangle, Ban, Building2, Calendar, CheckCircle2, ClipboardCheck, Copy, Download, FileArchive, FileText, KeyRound, LockKeyhole, PlusCircle, RefreshCw, ShieldCheck, Trash2, UserPlus, Users, Wallet, Wrench } from 'lucide-react';
 import GlassCard from '../../components/GlassCard';
 import Badge from '../../components/Badge';
 import Button from '../../components/Button';
@@ -532,11 +532,11 @@ export default function BoardAgencyPortfolio() {
     window.setTimeout(() => setCopiedCode(false), 1600);
   }
 
-  async function downloadCsv(path: string, filename: string) {
+  async function downloadFile(path: string, filename: string, fallbackType = 'text/csv;charset=utf-8') {
     const response = await api.get(path, { responseType: 'blob' });
     const blob = response.data instanceof Blob
       ? response.data
-      : new Blob([response.data], { type: 'text/csv;charset=utf-8' });
+      : new Blob([response.data], { type: fallbackType });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -549,7 +549,7 @@ export default function BoardAgencyPortfolio() {
 
   async function downloadPortfolioCsv() {
     if (!primaryAgency) return;
-    await downloadCsv(
+    await downloadFile(
       `/agencies/${primaryAgency.id}/export/portfolio.csv`,
       `condoos-${primaryAgency.slug}-portfolio.csv`,
     );
@@ -558,7 +558,7 @@ export default function BoardAgencyPortfolio() {
 
   async function downloadOperationalCsv(kind: AgencyExportKind) {
     if (!primaryAgency) return;
-    await downloadCsv(
+    await downloadFile(
       `/agencies/${primaryAgency.id}/export/${kind}.csv`,
       `condoos-${primaryAgency.slug}-${kind}.csv`,
     );
@@ -568,9 +568,21 @@ export default function BoardAgencyPortfolio() {
   async function downloadAgencyReport() {
     if (!primaryAgency) return;
     const month = currentReportMonth();
-    await downloadCsv(
+    await downloadFile(
       `/agencies/${primaryAgency.id}/report.md?month=${encodeURIComponent(month)}`,
       `condoos-${primaryAgency.slug}-${month}-agency-report.md`,
+      'text/markdown;charset=utf-8',
+    );
+    await loadAuditEvents(primaryAgency.id);
+  }
+
+  async function downloadAgencyReportPdf() {
+    if (!primaryAgency) return;
+    const month = currentReportMonth();
+    await downloadFile(
+      `/agencies/${primaryAgency.id}/report.pdf?month=${encodeURIComponent(month)}`,
+      `condoos-${primaryAgency.slug}-${month}-agency-report.pdf`,
+      'application/pdf',
     );
     await loadAuditEvents(primaryAgency.id);
   }
@@ -953,6 +965,9 @@ export default function BoardAgencyPortfolio() {
                 <div className="grid grid-cols-1 gap-2">
                   {canExportReports && (
                     <>
+                      <Button variant="sage" onClick={downloadAgencyReportPdf} leftIcon={<FileText className="w-4 h-4" />}>
+                        {t('Relatório mensal em PDF')}
+                      </Button>
                       <Button variant="sage" onClick={downloadAgencyReport} leftIcon={<Download className="w-4 h-4" />}>
                         {t('Relatório mensal da administradora')}
                       </Button>

@@ -1719,6 +1719,7 @@ const phrases: Copy[] = [
   c('Exportações operacionais', 'Operational exports', 'Exportaciones operativas', 'Exports opérationnels'),
   c('Baixe dados do portfólio respeitando os prédios permitidos para sua função.', 'Download portfolio data respecting the buildings allowed for your role.', 'Descarga datos del portafolio respetando los edificios permitidos para tu función.', 'Téléchargez les données du portefeuille en respectant les immeubles autorisés pour votre rôle.'),
   c('Sua função não tem exportações liberadas.', 'Your role does not have any exports enabled.', 'Tu función no tiene exportaciones habilitadas.', 'Votre rôle n’a aucune exportation autorisée.'),
+  c('Relatório mensal em PDF', 'Monthly report PDF', 'Reporte mensual en PDF', 'Rapport mensuel en PDF'),
   c('Relatório mensal da administradora', 'Monthly agency report', 'Reporte mensual de la administradora', 'Rapport mensuel du gestionnaire'),
   c('Resumo do portfólio', 'Portfolio summary', 'Resumen del portafolio', 'Résumé du portefeuille'),
   c('Prédio ativo', 'Active building', 'Edificio activo', 'Immeuble actif'),
