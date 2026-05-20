@@ -1,8 +1,10 @@
+import PDFDocument from 'pdfkit';
 import db from '../db';
 import { listServiceContactsWithScorecards } from './vendor-scorecards';
 
 type CountRow = { count: number };
 type MoneyRow = { total_cents: number | null; count: number; currency: string | null };
+type PdfChunk = Buffer | Uint8Array | string;
 
 export interface BoardPacket {
   month: string;
@@ -177,6 +179,38 @@ function compact<T>(items: Array<T | null | undefined | false>): T[] {
 
 function moneyLabel(cents: number, currency = 'BRL') {
   return `${currency} ${(cents / 100).toFixed(0)}`;
+}
+
+function writePdfHeading(doc: PDFKit.PDFDocument, text: string, size = 15) {
+  doc.moveDown(0.8);
+  doc.font('Helvetica-Bold').fontSize(size).fillColor('#332725').text(text, { width: 500 });
+  doc.moveDown(0.25);
+}
+
+function writePdfBullet(doc: PDFKit.PDFDocument, text: string) {
+  doc.font('Helvetica').fontSize(10).fillColor('#5f504c').text(`- ${text}`, { width: 500 });
+}
+
+function writePdfLine(doc: PDFKit.PDFDocument, text: string) {
+  doc.font('Helvetica').fontSize(9).fillColor('#6c5a55').text(text, { width: 500 });
+}
+
+function writePdfPageIfNeeded(doc: PDFKit.PDFDocument, minSpace = 120) {
+  if (doc.y > doc.page.height - doc.page.margins.bottom - minSpace) {
+    doc.addPage();
+  }
+}
+
+function finishPdf(doc: PDFKit.PDFDocument): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    doc.on('data', (chunk: PdfChunk) => {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    });
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
+    doc.end();
+  });
 }
 
 export function getBoardPacket(condoId: number, monthInput?: string, now = new Date()): BoardPacket {
@@ -566,6 +600,113 @@ export function getBoardPacket(condoId: number, monthInput?: string, now = new D
   };
   packet.markdown = buildBoardPacketMarkdown(packet);
   return packet;
+}
+
+export async function buildBoardPacketPdf(packet: BoardPacket): Promise<Buffer> {
+  const doc = new PDFDocument({
+    size: 'LETTER',
+    margin: 48,
+    bufferPages: true,
+    info: {
+      Title: `${packet.condominium.name} board packet - ${packet.month}`,
+      Author: 'CONDOS',
+      Subject: 'Monthly condominium board packet',
+    },
+  });
+
+  doc.font('Helvetica-Bold').fontSize(20).fillColor('#332725').text('CONDOS board packet', { width: 500 });
+  doc.font('Helvetica').fontSize(11).fillColor('#6c5a55').text(`${packet.condominium.name} - ${packet.month}`);
+  doc.fontSize(9).fillColor('#8a7a74').text(`Generated ${packet.generated_at} - ${packet.period_start} to ${packet.period_end}`);
+
+  writePdfHeading(doc, 'Executive summary');
+  packet.summary.bullets.forEach((bullet) => writePdfBullet(doc, bullet));
+
+  writePdfHeading(doc, 'Risks');
+  if (packet.risks.length === 0) {
+    writePdfBullet(doc, 'No critical risks detected.');
+  } else {
+    packet.risks.forEach((risk) => writePdfBullet(doc, `[${risk.level.toUpperCase()}] ${risk.title}: ${risk.action}`));
+  }
+
+  writePdfHeading(doc, 'Next steps');
+  packet.next_steps.forEach((step) => writePdfBullet(doc, step));
+
+  writePdfHeading(doc, 'Finance');
+  [
+    `Expenses: ${moneyLabel(packet.finances.expenses_total_cents, packet.finances.currency)} across ${packet.finances.expense_count} entries.`,
+    `Open dues: ${moneyLabel(packet.finances.receivables.total_open_cents, packet.finances.currency)}.`,
+    `Overdue dues: ${moneyLabel(packet.finances.receivables.overdue_cents, packet.finances.currency)}.`,
+  ].forEach((line) => writePdfBullet(doc, line));
+  if (packet.finances.by_category.length > 0) {
+    doc.moveDown(0.25);
+    doc.font('Helvetica-Bold').fontSize(9).fillColor('#5f504c').text('Expense categories');
+    packet.finances.by_category.slice(0, 8).forEach((row) => {
+      writePdfLine(doc, `${row.category}: ${moneyLabel(row.total_cents, packet.finances.currency)} (${row.count})`);
+    });
+  }
+  if (packet.finances.receivables.overdue_units.length > 0) {
+    doc.moveDown(0.25);
+    doc.font('Helvetica-Bold').fontSize(9).fillColor('#5f504c').text('Overdue units');
+    packet.finances.receivables.overdue_units.forEach((unit) => {
+      writePdfLine(doc, `${unit.building_name} ${unit.unit_number}: ${moneyLabel(unit.remaining_cents, unit.currency)} due ${unit.due_date.slice(0, 10)}`);
+    });
+  }
+
+  writePdfHeading(doc, 'Operations');
+  [
+    `Open tickets: ${packet.tickets.open_count}.`,
+    `Urgent open tickets: ${packet.tickets.urgent_open_count}.`,
+    `Open work orders: ${packet.tickets.work_orders.open_count}.`,
+    `Completed work orders this month: ${packet.tickets.work_orders.completed_count}.`,
+  ].forEach((line) => writePdfBullet(doc, line));
+  if (packet.tickets.active.length > 0) {
+    doc.moveDown(0.25);
+    doc.font('Helvetica-Bold').fontSize(9).fillColor('#5f504c').text('Active tickets');
+    packet.tickets.active.slice(0, 8).forEach((ticket) => {
+      writePdfLine(doc, `#${ticket.id} ${ticket.title} - ${ticket.priority} - ${ticket.status}`);
+    });
+  }
+  if (packet.tickets.work_orders.active.length > 0) {
+    doc.moveDown(0.25);
+    doc.font('Helvetica-Bold').fontSize(9).fillColor('#5f504c').text('Active work orders');
+    packet.tickets.work_orders.active.slice(0, 8).forEach((order) => {
+      writePdfLine(doc, `#${order.id} ${order.title} - ${order.vendor_name || 'No vendor'} - ${order.status}`);
+    });
+  }
+
+  writePdfPageIfNeeded(doc, 170);
+  writePdfHeading(doc, 'Governance and vendors');
+  writePdfBullet(doc, `Active proposals: ${packet.proposals.active_count}; closed this month: ${packet.proposals.closed_count}.`);
+  writePdfBullet(doc, `Upcoming meetings: ${packet.meetings.upcoming_count}; completed this month: ${packet.meetings.completed_count}.`);
+  writePdfBullet(doc, `Saved vendors: ${packet.vendors.count}; vendor-linked spend: ${moneyLabel(packet.vendors.tracked_spend_cents, packet.finances.currency)}.`);
+  writePdfBullet(doc, `Average vendor response rate: ${packet.vendors.response_rate_percent == null ? 'No history' : `${packet.vendors.response_rate_percent}%`}.`);
+  if (packet.proposals.active.length > 0) {
+    doc.moveDown(0.25);
+    doc.font('Helvetica-Bold').fontSize(9).fillColor('#5f504c').text('Active proposals');
+    packet.proposals.active.slice(0, 6).forEach((proposal) => {
+      writePdfLine(doc, `#${proposal.id} ${proposal.title} - ${proposal.status} - yes ${proposal.yes_votes}, no ${proposal.no_votes}`);
+    });
+  }
+  if (packet.vendors.top_by_work.length > 0) {
+    doc.moveDown(0.25);
+    doc.font('Helvetica-Bold').fontSize(9).fillColor('#5f504c').text('Top vendors');
+    packet.vendors.top_by_work.slice(0, 6).forEach((vendor) => {
+      writePdfLine(doc, `${vendor.company_name} - ${vendor.category} - ${vendor.work_orders_open}/${vendor.work_orders_total} open/total work orders`);
+    });
+  }
+
+  const range = doc.bufferedPageRange();
+  for (let pageIndex = range.start; pageIndex < range.start + range.count; pageIndex += 1) {
+    doc.switchToPage(pageIndex);
+    doc.font('Helvetica').fontSize(8).fillColor('#9a8d88').text(
+      `CONDOS board packet - page ${pageIndex + 1} of ${range.count}`,
+      48,
+      doc.page.height - 36,
+      { width: 500, align: 'center' },
+    );
+  }
+
+  return finishPdf(doc);
 }
 
 function buildBoardPacketMarkdown(packet: BoardPacket): string {

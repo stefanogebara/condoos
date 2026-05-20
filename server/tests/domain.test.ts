@@ -42,7 +42,7 @@ import { evaluateAgentAutoDispatch } from '../src/lib/agent-auto-dispatch';
 import { normalizeServiceContact, serviceContactSchema } from '../src/lib/service-contacts';
 import { listServiceContactsWithScorecards } from '../src/lib/vendor-scorecards';
 import { searchBuildingMemory } from '../src/lib/memory';
-import { getBoardPacket } from '../src/lib/board-packet';
+import { buildBoardPacketPdf, getBoardPacket } from '../src/lib/board-packet';
 import { researchExternalVendors } from '../src/ai/web-research';
 import { getDashboardActions } from '../src/lib/dashboard-actions';
 import { createInAppNotification, markInAppNotificationRead } from '../src/lib/in-app-notifications';
@@ -2269,7 +2269,7 @@ test('ticket vendor quotes are condo-scoped and hidden from residents', () => {
   assert.ok(!residentTimeline.some((event) => event.event_type === 'vendor.quote_status_updated'));
 });
 
-test('board packet aggregates monthly operations without cross-condo leakage', () => {
+test('board packet aggregates monthly operations without cross-condo leakage', async () => {
   resetDb();
   const { condoId, unit101 } = createCondoFixture();
   const adminId = createUser('packet-admin@example.com', 'board_admin');
@@ -2342,6 +2342,9 @@ test('board packet aggregates monthly operations without cross-condo leakage', (
   assert.equal(packet.meetings.upcoming_count, 1);
   assert.equal(packet.vendors.count, 1);
   assert.match(packet.markdown, /Test Condo board packet/);
+  const pdf = await buildBoardPacketPdf(packet);
+  assert.equal(pdf.subarray(0, 4).toString('utf8'), '%PDF');
+  assert.ok(pdf.length > 1000);
   assert.doesNotMatch(JSON.stringify(packet), /Leaky Other Vendor/);
 });
 

@@ -93,4 +93,5 @@ Before showing a buyer:
 - Agency pilot readiness checklist flags private access, email, R2 uploads, backups, observability, staff coverage, and critical operational risk before buyer demos.
 - Agency attention queue shows urgent multi-building issues and opens the right building workflow from each item.
 - Agency monthly report downloads from `/board/portfolio` and respects the same building scope as portfolio/operations exports.
+- Building-level board packet PDF downloads from `/board/reports` and is scoped to the active building.
 - Public i18n sweep includes `/login` and signup join/create/agency intent pages.

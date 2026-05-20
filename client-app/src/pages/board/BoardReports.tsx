@@ -19,7 +19,7 @@ import PageHeader from '../../components/PageHeader';
 import GlassCard from '../../components/GlassCard';
 import Button from '../../components/Button';
 import Badge from '../../components/Badge';
-import { apiGet } from '../../lib/api';
+import { api, apiGet } from '../../lib/api';
 import { formatCurrency, formatDate, t, useLocale } from '../../lib/i18n';
 
 interface BoardPacket {
@@ -327,6 +327,24 @@ export default function BoardReports() {
     URL.revokeObjectURL(url);
   }
 
+  async function downloadPdf() {
+    if (!packet) return;
+    try {
+      const response = await api.get(`/reports/board-packet.pdf?month=${encodeURIComponent(packet.month)}`, { responseType: 'blob' });
+      const blob = response.data instanceof Blob
+        ? response.data
+        : new Blob([response.data], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `condoos-board-packet-${fileSafeMonth(packet.month)}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error(tr('Não foi possível baixar PDF'));
+    }
+  }
+
   return (
     <>
       <PageHeader
@@ -385,6 +403,9 @@ export default function BoardReports() {
                 </Button>
                 <Button type="button" variant="ghost" size="sm" onClick={downloadMarkdown} leftIcon={<Download className="w-4 h-4" />} data-testid="board-packet-download">
                   {tr('Baixar Markdown')}
+                </Button>
+                <Button type="button" variant="ghost" size="sm" onClick={downloadPdf} leftIcon={<FileText className="w-4 h-4" />} data-testid="board-packet-pdf">
+                  {tr('Baixar PDF')}
                 </Button>
                 <Button type="button" variant="ghost" size="sm" onClick={() => window.print()} leftIcon={<Printer className="w-4 h-4" />}>
                   {tr('Imprimir')}

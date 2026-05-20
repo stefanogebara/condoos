@@ -106,6 +106,15 @@ The portfolio page also shows a recent audit preview from
 the CSV exports, so staff see only their allowed buildings plus agency-level
 events.
 
+Building-level board packets are available to board/report-capable admins from
+`/board/reports` and through:
+
+- `GET /api/reports/board-packet?month=YYYY-MM`
+- `GET /api/reports/board-packet.pdf?month=YYYY-MM`
+
+The PDF export is generated server-side from the same scoped packet data as the
+on-screen report and writes an audit row when downloaded.
+
 The portfolio response includes an attention queue derived from the same scoped
 building metrics. `/board/portfolio` prioritizes urgent tickets, vendor SLA
 problems, overdue dues, pending payment proofs, pending residents, and

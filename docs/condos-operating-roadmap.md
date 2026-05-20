@@ -39,8 +39,8 @@ Every shipped feature must improve at least one promise:
    - Defer live processors until the workflow is trusted.
 
 4. **Maintenance as work orders**
-   - Ticket timeline events, quote comparison, quote decisions, recurring problem detection, vendor follow-up health, SLA alerts, resident-safe progress visibility, executive report snapshots, agency PDF reports, and per-building monthly maintenance/finance scoreboards are in place.
-   - Remaining work: building-level board packet PDF export, trend charts, and richer visual multi-building maintenance sections.
+   - Ticket timeline events, quote comparison, quote decisions, recurring problem detection, vendor follow-up health, SLA alerts, resident-safe progress visibility, executive report snapshots, agency/building PDF reports, and per-building monthly maintenance/finance scoreboards are in place.
+   - Remaining work: trend charts and richer visual multi-building maintenance sections.
 
 5. **Brazil + Ecuador readiness**
    - Building-level country, currency, timezone, locale, and governance mode are in place.
