@@ -14,6 +14,7 @@ import { formatCurrency, formatDateTime, formatRelativeTime, t } from '../../lib
 import { openUploadedFile, uploadFileToCondoOS } from '../../lib/uploads';
 
 type WorkOrderStatus = 'draft' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
+type VoteChoice = 'confirm' | 'deny';
 
 interface Ticket {
   id: number;
@@ -40,12 +41,13 @@ interface Ticket {
   work_order_scheduled_for: string | null;
   work_order_estimated_amount_cents: number | null;
   work_order_vendor_name: string | null;
+  my_vote: VoteChoice | null;
   created_at: string;
 }
 
 interface Verification {
   id: number;
-  vote: 'confirm' | 'deny';
+  vote: VoteChoice;
   comment: string | null;
   created_at: string;
   first_name: string;
@@ -78,7 +80,7 @@ interface TicketDetail extends Ticket {
   dispatches?: ResidentDispatch[];
   work_order: WorkOrder | null;
   timeline?: TicketTimelineEntry[];
-  my_vote: 'confirm' | 'deny' | null;
+  my_vote: VoteChoice | null;
 }
 
 interface TicketAttachment {
@@ -145,13 +147,13 @@ export default function Tickets() {
   const [showForm, setShowForm] = useState(false);
   const [openId, setOpenId] = useState<number | null>(null);
   const [detail, setDetail] = useState<TicketDetail | null>(null);
+  const [localVotes, setLocalVotes] = useState<Record<number, VoteChoice>>({});
 
   const load = useCallback(() => {
     apiGet<Ticket[]>('/tickets').then(setRows).catch(() => {});
   }, []);
   useEffect(() => { load(); }, [load]);
-  // UX-H3 — match the admin page's 15s polling cadence so residents see
-  // fresh verification counts and status flips without a manual reload.
+  // Keep verification counts and remediation states fresh while residents vote.
   useEffect(() => {
     const timer = window.setInterval(load, 15_000);
     return () => window.clearInterval(timer);
@@ -162,34 +164,29 @@ export default function Tickets() {
     apiGet<TicketDetail>(`/tickets/${openId}`).then(setDetail).catch(() => setDetail(null));
   }, [openId]);
 
-  async function vote(id: number, choice: 'confirm' | 'deny', comment?: string) {
+  async function vote(id: number, choice: VoteChoice, comment?: string) {
     try {
       const body: Record<string, unknown> = { vote: choice };
       if (comment && comment.trim()) body.comment = comment.trim().slice(0, 500);
       await apiPost(`/tickets/${id}/verify`, body);
+      setLocalVotes((current) => ({ ...current, [id]: choice }));
+      setDetail((current) => (
+        current?.id === id ? { ...current, my_vote: choice } : current
+      ));
       toast.success(t(choice === 'confirm' ? 'Voto registrado: confirmo' : 'Voto registrado: não confirmo'));
-      apiGet<TicketDetail>(`/tickets/${id}`).then(setDetail).catch(() => {});
+      if (openId === id) apiGet<TicketDetail>(`/tickets/${id}`).then(setDetail).catch(() => {});
       load();
     } catch (err: any) {
       toast.error(err?.response?.data?.error || t('Falha ao registrar voto'));
     }
   }
 
-  // UX-M2 — resolved community tickets used to sit under "Aguardando
-  // verificação" with a `resolvido` badge, which read as contradictory.
-  // Split open vs resolved into separate sections.
+  const voteFor = (ticket: Ticket) => localVotes[ticket.id] ?? ticket.my_vote ?? null;
   const communityOpen = rows.filter((r) => r.verification_threshold > 0 && r.remediation_status !== 'resolved');
   const communityResolved = rows.filter((r) => r.verification_threshold > 0 && r.remediation_status === 'resolved');
   const mine = rows.filter((r) => r.reporter_id === user?.id && r.verification_threshold === 0);
-
-  // UX inspection 2026-05-21 — "Aguardando verificação (5)" was
-  // mixing two distinct states: tickets the current user can still
-  // vote on (actionable) AND tickets that are already verified +
-  // being processed (informational). Actionable ones were getting
-  // lost. Split into two sub-buckets so the vote-needed ones surface
-  // at the top of the page where the resident sees them first.
-  const needsMyVote = communityOpen.filter((r) => !r.verified_at && r.reporter_id !== user?.id);
-  const inProgress = communityOpen.filter((r) => r.verified_at || r.reporter_id === user?.id);
+  const needsMyVote = communityOpen.filter((r) => !r.verified_at && r.reporter_id !== user?.id && !voteFor(r));
+  const inProgress = communityOpen.filter((r) => r.verified_at || r.reporter_id === user?.id || !!voteFor(r));
 
   return (
     <>
@@ -219,6 +216,7 @@ export default function Tickets() {
                 ticket={tk}
                 expanded={openId === tk.id}
                 detail={openId === tk.id ? detail : null}
+                currentVote={voteFor(tk)}
                 onToggle={() => setOpenId((cur) => (cur === tk.id ? null : tk.id))}
                 onVote={(choice, comment) => vote(tk.id, choice, comment)}
                 isOwn={tk.reporter_id === user?.id}
@@ -241,6 +239,7 @@ export default function Tickets() {
                 ticket={tk}
                 expanded={openId === tk.id}
                 detail={openId === tk.id ? detail : null}
+                currentVote={voteFor(tk)}
                 onToggle={() => setOpenId((cur) => (cur === tk.id ? null : tk.id))}
                 onVote={(choice, comment) => vote(tk.id, choice, comment)}
                 isOwn={tk.reporter_id === user?.id}
@@ -263,6 +262,7 @@ export default function Tickets() {
                 ticket={tk}
                 expanded={openId === tk.id}
                 detail={openId === tk.id ? detail : null}
+                currentVote={voteFor(tk)}
                 onToggle={() => setOpenId((cur) => (cur === tk.id ? null : tk.id))}
                 onVote={(choice, comment) => vote(tk.id, choice, comment)}
                 isOwn={tk.reporter_id === user?.id}
@@ -305,28 +305,24 @@ export default function Tickets() {
 }
 
 function TicketCard({
-  ticket, expanded, detail, onToggle, onVote, isOwn,
+  ticket, expanded, detail, currentVote, onToggle, onVote, isOwn,
 }: {
   ticket: Ticket;
   expanded: boolean;
   detail: TicketDetail | null;
+  currentVote: VoteChoice | null;
   onToggle: () => void;
-  onVote: (choice: 'confirm' | 'deny', comment?: string) => void;
+  onVote: (choice: VoteChoice, comment?: string) => void;
   isOwn: boolean;
 }) {
   const verified = !!ticket.verified_at;
-  const myVote = detail?.my_vote;
-  // Optional comment when the resident wants to add neighborhood
-  // context to their vote ("Eu vi isso ontem às 18h"). Backend
-  // already accepts + persists this on the verify endpoint; the UI
-  // just didn't surface it before today's inspection.
   const [showCommentBox, setShowCommentBox] = React.useState(false);
-  const [pendingChoice, setPendingChoice] = React.useState<'confirm' | 'deny' | null>(null);
+  const [pendingChoice, setPendingChoice] = React.useState<VoteChoice | null>(null);
   const [comment, setComment] = React.useState('');
-  function quickVote(choice: 'confirm' | 'deny') {
-    // One-click vote when the comment box isn't open. Submits with
-    // no comment — the resident can still expand the card and use
-    // the with-comment flow if they want context.
+  function quickVote(choice: VoteChoice) {
+    setShowCommentBox(false);
+    setPendingChoice(null);
+    setComment('');
     onVote(choice);
   }
   function submitWithComment() {
@@ -336,26 +332,16 @@ function TicketCard({
     setComment('');
     setPendingChoice(null);
   }
-  function openCommentBox(choice: 'confirm' | 'deny') {
-    setPendingChoice(choice);
+  function openCommentBox() {
+    setPendingChoice(currentVote || 'confirm');
     setShowCommentBox(true);
   }
 
-  // Counter shape — "1/2 votos" is one glance vs "1 confirmações ·
-  // 0 negaram · meta: 2" which forced reading 3 chunks. We surface
-  // denial count only when > 0 (otherwise the red text reads as a
-  // false-alarm warning when actually zero denials is good news).
   const counterText = `${ticket.verification_count}/${ticket.verification_threshold} ${t('votos')}`;
 
   return (
-    <GlassCard variant="clay" className="p-4">
-      {/* A11y — the card is no longer a single big <button>. The
-          collapsed region is a div role=region with an explicit
-          aria-expanded toggle on the chevron-like text affordance,
-          and the inline vote buttons can now live as proper siblings
-          instead of nested buttons (which used to be an HTML
-          validation failure + screen reader trap). */}
-      <div role="region" aria-label={ticket.title}>
+    <GlassCard variant="clay" className="p-4" role="region" aria-label={ticket.title}>
+      <div>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
@@ -384,19 +370,11 @@ function TicketCard({
                   <ClipboardCheck className="w-3 h-3" /> {t(WORK_ORDER_STATUS_LABEL[(detail?.work_order?.status || ticket.work_order_status)!])}
                 </Badge>
               )}
-              {/* "síndico vai resolver" was rendering on a dark badge
-                  which read as alarming on the clay card background.
-                  It's actually a calm "we're handling it" — switch
-                  to sage to match the other reassuring states. */}
               {ticket.remediation_status === 'blocked_needs_admin' && (
                 <Badge tone="sage">{t('síndico vai resolver')}</Badge>
               )}
               {ticket.remediation_status === 'resolved' && <Badge tone="sage"><CheckCircle2 className="w-3 h-3" /> {t('resolvido')}</Badge>}
             </div>
-            {/* Byline — drop the truncate-to-60% which was clipping
-                short names ("E2E" appeared as "E2E…" suggesting
-                missing data). Long names will still wrap via the
-                flex-wrap. */}
             <div className="text-xs text-dusk-300 mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
               <span>
                 {`${t('Reportado por')} ${ticket.reporter_first || ''}`.trim()}
@@ -406,8 +384,6 @@ function TicketCard({
               )}
               <span className="text-dusk-200">· {formatRelativeTime(ticket.created_at)}</span>
             </div>
-            {/* Compact one-glance counter. Denial count only when > 0
-                so zero-denial cards don't show a false-alarm red. */}
             <div className="mt-2 flex items-center gap-2 text-xs">
               <span className="text-sage-700 font-semibold">{counterText}</span>
               {ticket.denial_count > 0 && (
@@ -417,7 +393,6 @@ function TicketCard({
                 </>
               )}
             </div>
-            {/* Slightly chunkier progress bar (2px → easier to spot). */}
             <div className="mt-1.5 h-2 rounded-full bg-white/40 overflow-hidden">
               {ticket.verification_count === 0 ? (
                 <div className="h-full" style={{
@@ -430,33 +405,25 @@ function TicketCard({
               )}
             </div>
 
-            {/* INLINE QUICK-VOTE — the highest-impact fix from the
-                design review. Confirm/Deny used to be hidden behind
-                a card expand which killed conversion. Now they live
-                inline on the collapsed card so a resident scrolling
-                the list votes in one tap. The variant toggles
-                primary when it's their current vote so they get
-                instant feedback + a discoverable way to change
-                their mind. Hidden only when the user is the
-                reporter (can't vote on own ticket), the ticket is
-                already verified, or it's already resolved. */}
             {!verified && !isOwn && ticket.remediation_status !== 'resolved' && (
               <div className="mt-3 flex items-center gap-2 flex-wrap">
                 <Button size="sm"
-                        variant={myVote === 'confirm' ? 'primary' : 'ghost'}
+                        type="button"
+                        variant={currentVote === 'confirm' ? 'primary' : 'ghost'}
                         leftIcon={<ThumbsUp className="w-3.5 h-3.5" />}
                         onClick={() => quickVote('confirm')}>
                   {t('Confirmo')}
                 </Button>
                 <Button size="sm"
-                        variant={myVote === 'deny' ? 'primary' : 'ghost'}
+                        type="button"
+                        variant={currentVote === 'deny' ? 'primary' : 'ghost'}
                         leftIcon={<ThumbsDown className="w-3.5 h-3.5" />}
                         onClick={() => quickVote('deny')}>
                   {t('Não confirmo')}
                 </Button>
                 <button
                   type="button"
-                  onClick={() => openCommentBox('confirm')}
+                  onClick={openCommentBox}
                   className="text-xs text-dusk-300 underline underline-offset-2 hover:text-dusk-500"
                 >
                   {t('+ comentar')}
@@ -467,16 +434,33 @@ function TicketCard({
         </div>
       </div>
 
-      {/* Comment textarea — opens inline when the user clicks
-          "+ comentar". Backend already accepts `comment` on /verify;
-          this just gives the resident a place to add context
-          ("Eu vi isso ontem às 18h"). 500-char cap matches server. */}
       {showCommentBox && (
         <div className="mt-3 pt-3 border-t border-white/50 space-y-2">
           <label className="text-xs text-dusk-300">
             {t('Comente seu voto (opcional, ajuda o síndico a decidir)')}
           </label>
+          <div className="flex gap-2 flex-wrap">
+            <Button
+              type="button"
+              size="sm"
+              variant={pendingChoice === 'confirm' ? 'primary' : 'ghost'}
+              leftIcon={<ThumbsUp className="w-3.5 h-3.5" />}
+              onClick={() => setPendingChoice('confirm')}
+            >
+              {t('Confirmo')}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={pendingChoice === 'deny' ? 'primary' : 'ghost'}
+              leftIcon={<ThumbsDown className="w-3.5 h-3.5" />}
+              onClick={() => setPendingChoice('deny')}
+            >
+              {t('Não confirmo')}
+            </Button>
+          </div>
           <textarea
+            aria-label={t('Comente seu voto (opcional, ajuda o síndico a decidir)')}
             value={comment}
             onChange={(e) => setComment(e.target.value.slice(0, 500))}
             placeholder={t('ex: Vi o problema ontem às 18h, no andar 3')}
@@ -484,20 +468,13 @@ function TicketCard({
             rows={3}
           />
           <div className="flex gap-2 flex-wrap">
-            <Button size="sm" variant="primary" onClick={submitWithComment}>
-              {t(pendingChoice === 'confirm' ? 'Confirmar com comentário' : 'Não confirmo (com comentário)')}
+            <Button size="sm" type="button" variant="primary" onClick={submitWithComment}>
+              {t('Enviar voto com comentário')}
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => { setShowCommentBox(false); setComment(''); setPendingChoice(null); }}>
+            <Button size="sm" type="button" variant="ghost" onClick={() => { setShowCommentBox(false); setComment(''); setPendingChoice(null); }}>
               {t('Cancelar')}
             </Button>
           </div>
-          <button
-            type="button"
-            onClick={() => setPendingChoice(pendingChoice === 'confirm' ? 'deny' : 'confirm')}
-            className="text-xs text-dusk-300 underline underline-offset-2 hover:text-dusk-500"
-          >
-            {t(pendingChoice === 'confirm' ? 'Mudar para "Não confirmo"' : 'Mudar para "Confirmo"')}
-          </button>
         </div>
       )}
 

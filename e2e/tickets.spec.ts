@@ -221,6 +221,60 @@ test('Tickets: resident community report appears on admin ticket page', async ({
   await expect(page.getByText(/Aguardando verificação|Awaiting verification|Esperando verificación/i)).toBeVisible();
 });
 
+test('Tickets: resident inline vote with comment persists and leaves the action queue', async ({ request, page }) => {
+  const admin = await loginApi(request, 'admin@condoos.dev', 'admin123');
+  const resident = await loginApi(request, 'resident@condoos.dev', 'resident123');
+  const admH = { Authorization: `Bearer ${admin.token}`, 'Content-Type': 'application/json' };
+  const resH = { Authorization: `Bearer ${resident.token}`, 'Content-Type': 'application/json' };
+  const tag = Date.now();
+  const title = `E2E Inline Vote ${tag}`;
+  const comment = `Vi o problema no corredor durante o E2E ${tag}.`;
+
+  const createRes = await request.post(`${apiURL}/tickets`, {
+    headers: admH,
+    data: {
+      title,
+      description: 'Community-visible issue for resident inline vote coverage.',
+      category: 'maintenance',
+      priority: 'normal',
+      verification_threshold: 3,
+    },
+  });
+  expect(createRes.status()).toBe(201);
+  const ticketId: number = (await createRes.json()).data.id;
+
+  const listBefore = (await (await request.get(`${apiURL}/tickets`, { headers: resH })).json()).data as any[];
+  const rowBefore = listBefore.find((ticket: any) => ticket.id === ticketId);
+  expect(rowBefore?.my_vote ?? null).toBeNull();
+
+  await installSession(page, resident);
+  await page.goto('/app/tickets', { waitUntil: 'domcontentloaded' });
+  await expect(page.getByRole('heading', { name: /Vote nestes|Vote on these|Vota estos|Votez sur ceux-ci/i })).toBeVisible();
+
+  const card = page.getByRole('region', { name: title });
+  await expect(card).toBeVisible();
+  await card.getByRole('button', { name: /\+ comentar|\+ comment|\+ commenter/i }).click();
+  await card.getByRole('button', { name: /^Não confirmo$|^I do not confirm$|^No confirmo$|^Je ne confirme pas$/i }).last().click();
+  await card.getByLabel(/Comente seu voto|Comment on your vote|Comenta tu voto|Commentez votre vote/i).fill(comment);
+  await card.getByRole('button', { name: /Enviar voto com comentário|Send vote with comment|Enviar voto con comentario|Envoyer le vote avec commentaire/i }).click();
+
+  await expect(page.getByText(/Voto registrado: não confirmo|Vote recorded: I do not confirm|Voto registrado: no confirmo|Vote enregistré : je ne confirme pas/i)).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Em andamento|In progress|En curso|En cours/i })).toBeVisible();
+  await expect(card.getByLabel(/Comente seu voto|Comment on your vote|Comenta tu voto|Commentez votre vote/i)).toBeHidden();
+
+  const listAfter = (await (await request.get(`${apiURL}/tickets`, { headers: resH })).json()).data as any[];
+  const rowAfter = listAfter.find((ticket: any) => ticket.id === ticketId);
+  expect(rowAfter?.my_vote).toBe('deny');
+
+  await card.getByRole('button', { name: title }).click();
+  await expect(page.getByText(comment)).toBeVisible();
+
+  const detail = (await (await request.get(`${apiURL}/tickets/${ticketId}`, { headers: resH })).json()).data;
+  const verification = detail.verifications.find((row: any) => row.comment === comment);
+  expect(verification).toBeTruthy();
+  expect(verification.vote).toBe('deny');
+});
+
 test('Tickets: admin records vendor response through the modal', async ({ request, page }) => {
   const admin = await loginApi(request, 'admin@condoos.dev', 'admin123');
   const admH = { Authorization: `Bearer ${admin.token}`, 'Content-Type': 'application/json' };

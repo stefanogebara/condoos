@@ -617,11 +617,6 @@ router.get('/', requireAuth, requireBoardCapability('maintenance'), (req: Authed
     clauses.push('t.status = ?');
     params.push(status);
   }
-  // Audit follow-up — the previous payload only exposed `unit_number` joined
-  // off `t.unit_id` (the unit the TICKET is about). Community reports rarely
-  // set unit_id, so the resident byline rendered without any unit info. Add
-  // `reporter_unit_number` joined off the reporter's primary active
-  // user_unit row so the UI can show "Maya · 704 · 10/05/2026" reliably.
   const rows = db.prepare(
     `SELECT t.*, u.number AS unit_number, r.first_name AS reporter_first, r.last_name AS reporter_last,
             ru.number AS reporter_unit_number,
@@ -630,7 +625,13 @@ router.get('/', requireAuth, requireBoardCapability('maintenance'), (req: Authed
             wo.status AS work_order_status,
             wo.scheduled_for AS work_order_scheduled_for,
             wo.estimated_amount_cents AS work_order_estimated_amount_cents,
-            wosc.company_name AS work_order_vendor_name
+            wosc.company_name AS work_order_vendor_name,
+            (
+              SELECT v.vote
+              FROM ticket_verifications v
+              WHERE v.ticket_id = t.id AND v.user_id = ?
+              LIMIT 1
+            ) AS my_vote
      FROM tickets t
      LEFT JOIN units u ON u.id = t.unit_id
      JOIN users r ON r.id = t.reporter_id
@@ -643,7 +644,7 @@ router.get('/', requireAuth, requireBoardCapability('maintenance'), (req: Authed
      ORDER BY
        CASE t.priority WHEN 'urgent' THEN 1 WHEN 'high' THEN 2 WHEN 'normal' THEN 3 ELSE 4 END,
        t.updated_at DESC`
-  ).all(...params) as any[];
+  ).all(req.user!.id, ...params) as any[];
   // Privacy gate: on community-visible tickets, a non-admin viewer used
   // to see the reporter's unit number — turning the community list into
   // a "who lives where" map. Strip unit + last_name from the reporter
