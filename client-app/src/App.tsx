@@ -54,11 +54,14 @@ function RequireSignedIn({ children }: { children: React.ReactNode }) {
 }
 
 function RootRoute() {
-  const { user, loading, hasActiveMembership } = useAuth();
-  if (loading || (user && hasActiveMembership === null)) return null;
-  if (!user) return <LandingPage />;
-  if (!hasActiveMembership && !isStaffRole(user.role)) return <Navigate to="/onboarding" replace />;
-  return <Navigate to={landingPath(user.role)} replace />;
+  // The hero / marketing page is the front door. We used to auto-redirect
+  // logged-in users straight to their dashboard (or to /onboarding if they
+  // hadn't joined a building yet) — but that meant the marketing page was
+  // invisible to anyone with a stored session, including admins showing
+  // CondoOS to neighbours and returning visitors mid-onboarding.
+  // Render Landing for everyone; logged-in users get a "go to your
+  // dashboard" CTA in the Landing nav.
+  return <LandingPage />;
 }
 
 export default function App() {

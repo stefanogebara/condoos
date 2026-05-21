@@ -9,9 +9,23 @@ import Avatar from '../components/Avatar';
 import Badge from '../components/Badge';
 import Picture from '../components/Picture';
 import { exposeInternalPages } from '../lib/appConfig';
+import { useAuth } from '../lib/auth';
+
+// Where to send a signed-in visitor if they hit the Landing nav CTA.
+// Mirrors App.tsx#landingPath so the two stay aligned — residents go to
+// /app, staff go to /board or /concierge. Anyone without a membership
+// gets pointed at /onboarding so they can resume picking a building.
+function signedInDestination(role: string | undefined, hasMembership: boolean | null): string {
+  if (!role) return '/login';
+  if (role === 'board_admin') return '/board';
+  if (role === 'concierge') return '/concierge';
+  if (hasMembership) return '/app';
+  return '/onboarding';
+}
 
 export default function Landing() {
   useEffect(() => { track('landing_view'); }, []);
+  const { user, hasActiveMembership } = useAuth();
 
   // Forward any ?code=ABC123 the visitor arrived with so the resident-with-invite
   // CTA preserves it through the login redirect into the join wizard.
@@ -37,7 +51,21 @@ export default function Landing() {
           <a href="#faq"       className="px-3 py-1.5 rounded-full hover:bg-white/50 transition">Dúvidas</a>
           <a href="https://github.com/stefanogebara/condoos" target="_blank" rel="noreferrer" className="px-3 py-1.5 rounded-full hover:bg-white/50 transition">GitHub</a>
         </div>
-        <Link to="/login"><Button variant="primary" size="sm" rightIcon={<ArrowRight className="w-4 h-4" />}>Entrar</Button></Link>
+        {user ? (
+          <Link
+            to={signedInDestination(user.role, hasActiveMembership)}
+            onClick={() => track('cta_clicked', { location: 'nav', label: 'continue_signed_in' })}
+          >
+            <Button variant="primary" size="sm" rightIcon={<ArrowRight className="w-4 h-4" />}>
+              {user.role === 'board_admin' ? 'Ir para o painel'
+                : user.role === 'concierge' ? 'Ir para a portaria'
+                : hasActiveMembership ? 'Ir para o app'
+                : 'Continuar cadastro'}
+            </Button>
+          </Link>
+        ) : (
+          <Link to="/login"><Button variant="primary" size="sm" rightIcon={<ArrowRight className="w-4 h-4" />}>Entrar</Button></Link>
+        )}
       </nav>
 
       {/* Hero — tighter, more confident, Inter Tight first */}
