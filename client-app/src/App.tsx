@@ -1,4 +1,4 @@
-import React, { lazy, Suspense } from 'react';
+import React, { Component, ErrorInfo, lazy, ReactNode, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './lib/auth';
 import { exposeInternalPages } from './lib/appConfig';
@@ -20,6 +20,54 @@ const ConciergeApp = lazy(() => import('./pages/concierge/ConciergeApp'));
 
 function PageFallback() {
   return <div className="min-h-screen flex items-center justify-center text-dusk-300">{t('Carregando...')}</div>;
+}
+
+// Lazy-loaded chunks can 404 when a user opens the app, leaves a tab
+// open through a deploy, then navigates to a new route — the bundle
+// hash in the HTML they have cached no longer matches what Vercel
+// serves. The default behaviour is a blank screen with no recovery.
+// We catch the chunk-load error, show a recoverable message, and
+// auto-reload once (with a sessionStorage guard so we don't reload-
+// loop if the error is genuine, like a real bundle bug).
+class ChunkLoadBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError(error: Error) {
+    const msg = error?.message || '';
+    const isChunkError = /Loading chunk|Failed to fetch dynamically|Importing a module script failed/i.test(msg);
+    if (isChunkError) {
+      if (typeof window !== 'undefined' && !window.sessionStorage.getItem('condoos_chunk_reload')) {
+        window.sessionStorage.setItem('condoos_chunk_reload', '1');
+        window.location.reload();
+        return { failed: false };
+      }
+      return { failed: true };
+    }
+    throw error;
+  }
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    if (typeof window !== 'undefined' && (window as any).Sentry?.captureException) {
+      (window as any).Sentry.captureException(error, { extra: { componentStack: info.componentStack } });
+    }
+  }
+  render() {
+    if (this.state.failed) {
+      return (
+        <div className="min-h-screen flex items-center justify-center px-6 text-center text-dusk-400">
+          <div>
+            <p className="mb-4">{t('Atualizamos o app. Recarregue para continuar.')}</p>
+            <button
+              type="button"
+              onClick={() => { window.sessionStorage.removeItem('condoos_chunk_reload'); window.location.reload(); }}
+              className="px-4 py-2 rounded-2xl bg-dusk-500 text-cream-50 text-sm font-medium hover:bg-dusk-400 transition"
+            >
+              {t('Recarregar')}
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
 }
 
 // Staff users (board_admin, concierge) don't have user_unit rows, so the
@@ -67,6 +115,7 @@ function RootRoute() {
 export default function App() {
   return (
     <AuthProvider>
+      <ChunkLoadBoundary>
       <Suspense fallback={<PageFallback />}>
         <Routes>
           <Route path="/" element={<RootRoute />} />
@@ -85,6 +134,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>
+      </ChunkLoadBoundary>
     </AuthProvider>
   );
 }

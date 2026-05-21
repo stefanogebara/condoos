@@ -993,7 +993,18 @@ export default function BoardAgent() {
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <Badge tone="sage">{tr('Ação recomendada')}</Badge>
-                    {result._fallback ? <Badge tone="warning">{tr('Fallback seguro')}</Badge> : null}
+                    {result._fallback ? (
+                      <Badge tone="warning">{tr('Fallback seguro')}</Badge>
+                    ) : result.ai_status === 'ok' ? (
+                      // Positive confirmation — the full pipeline ran end-to-end.
+                      // Sets expectation that the plan is grounded in tool-call
+                      // data (network fit, building memory, etc.) rather than a
+                      // skeleton from the safety fallback. Tooltip points to
+                      // the diagnostics drawer for admins who want proof.
+                      <span title={result.diagnostics_available ? tr('Plano com diagnóstico — abra "Detalhes do plano"') : tr('Plano gerado com IA')}>
+                        <Badge tone="neutral">✓ {tr('Plano IA')}</Badge>
+                      </span>
+                    ) : null}
                     <Badge tone="neutral">{agentTaskTypeLabel(result.task_type, tr)}</Badge>
                     {turns.length > 1 && <Badge tone="neutral">{tr('Turno')} {turns.length}</Badge>}
                   </div>

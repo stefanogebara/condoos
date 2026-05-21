@@ -20,20 +20,36 @@ const Transparencia = lazy(() => import('./Transparencia'));
 const Tickets = lazy(() => import('./Tickets'));
 const Documents = lazy(() => import('./Documents'));
 
+// Resident sidebar — same 3-section pattern as the board sidebar so
+// the two surfaces feel like siblings. Sections chosen by what a
+// resident actually does, not by feature category:
+//
+//   Dia a dia — package pickup, guest sign-in, reporting a leak,
+//   reserving the BBQ, reading the latest announcement
+//   Decidir   — vote, attend, suggest. Mirrors the board's "Decidir".
+//   Conhecer  — read the building's docs, see where the money went,
+//   tweak your own preferences. Mirrors the board's "Conhecer".
 const NAV: NavItem[] = [
+  // Top — home. No section header.
   { to: '/app',               label: 'Início',        icon: Home },
-  { to: '/app/packages',      label: 'Encomendas',    icon: Package },
-  { to: '/app/visitors',      label: 'Visitantes',    icon: DoorOpen },
-  { to: '/app/tickets',       label: 'Problemas',     icon: AlertTriangle },
-  { to: '/app/amenities',     label: 'Áreas comuns',  icon: Waves },
-  { to: '/app/announcements', label: 'Comunicados',   icon: Megaphone },
-  { to: '/app/documents',     label: 'Documentos',    icon: FileText },
-  { to: '/app/proposals',     label: 'Propostas',     icon: Vote },
-  { to: '/app/assemblies',    label: 'Assembleias',   icon: Gavel },
-  { to: '/app/meetings',      label: 'Reuniões',      icon: Calendar },
-  { to: '/app/transparencia', label: 'Transparência', icon: Wallet },
-  { to: '/app/suggest',       label: 'Sugerir',       icon: Sparkles },
-  { to: '/app/settings',      label: 'Preferências',  icon: SlidersHorizontal },
+
+  // Dia a dia — daily resident actions.
+  { to: '/app/packages',      label: 'Encomendas',    icon: Package, section: 'Dia a dia' },
+  { to: '/app/visitors',      label: 'Visitantes',    icon: DoorOpen, section: 'Dia a dia' },
+  { to: '/app/tickets',       label: 'Problemas',     icon: AlertTriangle, section: 'Dia a dia' },
+  { to: '/app/amenities',     label: 'Áreas comuns',  icon: Waves, section: 'Dia a dia' },
+  { to: '/app/announcements', label: 'Comunicados',   icon: Megaphone, section: 'Dia a dia' },
+
+  // Decidir — collective decision-making. Matches the board verb.
+  { to: '/app/proposals',     label: 'Propostas',     icon: Vote, section: 'Decidir' },
+  { to: '/app/assemblies',    label: 'Assembleias',   icon: Gavel, section: 'Decidir' },
+  { to: '/app/meetings',      label: 'Reuniões',      icon: Calendar, section: 'Decidir' },
+  { to: '/app/suggest',       label: 'Sugerir',       icon: Sparkles, section: 'Decidir' },
+
+  // Conhecer — reference & personal account.
+  { to: '/app/documents',     label: 'Documentos',    icon: FileText, section: 'Conhecer' },
+  { to: '/app/transparencia', label: 'Transparência', icon: Wallet, section: 'Conhecer' },
+  { to: '/app/settings',      label: 'Preferências',  icon: SlidersHorizontal, section: 'Conhecer' },
 ];
 
 export default function ResidentApp() {
