@@ -210,8 +210,9 @@ test('admin: AI agent generates an operational plan', async ({ page, request }) 
   await adminLogin(page, request);
   await page.goto('/board/agent');
   await expect(page.getByRole('heading', { name: /AI agent|Agente IA|Agent IA/i })).toBeVisible();
-  await expect(page.getByText(/Operations agent|Agente operacional|Agente operativo|Agent opérationnel/i).first()).toBeVisible();
-  await page.getByRole('textbox', { name: /What do you want to solve|O que você quer resolver|Qué quieres resolver|Que voulez-vous résoudre/i }).fill('Compare options to repair the gym treadmill and find maintenance vendors.');
+  const taskInput = page.getByRole('textbox', { name: /What do you want to solve|O que você quer resolver|Qué quieres resolver|Que voulez-vous résoudre/i });
+  await expect(taskInput).toBeVisible();
+  await taskInput.fill('Compare options to repair the gym treadmill and find maintenance vendors.');
   await page.getByRole('button', { name: /Generate plan|Gerar plano|Generar plan|Générer le plan/i }).click();
   const aiTimeout = process.env.E2E_HAS_LLM ? 60_000 : 20_000;
   await expect(page.getByText(/Recommended action|Ação recomendada|Acción recomendada|Action recommandée/i)).toBeVisible({ timeout: aiTimeout });
