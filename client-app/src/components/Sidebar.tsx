@@ -14,6 +14,12 @@ export interface NavItem {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   badge?: number | string;
+  // Optional grouping label. When provided, the Sidebar renders a
+  // small uppercase divider above the first item of each new section.
+  // Items without a section render normally without a header. Sections
+  // group adjacent items in render order — so callers should pre-sort
+  // their items by section.
+  section?: string;
 }
 
 interface Props {
@@ -114,31 +120,50 @@ export default function Sidebar({ items, title, subtitle, headerSlot }: Props) {
 
       {!compact && headerSlot}
 
-      <nav className="flex-1 overflow-y-auto space-y-1 pr-1">
-        {items.map((it) => (
-          <NavLink
-            key={it.to}
-            to={it.to}
-            end={it.to.endsWith('/app') || it.to.endsWith('/board')}
-            title={compact ? tr(it.label) : undefined}
-            className={({ isActive }) => clsx(
-              'flex items-center rounded-2xl text-sm font-medium transition-all w-full',
-              compact ? 'justify-center px-2 py-2.5' : 'gap-3 px-3.5 py-2.5',
-              isActive
-                ? 'bg-white/70 text-dusk-500 shadow-clay border border-white/80'
-                : 'text-dusk-300 hover:bg-white/40 hover:text-dusk-500',
-            )}
-          >
-            <it.icon className="w-[18px] h-[18px]" />
-            {!compact && <span className="flex-1">{tr(it.label)}</span>}
-            {!compact && it.badge !== undefined && (
-              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-peach-200 text-peach-500">{it.badge}</span>
-            )}
-            {compact && it.badge !== undefined && (
-              <span className="absolute ml-5 -mt-3 text-[10px] font-semibold w-4 h-4 leading-4 text-center rounded-full bg-peach-200 text-peach-500">{it.badge}</span>
-            )}
-          </NavLink>
-        ))}
+      <nav className="flex-1 overflow-y-auto pr-1">
+        {items.map((it, idx) => {
+          // Section header — only when this item's section differs from
+          // the previous item's. First item with a section also renders
+          // a header. Hidden in the icon-only rail (compact mode) since
+          // there's no room for a label.
+          const prevSection = idx > 0 ? items[idx - 1].section : undefined;
+          const showHeader = !compact && it.section && it.section !== prevSection;
+          return (
+            <React.Fragment key={it.to}>
+              {showHeader && (
+                <div
+                  className={clsx(
+                    'px-3.5 text-[10px] font-semibold uppercase tracking-wider text-dusk-200/80',
+                    idx === 0 ? 'pt-1 pb-2' : 'pt-4 pb-2',
+                  )}
+                >
+                  {tr(it.section!)}
+                </div>
+              )}
+              <NavLink
+                to={it.to}
+                end={it.to.endsWith('/app') || it.to.endsWith('/board')}
+                title={compact ? tr(it.label) : undefined}
+                className={({ isActive }) => clsx(
+                  'flex items-center rounded-2xl text-sm font-medium transition-all w-full mb-1',
+                  compact ? 'justify-center px-2 py-2.5' : 'gap-3 px-3.5 py-2.5',
+                  isActive
+                    ? 'bg-white/70 text-dusk-500 shadow-clay border border-white/80'
+                    : 'text-dusk-300 hover:bg-white/40 hover:text-dusk-500',
+                )}
+              >
+                <it.icon className="w-[18px] h-[18px]" />
+                {!compact && <span className="flex-1">{tr(it.label)}</span>}
+                {!compact && it.badge !== undefined && (
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-peach-200 text-peach-500">{it.badge}</span>
+                )}
+                {compact && it.badge !== undefined && (
+                  <span className="absolute ml-5 -mt-3 text-[10px] font-semibold w-4 h-4 leading-4 text-center rounded-full bg-peach-200 text-peach-500">{it.badge}</span>
+                )}
+              </NavLink>
+            </React.Fragment>
+          );
+        })}
       </nav>
 
       <div className="mt-auto pt-2 border-t border-white/30 space-y-2">

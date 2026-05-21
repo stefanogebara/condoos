@@ -249,6 +249,11 @@ const phrases: Copy[] = [
   c('Preferências', 'Settings', 'Preferencias', 'Préférences'),
   c('Sugestões', 'Suggestions', 'Sugerencias', 'Suggestions'),
   c('Pendentes', 'Pending', 'Pendientes', 'En attente'),
+  // Sidebar section headers — "respond now / lead the building /
+  // look it up". Short verbs in PT so the sidebar stays scannable.
+  c('Atender', 'Respond', 'Atender', 'Répondre'),
+  c('Decidir', 'Decide', 'Decidir', 'Décider'),
+  c('Conhecer', 'Reference', 'Consultar', 'Consulter'),
   c('Moradores', 'Residents', 'Residentes', 'Résidents'),
   c('Funcionalidades', 'Features', 'Funciones', 'Fonctionnalités'),
   c('Como funciona', 'How it works', 'Cómo funciona', 'Fonctionnement'),

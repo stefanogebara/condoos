@@ -148,27 +148,43 @@ export default function BoardApp() {
     ? ticketSummary.needs_admin + ticketSummary.verified_ready
     : 0;
 
+  // Sidebar layout — grouped into 3 sections so the admin can scan
+  // by intent (Atender = "respond now"; Decidir = "lead the building";
+  // Conhecer = "look something up"). Items must be declared in section
+  // order — the Sidebar groups adjacent items, so any item with the
+  // same section header has to sit next to its siblings here.
+  //
+  // Items without `section` (Visão geral, Portfólio) render at the top
+  // without a header, giving the home views a quiet zone above the
+  // grouped sections.
   const nav: NavItem[] = useMemo(() => {
     const items: BoardNavItem[] = [
+      // Top — quick context. No section header.
       { to: '/board',               label: 'Visão geral',   icon: Home, capability: 'building_admin' },
       { to: '/board/portfolio',     label: 'Portfólio',     icon: Briefcase },
-      { to: '/board/suggestions',   label: 'Sugestões',     icon: Inbox, capability: 'building_admin' },
-      { to: '/board/agent',         label: 'Agente IA',     icon: Bot, capability: 'building_admin' },
-      { to: '/board/memory',        label: 'Memória',       icon: BookOpenText, capability: 'building_admin' },
-      { to: '/board/reports',       label: 'Relatórios',    icon: ClipboardList, capability: 'reports' },
-      { to: '/board/pending',       label: 'Pendentes',     icon: UserCheck, badge: pendingCount || undefined, capability: 'building_admin' },
-      { to: '/board/proposals',     label: 'Propostas',     icon: Vote, capability: 'building_admin' },
-      { to: '/board/assemblies',    label: 'Assembleias',   icon: Gavel, capability: 'building_admin' },
-      { to: '/board/meetings',      label: 'Reuniões',      icon: Calendar, capability: 'building_admin' },
-      { to: '/board/announcements', label: 'Comunicados',   icon: Megaphone, capability: 'building_admin' },
-      { to: '/board/residents',     label: 'Moradores',     icon: Users, capability: 'building_admin' },
-      { to: '/board/concierge',     label: 'Portaria',      icon: ShieldCheck, capability: 'building_admin' },
-      { to: '/board/amenities',     label: 'Áreas comuns',  icon: Waves, capability: 'building_admin' },
-      { to: '/board/documents',     label: 'Documentos',    icon: FileText, capability: 'documents' },
-      { to: '/board/edificio',      label: 'Edifício',      icon: Building2, capability: 'building_admin' },
-      { to: '/board/services',      label: 'Operação',      icon: Wrench, capability: 'maintenance' },
-      { to: '/board/tickets',       label: 'Chamados',      icon: AlertTriangle, badge: ticketBadge || undefined, capability: 'maintenance' },
-      { to: '/board/financas',      label: 'Finanças',      icon: Wallet, capability: 'finance' },
+
+      // Atender — daily inbox. Things waiting on you.
+      { to: '/board/tickets',       label: 'Chamados',      icon: AlertTriangle, badge: ticketBadge || undefined, capability: 'maintenance', section: 'Atender' },
+      { to: '/board/suggestions',   label: 'Sugestões',     icon: Inbox, capability: 'building_admin', section: 'Atender' },
+      { to: '/board/pending',       label: 'Pendentes',     icon: UserCheck, badge: pendingCount || undefined, capability: 'building_admin', section: 'Atender' },
+      { to: '/board/concierge',     label: 'Portaria',      icon: ShieldCheck, capability: 'building_admin', section: 'Atender' },
+
+      // Decidir — admin work. Propose, vote, schedule, communicate.
+      { to: '/board/agent',         label: 'Agente IA',     icon: Bot, capability: 'building_admin', section: 'Decidir' },
+      { to: '/board/proposals',     label: 'Propostas',     icon: Vote, capability: 'building_admin', section: 'Decidir' },
+      { to: '/board/assemblies',    label: 'Assembleias',   icon: Gavel, capability: 'building_admin', section: 'Decidir' },
+      { to: '/board/meetings',      label: 'Reuniões',      icon: Calendar, capability: 'building_admin', section: 'Decidir' },
+      { to: '/board/announcements', label: 'Comunicados',   icon: Megaphone, capability: 'building_admin', section: 'Decidir' },
+      { to: '/board/services',      label: 'Operação',      icon: Wrench, capability: 'maintenance', section: 'Decidir' },
+
+      // Conhecer — context & reference. Read-only mostly.
+      { to: '/board/residents',     label: 'Moradores',     icon: Users, capability: 'building_admin', section: 'Conhecer' },
+      { to: '/board/amenities',     label: 'Áreas comuns',  icon: Waves, capability: 'building_admin', section: 'Conhecer' },
+      { to: '/board/edificio',      label: 'Edifício',      icon: Building2, capability: 'building_admin', section: 'Conhecer' },
+      { to: '/board/documents',     label: 'Documentos',    icon: FileText, capability: 'documents', section: 'Conhecer' },
+      { to: '/board/memory',        label: 'Memória',       icon: BookOpenText, capability: 'building_admin', section: 'Conhecer' },
+      { to: '/board/reports',       label: 'Relatórios',    icon: ClipboardList, capability: 'reports', section: 'Conhecer' },
+      { to: '/board/financas',      label: 'Finanças',      icon: Wallet, capability: 'finance', section: 'Conhecer' },
     ];
     return items.filter((item) => canUseBoardCapability(access, item.capability));
   }, [access, pendingCount, ticketBadge]);
