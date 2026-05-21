@@ -26,6 +26,32 @@ async function setSession(page: Page, session: Session) {
   }, session);
 }
 
+function resolveUploadUrl(uploadUrl: string) {
+  return uploadUrl.startsWith('http') ? uploadUrl : `${apiOrigin}${uploadUrl}`;
+}
+
+function uploadHeaders(presigned: any, session: Session) {
+  const uploadUrl = resolveUploadUrl(String(presigned.upload_url));
+  const headers: Record<string, string> = { ...(presigned.headers || {}) };
+  try {
+    const payloadHash = new URL(uploadUrl).searchParams.get('X-Amz-Content-Sha256');
+    if (payloadHash && !headers['x-amz-content-sha256']) headers['x-amz-content-sha256'] = payloadHash;
+  } catch {
+    // Relative local API URLs are resolved above; keep this defensive for malformed fixtures.
+  }
+  if (presigned.upload_method === 'api') headers.Authorization = `Bearer ${session.token}`;
+  return headers;
+}
+
+async function putPresignedFile(request: APIRequestContext, presigned: any, bytes: Buffer, session: Session) {
+  const uploadUrl = resolveUploadUrl(String(presigned.upload_url));
+  const uploaded = await request.put(uploadUrl, {
+    headers: uploadHeaders(presigned, session),
+    data: bytes,
+  });
+  expect(uploaded.ok(), `upload failed: ${uploaded.status()} ${await uploaded.text()}`).toBeTruthy();
+}
+
 test('admin publishes a resident-visible document and resident can open it', async ({ page, request }) => {
   const admin = await loginRole(request, 'admin');
   const resident = await loginRole(request, 'resident');
@@ -129,20 +155,15 @@ test('uploaded document shows a size chip on both board and resident views (Phas
         visibility: 'residents',
       },
     });
-    expect(presign.ok()).toBeTruthy();
+    expect(presign.ok(), `presign failed: ${presign.status()} ${await presign.text()}`).toBeTruthy();
     const presigned = (await presign.json()).data;
     fileId = presigned.file.id;
-    const uploadUrl = String(presigned.upload_url).startsWith('http')
-      ? presigned.upload_url
-      : `${apiOrigin}${presigned.upload_url}`;
-    await request.put(uploadUrl, {
-      headers: { Authorization: `Bearer ${admin.token}`, 'Content-Type': 'text/plain' },
-      data: bytes,
-    });
-    await request.post(`${apiURL}/uploads/complete`, {
+    await putPresignedFile(request, presigned, bytes, admin);
+    const completed = await request.post(`${apiURL}/uploads/complete`, {
       headers: { Authorization: `Bearer ${admin.token}` },
       data: { file_id: fileId },
     });
+    expect(completed.ok(), `complete failed: ${completed.status()} ${await completed.text()}`).toBeTruthy();
 
     const created = await request.post(`${apiURL}/documents`, {
       headers: { Authorization: `Bearer ${admin.token}` },
@@ -202,17 +223,7 @@ test('admin uploads a document file and resident can download the stored copy', 
     const presigned = (await presign.json()).data;
     fileId = presigned.file.id;
 
-    const uploadUrl = String(presigned.upload_url).startsWith('http')
-      ? presigned.upload_url
-      : `${apiOrigin}${presigned.upload_url}`;
-    const uploaded = await request.put(uploadUrl, {
-      headers: {
-        Authorization: `Bearer ${admin.token}`,
-        'Content-Type': 'text/plain',
-      },
-      data: bytes,
-    });
-    expect(uploaded.ok(), `upload failed: ${uploaded.status()} ${await uploaded.text()}`).toBeTruthy();
+    await putPresignedFile(request, presigned, bytes, admin);
 
     const completed = await request.post(`${apiURL}/uploads/complete`, {
       headers: { Authorization: `Bearer ${admin.token}` },

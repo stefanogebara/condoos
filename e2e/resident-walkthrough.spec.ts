@@ -292,7 +292,7 @@ test('resident: settings page has profile summary', async ({ page, request }) =>
   await page.goto('/app/settings');
   await expect(page.getByRole('heading', { level: 1, name: /Settings|Preferênc/i })).toBeVisible();
   await expect(page.getByRole('heading', { name: /Profile|Perfil/i })).toBeVisible();
-  await expect(page.getByText(new RegExp(escapeRegExp(session.user.email), 'i'))).toBeVisible();
+  await expect(page.getByRole('main').getByText(new RegExp(escapeRegExp(session.user.email), 'i'))).toBeVisible();
 });
 
 // ---------------------------------------------------------------------------

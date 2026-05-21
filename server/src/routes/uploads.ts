@@ -170,7 +170,10 @@ router.post('/presign', requireAuth, asyncHandler(async (req: AuthedRequest, res
     ContentType: body.content_type,
     ContentLength: body.size_bytes,
   });
-  const uploadUrl = await getSignedUrl(s3(), command, { expiresIn });
+  const uploadUrl = await getSignedUrl(s3(), command, {
+    expiresIn,
+    unhoistableHeaders: new Set(['x-amz-content-sha256']),
+  });
   audit(req, {
     action: 'file.presign',
     target_type: 'file',
@@ -182,7 +185,10 @@ router.post('/presign', requireAuth, asyncHandler(async (req: AuthedRequest, res
     file: filePayload(file.id),
     upload_method: 'put',
     upload_url: uploadUrl,
-    headers: { 'Content-Type': body.content_type },
+    headers: {
+      'Content-Type': body.content_type,
+      'x-amz-content-sha256': 'UNSIGNED-PAYLOAD',
+    },
     expires_in_seconds: expiresIn,
   }, 201);
 }));
