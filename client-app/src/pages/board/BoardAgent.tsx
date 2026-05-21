@@ -683,68 +683,84 @@ export default function BoardAgent() {
         </GlassCard>
       )}
 
-      {/* Observability — dispatch queue snapshot. Auto-refreshes every
-          12s (paused when the tab is hidden). Green/sage when the
-          queue is healthy, amber on lag, red on recent failures. */}
-      {queueStatus && (
-        <GlassCard
-          data-testid="queue-ops-panel"
-          className={`p-4 mb-5 ${
-            queueHealth.tone === 'red' ? 'border-red-300 bg-red-50/60'
-            : queueHealth.tone === 'amber' ? 'border-amber-300 bg-amber-50/60'
-            : ''
-          }`}
-        >
-          <div className="flex items-center justify-between gap-3 mb-3">
-            <div className="flex items-center gap-2.5 text-sm">
+      {/* Observability — dispatch queue snapshot. UX inspection
+          2026-05-21: was always visible 4-stat-tile panel competing
+          with the form for visual attention. Most days the queue is
+          healthy and the stats don't change anything the admin does.
+          Now: render as a single compact health indicator that auto-
+          expands only when the health tone is amber/red OR when the
+          admin clicks the chip to see the detail. */}
+      {queueStatus && (() => {
+        const isUnhealthy = queueHealth.tone !== 'sage';
+        return (
+          <details
+            data-testid="queue-ops-panel"
+            className="mb-5 group"
+            open={isUnhealthy}
+          >
+            <summary className={`cursor-pointer list-none inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs border transition ${
+              queueHealth.tone === 'red' ? 'border-red-300 bg-red-50/80 text-red-800'
+              : queueHealth.tone === 'amber' ? 'border-amber-300 bg-amber-50/80 text-amber-900'
+              : 'border-white/70 bg-white/60 text-dusk-400 hover:bg-white/80'
+            }`}>
               <span className={`inline-block w-2 h-2 rounded-full ${
                 queueHealth.tone === 'red' ? 'bg-red-500'
                 : queueHealth.tone === 'amber' ? 'bg-amber-500'
                 : 'bg-sage-500'
               }`} />
-              <div className="font-medium text-dusk-500">{tr('Fila de despachos')}</div>
-            </div>
-            <div className="text-xs text-dusk-300">{queueStatus.active_workers.length} {tr('worker(s) ativo(s)')}</div>
-          </div>
-          <div className="grid grid-cols-4 gap-2 text-center text-xs">
-            <div className="rounded-xl bg-white/60 px-2 py-2" data-testid="queue-ops-queued">
-              <div className="text-lg font-display text-dusk-500">{queueStatus.counts.queued}</div>
-              <div className="text-dusk-300">{tr('Em fila')}</div>
-            </div>
-            <div className="rounded-xl bg-white/60 px-2 py-2" data-testid="queue-ops-claimed">
-              <div className="text-lg font-display text-dusk-500">{queueStatus.counts.claimed}</div>
-              <div className="text-dusk-300">{tr('Em análise')}</div>
-            </div>
-            <div className="rounded-xl bg-white/60 px-2 py-2" data-testid="queue-ops-done">
-              <div className="text-lg font-display text-dusk-500">{queueStatus.counts.done}</div>
-              <div className="text-dusk-300">{tr('Concluídos')}</div>
-            </div>
-            <div className="rounded-xl bg-white/60 px-2 py-2" data-testid="queue-ops-failed">
-              <div className="text-lg font-display text-dusk-500">{queueStatus.failed_24h}</div>
-              <div className="text-dusk-300">{tr('Falhas (24h)')}</div>
-            </div>
-          </div>
-          {queueHealth.reason && (
-            <div className="mt-3 text-xs text-dusk-400">{queueHealth.reason}</div>
-          )}
-          {queueStatus.recent_failures.length > 0 && (
-            <details className="mt-3 text-xs">
-              <summary className="cursor-pointer text-dusk-300 hover:text-dusk-500">
-                {tr('Falhas recentes')} ({queueStatus.recent_failures.length})
-              </summary>
-              <ul className="mt-2 space-y-1">
-                {queueStatus.recent_failures.map((f) => (
-                  <li key={f.id} className="rounded-lg bg-white/60 px-2 py-1.5 flex items-center justify-between gap-2">
-                    <span className="font-mono text-dusk-300">#{f.ticket_id}</span>
-                    <span className="text-dusk-500 truncate flex-1">{f.last_error || tr('sem detalhes')}</span>
-                    <span className="text-dusk-300">{new Date(f.finished_at).toLocaleString(locale)}</span>
-                  </li>
-                ))}
-              </ul>
-            </details>
-          )}
-        </GlassCard>
-      )}
+              <span className="font-medium">{tr('Fila de despachos')}</span>
+              {queueStatus.counts.queued + queueStatus.counts.claimed > 0 && (
+                <span className="text-dusk-300">· {queueStatus.counts.queued + queueStatus.counts.claimed} {tr('ativos')}</span>
+              )}
+              {queueStatus.failed_24h > 0 && (
+                <span className="text-red-700">· {queueStatus.failed_24h} {tr('falhas 24h')}</span>
+              )}
+              <ChevronDown className="w-3 h-3 transition-transform group-open:rotate-180 ml-1" />
+            </summary>
+            <GlassCard
+              className={`mt-3 p-4 ${
+                queueHealth.tone === 'red' ? 'border-red-300 bg-red-50/60'
+                : queueHealth.tone === 'amber' ? 'border-amber-300 bg-amber-50/60'
+                : ''
+              }`}
+            >
+              <div className="flex items-center justify-between gap-3 mb-3 text-xs text-dusk-300">
+                <span>{queueStatus.active_workers.length} {tr('worker(s) ativo(s)')}</span>
+                {queueHealth.reason && <span className="text-dusk-400">{queueHealth.reason}</span>}
+              </div>
+              <div className="grid grid-cols-4 gap-2 text-center text-xs">
+                <div className="rounded-xl bg-white/60 px-2 py-2" data-testid="queue-ops-queued">
+                  <div className="text-lg font-display text-dusk-500">{queueStatus.counts.queued}</div>
+                  <div className="text-dusk-300">{tr('Em fila')}</div>
+                </div>
+                <div className="rounded-xl bg-white/60 px-2 py-2" data-testid="queue-ops-claimed">
+                  <div className="text-lg font-display text-dusk-500">{queueStatus.counts.claimed}</div>
+                  <div className="text-dusk-300">{tr('Em análise')}</div>
+                </div>
+                <div className="rounded-xl bg-white/60 px-2 py-2" data-testid="queue-ops-done">
+                  <div className="text-lg font-display text-dusk-500">{queueStatus.counts.done}</div>
+                  <div className="text-dusk-300">{tr('Concluídos')}</div>
+                </div>
+                <div className="rounded-xl bg-white/60 px-2 py-2" data-testid="queue-ops-failed">
+                  <div className="text-lg font-display text-dusk-500">{queueStatus.failed_24h}</div>
+                  <div className="text-dusk-300">{tr('Falhas (24h)')}</div>
+                </div>
+              </div>
+              {queueStatus.recent_failures.length > 0 && (
+                <ul className="mt-3 space-y-1 text-xs">
+                  {queueStatus.recent_failures.map((f) => (
+                    <li key={f.id} className="rounded-lg bg-white/60 px-2 py-1.5 flex items-center justify-between gap-2">
+                      <span className="font-mono text-dusk-300">#{f.ticket_id}</span>
+                      <span className="text-dusk-500 truncate flex-1">{f.last_error || tr('sem detalhes')}</span>
+                      <span className="text-dusk-300">{new Date(f.finished_at).toLocaleString(locale)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </GlassCard>
+          </details>
+        );
+      })()}
 
       {/* Thread history drawer — collapsed by default, opens above the
           workbench so the admin can pick a past conversation to resume.
@@ -788,7 +804,12 @@ export default function BoardAgent() {
         </GlassCard>
       )}
 
-      {!result && (
+      {/* UX inspection 2026-05-21 — the intro card only helps first-
+          time users. Returning admins with prior conversations don't
+          need a daily reminder of what the agent does. Show only when
+          no result AND no prior threads have been started by this
+          admin. */}
+      {!result && !loading && threads.length === 0 && (
         <GlassCard variant="clay-sage" className="p-5 mb-5 overflow-hidden relative">
           <div className="absolute -right-10 -top-10 w-36 h-36 rounded-full bg-sage-200/60 blur-2xl" />
           <div className="relative flex items-start gap-4">
@@ -839,8 +860,13 @@ export default function BoardAgent() {
         </GlassCard>
       )}
 
-      {!result && (
-      <form onSubmit={submit} className="grid lg:grid-cols-[1.2fr_0.8fr] gap-5 mb-6">
+      {/* UX inspection — form hidden while loading so the thinking
+          pane has the user's full attention (was "where do I look"
+          confusion). Also hidden when there's already a result; the
+          follow-up textarea below the result becomes the entry point
+          for the next turn. */}
+      {!result && !loading && (
+      <form onSubmit={submit} className="grid lg:grid-cols-[1.5fr_0.5fr] gap-5 mb-6">
         <GlassCard className="p-5">
           <label className="block text-xs text-dusk-300 font-medium">
             {tr('O que você quer resolver?')}
@@ -864,30 +890,46 @@ export default function BoardAgent() {
               </button>
             ))}
           </div>
+
+          {/* UX inspection — Tipo de ajuda / Localização / Orçamento /
+              Urgência are nice-to-haves. Hide them behind a disclosure
+              so the default flow is "type + submit", and let admins
+              who want to add context one click away. */}
+          <details className="mt-4 group">
+            <summary className="cursor-pointer list-none inline-flex items-center gap-1.5 text-xs text-dusk-300 hover:text-dusk-500">
+              <ChevronDown className="w-3 h-3 transition-transform group-open:rotate-180" />
+              {tr('+ adicionar contexto (tipo, local, orçamento, urgência)')}
+            </summary>
+            <div className="mt-3 grid sm:grid-cols-2 gap-3">
+              <label className="block text-xs text-dusk-300 font-medium">
+                {tr('Tipo de ajuda')}
+                <select className="input mt-1" value={mode} onChange={(e) => setMode(e.target.value as Mode)}>
+                  {MODES.map((m) => <option key={m.value} value={m.value}>{tr(m.label)}</option>)}
+                </select>
+              </label>
+              <label className="block text-xs text-dusk-300 font-medium">
+                {tr('Localização ou área')}
+                <input className="input mt-1" value={location} onChange={(e) => setLocation(e.target.value)} maxLength={240} placeholder={tr('ex: academia, garagem, São Paulo')} />
+              </label>
+              <label className="block text-xs text-dusk-300 font-medium">
+                {tr('Orçamento ou teto')}
+                <input className="input mt-1" value={budget} onChange={(e) => setBudget(e.target.value)} maxLength={120} placeholder={tr('ex: até R$ 15.000')} />
+              </label>
+              <label className="block text-xs text-dusk-300 font-medium">
+                {tr('Urgência')}
+                <input className="input mt-1" value={urgency} onChange={(e) => setUrgency(e.target.value)} maxLength={120} placeholder={tr('ex: urgente esta semana')} />
+              </label>
+            </div>
+          </details>
         </GlassCard>
 
-        <GlassCard className="p-5 space-y-3">
-          <label className="block text-xs text-dusk-300 font-medium">
-            {tr('Tipo de ajuda')}
-            <select className="input mt-1" value={mode} onChange={(e) => setMode(e.target.value as Mode)}>
-              {MODES.map((m) => <option key={m.value} value={m.value}>{tr(m.label)}</option>)}
-            </select>
-          </label>
-          <label className="block text-xs text-dusk-300 font-medium">
-            {tr('Localização ou área')}
-            <input className="input mt-1" value={location} onChange={(e) => setLocation(e.target.value)} maxLength={240} placeholder={tr('ex: academia, garagem, São Paulo')} />
-          </label>
-          <label className="block text-xs text-dusk-300 font-medium">
-            {tr('Orçamento ou teto')}
-            <input className="input mt-1" value={budget} onChange={(e) => setBudget(e.target.value)} maxLength={120} placeholder={tr('ex: até R$ 15.000')} />
-          </label>
-          <label className="block text-xs text-dusk-300 font-medium">
-            {tr('Urgência')}
-            <input className="input mt-1" value={urgency} onChange={(e) => setUrgency(e.target.value)} maxLength={120} placeholder={tr('ex: urgente esta semana')} />
-          </label>
+        <GlassCard className="p-5 flex flex-col items-stretch justify-center">
           <Button type="submit" variant="primary" className="w-full" loading={loading} leftIcon={<Sparkles className="w-4 h-4" />}>
             {tr('Gerar plano')}
           </Button>
+          <p className="text-xs text-dusk-300 mt-3 text-center">
+            {tr('30-60s, usa seu histórico do prédio')}
+          </p>
         </GlassCard>
       </form>
       )}
@@ -1156,8 +1198,21 @@ export default function BoardAgent() {
                         <div key={option.title} className="rounded-3xl bg-white/60 border border-white/70 p-4">
                           <h4 className="font-semibold text-dusk-500">{option.title}</h4>
                           <p className="text-sm text-dusk-400 mt-1">{option.fit}</p>
+                          {/* UX inspection — "Confirmar por orçamento"
+                              used to render as plain "Custo: Confirmar
+                              por orçamento" string which read like
+                              missing data. Style it as a muted neutral
+                              chip when the model couldn't price the
+                              option; only show full text when there's
+                              a real number. */}
                           <div className="mt-3 flex flex-wrap gap-2 text-xs text-dusk-300">
-                            <span className="rounded-full bg-cream-50/80 px-3 py-1">{tr('Custo')}: {option.estimated_cost_range}</span>
+                            {/^(confirmar por or[çc]amento|tbd|n\/a|—|to be|—)/i.test(option.estimated_cost_range) ? (
+                              <span className="rounded-full bg-white/55 border border-white/70 px-3 py-1 text-dusk-300 italic">
+                                {tr('Custo: pedir orçamento')}
+                              </span>
+                            ) : (
+                              <span className="rounded-full bg-cream-50/80 px-3 py-1">{tr('Custo')}: {option.estimated_cost_range}</span>
+                            )}
                             <span className="rounded-full bg-cream-50/80 px-3 py-1">{tr('Prazo')}: {option.timeline}</span>
                           </div>
                         </div>
