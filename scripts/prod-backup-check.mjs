@@ -61,14 +61,14 @@ async function main() {
   if (!token) throw new Error('login response did not include a token');
   const auth = { Authorization: `Bearer ${token}` };
 
-  const status = await jsonRequest('/admin-ops/backup/status', { headers: auth });
+  const status = await jsonRequest('/admin/backup/status', { headers: auth });
   if (requireConfigured && !status.configured) {
     throw new Error('production backups are not configured');
   }
 
   let run = null;
   if (shouldRunBackup) {
-    run = await jsonRequest('/admin-ops/backup/run', {
+    run = await jsonRequest('/admin/backup/run', {
       method: 'POST',
       headers: auth,
       body: JSON.stringify({}),

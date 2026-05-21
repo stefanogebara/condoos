@@ -109,8 +109,8 @@ async function main() {
     () => jsonRequest('/announcements', { headers: auth }),
     () => jsonRequest('/meetings', { headers: auth }),
     () => jsonRequest('/finance/receivables', { headers: auth }),
-    () => jsonRequest('/admin-ops/integrations/status', { headers: auth }),
-    () => jsonRequest('/admin-ops/agent/queue/status', { headers: auth }),
+    () => jsonRequest('/admin/integrations/status', { headers: auth }),
+    () => jsonRequest('/admin/agent/queue/status', { headers: auth }),
   ];
 
   const results = [];
