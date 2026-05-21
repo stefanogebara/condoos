@@ -129,6 +129,12 @@ jobs:
       - name: Production R2 upload audit
         run: npm run audit:prod:uploads
 
+      - name: Production backup configuration audit
+        run: npm run audit:prod:backup
+
+      - name: Production bounded load audit
+        run: npm run audit:prod:load
+
       - name: Lighthouse production budgets
         run: npm run audit:perf:prod
 

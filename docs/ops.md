@@ -295,6 +295,21 @@ checks that the live client CSP allows the R2 upload origin, and soft-deletes
 the test file. Use `npm run audit:prod:uploads:allow-local` only to verify the
 non-production local-storage fallback.
 
+Production backup and load probes:
+
+```bash
+npm run audit:prod:backup      # verify off-site backup config is present
+npm run audit:prod:backup:run  # trigger one manual production snapshot + upload
+npm run audit:prod:load        # bounded production API/client concurrency probe
+```
+
+`audit:prod:backup:run` logs in as the production E2E board admin, calls the
+admin backup endpoint, and fails unless the snapshot uploads successfully with
+non-empty metadata. `audit:prod:load` is intentionally small; it exercises the
+live client, auth, dashboard, tickets, finance, integrations, and agent queue
+status under bounded concurrency so it can run in CI without becoming a load
+test against customers.
+
 ## Production E2E Against Vercel
 
 Vercel Deployment Protection can show the Security Checkpoint to automated

@@ -32,6 +32,8 @@ npm run test:e2e:prod:smoke
 npm run test:e2e:prod:safe:desktop
 npm run audit:prod:hardening
 npm run audit:prod:uploads
+npm run audit:prod:backup
+npm run audit:prod:load
 npm run audit:ops:backup-restore
 npm run audit:perf:prod
 ```
