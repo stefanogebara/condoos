@@ -4,12 +4,13 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 const apiURL = process.env.E2E_API_URL || 'https://condoos-api.fly.dev/api';
-const residentEmail = process.env.E2E_RESIDENT_EMAIL || 'e2e-resident@condoos.test';
-const residentPassword = process.env.E2E_RESIDENT_PASSWORD || 'e2e-prod-fixed-passphrase-2026';
+const residentEmail = process.env.E2E_RESIDENT_EMAIL;
+const residentPassword = process.env.E2E_RESIDENT_PASSWORD;
 const SHOT_DIR = path.join('test-results', 'resident-sidebar');
 fs.mkdirSync(SHOT_DIR, { recursive: true });
 
 async function login(request: APIRequestContext) {
+  test.skip(!residentEmail || !residentPassword, 'Set resident production E2E credentials to run this inspection.');
   const res = await request.post(`${apiURL}/auth/login`, { data: { email: residentEmail, password: residentPassword } });
   expect(res.ok(), `login failed: ${res.status()}`).toBeTruthy();
   return (await res.json()).data;

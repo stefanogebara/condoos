@@ -9,12 +9,17 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 const apiURL = process.env.E2E_API_URL || 'https://condoos-api.fly.dev/api';
-const adminEmail = process.env.E2E_ADMIN_EMAIL || 'e2e-admin@condoos.test';
-const adminPassword = process.env.E2E_ADMIN_PASSWORD || 'e2e-prod-fixed-passphrase-2026';
-const residentEmail = process.env.E2E_RESIDENT_EMAIL || 'e2e-resident@condoos.test';
-const residentPassword = process.env.E2E_RESIDENT_PASSWORD || 'e2e-prod-fixed-passphrase-2026';
+const adminEmail = process.env.E2E_ADMIN_EMAIL;
+const adminPassword = process.env.E2E_ADMIN_PASSWORD;
+const residentEmail = process.env.E2E_RESIDENT_EMAIL;
+const residentPassword = process.env.E2E_RESIDENT_PASSWORD;
 const SHOT_DIR = path.join('test-results', 'coverage-gaps');
 fs.mkdirSync(SHOT_DIR, { recursive: true });
+
+function requireCredentials(label: string, email: string | undefined, password: string | undefined) {
+  test.skip(!email || !password, `Set ${label} production E2E credentials to run this inspection.`);
+  return { email: email!, password: password! };
+}
 
 async function login(request: APIRequestContext, email: string, password: string) {
   const res = await request.post(`${apiURL}/auth/login`, { data: { email, password } });
@@ -30,7 +35,8 @@ async function setSession(page: Page, session: any) {
 }
 
 test('hero CTAs — admin clicks "Ir para o painel" lands on /board', async ({ page, request }) => {
-  const admin = await login(request, adminEmail, adminPassword);
+  const creds = requireCredentials('admin', adminEmail, adminPassword);
+  const admin = await login(request, creds.email, creds.password);
   await page.setViewportSize({ width: 1440, height: 900 });
   await setSession(page, admin);
   await page.goto('/', { waitUntil: 'networkidle' });
@@ -40,7 +46,8 @@ test('hero CTAs — admin clicks "Ir para o painel" lands on /board', async ({ p
 });
 
 test('hero CTAs — resident clicks "Ir para o app" lands on /app or /onboarding', async ({ page, request }) => {
-  const resident = await login(request, residentEmail, residentPassword);
+  const creds = requireCredentials('resident', residentEmail, residentPassword);
+  const resident = await login(request, creds.email, creds.password);
   await page.setViewportSize({ width: 1440, height: 900 });
   await setSession(page, resident);
   await page.goto('/', { waitUntil: 'networkidle' });
@@ -51,7 +58,8 @@ test('hero CTAs — resident clicks "Ir para o app" lands on /app or /onboarding
 });
 
 test('board sidebar — full-height capture, all three sections visible', async ({ page, request }) => {
-  const admin = await login(request, adminEmail, adminPassword);
+  const creds = requireCredentials('admin', adminEmail, adminPassword);
+  const admin = await login(request, creds.email, creds.password);
   await page.setViewportSize({ width: 1440, height: 1200 });
   await setSession(page, admin);
   await page.goto('/board', { waitUntil: 'domcontentloaded' });
@@ -65,7 +73,8 @@ test('board sidebar — full-height capture, all three sections visible', async 
 });
 
 test('resident sidebar — full-height capture, all three sections visible', async ({ page, request }) => {
-  const resident = await login(request, residentEmail, residentPassword);
+  const creds = requireCredentials('resident', residentEmail, residentPassword);
+  const resident = await login(request, creds.email, creds.password);
   await page.setViewportSize({ width: 1440, height: 1100 });
   await setSession(page, resident);
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
@@ -77,7 +86,8 @@ test('resident sidebar — full-height capture, all three sections visible', asy
 });
 
 test('mobile drawer — board admin section headers visible when drawer open', async ({ page, request }) => {
-  const admin = await login(request, adminEmail, adminPassword);
+  const creds = requireCredentials('admin', adminEmail, adminPassword);
+  const admin = await login(request, creds.email, creds.password);
   await page.setViewportSize({ width: 390, height: 844 });
   await setSession(page, admin);
   await page.goto('/board', { waitUntil: 'domcontentloaded' });
@@ -89,7 +99,8 @@ test('mobile drawer — board admin section headers visible when drawer open', a
 });
 
 test('language switch — section headers translate to EN', async ({ page, request }) => {
-  const admin = await login(request, adminEmail, adminPassword);
+  const creds = requireCredentials('admin', adminEmail, adminPassword);
+  const admin = await login(request, creds.email, creds.password);
   await page.setViewportSize({ width: 1440, height: 1200 });
   await setSession(page, admin);
   await page.goto('/board', { waitUntil: 'domcontentloaded' });
@@ -110,7 +121,8 @@ test('language switch — section headers translate to EN', async ({ page, reque
 });
 
 test('plano IA chip — appears next to action badge on successful plan', async ({ page, request }) => {
-  const admin = await login(request, adminEmail, adminPassword);
+  const creds = requireCredentials('admin', adminEmail, adminPassword);
+  const admin = await login(request, creds.email, creds.password);
   await page.setViewportSize({ width: 1440, height: 900 });
   await setSession(page, admin);
   await page.goto('/board/agent', { waitUntil: 'domcontentloaded' });

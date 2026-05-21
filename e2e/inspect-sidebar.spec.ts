@@ -8,12 +8,13 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 const apiURL = process.env.E2E_API_URL || 'https://condoos-api.fly.dev/api';
-const adminEmail = process.env.E2E_ADMIN_EMAIL || 'e2e-admin@condoos.test';
-const adminPassword = process.env.E2E_ADMIN_PASSWORD || 'e2e-prod-fixed-passphrase-2026';
+const adminEmail = process.env.E2E_ADMIN_EMAIL;
+const adminPassword = process.env.E2E_ADMIN_PASSWORD;
 const SHOT_DIR = path.join('test-results', 'sidebar-grouping');
 fs.mkdirSync(SHOT_DIR, { recursive: true });
 
 async function login(request: APIRequestContext) {
+  test.skip(!adminEmail || !adminPassword, 'Set admin production E2E credentials to run this inspection.');
   const res = await request.post(`${apiURL}/auth/login`, { data: { email: adminEmail, password: adminPassword } });
   expect(res.ok(), `login failed: ${res.status()}`).toBeTruthy();
   return (await res.json()).data;

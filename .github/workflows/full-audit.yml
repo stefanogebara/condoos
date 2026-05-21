@@ -123,6 +123,12 @@ jobs:
           done
           exit "$missing"
 
+      - name: Production hardening audit
+        run: npm run audit:prod:hardening
+
+      - name: Production R2 upload audit
+        run: npm run audit:prod:uploads
+
       - name: Lighthouse production budgets
         run: npm run audit:perf:prod
 

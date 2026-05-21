@@ -16,6 +16,7 @@ on:
           - safe-mobile
           - safe-full
           - integrations
+          - uploads
   # Nightly assurance against the live stack. 06:00 UTC = 03:00 BRT —
   # off-hours for the Brazilian customer base, well before US morning.
   # Runs the safe-desktop suite (now includes documents.spec.ts) which
@@ -89,13 +90,26 @@ jobs:
       - name: Check private production E2E credentials
         run: |
           missing=0
-          for name in E2E_ADMIN_EMAIL E2E_ADMIN_PASSWORD E2E_RESIDENT_EMAIL E2E_RESIDENT_PASSWORD E2E_CONCIERGE_EMAIL E2E_CONCIERGE_PASSWORD; do
+          if [ "$SUITE" = "uploads" ]; then
+            required="E2E_ADMIN_EMAIL E2E_ADMIN_PASSWORD"
+          else
+            required="E2E_ADMIN_EMAIL E2E_ADMIN_PASSWORD E2E_RESIDENT_EMAIL E2E_RESIDENT_PASSWORD E2E_CONCIERGE_EMAIL E2E_CONCIERGE_PASSWORD"
+          fi
+          for name in $required; do
             if [ -z "${!name}" ]; then
-              echo "$name is required so production E2E does not depend on seeded demo credentials."
+              echo "$name is required so production checks do not depend on seeded demo credentials."
               missing=1
             fi
           done
           exit "$missing"
+
+      - name: Run production hardening audit
+        if: ${{ env.SUITE == 'uploads' }}
+        run: npm run audit:prod:hardening
+
+      - name: Run production R2 upload audit
+        if: ${{ env.SUITE == 'uploads' }}
+        run: npm run audit:prod:uploads
 
       - name: Run production API regression
         if: ${{ env.SUITE == 'api' }}
