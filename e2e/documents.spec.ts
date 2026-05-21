@@ -1,4 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
+import { credentialsFor } from './support/credentials';
 
 const apiURL = process.env.E2E_API_URL
   || (process.env.E2E_BASE_URL ? `${process.env.E2E_BASE_URL.replace(/\/$/, '')}/api` : 'http://127.0.0.1:6312/api');
@@ -12,6 +13,11 @@ async function loginApi(request: APIRequestContext, email: string, password: str
   return (await res.json()).data as Session;
 }
 
+async function loginRole(request: APIRequestContext, role: 'admin' | 'resident'): Promise<Session> {
+  const creds = credentialsFor(role);
+  return loginApi(request, creds.email, creds.password);
+}
+
 async function setSession(page: Page, session: Session) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await page.evaluate(({ token, user }) => {
@@ -21,8 +27,8 @@ async function setSession(page: Page, session: Session) {
 }
 
 test('admin publishes a resident-visible document and resident can open it', async ({ page, request }) => {
-  const admin = await loginApi(request, 'admin@condoos.dev', 'admin123');
-  const resident = await loginApi(request, 'resident@condoos.dev', 'resident123');
+  const admin = await loginRole(request, 'admin');
+  const resident = await loginRole(request, 'resident');
   const title = `Resident handbook ${Date.now()}`;
   let docId: number | undefined;
 
@@ -67,8 +73,8 @@ test('admin publishes a resident-visible document and resident can open it', asy
 });
 
 test('board-only documents stay hidden from residents', async ({ page, request }) => {
-  const admin = await loginApi(request, 'admin@condoos.dev', 'admin123');
-  const resident = await loginApi(request, 'resident@condoos.dev', 'resident123');
+  const admin = await loginRole(request, 'admin');
+  const resident = await loginRole(request, 'resident');
   const title = `Board contract ${Date.now()}`;
   let docId: number | undefined;
 
@@ -105,8 +111,8 @@ test('board-only documents stay hidden from residents', async ({ page, request }
 });
 
 test('uploaded document shows a size chip on both board and resident views (Phase 3)', async ({ page, request }) => {
-  const admin = await loginApi(request, 'admin@condoos.dev', 'admin123');
-  const resident = await loginApi(request, 'resident@condoos.dev', 'resident123');
+  const admin = await loginRole(request, 'admin');
+  const resident = await loginRole(request, 'resident');
   const title = `Phase3 size chip ${Date.now()}`;
   const bytes = Buffer.from('A'.repeat(4096));
   let docId: number | undefined;
@@ -174,8 +180,8 @@ test('uploaded document shows a size chip on both board and resident views (Phas
 });
 
 test('admin uploads a document file and resident can download the stored copy', async ({ page, request }) => {
-  const admin = await loginApi(request, 'admin@condoos.dev', 'admin123');
-  const resident = await loginApi(request, 'resident@condoos.dev', 'resident123');
+  const admin = await loginRole(request, 'admin');
+  const resident = await loginRole(request, 'resident');
   const title = `Uploaded bylaws ${Date.now()}`;
   const bytes = Buffer.from('CondoOS uploaded bylaws fixture\n');
   let docId: number | undefined;

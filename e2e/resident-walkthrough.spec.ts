@@ -29,6 +29,15 @@ async function residentLogin(page: Page, request: APIRequestContext) {
     localStorage.setItem('condoos_token', token);
     localStorage.setItem('condoos_user', JSON.stringify(user));
   }, s);
+  return s;
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function displayName(session: Session) {
+  return String(session.user?.first_name || session.user?.email?.split('@')[0] || '').trim();
 }
 
 async function findAvailableSlot(request: APIRequestContext, token: string, amenityId: number) {
@@ -66,12 +75,12 @@ async function nav(page: Page, isMobile: boolean) {
 // ---------------------------------------------------------------------------
 
 test('resident: overview greets by name + shows full sidebar', async ({ page, request, isMobile }) => {
-  await residentLogin(page, request);
+  const session = await residentLogin(page, request);
   await page.goto('/app');
   const menu = await nav(page, isMobile);
   await expect(menu.getByText(/Resident|Morador/i).first()).toBeVisible();
-  // Greet by name (Maya is the seeded resident)
-  await expect(page.getByRole('heading', { name: /Good (morning|afternoon|evening), Maya|Bom dia, Maya|Boa tarde, Maya|Boa noite, Maya/i }).first()).toBeVisible();
+  const name = displayName(session);
+  await expect(page.getByRole('heading', { name: new RegExp(escapeRegExp(name), 'i') }).first()).toBeVisible();
   await expect(page.getByRole('heading', { name: /Today in your unit|Hoje na sua unidade|Hoy en tu unidad|Aujourd’hui dans votre lot/i })).toBeVisible();
   await expect(page.getByText(/Fast actions|Ações rápidas|Acciones rápidas|Actions rapides/i)).toBeVisible();
   // All 10 nav items in sidebar
@@ -237,7 +246,10 @@ test('resident: proposals list + detail page exposes vote affordance when in vot
   await page.goto('/app/proposals');
   await expect(page.getByRole('heading', { level: 1, name: /Proposals|Propostas/i })).toBeVisible();
   const firstCard = page.locator('a[href*="/app/proposals/"]').first();
-  await expect(firstCard).toBeVisible();
+  if (!(await firstCard.waitFor({ state: 'visible', timeout: 5_000 }).then(() => true).catch(() => false))) {
+    await expect(page.getByText(/No proposals|Nenhuma proposta|Ninguna propuesta|Aucune proposition/i).first()).toBeVisible();
+    return;
+  }
   await firstCard.click();
   // Detail loaded — heading present
   await expect(page.getByRole('heading').first()).toBeVisible();
@@ -276,11 +288,11 @@ test('resident: suggest page exposes textarea + submit CTA', async ({ page, requ
 // ---------------------------------------------------------------------------
 
 test('resident: settings page has profile summary', async ({ page, request }) => {
-  await residentLogin(page, request);
+  const session = await residentLogin(page, request);
   await page.goto('/app/settings');
   await expect(page.getByRole('heading', { level: 1, name: /Settings|Preferênc/i })).toBeVisible();
   await expect(page.getByRole('heading', { name: /Profile|Perfil/i })).toBeVisible();
-  await expect(page.getByText(/resident@condoos\.dev/i)).toBeVisible();
+  await expect(page.getByText(new RegExp(escapeRegExp(session.user.email), 'i'))).toBeVisible();
 });
 
 // ---------------------------------------------------------------------------

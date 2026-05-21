@@ -44,9 +44,18 @@ const STATUS_LABEL: Record<string, string> = {
 
 export default function BoardProposals() {
   const [rows, setRows] = useState<Proposal[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [showForm, setShowForm] = useState(false);
 
-  const load = () => apiGet<Proposal[]>('/proposals').then(setRows).catch(() => {});
+  const load = () => {
+    setLoading(true);
+    setError(false);
+    return apiGet<Proposal[]>('/proposals')
+      .then(setRows)
+      .catch(() => { setRows([]); setError(true); })
+      .finally(() => setLoading(false));
+  };
   useEffect(() => { load(); }, []);
 
   const grouped = {
@@ -72,6 +81,22 @@ export default function BoardProposals() {
       />
 
       {showForm && <NewProposalForm onCreated={() => { setShowForm(false); load(); }} />}
+
+      {!loading && error && (
+        <GlassCard variant="clay" className="p-6 mb-6 border border-peach-200">
+          <h2 className="font-display text-xl text-peach-500">{t('Não foi possível carregar as propostas')}</h2>
+          <p className="text-sm text-dusk-300 mt-2">{t('Verifique sua conexão e tente recarregar a página.')}</p>
+        </GlassCard>
+      )}
+
+      {!loading && !error && rows.length === 0 && (
+        <GlassCard variant="clay" className="p-6 mb-6">
+          <h2 className="font-display text-xl text-dusk-500">{t('Nenhuma proposta no momento.')}</h2>
+          <p className="text-sm text-dusk-300 mt-2">
+            {t('Use Nova proposta para iniciar a primeira discussão formal do prédio.')}
+          </p>
+        </GlassCard>
+      )}
 
       <Section title="Em votação"   items={grouped.voting} />
       <Section title="Em discussão" items={grouped.discussion} />

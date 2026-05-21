@@ -52,6 +52,8 @@ function describeImportError(e: ImportError): string {
 
 export default function Residents() {
   const [rows, setRows] = useState<Resident[]>([]);
+  const [loadingRows, setLoadingRows] = useState(true);
+  const [rowsError, setRowsError] = useState(false);
   const [invites, setInvites] = useState<Invite[]>([]);
   const [condoName, setCondoName] = useState<string>('');
   const [inviteCode, setInviteCode] = useState<string | null>(null);
@@ -64,7 +66,12 @@ export default function Residents() {
   const [sendingInviteId, setSendingInviteId] = useState<number | null>(null);
 
   const load = () => {
-    apiGet<Resident[]>('/users/residents').then(setRows).catch(() => {});
+    setLoadingRows(true);
+    setRowsError(false);
+    apiGet<Resident[]>('/users/residents')
+      .then(setRows)
+      .catch(() => { setRows([]); setRowsError(true); })
+      .finally(() => setLoadingRows(false));
     apiGet<Invite[]>('/memberships/invites').then(setInvites).catch(() => {});
     apiGet<Membership[]>('/onboarding/me').then(async (rows) => {
       const active = rows.find((r) => r.status === 'active');
@@ -260,6 +267,20 @@ export default function Residents() {
           </GlassCard>
         ))}
       </div>
+      {!loadingRows && rowsError && (
+        <GlassCard variant="clay" className="p-6 border border-peach-200">
+          <h2 className="font-display text-xl text-peach-500">{t('Não foi possível carregar os moradores')}</h2>
+          <p className="text-sm text-dusk-300 mt-2">{t('Verifique sua conexão e tente recarregar a página.')}</p>
+        </GlassCard>
+      )}
+      {!loadingRows && !rowsError && rows.length === 0 && (
+        <GlassCard variant="clay" className="p-6">
+          <h2 className="font-display text-xl text-dusk-500">{t('Nenhum morador cadastrado ainda.')}</h2>
+          <p className="text-sm text-dusk-300 mt-2">
+            {t('Importe um CSV ou compartilhe o código de convite para começar a montar a base do prédio.')}
+          </p>
+        </GlassCard>
+      )}
     </>
   );
 }
