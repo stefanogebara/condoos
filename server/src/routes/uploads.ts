@@ -262,21 +262,30 @@ router.get('/files/:id/download', requireAuth, asyncHandler(async (req: AuthedRe
   if (file.public_url) return res.redirect(file.public_url);
 
   const disposition = `inline; filename="${cleanFilename(file.original_filename).replace(/"/g, '')}"`;
+  const setDownloadHeaders = () => {
+    res.setHeader('Content-Type', file.content_type);
+    res.setHeader('Content-Disposition', disposition);
+    res.setHeader('Cache-Control', 'private, max-age=60');
+  };
   if (file.storage_driver === 'r2') {
-    const url = await getSignedUrl(s3(), new GetObjectCommand({
+    const object = await s3().send(new GetObjectCommand({
       Bucket: process.env.R2_BUCKET!,
       Key: file.storage_key,
-      ResponseContentType: file.content_type,
-      ResponseContentDisposition: disposition,
-    }), { expiresIn: 5 * 60 });
-    return res.redirect(url);
+    }));
+    const body = object.Body as any;
+    if (!body) return fail(res, 'file_missing', 404);
+    setDownloadHeaders();
+    if (body && typeof body.pipe === 'function') return body.pipe(res);
+    if (body && typeof body.transformToByteArray === 'function') {
+      const bytes = await body.transformToByteArray();
+      return res.send(Buffer.from(bytes));
+    }
+    return fail(res, 'file_missing', 404);
   }
 
   const filePath = localPathForKey(file.storage_key);
   if (!fs.existsSync(filePath)) return fail(res, 'file_missing', 404);
-  res.setHeader('Content-Type', file.content_type);
-  res.setHeader('Content-Disposition', disposition);
-  res.setHeader('Cache-Control', 'private, max-age=60');
+  setDownloadHeaders();
   return fs.createReadStream(filePath).pipe(res);
 }));
 

@@ -209,15 +209,15 @@ test('admin: agency portfolio renders trends and work-order story', async ({ pag
 test('admin: AI agent generates an operational plan', async ({ page, request }) => {
   await adminLogin(page, request);
   await page.goto('/board/agent');
-  await expect(page.getByRole('heading', { name: /AI agent|Agente IA/i })).toBeVisible();
-  await expect(page.getByText(/Operations agent|Agente operacional/i).first()).toBeVisible();
-  await page.getByRole('textbox', { name: /What do you want to solve|O que você quer resolver/i }).fill('Compare options to repair the gym treadmill and find maintenance vendors.');
-  await page.getByRole('button', { name: /Generate plan|Gerar plano/i }).click();
+  await expect(page.getByRole('heading', { name: /AI agent|Agente IA|Agent IA/i })).toBeVisible();
+  await expect(page.getByText(/Operations agent|Agente operacional|Agente operativo|Agent opérationnel/i).first()).toBeVisible();
+  await page.getByRole('textbox', { name: /What do you want to solve|O que você quer resolver|Qué quieres resolver|Que voulez-vous résoudre/i }).fill('Compare options to repair the gym treadmill and find maintenance vendors.');
+  await page.getByRole('button', { name: /Generate plan|Gerar plano|Generar plan|Générer le plan/i }).click();
   const aiTimeout = process.env.E2E_HAS_LLM ? 60_000 : 20_000;
-  await expect(page.getByText(/Recommended action|Ação recomendada/i)).toBeVisible({ timeout: aiTimeout });
-  await page.getByText(/Plan details|Detalhes do plano/i).click();
-  await expect(page.getByRole('heading', { name: /^(Options|Opções|Recommendation|Recomendação)$/i })).toBeVisible();
-  await expect(page.getByRole('heading', { name: /^(Research plan|Plano de pesquisa)$/i })).toBeVisible();
+  await expect(page.getByText(/Recommended action|Ação recomendada|Acción recomendada|Action recommandée/i)).toBeVisible({ timeout: aiTimeout });
+  await page.getByText(/Plan details|Detalhes do plano|Detalles del plan|Détails du plan/i).click();
+  await expect(page.getByRole('heading', { name: /^(Options|Opções|Opciones|Recommendation|Recomendação|Recomendación|Recommandation)$/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /^(Research plan|Plano de pesquisa|Plan de investigación|Plan de recherche)$/i })).toBeVisible();
 });
 
 test('admin: AI agent renders server-derived evidence cards', async ({ page, request }) => {
