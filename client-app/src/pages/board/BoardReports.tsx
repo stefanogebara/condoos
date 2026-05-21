@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
   AlertTriangle,
@@ -528,13 +529,31 @@ export default function BoardReports() {
               <MiniPanel title={tr('Chamados ativos')} className="mt-3">
                 {packet.tickets.active.length === 0 ? (
                   <EmptyLine>{tr('Nenhum chamado ativo.')}</EmptyLine>
-                ) : packet.tickets.active.map((ticket) => (
-                  <KeyValue
-                    key={ticket.id}
-                    label={`${translateSavedText(ticket.title, tr)} · ${ticket.unit_number || ticket.reporter_name}`}
-                    value={translateToken(ticket.priority, tr)}
-                  />
-                ))}
+                ) : (
+                  <>
+                    {/* The "Operação" card was spamming 7+ identical ticket
+                        rows on the report, drowning out the rest of the
+                        finance/votação cards. Show the 3 most recent and
+                        link out to /board/tickets for the long tail.
+                        Reports is a summary surface, not a duplicate
+                        of the chamados list. */}
+                    {packet.tickets.active.slice(0, 3).map((ticket) => (
+                      <KeyValue
+                        key={ticket.id}
+                        label={`${translateSavedText(ticket.title, tr)} · ${ticket.unit_number || ticket.reporter_name}`}
+                        value={translateToken(ticket.priority, tr)}
+                      />
+                    ))}
+                    {packet.tickets.active.length > 3 && (
+                      <Link
+                        to="/board/tickets"
+                        className="mt-2 inline-flex items-center text-xs font-medium text-dusk-400 hover:text-dusk-500 underline-offset-4 hover:underline"
+                      >
+                        {tr('Ver todos os')} {packet.tickets.active.length} {tr('chamados ativos')} →
+                      </Link>
+                    )}
+                  </>
+                )}
               </MiniPanel>
               <MiniPanel title={tr('Ordens de serviço ativas')} className="mt-3">
                 {packet.tickets.work_orders.active.length === 0 ? (

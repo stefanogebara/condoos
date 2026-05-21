@@ -338,10 +338,10 @@ export default function ConciergeApp() {
             <Search className="w-5 h-5 text-dusk-300 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               className="input pl-10 pr-10 text-lg"
-              placeholder={t('Search unit, resident, visitor, package, or party')}
+              placeholder={t('Buscar unidade, morador, visitante, encomenda ou festa')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              aria-label={t('Search front desk queue')}
+              aria-label={t('Buscar fila da portaria')}
             />
             {search && (
               <button

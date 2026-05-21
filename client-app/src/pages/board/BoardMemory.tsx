@@ -64,7 +64,19 @@ const TYPE_META: Record<MemoryType, { label: string; icon: any; tone: 'sage' | '
 };
 
 const TYPE_ORDER = Object.keys(TYPE_META) as MemoryType[];
-const QUICK_SEARCHES = ['Cool Breeze', 'Fitness Pro', 'Otis', 'EV', 'seguro'];
+// Generic prompts admins can use as starting points. Used to be vendor
+// names from the demo seed ("Cool Breeze", "Otis") which looked like
+// real building data on prod and confused new admins — they'd click
+// "Cool Breeze" and get zero results, then assume the memory was broken.
+// Generic phrases are agnostic and clearly demonstrate the kinds of
+// queries the memory understands.
+const QUICK_SEARCHES = [
+  'orçamento de elevador',
+  'manutenção mensal',
+  'última assembleia',
+  'limpeza',
+  'seguro do prédio',
+];
 
 function externalLinks(meta?: MemoryResult['meta']) {
   if (!meta) return [];
@@ -159,7 +171,7 @@ export default function BoardMemory() {
               className="input pl-11"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder={tr('Buscar fornecedor, despesa, proposta, documento ou chamado')}
+              placeholder={tr('Buscar na memória do prédio')}
               maxLength={160}
               data-testid="memory-search-input"
             />
@@ -174,28 +186,36 @@ export default function BoardMemory() {
           </Button>
         </form>
 
-        <div className="mt-4 flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => chooseType('all')}
-            className={`chip transition ${activeType === 'all' ? 'bg-dusk-400 text-cream-50' : ''}`}
-          >
-            {tr('Tudo')}
-          </button>
-          {TYPE_ORDER.map((type) => {
-            const meta = TYPE_META[type];
-            return (
-              <button
-                key={type}
-                type="button"
-                onClick={() => chooseType(type)}
-                className={`chip transition ${activeType === type ? 'bg-dusk-400 text-cream-50' : ''}`}
-              >
-                {tr(meta.label)}
-              </button>
-            );
-          })}
-        </div>
+        {/* Category filter row — hidden until the first search returns
+            results. Premature filtering ("Despesas / Propostas /
+            Documentos / ...") in an empty state was noise: admins
+            saw 9 filter chips above zero content and had to scan
+            them just to find the search box. Show only when there
+            are actual results to scope down. */}
+        {data && (
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => chooseType('all')}
+              className={`chip transition ${activeType === 'all' ? 'bg-dusk-400 text-cream-50' : ''}`}
+            >
+              {tr('Tudo')}
+            </button>
+            {TYPE_ORDER.map((type) => {
+              const meta = TYPE_META[type];
+              return (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => chooseType(type)}
+                  className={`chip transition ${activeType === type ? 'bg-dusk-400 text-cream-50' : ''}`}
+                >
+                  {tr(meta.label)}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <span className="text-xs font-semibold uppercase tracking-[0.12em] text-dusk-200">{tr('Buscas rápidas')}</span>
