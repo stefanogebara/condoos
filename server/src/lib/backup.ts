@@ -18,7 +18,9 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import net from 'net';
 import { createReadStream, createWriteStream } from 'fs';
+import { spawn } from 'child_process';
 import { Readable } from 'stream';
 import { createGunzip, createGzip } from 'zlib';
 import { pipeline } from 'stream/promises';
@@ -80,6 +82,16 @@ export interface BackupRestoreDrillResult extends BackupVerificationResult {
   foreign_key_violations?: number;
   schema_table_count?: number;
   writable_probe?: boolean;
+}
+
+export interface BackupRestoreBootDrillResult extends BackupRestoreDrillResult {
+  booted?: boolean;
+  boot_health_ok?: boolean;
+  boot_status_code?: number;
+  boot_db?: string;
+  boot_port?: number;
+  boot_duration_ms?: number;
+  boot_entry?: string;
 }
 
 function latestBackupObject(objects: _Object[]): _Object | null {
@@ -224,6 +236,155 @@ async function drillSqliteSnapshot(localSnapshot: string): Promise<Pick<
   }
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function allocateLocalPort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+      server.close(() => {
+        if (!port) reject(new Error('restore_boot_port_unavailable'));
+        else resolve(port);
+      });
+    });
+  });
+}
+
+function restoreBootEntry(): { args: string[]; cwd: string; label: string } {
+  const configured = process.env.RESTORE_BOOT_ENTRY;
+  if (configured) {
+    const absolute = path.resolve(configured);
+    if (!fs.existsSync(absolute)) throw new Error('restore_boot_entry_not_found');
+    return { args: [absolute], cwd: path.dirname(absolute), label: absolute };
+  }
+
+  const distEntry = path.resolve(__dirname, '..', 'server.js');
+  if (fs.existsSync(distEntry)) {
+    return { args: [distEntry], cwd: path.resolve(path.dirname(distEntry), '..'), label: distEntry };
+  }
+
+  const tsEntry = path.resolve(__dirname, '..', 'server.ts');
+  if (fs.existsSync(tsEntry)) {
+    return { args: ['-r', 'ts-node/register', tsEntry], cwd: path.resolve(path.dirname(tsEntry), '..'), label: tsEntry };
+  }
+
+  throw new Error('restore_boot_entry_not_found');
+}
+
+function captureStreamTail(stream: NodeJS.ReadableStream, maxBytes = 4_000): () => string {
+  let tail = '';
+  stream.setEncoding('utf8');
+  stream.on('data', (chunk) => {
+    tail = (tail + String(chunk)).slice(-maxBytes);
+  });
+  return () => tail.trim();
+}
+
+async function fetchJsonWithTimeout(url: string, timeoutMs: number): Promise<{ status: number; body: any; raw: string }> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    const raw = await res.text();
+    let body: any = {};
+    try { body = raw ? JSON.parse(raw) : {}; } catch { body = { raw }; }
+    return { status: res.status, body, raw };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function bootRestoredApi(localSnapshot: string): Promise<Pick<
+  BackupRestoreBootDrillResult,
+  'booted' | 'boot_health_ok' | 'boot_status_code' | 'boot_db' | 'boot_port' | 'boot_duration_ms' | 'boot_entry'
+>> {
+  const started = Date.now();
+  const port = await allocateLocalPort();
+  const entry = restoreBootEntry();
+  const timeoutMs = Math.min(120_000, Math.max(5_000, Number(process.env.RESTORE_BOOT_DRILL_TIMEOUT_MS || 45_000)));
+  const child = spawn(process.execPath, entry.args, {
+    cwd: entry.cwd,
+    env: {
+      ...process.env,
+      DB_PATH: localSnapshot,
+      PORT: String(port),
+      NODE_ENV: 'test',
+      // Keep the child strictly local and inert. NODE_ENV=test prevents
+      // schedulers/workers; these remove any remaining external side effects.
+      DEMO_AUTH_ENABLED: '',
+      ALLOW_DEMO_AUTH_IN_PRODUCTION: '',
+      OPENROUTER_API_KEY: '',
+      RESEND_API_KEY: '',
+      TWILIO_ACCOUNT_SID: '',
+      TWILIO_AUTH_TOKEN: '',
+      WAHA_API_KEY: '',
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  const stdoutTail = captureStreamTail(child.stdout);
+  const stderrTail = captureStreamTail(child.stderr);
+  let exitState: { code: number | null; signal: NodeJS.Signals | null } | undefined;
+  let spawnError: Error | null = null;
+  const exitPromise = new Promise<{ code: number | null; signal: NodeJS.Signals | null } | null>((resolve) => {
+    child.once('exit', (code, signal) => {
+      exitState = { code, signal };
+      resolve(exitState);
+    });
+  });
+  child.once('error', (err) => {
+    spawnError = err;
+  });
+
+  let lastError = 'not_started';
+  try {
+    while (Date.now() - started < timeoutMs) {
+      if (spawnError) throw spawnError;
+      if (exitState) {
+        throw new Error(`restore_boot_process_exited code=${exitState.code} signal=${exitState.signal} stderr=${stderrTail() || stdoutTail()}`);
+      }
+
+      try {
+        const health = await fetchJsonWithTimeout(`http://127.0.0.1:${port}/api/health`, 1_000);
+        lastError = `status=${health.status} body=${health.raw.slice(0, 300)}`;
+        if (health.status === 200 && health.body?.ok === true && health.body?.db === 'ok') {
+          return {
+            booted: true,
+            boot_health_ok: true,
+            boot_status_code: health.status,
+            boot_db: health.body.db,
+            boot_port: port,
+            boot_duration_ms: Date.now() - started,
+            boot_entry: entry.label,
+          };
+        }
+      } catch (err) {
+        lastError = (err as Error).message || String(err);
+      }
+      await sleep(250);
+    }
+
+    throw new Error(`restore_boot_health_timeout: ${lastError}; stdout=${stdoutTail() || 'empty'}; stderr=${stderrTail() || 'empty'}`);
+  } finally {
+    if (!exitState) {
+      child.kill('SIGTERM');
+      const stopped = await Promise.race([
+        exitPromise,
+        sleep(2_000).then(() => null),
+      ]);
+      if (!stopped && !exitState) {
+        child.kill('SIGKILL');
+        await Promise.race([exitPromise, sleep(1_000)]);
+      }
+    }
+  }
+}
+
 export async function runBackup(): Promise<BackupResult> {
   if (!backupConfigured()) return { ok: false, error: 'not_configured' };
   const started = Date.now();
@@ -346,6 +507,38 @@ export async function runRestoreDrill(key?: string): Promise<BackupRestoreDrillR
     }
   } catch (err) {
     return { ok: false, key: selectedKey, error: (err as Error).message || 'backup_restore_drill_failed' };
+  }
+}
+
+export async function runRestoreBootDrill(key?: string): Promise<BackupRestoreBootDrillResult> {
+  if (!backupConfigured()) return { ok: false, error: 'not_configured' };
+  const started = Date.now();
+  const client = s3Client();
+  let selectedKey: string | undefined = key;
+
+  try {
+    const selected = await resolveBackupObject(client, key);
+    selectedKey = selected.key;
+
+    const localSnapshot = path.join(os.tmpdir(), `condoos-restore-boot-${Date.now()}-${process.pid}.sqlite`);
+    try {
+      const downloaded = await downloadBackupSnapshot(client, selectedKey, localSnapshot, selected.object_size_bytes);
+      const drilled = await drillSqliteSnapshot(localSnapshot);
+      const booted = await bootRestoredApi(localSnapshot);
+      return {
+        ok: true,
+        key: selectedKey,
+        object_size_bytes: downloaded.object_size_bytes,
+        restored_size_bytes: downloaded.restored_size_bytes,
+        duration_ms: Date.now() - started,
+        ...drilled,
+        ...booted,
+      };
+    } finally {
+      cleanupSqliteTempFiles(localSnapshot);
+    }
+  } catch (err) {
+    return { ok: false, key: selectedKey, error: (err as Error).message || 'backup_restore_boot_drill_failed' };
   }
 }
 

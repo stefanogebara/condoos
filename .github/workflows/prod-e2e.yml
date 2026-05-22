@@ -19,6 +19,7 @@ on:
           - uploads
           - backup
           - restore-drill
+          - restore-boot
           - load
   # Nightly assurance against the live stack. 06:00 UTC = 03:00 BRT —
   # off-hours for the Brazilian customer base, well before US morning.
@@ -76,7 +77,7 @@ jobs:
         run: echo "SUITE=${{ inputs.suite }}" >> $GITHUB_ENV
 
       - name: Check VERCEL_AUTOMATION_BYPASS_SECRET
-        if: ${{ env.SUITE != 'api' && env.SUITE != 'backup' && env.SUITE != 'restore-drill' }}
+        if: ${{ env.SUITE != 'api' && env.SUITE != 'backup' && env.SUITE != 'restore-drill' && env.SUITE != 'restore-boot' }}
         run: |
           if [ -z "$VERCEL_AUTOMATION_BYPASS_SECRET" ]; then
             echo "VERCEL_AUTOMATION_BYPASS_SECRET is required for protected Vercel browser suites."
@@ -93,7 +94,7 @@ jobs:
       - name: Check private production E2E credentials
         run: |
           missing=0
-          if [ "$SUITE" = "uploads" ] || [ "$SUITE" = "backup" ] || [ "$SUITE" = "restore-drill" ] || [ "$SUITE" = "load" ]; then
+          if [ "$SUITE" = "uploads" ] || [ "$SUITE" = "backup" ] || [ "$SUITE" = "restore-drill" ] || [ "$SUITE" = "restore-boot" ] || [ "$SUITE" = "load" ]; then
             required="E2E_ADMIN_EMAIL E2E_ADMIN_PASSWORD"
           else
             required="E2E_ADMIN_EMAIL E2E_ADMIN_PASSWORD E2E_RESIDENT_EMAIL E2E_RESIDENT_PASSWORD E2E_CONCIERGE_EMAIL E2E_CONCIERGE_PASSWORD"
@@ -112,7 +113,7 @@ jobs:
       # broken nightly run since the rest of the suite skips.
       # The 'api' suite doesn't need resident/concierge — skip there.
       - name: Verify prod credentials are aligned with GitHub secrets
-        if: ${{ env.SUITE != 'api' && env.SUITE != 'uploads' && env.SUITE != 'backup' && env.SUITE != 'load' }}
+        if: ${{ env.SUITE != 'api' && env.SUITE != 'uploads' && env.SUITE != 'backup' && env.SUITE != 'restore-drill' && env.SUITE != 'restore-boot' && env.SUITE != 'load' }}
         run: node scripts/verify-prod-credentials.mjs
 
       - name: Run production hardening audit
@@ -130,6 +131,10 @@ jobs:
       - name: Run production restore drill
         if: ${{ env.SUITE == 'restore-drill' }}
         run: npm run audit:prod:restore-drill
+
+      - name: Run production restore boot drill
+        if: ${{ env.SUITE == 'restore-boot' }}
+        run: npm run audit:prod:restore-boot
 
       - name: Run production load audit
         if: ${{ env.SUITE == 'load' }}

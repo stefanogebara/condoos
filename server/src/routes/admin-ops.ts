@@ -7,7 +7,7 @@ import { requireAuth, requireRole, requireBoardCapability, AuthedRequest } from 
 import { ok, fail, asyncHandler } from '../lib/respond';
 import { createRateLimit } from '../lib/rate-limit';
 import { audit } from '../lib/audit';
-import { runBackup, getBackupStatus, backupConfigured, verifyBackupObject, runRestoreDrill } from '../lib/backup';
+import { runBackup, getBackupStatus, backupConfigured, verifyBackupObject, runRestoreDrill, runRestoreBootDrill } from '../lib/backup';
 import { getWhatsAppStatus } from '../lib/whatsapp';
 import { privateCreateBuildingRequired } from '../lib/private-access';
 import { getQueueStatusSnapshot } from '../lib/agent-dispatch-queue';
@@ -36,6 +36,13 @@ const backupRestoreDrillRateLimit = createRateLimit({
   keyPrefix: 'admin-backup-restore-drill',
   windowMs: 60 * 60_000,
   max: 6,
+  key: (req) => String((req as AuthedRequest).user?.id || req.ip || 'unknown'),
+});
+
+const backupRestoreBootDrillRateLimit = createRateLimit({
+  keyPrefix: 'admin-backup-restore-boot-drill',
+  windowMs: 60 * 60_000,
+  max: 3,
   key: (req) => String((req as AuthedRequest).user?.id || req.ip || 'unknown'),
 });
 
@@ -161,6 +168,38 @@ router.post('/backup/restore-drill', requireAuth, requireRole('board_admin'), re
     },
   });
   if (!result.ok) return fail(res, result.error || 'backup_restore_drill_failed', 500, result);
+  return ok(res, result);
+}));
+
+router.post('/backup/restore-boot-drill', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), backupRestoreBootDrillRateLimit, asyncHandler(async (req: AuthedRequest, res) => {
+  if (!backupConfigured()) return fail(res, 'backup_not_configured', 503);
+  const parsed = verifyBackupSchema.safeParse(req.body || {});
+  if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
+
+  const result = await runRestoreBootDrill(parsed.data.key);
+  audit(req, {
+    action: 'admin.backup_restore_boot_drill',
+    target_type: 'backup',
+    target_id: 0,
+    condominium_id: req.user?.condominium_id ?? null,
+    metadata: {
+      ok: result.ok,
+      key: result.key,
+      object_size_bytes: result.object_size_bytes,
+      restored_size_bytes: result.restored_size_bytes,
+      integrity_check: result.integrity_check,
+      foreign_key_violations: result.foreign_key_violations,
+      schema_table_count: result.schema_table_count,
+      writable_probe: result.writable_probe,
+      booted: result.booted,
+      boot_health_ok: result.boot_health_ok,
+      boot_status_code: result.boot_status_code,
+      boot_db: result.boot_db,
+      boot_duration_ms: result.boot_duration_ms,
+      error: result.error,
+    },
+  });
+  if (!result.ok) return fail(res, result.error || 'backup_restore_boot_drill_failed', 500, result);
   return ok(res, result);
 }));
 

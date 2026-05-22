@@ -142,6 +142,9 @@ jobs:
       - name: Production restore drill
         run: npm run audit:prod:restore-drill
 
+      - name: Production restore boot drill
+        run: npm run audit:prod:restore-boot
+
       - name: Production bounded load audit
         run: npm run audit:prod:load
 

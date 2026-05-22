@@ -4456,6 +4456,90 @@ test('backup: restore drill opens restored snapshot read-write without touching 
   }
 });
 
+test('backup: restore boot drill starts an isolated API against the restored snapshot', async () => {
+  const fs = await import('fs');
+  const os = await import('os');
+  const path = await import('path');
+  const zlib = await import('zlib');
+  const { Readable } = await import('stream');
+  const Database = (await import('better-sqlite3')).default;
+  const { S3Client } = await import('@aws-sdk/client-s3');
+  const keys = [
+    'BACKUP_S3_BUCKET',
+    'BACKUP_S3_ACCESS_KEY',
+    'BACKUP_S3_SECRET_KEY',
+    'BACKUP_S3_ENDPOINT',
+    'BACKUP_S3_REGION',
+    'BACKUP_S3_KEY_PREFIX',
+    'R2_BUCKET',
+    'R2_ACCESS_KEY_ID',
+    'R2_SECRET_ACCESS_KEY',
+    'R2_ENDPOINT',
+    'R2_REGION',
+    'RESTORE_BOOT_DRILL_TIMEOUT_MS',
+  ];
+  const previousEnv = new Map(keys.map((key) => [key, process.env[key]]));
+  const originalSend = S3Client.prototype.send;
+  const sqlitePath = path.join(os.tmpdir(), `condoos-restore-boot-source-${Date.now()}.sqlite`);
+  try {
+    const sqlite = new Database(sqlitePath);
+    sqlite.exec(fs.readFileSync(path.resolve(__dirname, '../src/db/schema.sql'), 'utf8'));
+    sqlite.close();
+    const gzippedSnapshot = zlib.gzipSync(fs.readFileSync(sqlitePath));
+
+    for (const key of keys) delete process.env[key];
+    process.env.R2_BUCKET = 'condoos-private-uploads';
+    process.env.R2_ACCESS_KEY_ID = 'r2-access';
+    process.env.R2_SECRET_ACCESS_KEY = 'r2-secret';
+    process.env.R2_ENDPOINT = 'https://example.r2.cloudflarestorage.com';
+    process.env.R2_REGION = 'auto';
+    process.env.RESTORE_BOOT_DRILL_TIMEOUT_MS = '60000';
+
+    let requestedKey = '';
+    S3Client.prototype.send = async (command: any) => {
+      if (command.constructor.name === 'ListObjectsV2Command') {
+        return {
+          Contents: [
+            { Key: 'condoos-sqlite/condoos-old.sqlite.gz', LastModified: new Date('2026-01-01T00:00:00Z'), Size: 111 },
+            { Key: 'condoos-sqlite/condoos-boot.sqlite.gz', LastModified: new Date('2026-02-01T00:00:00Z'), Size: gzippedSnapshot.length },
+          ],
+        };
+      }
+      if (command.constructor.name === 'GetObjectCommand') {
+        requestedKey = command.input.Key;
+        return { Body: Readable.from(gzippedSnapshot), ContentLength: gzippedSnapshot.length };
+      }
+      throw new Error(`unexpected command ${command.constructor.name}`);
+    };
+
+    const { runRestoreBootDrill } = loadFreshBackupModule();
+    const result = await runRestoreBootDrill();
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.equal(result.key, 'condoos-sqlite/condoos-boot.sqlite.gz');
+    assert.equal(requestedKey, 'condoos-sqlite/condoos-boot.sqlite.gz');
+    assert.equal(result.integrity_check, 'ok');
+    assert.equal(result.foreign_key_violations, 0);
+    assert.equal(result.writable_probe, true);
+    assert.equal(result.booted, true);
+    assert.equal(result.boot_health_ok, true);
+    assert.equal(result.boot_status_code, 200);
+    assert.equal(result.boot_db, 'ok');
+    assert.ok((result.boot_port || 0) > 0);
+    assert.ok((result.boot_duration_ms || 0) > 0);
+    assert.ok((result.schema_table_count || 0) >= 50);
+  } finally {
+    S3Client.prototype.send = originalSend;
+    for (const [key, value] of previousEnv) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    for (const p of [sqlitePath, `${sqlitePath}-wal`, `${sqlitePath}-shm`, `${sqlitePath}-journal`]) {
+      try { fs.unlinkSync(p); } catch { /* temp already gone */ }
+    }
+    loadFreshBackupModule();
+  }
+});
+
 test('backup: db.backup() produces a readable consistent snapshot', async () => {
   // Don't go through runBackup() (it needs S3). Just prove the underlying
   // snapshot mechanism works end-to-end: write data, snapshot, reopen,

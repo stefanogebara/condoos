@@ -301,6 +301,7 @@ Production backup and load probes:
 npm run audit:prod:backup      # verify latest off-site backup downloads + integrity-checks
 npm run audit:prod:backup:run  # trigger one production snapshot, upload it, then verify it
 npm run audit:prod:restore-drill # restore latest off-site backup into a temp DB and prove it opens read-write
+npm run audit:prod:restore-boot  # boot an isolated API process against the restored temp DB and health-check it
 npm run audit:prod:load        # bounded production API/client concurrency probe
 ```
 
@@ -313,6 +314,13 @@ the restore drill against it. `audit:prod:restore-drill` is also non-destructive
 it downloads the backup server-side into a temporary SQLite file, runs
 `PRAGMA integrity_check`, `PRAGMA foreign_key_check`, counts core tables, and
 creates/drops a temporary probe table to prove the restored file is writable.
+`audit:prod:restore-boot` goes one step further: the Fly API downloads the
+backup into a temporary SQLite file, starts a separate local-only API process
+with `DB_PATH` pointed at that restored copy and `NODE_ENV=test`, waits for
+`/api/health` to report `db: ok`, then terminates the child process and deletes
+the temporary DB plus SQLite sidecars. It never replaces the live production
+database and does not start schedulers, WhatsApp retries, backup jobs, or agent
+workers.
 Production prefers dedicated `BACKUP_S3_*` credentials, but falls back to the
 configured private R2 upload bucket for pilot readiness. `audit:prod:load` is
 intentionally small; it exercises the live client, auth, dashboard, tickets,

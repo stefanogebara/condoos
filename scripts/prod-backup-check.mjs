@@ -17,6 +17,7 @@ const apiURL = (argValue('--api-url') || process.env.PROD_API_URL || process.env
 const email = argValue('--email') || process.env.PROD_ADMIN_EMAIL || process.env.E2E_ADMIN_EMAIL;
 const password = argValue('--password') || process.env.PROD_ADMIN_PASSWORD || process.env.E2E_ADMIN_PASSWORD;
 const shouldRunBackup = hasFlag('--run');
+const shouldRestoreBootDrill = hasFlag('--restore-boot-drill');
 const shouldRestoreDrill = hasFlag('--restore-drill') || shouldRunBackup;
 const shouldVerifyBackup = hasFlag('--verify') || shouldRunBackup;
 const requireConfigured = hasFlag('--require-configured');
@@ -114,6 +115,32 @@ async function main() {
     }
   }
 
+  let restoreBootDrill = null;
+  if (shouldRestoreBootDrill) {
+    const restoreKey = run?.key || verify?.key || restoreDrill?.key;
+    restoreBootDrill = await jsonRequest('/admin/backup/restore-boot-drill', {
+      method: 'POST',
+      headers: auth,
+      body: JSON.stringify(restoreKey ? { key: restoreKey } : {}),
+    });
+    if (!restoreBootDrill.ok) {
+      throw new Error(`backup restore boot drill failed: ${restoreBootDrill.error || 'unknown_error'}`);
+    }
+    if (
+      restoreBootDrill.integrity_check !== 'ok'
+      || !restoreBootDrill.restored_size_bytes
+      || restoreBootDrill.foreign_key_violations !== 0
+      || restoreBootDrill.writable_probe !== true
+      || !restoreBootDrill.schema_table_count
+      || restoreBootDrill.booted !== true
+      || restoreBootDrill.boot_health_ok !== true
+      || restoreBootDrill.boot_status_code !== 200
+      || restoreBootDrill.boot_db !== 'ok'
+    ) {
+      throw new Error(`backup restore boot drill returned incomplete boot metadata: ${JSON.stringify(restoreBootDrill)}`);
+    }
+  }
+
   console.log(JSON.stringify({
     ok: true,
     api_url: apiURL,
@@ -143,6 +170,21 @@ async function main() {
     restore_schema_table_count: restoreDrill?.schema_table_count || null,
     restore_writable_probe: restoreDrill?.writable_probe ?? null,
     restore_duration_ms: restoreDrill?.duration_ms || null,
+    restore_boot_drill: !!restoreBootDrill,
+    restore_boot_key: restoreBootDrill?.key || null,
+    restore_boot_integrity_check: restoreBootDrill?.integrity_check || null,
+    restore_boot_object_size_bytes: restoreBootDrill?.object_size_bytes || null,
+    restore_boot_restored_size_bytes: restoreBootDrill?.restored_size_bytes || null,
+    restore_boot_table_counts: restoreBootDrill?.table_counts || null,
+    restore_boot_foreign_key_violations: restoreBootDrill?.foreign_key_violations ?? null,
+    restore_boot_schema_table_count: restoreBootDrill?.schema_table_count || null,
+    restore_boot_writable_probe: restoreBootDrill?.writable_probe ?? null,
+    restore_boot_booted: restoreBootDrill?.booted ?? null,
+    restore_boot_health_ok: restoreBootDrill?.boot_health_ok ?? null,
+    restore_boot_status_code: restoreBootDrill?.boot_status_code || null,
+    restore_boot_db: restoreBootDrill?.boot_db || null,
+    restore_boot_duration_ms: restoreBootDrill?.boot_duration_ms || null,
+    restore_boot_total_duration_ms: restoreBootDrill?.duration_ms || null,
   }, null, 2));
 }
 
