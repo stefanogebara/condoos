@@ -18,6 +18,7 @@ on:
           - integrations
           - uploads
           - backup
+          - restore-drill
           - load
   # Nightly assurance against the live stack. 06:00 UTC = 03:00 BRT —
   # off-hours for the Brazilian customer base, well before US morning.
@@ -75,7 +76,7 @@ jobs:
         run: echo "SUITE=${{ inputs.suite }}" >> $GITHUB_ENV
 
       - name: Check VERCEL_AUTOMATION_BYPASS_SECRET
-        if: ${{ env.SUITE != 'api' }}
+        if: ${{ env.SUITE != 'api' && env.SUITE != 'backup' && env.SUITE != 'restore-drill' }}
         run: |
           if [ -z "$VERCEL_AUTOMATION_BYPASS_SECRET" ]; then
             echo "VERCEL_AUTOMATION_BYPASS_SECRET is required for protected Vercel browser suites."
@@ -92,7 +93,7 @@ jobs:
       - name: Check private production E2E credentials
         run: |
           missing=0
-          if [ "$SUITE" = "uploads" ] || [ "$SUITE" = "backup" ] || [ "$SUITE" = "load" ]; then
+          if [ "$SUITE" = "uploads" ] || [ "$SUITE" = "backup" ] || [ "$SUITE" = "restore-drill" ] || [ "$SUITE" = "load" ]; then
             required="E2E_ADMIN_EMAIL E2E_ADMIN_PASSWORD"
           else
             required="E2E_ADMIN_EMAIL E2E_ADMIN_PASSWORD E2E_RESIDENT_EMAIL E2E_RESIDENT_PASSWORD E2E_CONCIERGE_EMAIL E2E_CONCIERGE_PASSWORD"
@@ -116,6 +117,10 @@ jobs:
       - name: Run production backup audit
         if: ${{ env.SUITE == 'backup' }}
         run: npm run audit:prod:backup:run
+
+      - name: Run production restore drill
+        if: ${{ env.SUITE == 'restore-drill' }}
+        run: npm run audit:prod:restore-drill
 
       - name: Run production load audit
         if: ${{ env.SUITE == 'load' }}

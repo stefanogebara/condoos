@@ -17,6 +17,7 @@ const apiURL = (argValue('--api-url') || process.env.PROD_API_URL || process.env
 const email = argValue('--email') || process.env.PROD_ADMIN_EMAIL || process.env.E2E_ADMIN_EMAIL;
 const password = argValue('--password') || process.env.PROD_ADMIN_PASSWORD || process.env.E2E_ADMIN_PASSWORD;
 const shouldRunBackup = hasFlag('--run');
+const shouldRestoreDrill = hasFlag('--restore-drill') || shouldRunBackup;
 const shouldVerifyBackup = hasFlag('--verify') || shouldRunBackup;
 const requireConfigured = hasFlag('--require-configured');
 const rateLimitBypassSecret =
@@ -93,6 +94,26 @@ async function main() {
     }
   }
 
+  let restoreDrill = null;
+  if (shouldRestoreDrill) {
+    const restoreKey = run?.key || verify?.key;
+    restoreDrill = await jsonRequest('/admin/backup/restore-drill', {
+      method: 'POST',
+      headers: auth,
+      body: JSON.stringify(restoreKey ? { key: restoreKey } : {}),
+    });
+    if (!restoreDrill.ok) throw new Error(`backup restore drill failed: ${restoreDrill.error || 'unknown_error'}`);
+    if (
+      restoreDrill.integrity_check !== 'ok'
+      || !restoreDrill.restored_size_bytes
+      || restoreDrill.foreign_key_violations !== 0
+      || restoreDrill.writable_probe !== true
+      || !restoreDrill.schema_table_count
+    ) {
+      throw new Error(`backup restore drill returned incomplete restore metadata: ${JSON.stringify(restoreDrill)}`);
+    }
+  }
+
   console.log(JSON.stringify({
     ok: true,
     api_url: apiURL,
@@ -112,6 +133,16 @@ async function main() {
     verified_restored_size_bytes: verify?.restored_size_bytes || null,
     verified_table_counts: verify?.table_counts || null,
     verified_duration_ms: verify?.duration_ms || null,
+    restore_drill: !!restoreDrill,
+    restore_key: restoreDrill?.key || null,
+    restore_integrity_check: restoreDrill?.integrity_check || null,
+    restore_object_size_bytes: restoreDrill?.object_size_bytes || null,
+    restore_restored_size_bytes: restoreDrill?.restored_size_bytes || null,
+    restore_table_counts: restoreDrill?.table_counts || null,
+    restore_foreign_key_violations: restoreDrill?.foreign_key_violations ?? null,
+    restore_schema_table_count: restoreDrill?.schema_table_count || null,
+    restore_writable_probe: restoreDrill?.writable_probe ?? null,
+    restore_duration_ms: restoreDrill?.duration_ms || null,
   }, null, 2));
 }
 

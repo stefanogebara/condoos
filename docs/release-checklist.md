@@ -34,6 +34,7 @@ npm run audit:prod:hardening
 npm run audit:prod:uploads
 npm run audit:prod:backup
 npm run audit:prod:backup:run
+npm run audit:prod:restore-drill
 npm run audit:prod:load
 npm run audit:ops:backup-restore
 npm run audit:perf:prod
@@ -53,7 +54,10 @@ disposable demo environments where captcha keys have not been installed yet.
 `audit:prod:backup` is non-destructive: it downloads the latest off-site
 snapshot, gunzips it, opens it as read-only SQLite, and runs integrity checks.
 `audit:prod:backup:run` creates a fresh production snapshot and verifies that
-exact object. Do not test destructive restore against production.
+exact object, including the read-write restore drill. `audit:prod:restore-drill`
+downloads the backup into a temporary database, runs integrity and foreign-key
+checks, and creates/drops a probe table only inside that restored copy. Do not
+test destructive restore against production.
 
 Do not ship a feature push while the production-safe audit is red. If the
 failure is seeded/user-entered content, mark the rendered field with

@@ -7,7 +7,7 @@ import { requireAuth, requireRole, requireBoardCapability, AuthedRequest } from 
 import { ok, fail, asyncHandler } from '../lib/respond';
 import { createRateLimit } from '../lib/rate-limit';
 import { audit } from '../lib/audit';
-import { runBackup, getBackupStatus, backupConfigured, verifyBackupObject } from '../lib/backup';
+import { runBackup, getBackupStatus, backupConfigured, verifyBackupObject, runRestoreDrill } from '../lib/backup';
 import { getWhatsAppStatus } from '../lib/whatsapp';
 import { privateCreateBuildingRequired } from '../lib/private-access';
 import { getQueueStatusSnapshot } from '../lib/agent-dispatch-queue';
@@ -29,6 +29,13 @@ const backupVerifyRateLimit = createRateLimit({
   keyPrefix: 'admin-backup-verify',
   windowMs: 60 * 60_000,
   max: 10,
+  key: (req) => String((req as AuthedRequest).user?.id || req.ip || 'unknown'),
+});
+
+const backupRestoreDrillRateLimit = createRateLimit({
+  keyPrefix: 'admin-backup-restore-drill',
+  windowMs: 60 * 60_000,
+  max: 6,
   key: (req) => String((req as AuthedRequest).user?.id || req.ip || 'unknown'),
 });
 
@@ -127,6 +134,33 @@ router.post('/backup/verify', requireAuth, requireRole('board_admin'), requireBo
     },
   });
   if (!result.ok) return fail(res, result.error || 'backup_verify_failed', 500, result);
+  return ok(res, result);
+}));
+
+router.post('/backup/restore-drill', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), backupRestoreDrillRateLimit, asyncHandler(async (req: AuthedRequest, res) => {
+  if (!backupConfigured()) return fail(res, 'backup_not_configured', 503);
+  const parsed = verifyBackupSchema.safeParse(req.body || {});
+  if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
+
+  const result = await runRestoreDrill(parsed.data.key);
+  audit(req, {
+    action: 'admin.backup_restore_drill',
+    target_type: 'backup',
+    target_id: 0,
+    condominium_id: req.user?.condominium_id ?? null,
+    metadata: {
+      ok: result.ok,
+      key: result.key,
+      object_size_bytes: result.object_size_bytes,
+      restored_size_bytes: result.restored_size_bytes,
+      integrity_check: result.integrity_check,
+      foreign_key_violations: result.foreign_key_violations,
+      schema_table_count: result.schema_table_count,
+      writable_probe: result.writable_probe,
+      error: result.error,
+    },
+  });
+  if (!result.ok) return fail(res, result.error || 'backup_restore_drill_failed', 500, result);
   return ok(res, result);
 }));
 

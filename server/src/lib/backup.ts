@@ -76,6 +76,12 @@ export interface BackupVerificationResult {
   error?: string;
 }
 
+export interface BackupRestoreDrillResult extends BackupVerificationResult {
+  foreign_key_violations?: number;
+  schema_table_count?: number;
+  writable_probe?: boolean;
+}
+
 function latestBackupObject(objects: _Object[]): _Object | null {
   const candidates = objects
     .filter((obj) => obj.Key?.startsWith(`${KEY_PREFIX}/`) && obj.Key.endsWith('.sqlite.gz'))
@@ -106,6 +112,53 @@ async function gunzipObjectBody(body: unknown, destination: string): Promise<voi
   throw new Error('backup_object_body_unsupported');
 }
 
+async function resolveBackupObject(client: S3Client, key?: string): Promise<{ key: string; object_size_bytes?: number }> {
+  let selectedKey = key;
+  let objectSize: number | undefined;
+
+  if (!selectedKey) {
+    const list = await client.send(new ListObjectsV2Command({ Bucket: BUCKET, Prefix: `${KEY_PREFIX}/` }));
+    const latest = latestBackupObject((list.Contents || []) as _Object[]);
+    if (!latest?.Key) throw new Error('no_backup_objects');
+    selectedKey = latest.Key;
+    objectSize = latest.Size;
+  }
+
+  if (!selectedKey.startsWith(`${KEY_PREFIX}/`) || !selectedKey.endsWith('.sqlite.gz')) {
+    throw new Error('invalid_backup_key');
+  }
+
+  return { key: selectedKey, object_size_bytes: objectSize };
+}
+
+async function downloadBackupSnapshot(
+  client: S3Client,
+  key: string,
+  localSnapshot: string,
+  objectSize?: number,
+): Promise<{ object_size_bytes?: number; restored_size_bytes: number }> {
+  const object = await client.send(new GetObjectCommand({ Bucket: BUCKET, Key: key }));
+  const downloadedObjectSize = Number(object.ContentLength || objectSize || 0) || undefined;
+  await gunzipObjectBody(object.Body, localSnapshot);
+  const stats = fs.statSync(localSnapshot);
+  return { object_size_bytes: downloadedObjectSize, restored_size_bytes: stats.size };
+}
+
+function cleanupSqliteTempFiles(localSnapshot: string): void {
+  for (const p of [localSnapshot, `${localSnapshot}-wal`, `${localSnapshot}-shm`, `${localSnapshot}-journal`]) {
+    try { fs.unlinkSync(p); } catch { /* tmp already gone */ }
+  }
+}
+
+function countCoreTables(check: { prepare: (sql: string) => { get: () => unknown } }): Record<string, number> {
+  const tableCounts: Record<string, number> = {};
+  for (const table of ['condominiums', 'users', 'tickets', 'agent_runs']) {
+    const row = check.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get() as { count: number };
+    tableCounts[table] = Number(row.count || 0);
+  }
+  return tableCounts;
+}
+
 async function inspectSqliteSnapshot(localSnapshot: string): Promise<Pick<BackupVerificationResult, 'integrity_check' | 'table_counts'>> {
   const Database = (await import('better-sqlite3')).default;
   const check = new Database(localSnapshot, { readonly: true });
@@ -114,12 +167,58 @@ async function inspectSqliteSnapshot(localSnapshot: string): Promise<Pick<Backup
     if (integrity.integrity_check !== 'ok') {
       throw new Error(`integrity_check_failed: ${integrity.integrity_check}`);
     }
-    const tableCounts: Record<string, number> = {};
-    for (const table of ['condominiums', 'users', 'tickets', 'agent_runs']) {
-      const row = check.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get() as { count: number };
-      tableCounts[table] = Number(row.count || 0);
+    return { integrity_check: integrity.integrity_check, table_counts: countCoreTables(check) };
+  } finally {
+    check.close();
+  }
+}
+
+async function drillSqliteSnapshot(localSnapshot: string): Promise<Pick<
+  BackupRestoreDrillResult,
+  'integrity_check' | 'table_counts' | 'foreign_key_violations' | 'schema_table_count' | 'writable_probe'
+>> {
+  const Database = (await import('better-sqlite3')).default;
+  const check = new Database(localSnapshot);
+  try {
+    check.pragma('foreign_keys = ON');
+    const integrity = check.prepare('PRAGMA integrity_check').get() as { integrity_check: string };
+    if (integrity.integrity_check !== 'ok') {
+      throw new Error(`integrity_check_failed: ${integrity.integrity_check}`);
     }
-    return { integrity_check: integrity.integrity_check, table_counts: tableCounts };
+
+    const foreignKeyViolations = check.prepare('PRAGMA foreign_key_check').all().length;
+    if (foreignKeyViolations > 0) {
+      throw new Error(`foreign_key_check_failed: ${foreignKeyViolations}`);
+    }
+
+    const tableCounts = countCoreTables(check);
+    const schema = check.prepare(
+      `SELECT COUNT(*) AS count
+       FROM sqlite_master
+       WHERE type = 'table'
+         AND name NOT LIKE 'sqlite_%'`
+    ).get() as { count: number };
+
+    const probeTable = `restore_drill_write_probe_${Date.now()}_${process.pid}`;
+    const writeProbe = check.transaction(() => {
+      check.exec(`
+        CREATE TABLE ${probeTable} (
+          id INTEGER PRIMARY KEY,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        INSERT INTO ${probeTable} DEFAULT VALUES;
+        DROP TABLE ${probeTable};
+      `);
+    });
+    writeProbe();
+
+    return {
+      integrity_check: integrity.integrity_check,
+      table_counts: tableCounts,
+      foreign_key_violations: foreignKeyViolations,
+      schema_table_count: Number(schema.count || 0),
+      writable_probe: true,
+    };
   } finally {
     check.close();
   }
@@ -194,42 +293,59 @@ export async function verifyBackupObject(key?: string): Promise<BackupVerificati
   if (!backupConfigured()) return { ok: false, error: 'not_configured' };
   const started = Date.now();
   const client = s3Client();
-  let selectedKey = key;
-  let objectSize: number | undefined;
+  let selectedKey: string | undefined = key;
 
   try {
-    if (!selectedKey) {
-      const list = await client.send(new ListObjectsV2Command({ Bucket: BUCKET, Prefix: `${KEY_PREFIX}/` }));
-      const latest = latestBackupObject((list.Contents || []) as _Object[]);
-      if (!latest?.Key) return { ok: false, error: 'no_backup_objects' };
-      selectedKey = latest.Key;
-      objectSize = latest.Size;
-    }
-
-    if (!selectedKey.startsWith(`${KEY_PREFIX}/`) || !selectedKey.endsWith('.sqlite.gz')) {
-      return { ok: false, error: 'invalid_backup_key' };
-    }
+    const selected = await resolveBackupObject(client, key);
+    selectedKey = selected.key;
 
     const localSnapshot = path.join(os.tmpdir(), `condoos-verify-${Date.now()}-${process.pid}.sqlite`);
     try {
-      const object = await client.send(new GetObjectCommand({ Bucket: BUCKET, Key: selectedKey }));
-      objectSize = Number(object.ContentLength || objectSize || 0) || undefined;
-      await gunzipObjectBody(object.Body, localSnapshot);
-      const stats = fs.statSync(localSnapshot);
+      const downloaded = await downloadBackupSnapshot(client, selectedKey, localSnapshot, selected.object_size_bytes);
       const inspected = await inspectSqliteSnapshot(localSnapshot);
       return {
         ok: true,
         key: selectedKey,
-        object_size_bytes: objectSize,
-        restored_size_bytes: stats.size,
+        object_size_bytes: downloaded.object_size_bytes,
+        restored_size_bytes: downloaded.restored_size_bytes,
         duration_ms: Date.now() - started,
         ...inspected,
       };
     } finally {
-      try { fs.unlinkSync(localSnapshot); } catch { /* tmp already gone */ }
+      cleanupSqliteTempFiles(localSnapshot);
     }
   } catch (err) {
     return { ok: false, key: selectedKey, error: (err as Error).message || 'backup_verify_failed' };
+  }
+}
+
+export async function runRestoreDrill(key?: string): Promise<BackupRestoreDrillResult> {
+  if (!backupConfigured()) return { ok: false, error: 'not_configured' };
+  const started = Date.now();
+  const client = s3Client();
+  let selectedKey: string | undefined = key;
+
+  try {
+    const selected = await resolveBackupObject(client, key);
+    selectedKey = selected.key;
+
+    const localSnapshot = path.join(os.tmpdir(), `condoos-restore-drill-${Date.now()}-${process.pid}.sqlite`);
+    try {
+      const downloaded = await downloadBackupSnapshot(client, selectedKey, localSnapshot, selected.object_size_bytes);
+      const drilled = await drillSqliteSnapshot(localSnapshot);
+      return {
+        ok: true,
+        key: selectedKey,
+        object_size_bytes: downloaded.object_size_bytes,
+        restored_size_bytes: downloaded.restored_size_bytes,
+        duration_ms: Date.now() - started,
+        ...drilled,
+      };
+    } finally {
+      cleanupSqliteTempFiles(localSnapshot);
+    }
+  } catch (err) {
+    return { ok: false, key: selectedKey, error: (err as Error).message || 'backup_restore_drill_failed' };
   }
 }
 

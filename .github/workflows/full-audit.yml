@@ -132,6 +132,9 @@ jobs:
       - name: Production backup integrity audit
         run: npm run audit:prod:backup
 
+      - name: Production restore drill
+        run: npm run audit:prod:restore-drill
+
       - name: Production bounded load audit
         run: npm run audit:prod:load
 

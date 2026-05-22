@@ -300,6 +300,7 @@ Production backup and load probes:
 ```bash
 npm run audit:prod:backup      # verify latest off-site backup downloads + integrity-checks
 npm run audit:prod:backup:run  # trigger one production snapshot, upload it, then verify it
+npm run audit:prod:restore-drill # restore latest off-site backup into a temp DB and prove it opens read-write
 npm run audit:prod:load        # bounded production API/client concurrency probe
 ```
 
@@ -307,12 +308,16 @@ npm run audit:prod:load        # bounded production API/client concurrency probe
 off-site snapshot, downloads it, gunzips it into a temporary file, opens it as
 read-only SQLite, runs `PRAGMA integrity_check`, and counts core tables. It does
 not replace or mutate the production database. `audit:prod:backup:run` first
-creates a fresh snapshot and then verifies that exact uploaded object. Production
-prefers dedicated `BACKUP_S3_*` credentials, but falls back to the configured
-private R2 upload bucket for pilot readiness. `audit:prod:load` is intentionally
-small; it exercises the live client, auth, dashboard, tickets, finance,
-integrations, and agent queue status under bounded concurrency so it can run in
-CI without becoming a load test against customers.
+creates a fresh snapshot and then verifies that exact uploaded object and runs
+the restore drill against it. `audit:prod:restore-drill` is also non-destructive:
+it downloads the backup server-side into a temporary SQLite file, runs
+`PRAGMA integrity_check`, `PRAGMA foreign_key_check`, counts core tables, and
+creates/drops a temporary probe table to prove the restored file is writable.
+Production prefers dedicated `BACKUP_S3_*` credentials, but falls back to the
+configured private R2 upload bucket for pilot readiness. `audit:prod:load` is
+intentionally small; it exercises the live client, auth, dashboard, tickets,
+finance, integrations, and agent queue status under bounded concurrency so it
+can run in CI without becoming a load test against customers.
 
 ## Production E2E Against Vercel
 

@@ -26,6 +26,7 @@
     "audit:perf:prod": "node scripts/lighthouse-budget.mjs",
     "audit:prod:backup": "node scripts/prod-backup-check.mjs --require-configured --verify",
     "audit:prod:backup:run": "node scripts/prod-backup-check.mjs --require-configured --run",
+    "audit:prod:restore-drill": "node scripts/prod-backup-check.mjs --require-configured --restore-drill",
     "audit:prod:hardening": "node scripts/prod-hardening-check.mjs",
     "audit:prod:hardening:warn": "node scripts/prod-hardening-check.mjs --warn-only-captcha",
     "audit:prod:load": "node scripts/prod-load-check.mjs",
