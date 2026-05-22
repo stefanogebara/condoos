@@ -15,10 +15,18 @@ const conciergePassword = process.env.E2E_CONCIERGE_PASSWORD || 'e2e-prod-fixed-
 const SHOT_DIR = path.join('test-results', 'untouched-views');
 fs.mkdirSync(SHOT_DIR, { recursive: true });
 
+// Share sessions across tests to stay under the auth rate limit
+// (30 logins per 15min per IP). Without this, 10 tests = 10 logins
+// and a second run inside the same window blows the budget.
+const sessionCache = new Map<string, any>();
 async function login(request: APIRequestContext, email: string, password: string) {
+  const cached = sessionCache.get(email);
+  if (cached) return cached;
   const res = await request.post(`${apiURL}/auth/login`, { data: { email, password } });
   expect(res.ok(), `login failed for ${email}: ${res.status()} ${await res.text()}`).toBeTruthy();
-  return (await res.json()).data;
+  const session = (await res.json()).data;
+  sessionCache.set(email, session);
+  return session;
 }
 async function setSession(page: Page, session: any) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
