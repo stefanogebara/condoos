@@ -298,18 +298,21 @@ non-production local-storage fallback.
 Production backup and load probes:
 
 ```bash
-npm run audit:prod:backup      # verify off-site backup config is present
-npm run audit:prod:backup:run  # trigger one manual production snapshot + upload
+npm run audit:prod:backup      # verify latest off-site backup downloads + integrity-checks
+npm run audit:prod:backup:run  # trigger one production snapshot, upload it, then verify it
 npm run audit:prod:load        # bounded production API/client concurrency probe
 ```
 
-`audit:prod:backup:run` logs in as the production E2E board admin, calls the
-admin backup endpoint, and fails unless the snapshot uploads successfully with
-non-empty metadata. Production prefers dedicated `BACKUP_S3_*` credentials,
-but falls back to the configured private R2 upload bucket for pilot readiness.
-`audit:prod:load` is intentionally small; it exercises the live client, auth,
-dashboard, tickets, finance, integrations, and agent queue status under bounded
-concurrency so it can run in CI without becoming a load test against customers.
+`audit:prod:backup` logs in as the production E2E board admin, finds the latest
+off-site snapshot, downloads it, gunzips it into a temporary file, opens it as
+read-only SQLite, runs `PRAGMA integrity_check`, and counts core tables. It does
+not replace or mutate the production database. `audit:prod:backup:run` first
+creates a fresh snapshot and then verifies that exact uploaded object. Production
+prefers dedicated `BACKUP_S3_*` credentials, but falls back to the configured
+private R2 upload bucket for pilot readiness. `audit:prod:load` is intentionally
+small; it exercises the live client, auth, dashboard, tickets, finance,
+integrations, and agent queue status under bounded concurrency so it can run in
+CI without becoming a load test against customers.
 
 ## Production E2E Against Vercel
 

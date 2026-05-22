@@ -17,6 +17,7 @@ const apiURL = (argValue('--api-url') || process.env.PROD_API_URL || process.env
 const email = argValue('--email') || process.env.PROD_ADMIN_EMAIL || process.env.E2E_ADMIN_EMAIL;
 const password = argValue('--password') || process.env.PROD_ADMIN_PASSWORD || process.env.E2E_ADMIN_PASSWORD;
 const shouldRunBackup = hasFlag('--run');
+const shouldVerifyBackup = hasFlag('--verify') || shouldRunBackup;
 const requireConfigured = hasFlag('--require-configured');
 const rateLimitBypassSecret =
   process.env.E2E_RATE_LIMIT_BYPASS_SECRET
@@ -79,6 +80,19 @@ async function main() {
     }
   }
 
+  let verify = null;
+  if (shouldVerifyBackup) {
+    verify = await jsonRequest('/admin/backup/verify', {
+      method: 'POST',
+      headers: auth,
+      body: JSON.stringify(run?.key ? { key: run.key } : {}),
+    });
+    if (!verify.ok) throw new Error(`backup verify failed: ${verify.error || 'unknown_error'}`);
+    if (verify.integrity_check !== 'ok' || !verify.restored_size_bytes) {
+      throw new Error(`backup verify returned incomplete integrity metadata: ${JSON.stringify(verify)}`);
+    }
+  }
+
   console.log(JSON.stringify({
     ok: true,
     api_url: apiURL,
@@ -91,6 +105,13 @@ async function main() {
     backup_size_bytes: run?.size_bytes || null,
     backup_duration_ms: run?.duration_ms || null,
     backup_pruned: run?.pruned ?? null,
+    verified_backup: !!verify,
+    verified_key: verify?.key || null,
+    verified_integrity_check: verify?.integrity_check || null,
+    verified_object_size_bytes: verify?.object_size_bytes || null,
+    verified_restored_size_bytes: verify?.restored_size_bytes || null,
+    verified_table_counts: verify?.table_counts || null,
+    verified_duration_ms: verify?.duration_ms || null,
   }, null, 2));
 }
 

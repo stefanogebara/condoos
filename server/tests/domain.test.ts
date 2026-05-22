@@ -4272,6 +4272,89 @@ test('backup: falls back to configured private R2 upload storage', () => {
   }
 });
 
+test('backup: verifies latest uploaded object by gunzipping and integrity-checking SQLite', async () => {
+  const fs = await import('fs');
+  const os = await import('os');
+  const path = await import('path');
+  const zlib = await import('zlib');
+  const { Readable } = await import('stream');
+  const Database = (await import('better-sqlite3')).default;
+  const { S3Client } = await import('@aws-sdk/client-s3');
+  const keys = [
+    'BACKUP_S3_BUCKET',
+    'BACKUP_S3_ACCESS_KEY',
+    'BACKUP_S3_SECRET_KEY',
+    'BACKUP_S3_ENDPOINT',
+    'BACKUP_S3_REGION',
+    'BACKUP_S3_KEY_PREFIX',
+    'R2_BUCKET',
+    'R2_ACCESS_KEY_ID',
+    'R2_SECRET_ACCESS_KEY',
+    'R2_ENDPOINT',
+    'R2_REGION',
+  ];
+  const previousEnv = new Map(keys.map((key) => [key, process.env[key]]));
+  const originalSend = S3Client.prototype.send;
+  const sqlitePath = path.join(os.tmpdir(), `condoos-verify-source-${Date.now()}.sqlite`);
+  try {
+    const sqlite = new Database(sqlitePath);
+    sqlite.exec(`
+      CREATE TABLE condominiums (id INTEGER PRIMARY KEY, name TEXT);
+      CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT);
+      CREATE TABLE tickets (id INTEGER PRIMARY KEY, title TEXT);
+      CREATE TABLE agent_runs (id INTEGER PRIMARY KEY, status TEXT);
+      INSERT INTO condominiums (id, name) VALUES (1, 'Backup Test Condo');
+      INSERT INTO users (id, email) VALUES (1, 'backup@example.test');
+      INSERT INTO tickets (id, title) VALUES (1, 'Backup ticket');
+      INSERT INTO agent_runs (id, status) VALUES (1, 'succeeded');
+    `);
+    sqlite.close();
+    const gzippedSnapshot = zlib.gzipSync(fs.readFileSync(sqlitePath));
+
+    for (const key of keys) delete process.env[key];
+    process.env.R2_BUCKET = 'condoos-private-uploads';
+    process.env.R2_ACCESS_KEY_ID = 'r2-access';
+    process.env.R2_SECRET_ACCESS_KEY = 'r2-secret';
+    process.env.R2_ENDPOINT = 'https://example.r2.cloudflarestorage.com';
+    process.env.R2_REGION = 'auto';
+
+    let requestedKey = '';
+    S3Client.prototype.send = async (command: any) => {
+      if (command.constructor.name === 'ListObjectsV2Command') {
+        return {
+          Contents: [
+            { Key: 'condoos-sqlite/condoos-old.sqlite.gz', LastModified: new Date('2026-01-01T00:00:00Z'), Size: 111 },
+            { Key: 'condoos-sqlite/condoos-new.sqlite.gz', LastModified: new Date('2026-02-01T00:00:00Z'), Size: gzippedSnapshot.length },
+          ],
+        };
+      }
+      if (command.constructor.name === 'GetObjectCommand') {
+        requestedKey = command.input.Key;
+        return { Body: Readable.from(gzippedSnapshot), ContentLength: gzippedSnapshot.length };
+      }
+      throw new Error(`unexpected command ${command.constructor.name}`);
+    };
+
+    const { verifyBackupObject } = loadFreshBackupModule();
+    const result = await verifyBackupObject();
+    assert.equal(result.ok, true);
+    assert.equal(result.key, 'condoos-sqlite/condoos-new.sqlite.gz');
+    assert.equal(requestedKey, 'condoos-sqlite/condoos-new.sqlite.gz');
+    assert.equal(result.integrity_check, 'ok');
+    assert.equal(result.table_counts?.condominiums, 1);
+    assert.equal(result.table_counts?.users, 1);
+    assert.ok((result.restored_size_bytes || 0) > 0);
+  } finally {
+    S3Client.prototype.send = originalSend;
+    for (const [key, value] of previousEnv) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    try { fs.unlinkSync(sqlitePath); } catch { /* temp already gone */ }
+    loadFreshBackupModule();
+  }
+});
+
 test('backup: db.backup() produces a readable consistent snapshot', async () => {
   // Don't go through runBackup() (it needs S3). Just prove the underlying
   // snapshot mechanism works end-to-end: write data, snapshot, reopen,

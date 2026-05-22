@@ -11,16 +11,25 @@
 // writers), gzip it, upload it under a date-stamped key, and sweep
 // objects older than the retention window.
 //
-// Graceful when not configured: if the BACKUP_S3_* env vars aren't set,
-// the scheduler logs once and stays idle. No crashes, no noise.
+// Graceful when not configured: if neither BACKUP_S3_* nor R2_* storage
+// credentials are set, the scheduler logs once and stays idle. No crashes,
+// no noise.
 
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { createReadStream, createWriteStream } from 'fs';
-import { createGzip } from 'zlib';
+import { Readable } from 'stream';
+import { createGunzip, createGzip } from 'zlib';
 import { pipeline } from 'stream/promises';
-import { S3Client, PutObjectCommand, ListObjectsV2Command, DeleteObjectCommand, _Object } from '@aws-sdk/client-s3';
+import {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+  ListObjectsV2Command,
+  DeleteObjectCommand,
+  _Object,
+} from '@aws-sdk/client-s3';
 import db from '../db';
 
 // Prefer dedicated backup credentials when present. For a lean pilot, fall
@@ -54,6 +63,66 @@ export interface BackupResult {
   duration_ms?: number;
   pruned?: number;
   error?: string;
+}
+
+export interface BackupVerificationResult {
+  ok: boolean;
+  key?: string;
+  object_size_bytes?: number;
+  restored_size_bytes?: number;
+  duration_ms?: number;
+  integrity_check?: string;
+  table_counts?: Record<string, number>;
+  error?: string;
+}
+
+function latestBackupObject(objects: _Object[]): _Object | null {
+  const candidates = objects
+    .filter((obj) => obj.Key?.startsWith(`${KEY_PREFIX}/`) && obj.Key.endsWith('.sqlite.gz'))
+    .sort((a, b) => {
+      const aTime = a.LastModified?.getTime() || 0;
+      const bTime = b.LastModified?.getTime() || 0;
+      if (aTime !== bTime) return bTime - aTime;
+      return String(b.Key || '').localeCompare(String(a.Key || ''));
+    });
+  return candidates[0] || null;
+}
+
+async function gunzipObjectBody(body: unknown, destination: string): Promise<void> {
+  if (!body) throw new Error('backup_object_empty');
+  if (typeof (body as NodeJS.ReadableStream).pipe === 'function') {
+    await pipeline(body as NodeJS.ReadableStream, createGunzip(), createWriteStream(destination));
+    return;
+  }
+  if (typeof (body as { transformToByteArray?: () => Promise<Uint8Array> }).transformToByteArray === 'function') {
+    const bytes = await (body as { transformToByteArray: () => Promise<Uint8Array> }).transformToByteArray();
+    await pipeline(Readable.from(Buffer.from(bytes)), createGunzip(), createWriteStream(destination));
+    return;
+  }
+  if (Buffer.isBuffer(body) || body instanceof Uint8Array || typeof body === 'string') {
+    await pipeline(Readable.from(Buffer.from(body as Buffer | Uint8Array | string)), createGunzip(), createWriteStream(destination));
+    return;
+  }
+  throw new Error('backup_object_body_unsupported');
+}
+
+async function inspectSqliteSnapshot(localSnapshot: string): Promise<Pick<BackupVerificationResult, 'integrity_check' | 'table_counts'>> {
+  const Database = (await import('better-sqlite3')).default;
+  const check = new Database(localSnapshot, { readonly: true });
+  try {
+    const integrity = check.prepare('PRAGMA integrity_check').get() as { integrity_check: string };
+    if (integrity.integrity_check !== 'ok') {
+      throw new Error(`integrity_check_failed: ${integrity.integrity_check}`);
+    }
+    const tableCounts: Record<string, number> = {};
+    for (const table of ['condominiums', 'users', 'tickets', 'agent_runs']) {
+      const row = check.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get() as { count: number };
+      tableCounts[table] = Number(row.count || 0);
+    }
+    return { integrity_check: integrity.integrity_check, table_counts: tableCounts };
+  } finally {
+    check.close();
+  }
 }
 
 export async function runBackup(): Promise<BackupResult> {
@@ -121,6 +190,49 @@ export async function runBackup(): Promise<BackupResult> {
   }
 }
 
+export async function verifyBackupObject(key?: string): Promise<BackupVerificationResult> {
+  if (!backupConfigured()) return { ok: false, error: 'not_configured' };
+  const started = Date.now();
+  const client = s3Client();
+  let selectedKey = key;
+  let objectSize: number | undefined;
+
+  try {
+    if (!selectedKey) {
+      const list = await client.send(new ListObjectsV2Command({ Bucket: BUCKET, Prefix: `${KEY_PREFIX}/` }));
+      const latest = latestBackupObject((list.Contents || []) as _Object[]);
+      if (!latest?.Key) return { ok: false, error: 'no_backup_objects' };
+      selectedKey = latest.Key;
+      objectSize = latest.Size;
+    }
+
+    if (!selectedKey.startsWith(`${KEY_PREFIX}/`) || !selectedKey.endsWith('.sqlite.gz')) {
+      return { ok: false, error: 'invalid_backup_key' };
+    }
+
+    const localSnapshot = path.join(os.tmpdir(), `condoos-verify-${Date.now()}-${process.pid}.sqlite`);
+    try {
+      const object = await client.send(new GetObjectCommand({ Bucket: BUCKET, Key: selectedKey }));
+      objectSize = Number(object.ContentLength || objectSize || 0) || undefined;
+      await gunzipObjectBody(object.Body, localSnapshot);
+      const stats = fs.statSync(localSnapshot);
+      const inspected = await inspectSqliteSnapshot(localSnapshot);
+      return {
+        ok: true,
+        key: selectedKey,
+        object_size_bytes: objectSize,
+        restored_size_bytes: stats.size,
+        duration_ms: Date.now() - started,
+        ...inspected,
+      };
+    } finally {
+      try { fs.unlinkSync(localSnapshot); } catch { /* tmp already gone */ }
+    }
+  } catch (err) {
+    return { ok: false, key: selectedKey, error: (err as Error).message || 'backup_verify_failed' };
+  }
+}
+
 // State for the spend-visibility / health endpoint and for the
 // idempotent startBackupScheduler() guard.
 let scheduled = false;
@@ -151,7 +263,7 @@ function msUntilNextBackupHour(): number {
 export function startBackupScheduler(): void {
   if (scheduled) return;
   if (!backupConfigured()) {
-    console.warn('[backup] not configured — set BACKUP_S3_BUCKET/ACCESS_KEY/SECRET_KEY to enable nightly backups');
+    console.warn('[backup] not configured — set BACKUP_S3_* or R2_* storage credentials to enable nightly backups');
     return;
   }
   scheduled = true;

@@ -1,6 +1,5 @@
-// Admin-only operational endpoints. Currently just backup status + a
-// manual trigger; future home for "snapshot now before risky migration",
-// "rebuild scorecards", etc.
+// Admin-only operational endpoints. Backup status/run/verify live here,
+// plus future "snapshot now before risky migration", "rebuild scorecards", etc.
 import { Router } from 'express';
 import { z } from 'zod';
 import db from '../db';
@@ -8,7 +7,7 @@ import { requireAuth, requireRole, requireBoardCapability, AuthedRequest } from 
 import { ok, fail, asyncHandler } from '../lib/respond';
 import { createRateLimit } from '../lib/rate-limit';
 import { audit } from '../lib/audit';
-import { runBackup, getBackupStatus, backupConfigured } from '../lib/backup';
+import { runBackup, getBackupStatus, backupConfigured, verifyBackupObject } from '../lib/backup';
 import { getWhatsAppStatus } from '../lib/whatsapp';
 import { privateCreateBuildingRequired } from '../lib/private-access';
 import { getQueueStatusSnapshot } from '../lib/agent-dispatch-queue';
@@ -23,6 +22,13 @@ const backupRateLimit = createRateLimit({
   keyPrefix: 'admin-backup',
   windowMs: 60 * 60_000,
   max: 3,
+  key: (req) => String((req as AuthedRequest).user?.id || req.ip || 'unknown'),
+});
+
+const backupVerifyRateLimit = createRateLimit({
+  keyPrefix: 'admin-backup-verify',
+  windowMs: 60 * 60_000,
+  max: 10,
   key: (req) => String((req as AuthedRequest).user?.id || req.ip || 'unknown'),
 });
 
@@ -93,6 +99,34 @@ router.post('/backup/run', requireAuth, requireRole('board_admin'), requireBoard
     metadata: { ok: result.ok, key: result.key, size_bytes: result.size_bytes, error: result.error },
   });
   if (!result.ok) return fail(res, result.error || 'backup_failed', 500, result);
+  return ok(res, result);
+}));
+
+const verifyBackupSchema = z.object({
+  key: z.string().min(1).max(512).optional(),
+});
+
+router.post('/backup/verify', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), backupVerifyRateLimit, asyncHandler(async (req: AuthedRequest, res) => {
+  if (!backupConfigured()) return fail(res, 'backup_not_configured', 503);
+  const parsed = verifyBackupSchema.safeParse(req.body || {});
+  if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
+
+  const result = await verifyBackupObject(parsed.data.key);
+  audit(req, {
+    action: 'admin.backup_verify',
+    target_type: 'backup',
+    target_id: 0,
+    condominium_id: req.user?.condominium_id ?? null,
+    metadata: {
+      ok: result.ok,
+      key: result.key,
+      object_size_bytes: result.object_size_bytes,
+      restored_size_bytes: result.restored_size_bytes,
+      integrity_check: result.integrity_check,
+      error: result.error,
+    },
+  });
+  if (!result.ok) return fail(res, result.error || 'backup_verify_failed', 500, result);
   return ok(res, result);
 }));
 

@@ -129,7 +129,7 @@ jobs:
       - name: Production R2 upload audit
         run: npm run audit:prod:uploads
 
-      - name: Production backup configuration audit
+      - name: Production backup integrity audit
         run: npm run audit:prod:backup
 
       - name: Production bounded load audit
