@@ -6,12 +6,12 @@
 import { test, expect, type APIRequestContext, type Page } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
+import { credentialsFor } from './support/credentials';
 
-const apiURL = process.env.E2E_API_URL || 'https://condoos-api.fly.dev/api';
-const adminEmail = process.env.E2E_ADMIN_EMAIL || 'e2e-admin@condoos.test';
-const adminPassword = process.env.E2E_ADMIN_PASSWORD || 'e2e-prod-fixed-passphrase-2026';
-const conciergeEmail = process.env.E2E_CONCIERGE_EMAIL || 'e2e-concierge@condoos.test';
-const conciergePassword = process.env.E2E_CONCIERGE_PASSWORD || 'e2e-prod-fixed-passphrase-2026';
+const apiURL = process.env.E2E_API_URL
+  || (process.env.E2E_BASE_URL ? `${process.env.E2E_BASE_URL.replace(/\/$/, '')}/api` : 'http://127.0.0.1:6312/api');
+const adminCredentials = credentialsFor('admin');
+const conciergeCredentials = credentialsFor('concierge');
 const SHOT_DIR = path.join('test-results', 'untouched-views');
 fs.mkdirSync(SHOT_DIR, { recursive: true });
 
@@ -45,7 +45,7 @@ const BOARD_VIEWS = [
 
 for (const view of BOARD_VIEWS) {
   test(`board ${view.slug} — desktop`, async ({ page, request }) => {
-    const admin = await login(request, adminEmail, adminPassword);
+    const admin = await login(request, adminCredentials.email, adminCredentials.password);
     await page.setViewportSize({ width: 1440, height: 900 });
     await setSession(page, admin);
     await page.goto(view.path, { waitUntil: 'domcontentloaded' });
@@ -60,7 +60,7 @@ for (const view of BOARD_VIEWS) {
   });
 
   test(`board ${view.slug} — mobile`, async ({ page, request }) => {
-    const admin = await login(request, adminEmail, adminPassword);
+    const admin = await login(request, adminCredentials.email, adminCredentials.password);
     await page.setViewportSize({ width: 390, height: 844 });
     await setSession(page, admin);
     await page.goto(view.path, { waitUntil: 'domcontentloaded' });
@@ -71,7 +71,7 @@ for (const view of BOARD_VIEWS) {
 }
 
 test('concierge — desktop', async ({ page, request }) => {
-  const concierge = await login(request, conciergeEmail, conciergePassword);
+  const concierge = await login(request, conciergeCredentials.email, conciergeCredentials.password);
   await page.setViewportSize({ width: 1440, height: 900 });
   await setSession(page, concierge);
   await page.goto('/concierge', { waitUntil: 'domcontentloaded' });
@@ -81,7 +81,7 @@ test('concierge — desktop', async ({ page, request }) => {
 });
 
 test('concierge — mobile', async ({ page, request }) => {
-  const concierge = await login(request, conciergeEmail, conciergePassword);
+  const concierge = await login(request, conciergeCredentials.email, conciergeCredentials.password);
   await page.setViewportSize({ width: 390, height: 844 });
   await setSession(page, concierge);
   await page.goto('/concierge', { waitUntil: 'domcontentloaded' });

@@ -305,10 +305,11 @@ npm run audit:prod:load        # bounded production API/client concurrency probe
 
 `audit:prod:backup:run` logs in as the production E2E board admin, calls the
 admin backup endpoint, and fails unless the snapshot uploads successfully with
-non-empty metadata. `audit:prod:load` is intentionally small; it exercises the
-live client, auth, dashboard, tickets, finance, integrations, and agent queue
-status under bounded concurrency so it can run in CI without becoming a load
-test against customers.
+non-empty metadata. Production prefers dedicated `BACKUP_S3_*` credentials,
+but falls back to the configured private R2 upload bucket for pilot readiness.
+`audit:prod:load` is intentionally small; it exercises the live client, auth,
+dashboard, tickets, finance, integrations, and agent queue status under bounded
+concurrency so it can run in CI without becoming a load test against customers.
 
 ## Production E2E Against Vercel
 

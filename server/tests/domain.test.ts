@@ -4223,13 +4223,53 @@ test('finance: userCanSeeUnit rejects cross-unit reads from non-admin residents'
   assert.equal(userCanSeeUnit(admin, 'board_admin', unit102, condoId), true);
 });
 
+function loadFreshBackupModule(): typeof import('../src/lib/backup') {
+  const modulePath = require.resolve('../src/lib/backup');
+  delete require.cache[modulePath];
+  return require('../src/lib/backup');
+}
+
 test('backup: returns not_configured when S3 env vars are absent', async () => {
-  const { runBackup, backupConfigured } = await import('../src/lib/backup');
+  const { runBackup, backupConfigured } = loadFreshBackupModule();
   // Test env never sets BACKUP_S3_*; confirm graceful no-op rather than crash.
   assert.equal(backupConfigured(), false);
   const r = await runBackup();
   assert.equal(r.ok, false);
   assert.equal(r.error, 'not_configured');
+});
+
+test('backup: falls back to configured private R2 upload storage', () => {
+  const keys = [
+    'BACKUP_S3_BUCKET',
+    'BACKUP_S3_ACCESS_KEY',
+    'BACKUP_S3_SECRET_KEY',
+    'BACKUP_S3_ENDPOINT',
+    'BACKUP_S3_REGION',
+    'R2_BUCKET',
+    'R2_ACCESS_KEY_ID',
+    'R2_SECRET_ACCESS_KEY',
+    'R2_ENDPOINT',
+    'R2_REGION',
+  ];
+  const previous = new Map(keys.map((key) => [key, process.env[key]]));
+  try {
+    for (const key of keys) delete process.env[key];
+    process.env.R2_BUCKET = 'condoos-private-uploads';
+    process.env.R2_ACCESS_KEY_ID = 'r2-access';
+    process.env.R2_SECRET_ACCESS_KEY = 'r2-secret';
+    process.env.R2_ENDPOINT = 'https://example.r2.cloudflarestorage.com';
+    process.env.R2_REGION = 'auto';
+
+    const { backupConfigured, getBackupStatus } = loadFreshBackupModule();
+    assert.equal(backupConfigured(), true);
+    assert.equal(getBackupStatus().bucket, 'condoos-private-uploads');
+  } finally {
+    for (const [key, value] of previous) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    loadFreshBackupModule();
+  }
 });
 
 test('backup: db.backup() produces a readable consistent snapshot', async () => {

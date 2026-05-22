@@ -23,11 +23,14 @@ import { pipeline } from 'stream/promises';
 import { S3Client, PutObjectCommand, ListObjectsV2Command, DeleteObjectCommand, _Object } from '@aws-sdk/client-s3';
 import db from '../db';
 
-const BUCKET = process.env.BACKUP_S3_BUCKET || '';
-const ENDPOINT = process.env.BACKUP_S3_ENDPOINT || undefined; // R2 needs this; AWS S3 leaves undefined
-const REGION = process.env.BACKUP_S3_REGION || 'auto';
-const ACCESS_KEY = process.env.BACKUP_S3_ACCESS_KEY || '';
-const SECRET_KEY = process.env.BACKUP_S3_SECRET_KEY || '';
+// Prefer dedicated backup credentials when present. For a lean pilot, fall
+// back to the already-configured private R2 upload bucket so off-site backups
+// are not blocked on a second Cloudflare credential set.
+const BUCKET = process.env.BACKUP_S3_BUCKET || process.env.R2_BUCKET || '';
+const ENDPOINT = process.env.BACKUP_S3_ENDPOINT || process.env.R2_ENDPOINT || undefined; // R2 needs this; AWS S3 leaves undefined
+const REGION = process.env.BACKUP_S3_REGION || process.env.R2_REGION || 'auto';
+const ACCESS_KEY = process.env.BACKUP_S3_ACCESS_KEY || process.env.R2_ACCESS_KEY_ID || '';
+const SECRET_KEY = process.env.BACKUP_S3_SECRET_KEY || process.env.R2_SECRET_ACCESS_KEY || '';
 const KEY_PREFIX = (process.env.BACKUP_S3_KEY_PREFIX || 'condoos-sqlite').replace(/\/$/, '');
 const RETENTION_DAYS = Math.max(1, Number(process.env.BACKUP_RETENTION_DAYS || 30));
 
