@@ -123,6 +123,13 @@ jobs:
           done
           exit "$missing"
 
+      # Fail-fast credential probe. Same logic as the prod-e2e workflow
+      # — if the GitHub secret has drifted away from the prod DB, fail
+      # here with a clear message instead of having ~20 downstream
+      # tests trip on cascading 401s.
+      - name: Verify prod credentials are aligned with GitHub secrets
+        run: node scripts/verify-prod-credentials.mjs
+
       - name: Production hardening audit
         run: npm run audit:prod:hardening
 

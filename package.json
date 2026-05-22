@@ -33,6 +33,8 @@
     "audit:prod:uploads": "node scripts/prod-upload-check.mjs --require-r2",
     "audit:prod:uploads:allow-local": "node scripts/prod-upload-check.mjs --allow-local",
     "audit:ops:backup-restore": "node scripts/backup-restore-dry-run.mjs",
+    "audit:prod:credentials": "node scripts/verify-prod-credentials.mjs",
+    "ops:reset-e2e-passwords": "node scripts/reset-e2e-prod-passwords.mjs",
     "ops:turnstile:setup": "node scripts/setup-turnstile.mjs",
     "ops:turnstile:dry-run": "node scripts/setup-turnstile.mjs --dry-run",
     "test:all": "npm test && npm run build && npm run test:e2e",
@@ -53,6 +55,7 @@
   "devDependencies": {
     "@axe-core/playwright": "^4.11.3",
     "@playwright/test": "^1.59.1",
+    "bcryptjs": "^3.0.3",
     "chrome-launcher": "^1.2.1",
     "concurrently": "^9.1.0",
     "cross-env": "^7.0.3",

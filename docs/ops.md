@@ -411,3 +411,39 @@ E2E_LIVE_WHATSAPP_TO=+5511999002121
 Only set `E2E_ALLOW_PROD_WRITES=1` for a manual run when you actually want the
 workflow to create a production invite email and a production package
 notification. The default scheduled workflow avoids those writes.
+
+## E2E credential drift
+
+If the Production E2E or Full Audit workflows start failing at `/auth/login`
+with `invalid_credentials` for one of the `e2e-*@condoos.test` accounts, the
+prod DB `password_hash` column has drifted away from the GitHub Actions
+secret. Causes seen so far: manual ops session via Fly SSH that ran an
+ad-hoc UPDATE; a restored DB backup that pre-dated the last secret rotation.
+
+Symptom — `npm run audit:prod:credentials` returns:
+
+```
+[FAIL] admin — 401 invalid_credentials
+```
+
+Fix — pick a new password and align both ends:
+
+```bash
+NEW_PW='something-long-and-random-32-chars-min'
+
+# 1. Re-hash the prod DB for all 3 accounts.
+npm run ops:reset-e2e-passwords -- --password "$NEW_PW"
+
+# 2. Update the 3 GitHub Actions secrets to match.
+gh secret set E2E_ADMIN_PASSWORD     --body "$NEW_PW"
+gh secret set E2E_RESIDENT_PASSWORD  --body "$NEW_PW"
+gh secret set E2E_CONCIERGE_PASSWORD --body "$NEW_PW"
+
+# 3. Verify both ends agree (no rate-limit risk — only 3 logins).
+gh workflow run "Production E2E" -f suite=api
+```
+
+The `Verify prod credentials are aligned with GitHub secrets` step in both
+workflows runs `scripts/verify-prod-credentials.mjs` before any browser
+suite, so a future drift fails fast at the top of the run instead of
+cascading 401s through 20+ downstream tests.

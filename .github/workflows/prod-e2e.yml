@@ -106,6 +106,15 @@ jobs:
           done
           exit "$missing"
 
+      # Fail-fast credential probe. Catches drift between the GitHub
+      # secret values and the prod DB password_hash column before any
+      # browser suite tries to log in mid-flow. Saves ~10 min on a
+      # broken nightly run since the rest of the suite skips.
+      # The 'api' suite doesn't need resident/concierge — skip there.
+      - name: Verify prod credentials are aligned with GitHub secrets
+        if: ${{ env.SUITE != 'api' && env.SUITE != 'uploads' && env.SUITE != 'backup' && env.SUITE != 'load' }}
+        run: node scripts/verify-prod-credentials.mjs
+
       - name: Run production hardening audit
         if: ${{ env.SUITE == 'uploads' }}
         run: npm run audit:prod:hardening
