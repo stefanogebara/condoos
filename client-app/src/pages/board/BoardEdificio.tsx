@@ -334,7 +334,7 @@ function BlockCard({
       toast.error(t('Remova as unidades antes de apagar o bloco.'));
       return;
     }
-    if (!confirm(`Apagar o bloco "${building.name}"? Essa ação não pode ser desfeita.`)) return;
+    if (!confirm(`${t('Apagar o bloco')} "${building.name}"? ${t('Essa ação não pode ser desfeita.')}`)) return;
     try {
       await apiDelete(`/buildings/${building.id}`);
       toast.success(t('Bloco apagado'));
@@ -367,7 +367,7 @@ function BlockCard({
           ) : (
             <>
               <h3 className="font-display text-xl text-dusk-500">{building.name}</h3>
-              <button onClick={() => setEditingName(true)} className="text-dusk-300 hover:text-dusk-500" title="Renomear bloco" aria-label={`Renomear ${building.name}`}>
+              <button onClick={() => setEditingName(true)} className="text-dusk-300 hover:text-dusk-500" title={t('Renomear bloco')} aria-label={`${t('Renomear')} ${building.name}`}>
                 <Pencil className="w-4 h-4" />
               </button>
             </>
@@ -378,8 +378,8 @@ function BlockCard({
         <button
           onClick={deleteBlock}
           className="text-dusk-300 hover:text-peach-600 transition"
-          title="Apagar bloco (só se não tiver unidades)"
-          aria-label={`Apagar bloco ${building.name}`}
+          title={t('Apagar bloco (só se não tiver unidades)')}
+          aria-label={`${t('Apagar bloco')} ${building.name}`}
           disabled={building.unit_count > 0}
         >
           <Trash2 className={`w-4 h-4 ${building.unit_count > 0 ? 'opacity-30' : ''}`} />
@@ -402,7 +402,7 @@ function BlockCard({
             // hover that signals interactivity.
             className="p-3 rounded-2xl border-2 border-dashed border-sage-300 bg-sage-100/40 text-sm font-semibold text-sage-700 hover:border-sage-400 hover:bg-sage-200/60 hover:text-sage-900 transition flex items-center justify-center gap-2"
           >
-            <Plus className="w-4 h-4" /> Adicionar unidade
+            <Plus className="w-4 h-4" /> {t('Adicionar unidade')}
           </button>
         )}
       </div>
@@ -443,7 +443,7 @@ function UnitTile({
       toast.error(t('A unidade tem morador(es). Remova os vínculos antes de apagar.'));
       return;
     }
-    if (!confirm(`Apagar a unidade ${unit.number}?`)) return;
+    if (!confirm(`${t('Apagar a unidade')} ${unit.number}?`)) return;
     setBusy(true);
     try {
       await apiDelete(`/units/${unit.id}`);

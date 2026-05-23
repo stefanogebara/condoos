@@ -200,6 +200,50 @@ test('uploaded document shows a size chip on both board and resident views (Phas
   }
 });
 
+test('upload API rejects truncated local uploads before completion', async ({ request }) => {
+  const admin = await loginRole(request, 'admin');
+  const declaredBytes = Buffer.from('complete payload');
+  const truncatedBytes = Buffer.from('short');
+  let fileId: number | undefined;
+
+  try {
+    const presign = await request.post(`${apiURL}/uploads/presign`, {
+      headers: { Authorization: `Bearer ${admin.token}` },
+      data: {
+        filename: 'truncated-upload.txt',
+        content_type: 'text/plain',
+        size_bytes: declaredBytes.length,
+        purpose: 'document',
+        visibility: 'residents',
+      },
+    });
+    expect(presign.ok(), `presign failed: ${presign.status()} ${await presign.text()}`).toBeTruthy();
+    const presigned = (await presign.json()).data;
+    fileId = presigned.file.id;
+    test.skip(presigned.upload_method !== 'api', 'local API upload integrity only; R2 size integrity is checked on complete in production upload audits');
+
+    const uploaded = await request.put(resolveUploadUrl(String(presigned.upload_url)), {
+      headers: uploadHeaders(presigned, admin),
+      data: truncatedBytes,
+    });
+    expect(uploaded.status()).toBe(400);
+    expect((await uploaded.json()).error).toBe('file_size_mismatch');
+
+    const completed = await request.post(`${apiURL}/uploads/complete`, {
+      headers: { Authorization: `Bearer ${admin.token}` },
+      data: { file_id: fileId },
+    });
+    expect(completed.status()).toBe(400);
+    expect((await completed.json()).error).toBe('upload_not_found');
+  } finally {
+    if (fileId) {
+      await request.delete(`${apiURL}/uploads/files/${fileId}`, {
+        headers: { Authorization: `Bearer ${admin.token}` },
+      });
+    }
+  }
+});
+
 test('admin uploads a document file and resident can download the stored copy', async ({ page, request }) => {
   const admin = await loginRole(request, 'admin');
   const resident = await loginRole(request, 'resident');

@@ -81,7 +81,7 @@ export default function BoardAssemblyDetail() {
   }
 
   async function removeItem(itemId: number) {
-    if (!confirm('Remover este item da pauta?')) return;
+    if (!confirm(t('Remover este item da pauta?'))) return;
     await apiDelete(`/assemblies/${id}/agenda/${itemId}`);
     load();
   }
@@ -117,7 +117,7 @@ export default function BoardAssemblyDetail() {
   }
 
   async function closeAssembly() {
-    if (!confirm('Encerrar a assembleia? Itens em votação serão fechados como inconclusivos e a ata vai ser gerada.')) return;
+    if (!confirm(t('Encerrar a assembleia? Itens em votação serão fechados como inconclusivos e a ata vai ser gerada.'))) return;
     setBusy(true);
     try {
       await apiPost(`/assemblies/${id}/close`);

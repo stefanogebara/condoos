@@ -204,6 +204,12 @@ router.put('/:id/content', requireAuth, expressRawFile(), (req: AuthedRequest, r
   const body = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
   if (body.length <= 0) return fail(res, 'empty_file', 400);
   if (body.length > maxUploadBytes() || body.length > file.size_bytes) return fail(res, 'file_too_large', 413);
+  if (body.length !== file.size_bytes) {
+    return fail(res, 'file_size_mismatch', 400, {
+      expected_size_bytes: file.size_bytes,
+      received_size_bytes: body.length,
+    });
+  }
 
   const outputPath = localPathForKey(file.storage_key);
   fs.mkdirSync(path.dirname(outputPath), { recursive: true });
@@ -228,16 +234,31 @@ router.post('/complete', requireAuth, asyncHandler(async (req: AuthedRequest, re
   if (file.status === 'deleted') return fail(res, 'file_deleted', 409);
 
   if (file.storage_driver === 'local') {
-    const exists = fs.existsSync(localPathForKey(file.storage_key));
-    if (!exists) return fail(res, 'upload_not_found', 400);
+    const filePath = localPathForKey(file.storage_key);
+    if (!fs.existsSync(filePath)) return fail(res, 'upload_not_found', 400);
+    const stat = fs.statSync(filePath);
+    if (stat.size !== file.size_bytes) {
+      return fail(res, 'file_size_mismatch', 400, {
+        expected_size_bytes: file.size_bytes,
+        received_size_bytes: stat.size,
+      });
+    }
   } else if (file.storage_driver === 'r2') {
+    let actualSize = 0;
     try {
-      await s3().send(new HeadObjectCommand({
+      const head = await s3().send(new HeadObjectCommand({
         Bucket: process.env.R2_BUCKET!,
         Key: file.storage_key,
       }));
+      actualSize = Number(head.ContentLength || 0);
     } catch {
       return fail(res, 'upload_not_found', 400);
+    }
+    if (actualSize !== file.size_bytes) {
+      return fail(res, 'file_size_mismatch', 400, {
+        expected_size_bytes: file.size_bytes,
+        received_size_bytes: actualSize,
+      });
     }
   }
 

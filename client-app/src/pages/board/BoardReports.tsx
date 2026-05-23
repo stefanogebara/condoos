@@ -745,7 +745,7 @@ function ZeroActivityCard({ tr }: { tr: (key: string) => string }) {
     {
       to: '/board/services',
       icon: <BarChart3 className="h-5 w-5 text-sage-600" />,
-      title: tr('Cadastrar fornecedor'),
+      title: tr('Cadastrar fornecedor no diretório'),
       detail: tr('Monte a rede operacional reutilizável do prédio.'),
     },
   ];

@@ -699,6 +699,9 @@ const phrases: Copy[] = [
   c('Selecione um arquivo de comprovante.', 'Select a proof file.', 'Selecciona un archivo de comprobante.', 'Sélectionnez un fichier justificatif.'),
   c('Revise recibos enviados por moradores antes de registrar o pagamento.', 'Review receipts submitted by residents before recording the payment.', 'Revisa los recibos enviados por residentes antes de registrar el pago.', 'Révisez les reçus envoyés par les résidents avant d’enregistrer le paiement.'),
   c('Motivo da rejeição', 'Rejection reason', 'Motivo del rechazo', 'Motif du rejet'),
+  c('Rejeitar comprovante', 'Reject proof', 'Rechazar comprobante', 'Rejeter le justificatif'),
+  c('Informe o motivo para o morador corrigir o envio.', 'Tell the resident why the submission needs to be corrected.', 'Indica al residente por qué debe corregir el envío.', 'Indiquez au résident pourquoi l’envoi doit être corrigé.'),
+  c('Ex.: recibo ilegível, valor divergente ou comprovante de outra cobrança.', 'E.g. unreadable receipt, amount mismatch, or proof for another charge.', 'Ej.: recibo ilegible, valor distinto o comprobante de otro cobro.', 'Ex. reçu illisible, montant différent ou justificatif d’un autre appel.'),
   c('Não foi possível atualizar cobranças', 'Could not refresh charges', 'No se pudieron actualizar los cobros', 'Impossible d’actualiser les charges'),
   c('Orçamento vs realizado', 'Budget vs actual', 'Presupuesto vs ejecutado', 'Budget vs réalisé'),
   c('Defina o teto mensal por categoria e acompanhe o gasto real lançado.', 'Set the monthly cap by category and track actual logged spending.', 'Define el límite mensual por categoría y sigue el gasto real registrado.', 'Définissez le plafond mensuel par catégorie et suivez les dépenses réelles enregistrées.'),
@@ -845,6 +848,7 @@ const phrases: Copy[] = [
   c('Convocar', 'Convoke', 'Emitir convocatoria', 'Convoquer'),
   c('Abrir sessão', 'Open session', 'Abrir sesión', 'Ouvrir la séance'),
   c('Encerrar assembleia', 'Close assembly', 'Cerrar asamblea', 'Clore l’assemblée'),
+  c('Encerrar a assembleia? Itens em votação serão fechados como inconclusivos e a ata vai ser gerada.', 'Close the assembly? Voting items will be closed as inconclusive and the minutes will be generated.', '¿Cerrar la asamblea? Los puntos en votación se cerrarán como inconclusos y se generará el acta.', 'Clore l’assemblée ? Les points en vote seront fermés comme non concluants et le procès-verbal sera généré.'),
   c('Convocada — moradores já podem confirmar presença e conceder procurações', 'Convoked — residents can now confirm attendance and grant proxies', 'Convocatoria emitida: los residentes ya pueden confirmar asistencia y otorgar poderes', 'Convoquée : les résidents peuvent confirmer leur présence et donner procuration'),
   c('Falha', 'Failed', 'Error', 'Échec'),
   c('Sessão aberta', 'Session opened', 'Sesión abierta', 'Séance ouverte'),
@@ -873,6 +877,7 @@ const phrases: Copy[] = [
   c('Título do item (ex: Aprovar orçamento 2026)', 'Item title (e.g. Approve 2026 budget)', 'Título del punto (ej.: Aprobar presupuesto 2026)', 'Titre du point (ex. approuver le budget 2026)'),
   c('Descrição (opcional)', 'Description (optional)', 'Descripción (opcional)', 'Description (facultative)'),
   c('Adicionar item', 'Add item', 'Agregar punto', 'Ajouter le point'),
+  c('Remover este item da pauta?', 'Remove this agenda item?', '¿Quitar este punto de la agenda?', 'Retirer ce point de l’ordre du jour ?'),
   c('Repolir com IA', 'Polish with AI', 'Pulir con IA', 'Repolir avec IA'),
   c('(a ata será gerada quando você encerrar a assembleia)', '(minutes will be generated when you close the assembly)', '(el acta se generará al cerrar la asamblea)', '(le procès-verbal sera généré à la clôture de l’assemblée)'),
   c('Invite code', 'Invite code', 'Código de invitación', 'Code d’invitation'),
@@ -986,6 +991,7 @@ const phrases: Copy[] = [
   c('Renomear bloco', 'Rename block', 'Renombrar bloque', 'Renommer le bloc'),
   c('Renomear', 'Rename', 'Renombrar', 'Renommer'),
   c('Apagar bloco (só se não tiver unidades)', 'Delete block (only if no units)', 'Eliminar bloque (solo sin unidades)', 'Supprimer le bloc (uniquement sans lots)'),
+  c('Essa ação não pode ser desfeita.', 'This action cannot be undone.', 'Esta acción no se puede deshacer.', 'Cette action est irréversible.'),
   c('Salvar', 'Save', 'Guardar', 'Enregistrer'),
   c('Apagar', 'Delete', 'Eliminar', 'Supprimer'),
   c('Tem morador vinculado', 'Has linked resident', 'Tiene residente vinculado', 'A un résident lié'),
@@ -1135,6 +1141,7 @@ const phrases: Copy[] = [
   c('Renomear', 'Rename', 'Renombrar', 'Renommer'),
   c('Apagar', 'Delete', 'Eliminar', 'Supprimer'),
   c('Apagar bloco', 'Delete block', 'Eliminar bloque', 'Supprimer le bloc'),
+  c('Apagar a unidade', 'Delete unit', 'Eliminar la unidad', 'Supprimer le lot'),
   c('Adicionar unidade', 'Add unit', 'Añadir unidad', 'Ajouter un lot'),
   c('Bloco', 'Block', 'Bloque', 'Bloc'),
   c('Unidade', 'Unit', 'Unidad', 'Lot'),
@@ -1166,6 +1173,7 @@ const phrases: Copy[] = [
   c('Apagar despesa', 'Delete expense', 'Eliminar gasto', 'Supprimer la dépense'),
   c('Proposta:', 'Proposal:', 'Propuesta:', 'Proposition :'),
   c('Nenhuma despesa registrada nos últimos 12 meses. Comece pelas contas fixas (luz, água, condomínio da empresa de portaria).', 'No expenses logged in the last 12 months. Start with the fixed bills (electricity, water, front-desk staffing).', 'Sin gastos registrados en los últimos 12 meses. Empieza por las cuentas fijas (luz, agua, portería).', 'Aucune dépense enregistrée sur les 12 derniers mois. Commencez par les factures fixes (électricité, eau, conciergerie).'),
+  c('Lançar primeira despesa', 'Log first expense', 'Registrar primer gasto', 'Saisir la première dépense'),
   c('Controle cobranças, pagamentos, despesas e recibos em um só lugar. Moradores veem a parte transparente sem editar nada.', 'Manage dues, payments, expenses, and receipts in one place. Residents see the transparent read-only side.', 'Controla cobros, pagos, gastos y recibos en un solo lugar. Los residentes ven la parte transparente sin editar nada.', 'Gérez appels de charges, paiements, dépenses et reçus au même endroit. Les résidents voient la partie transparente en lecture seule.'),
   c('Não foi possível carregar finanças', 'Could not load finances', 'No se pudieron cargar las finanzas', 'Impossible de charger les finances'),
   c('Gerar cobranças', 'Generate charges', 'Generar cobros', 'Générer les appels'),
@@ -1173,6 +1181,7 @@ const phrases: Copy[] = [
   c('Defina o valor recorrente que vira cobrança para as unidades.', 'Set the recurring amount that becomes a charge for units.', 'Define el valor recurrente que se convierte en cobro para las unidades.', 'Définissez le montant récurrent facturé aux lots.'),
   c('Nova regra', 'New rule', 'Nueva regla', 'Nouvelle règle'),
   c('Nenhuma regra de cobrança ainda. Crie a mensalidade do condomínio ou uma taxa recorrente.', 'No charge rules yet. Create the condo monthly dues or a recurring fee.', 'Aún no hay reglas de cobro. Crea la cuota mensual del condominio o una tasa recurrente.', 'Aucune règle d’appel pour le moment. Créez les charges mensuelles ou des frais récurrents.'),
+  c('Criar primeira regra', 'Create first rule', 'Crear primera regla', 'Créer la première règle'),
   c('Mensal', 'Monthly', 'Mensual', 'Mensuel'),
   c('Trimestral', 'Quarterly', 'Trimestral', 'Trimestriel'),
   c('Anual', 'Annual', 'Anual', 'Annuel'),
@@ -1827,6 +1836,15 @@ const phrases: Copy[] = [
   // Board reports / monthly packet
   c('Relatórios', 'Reports', 'Informes', 'Rapports'),
   c('Pacote mensal para conselho, administração e reunião de prestação de contas.', 'Monthly packet for the board, management, and accountability meetings.', 'Paquete mensual para el consejo, la administración y la reunión de rendición de cuentas.', 'Dossier mensuel pour le conseil, la gestion et les réunions de reddition de comptes.'),
+  c('Mês ainda sem movimentação', 'No activity yet this month', 'Mes aún sin movimiento', 'Aucune activité ce mois-ci'),
+  c('Esse relatório mostra o que aconteceu no mês. Comece por uma das ações abaixo para preencher o pacote.', 'This report shows what happened during the month. Start with one of the actions below to fill the packet.', 'Este informe muestra lo ocurrido en el mes. Empieza con una de las acciones siguientes para completar el paquete.', 'Ce rapport montre ce qui s’est passé dans le mois. Commencez par l’une des actions ci-dessous pour compléter le dossier.'),
+  c('Comece pelas contas fixas (luz, água, portaria).', 'Start with fixed bills (electricity, water, front-desk staffing).', 'Empieza por las cuentas fijas (luz, agua, portería).', 'Commencez par les factures fixes (électricité, eau, conciergerie).'),
+  c('Abrir primeiro chamado', 'Open first ticket', 'Abrir primer ticket', 'Ouvrir le premier ticket'),
+  c('Registre manutenções e reparos com fornecedor.', 'Log maintenance and repairs with a vendor.', 'Registra mantenimientos y reparaciones con proveedor.', 'Enregistrez les maintenances et réparations avec un prestataire.'),
+  c('Criar primeira proposta', 'Create first proposal', 'Crear primera propuesta', 'Créer la première proposition'),
+  c('Coloque uma decisão em votação dos moradores.', 'Put a decision to resident vote.', 'Pon una decisión a votación de los residentes.', 'Soumettez une décision au vote des résidents.'),
+  c('Cadastrar fornecedor no diretório', 'Add vendor to directory', 'Agregar proveedor al directorio', 'Ajouter un prestataire au répertoire'),
+  c('Monte a rede operacional reutilizável do prédio.', 'Build the building’s reusable operations network.', 'Monta la red operativa reutilizable del edificio.', 'Constituez le réseau opérationnel réutilisable de l’immeuble.'),
   c('Mês do relatório', 'Report month', 'Mes del informe', 'Mois du rapport'),
   c('Atualizar', 'Refresh', 'Actualizar', 'Actualiser'),
   c('Carregando relatório…', 'Loading report…', 'Cargando informe…', 'Chargement du rapport…'),
@@ -3585,6 +3603,13 @@ export function LanguageSwitcher() {
   const [detecting, setDetecting] = useState(false);
   const active = LOCALE_OPTIONS.find((option) => option.locale === locale);
   const appSurface = location.pathname.startsWith('/app') || location.pathname.startsWith('/board') || location.pathname.startsWith('/concierge');
+  const controlsLabel = t('Language controls', locale);
+  const languageLabel = t('Language', locale);
+  const locationLabel = detecting
+    ? t('Detecting location...', locale)
+    : source === 'manual'
+      ? t('Use location', locale)
+      : t('Using location', locale);
 
   // On app/board/concierge surfaces the sidebar owns the language switcher.
   if (appSurface) return null;
@@ -3601,10 +3626,10 @@ export function LanguageSwitcher() {
   return (
     <div
       className="fixed top-4 right-4 z-[80] flex flex-row items-center gap-1.5 rounded-3xl border border-white/60 bg-cream-50/85 p-1.5 text-xs font-semibold text-dusk-400 shadow-clay backdrop-blur-xl sm:bottom-4 sm:right-4 sm:top-auto sm:gap-2 sm:p-2"
-      aria-label="Language controls"
+      aria-label={controlsLabel}
     >
       <label className="flex items-center gap-1.5 rounded-full bg-white/45 px-2 py-1 sm:gap-2 sm:px-3 sm:py-2">
-        <span className="hidden text-[11px] uppercase tracking-[0.14em] text-dusk-300 sm:inline">Language</span>
+        <span className="hidden text-[11px] uppercase tracking-[0.14em] text-dusk-300 sm:inline">{languageLabel}</span>
         <span aria-hidden className="rounded-full bg-dusk-500 px-1.5 py-0.5 text-[10px] text-cream-50 sm:px-2 sm:text-[11px]">
           {active?.short}
         </span>
@@ -3612,7 +3637,7 @@ export function LanguageSwitcher() {
           className="bg-transparent text-xs outline-none"
           value={locale}
           onChange={(e) => setLocale(e.target.value as AppLocale)}
-          aria-label="Language"
+          aria-label={languageLabel}
         >
           {LOCALE_OPTIONS.map((option) => (
             <option key={option.locale} value={option.locale}>{option.label}</option>
@@ -3624,10 +3649,10 @@ export function LanguageSwitcher() {
         className="rounded-full border border-dusk-200/20 bg-sage-200/70 px-2 py-1 text-[10px] uppercase tracking-[0.12em] text-sage-900 transition hover:bg-sage-300 disabled:cursor-wait disabled:opacity-70 sm:px-3 sm:py-2 sm:text-[11px]"
         onClick={handleLocation}
         disabled={detecting}
-        aria-label={detecting ? 'Detecting location...' : source === 'manual' ? 'Use location' : 'Using location'}
+        aria-label={locationLabel}
       >
         <span className="hidden sm:inline">
-          {detecting ? 'Detecting location...' : source === 'manual' ? 'Use location' : 'Using location'}
+          {locationLabel}
         </span>
         <span className="sm:hidden">{detecting ? '…' : '⌖'}</span>
       </button>
@@ -3638,6 +3663,9 @@ export function LanguageSwitcher() {
 export function SidebarLangSwitcher() {
   const { locale, source, setLocale, useLocationLocale } = useLocale();
   const [detecting, setDetecting] = useState(false);
+  const locationLabel = source === 'manual'
+    ? t('Detect language from location', locale)
+    : t('Using location-detected language', locale);
 
   const handleLocation = async () => {
     setDetecting(true);
@@ -3674,8 +3702,8 @@ export function SidebarLangSwitcher() {
           type="button"
           onClick={handleLocation}
           disabled={detecting}
-          title={source === 'manual' ? 'Detect language from location' : 'Using location-detected language'}
-          aria-label={source === 'manual' ? 'Detect language from location' : 'Using location-detected language'}
+          title={locationLabel}
+          aria-label={locationLabel}
           className={`px-2.5 py-1 rounded-xl text-[11px] font-semibold transition-all disabled:cursor-wait disabled:opacity-60 ${
             source === 'location'
               ? 'bg-sage-200/80 text-sage-900 border border-sage-300/40'

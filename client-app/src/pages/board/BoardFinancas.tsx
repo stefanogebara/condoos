@@ -622,7 +622,23 @@ function PaymentProofReviewPanel({
   onChanged: () => void;
 }) {
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [rejectingProof, setRejectingProof] = useState<PaymentProof | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
   const pending = proofs.filter((proof) => proof.status === 'pending');
+
+  function closeRejectModal() {
+    setRejectingProof(null);
+    setRejectReason('');
+  }
+
+  useEffect(() => {
+    if (!rejectingProof) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeRejectModal();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [rejectingProof]);
 
   async function approve(proof: PaymentProof) {
     setBusyId(proof.id);
@@ -637,14 +653,18 @@ function PaymentProofReviewPanel({
     }
   }
 
-  async function reject(proof: PaymentProof) {
-    const reason = window.prompt(t('Motivo da rejeição')) || '';
+  async function reject(proof: PaymentProof, reason: string) {
+    if (!reason.trim()) {
+      toast.error(t('Informe o motivo para o morador corrigir o envio.'));
+      return;
+    }
     setBusyId(proof.id);
     try {
       await apiPost(`/finance/payment-proofs/${proof.id}/reject`, {
-        reason: reason.trim() || undefined,
+        reason: reason.trim(),
       });
       toast.success(t('Comprovante rejeitado'));
+      closeRejectModal();
       onChanged();
     } catch (err: any) {
       toast.error(err?.response?.data?.error || t('Falha ao rejeitar comprovante'));
@@ -654,77 +674,133 @@ function PaymentProofReviewPanel({
   }
 
   return (
-    <GlassCard className="p-5 mb-6">
-      <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
-        <div>
-          <h2 className="font-display text-xl text-dusk-500">{t('Comprovantes pendentes')}</h2>
-          <p className="text-sm text-dusk-300 mt-1">{t('Revise recibos enviados por moradores antes de registrar o pagamento.')}</p>
+    <>
+      <GlassCard className="p-5 mb-6">
+        <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+          <div>
+            <h2 className="font-display text-xl text-dusk-500">{t('Comprovantes pendentes')}</h2>
+            <p className="text-sm text-dusk-300 mt-1">{t('Revise recibos enviados por moradores antes de registrar o pagamento.')}</p>
+          </div>
+          <Badge tone={pending.length > 0 ? 'peach' : 'sage'}>
+            {pending.length} {t('pendente')}
+          </Badge>
         </div>
-        <Badge tone={pending.length > 0 ? 'peach' : 'sage'}>
-          {pending.length} {t('pendente')}
-        </Badge>
-      </div>
 
-      {pending.length === 0 ? (
-        <div className="rounded-2xl bg-white/55 border border-white/70 p-4 text-sm text-dusk-300">
-          {t('Nenhum comprovante pendente.')}
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {pending.map((proof) => (
-            <div key={proof.id} className="rounded-2xl bg-white/55 border border-white/70 p-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-semibold text-dusk-500">{t('Unidade')} {proof.unit_number}</span>
-                    <Badge tone="neutral">{proof.resident_name}</Badge>
-                    <Badge tone="warning">{t('Aguardando revisão')}</Badge>
+        {pending.length === 0 ? (
+          <div className="rounded-2xl bg-white/55 border border-white/70 p-4 text-sm text-dusk-300">
+            {t('Nenhum comprovante pendente.')}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {pending.map((proof) => (
+              <div key={proof.id} className="rounded-2xl bg-white/55 border border-white/70 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-dusk-500">{t('Unidade')} {proof.unit_number}</span>
+                      <Badge tone="neutral">{proof.resident_name}</Badge>
+                      <Badge tone="warning">{t('Aguardando revisão')}</Badge>
+                    </div>
+                    <p className="text-xs text-dusk-300 mt-1">
+                      {proof.period} · {formatDate(proof.due_date)} · {proof.method}
+                      {proof.reference ? ` · ${proof.reference}` : ''}
+                    </p>
+                    {proof.note && <p className="text-xs text-dusk-400 mt-1.5">{proof.note}</p>}
                   </div>
-                  <p className="text-xs text-dusk-300 mt-1">
-                    {proof.period} · {formatDate(proof.due_date)} · {proof.method}
-                    {proof.reference ? ` · ${proof.reference}` : ''}
-                  </p>
-                  {proof.note && <p className="text-xs text-dusk-400 mt-1.5">{proof.note}</p>}
+                  <div className="text-right shrink-0">
+                    <div className="font-mono font-semibold text-dusk-500">
+                      {formatCurrency(proof.amount_cents / 100, proof.currency)}
+                    </div>
+                    <div className="text-xs text-dusk-300">{formatDate(proof.created_at)}</div>
+                  </div>
                 </div>
-                <div className="text-right shrink-0">
-                  <div className="font-mono font-semibold text-dusk-500">
-                    {formatCurrency(proof.amount_cents / 100, proof.currency)}
-                  </div>
-                  <div className="text-xs text-dusk-300">{formatDate(proof.created_at)}</div>
+                <div className="flex flex-wrap justify-end gap-2 mt-3">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    leftIcon={<ExternalLink className="w-4 h-4" />}
+                    onClick={() => openUploadedFile(proof.file_id, proof.file_name || 'payment-proof')}
+                  >
+                    {t('Abrir comprovante')}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={busyId === proof.id}
+                    onClick={() => {
+                      setRejectingProof(proof);
+                      setRejectReason('');
+                    }}
+                  >
+                    {t('Rejeitar')}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="sage"
+                    loading={busyId === proof.id}
+                    leftIcon={<CheckCircle2 className="w-4 h-4" />}
+                    onClick={() => approve(proof)}
+                  >
+                    {t('Aprovar comprovante')}
+                  </Button>
                 </div>
               </div>
-              <div className="flex flex-wrap justify-end gap-2 mt-3">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  leftIcon={<ExternalLink className="w-4 h-4" />}
-                  onClick={() => openUploadedFile(proof.file_id, proof.file_name || 'payment-proof')}
-                >
-                  {t('Abrir comprovante')}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={busyId === proof.id}
-                  onClick={() => reject(proof)}
-                >
-                  {t('Rejeitar')}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="sage"
-                  loading={busyId === proof.id}
-                  leftIcon={<CheckCircle2 className="w-4 h-4" />}
-                  onClick={() => approve(proof)}
-                >
-                  {t('Aprovar comprovante')}
-                </Button>
+            ))}
+          </div>
+        )}
+      </GlassCard>
+
+      {rejectingProof && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-dusk-500/30 px-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="reject-proof-title">
+          <div className="w-full max-w-lg rounded-[2rem] border border-white/70 bg-cream-50/95 p-5 shadow-clay">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 id="reject-proof-title" className="font-display text-2xl text-dusk-500">{t('Rejeitar comprovante')}</h3>
+                <p className="mt-1 text-sm text-dusk-300">
+                  {t('Informe o motivo para o morador corrigir o envio.')}
+                </p>
               </div>
+              <button
+                type="button"
+                className="rounded-full bg-white/70 p-2 text-dusk-300 transition hover:text-dusk-500"
+                onClick={closeRejectModal}
+                aria-label={t('Cancelar')}
+              >
+                <X className="h-4 w-4" />
+              </button>
             </div>
-          ))}
+            <div className="mt-5 rounded-2xl bg-white/55 border border-white/70 p-3 text-sm text-dusk-400">
+              <div className="font-semibold text-dusk-500">{t('Unidade')} {rejectingProof.unit_number}</div>
+              <div>{rejectingProof.resident_name} · {formatCurrency(rejectingProof.amount_cents / 100, rejectingProof.currency)}</div>
+            </div>
+            <label className="mt-4 block text-sm font-semibold text-dusk-400">
+              {t('Motivo da rejeição')}
+              <textarea
+                className="input mt-2 min-h-[120px] resize-y"
+                value={rejectReason}
+                onChange={(event) => setRejectReason(event.target.value)}
+                placeholder={t('Ex.: recibo ilegível, valor divergente ou comprovante de outra cobrança.')}
+                autoFocus
+              />
+            </label>
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <Button type="button" variant="ghost" onClick={closeRejectModal}>
+                {t('Cancelar')}
+              </Button>
+              <Button
+                type="button"
+                variant="peach"
+                disabled={!rejectReason.trim()}
+                loading={busyId === rejectingProof.id}
+                onClick={() => reject(rejectingProof, rejectReason)}
+              >
+                {t('Rejeitar comprovante')}
+              </Button>
+            </div>
+          </div>
         </div>
       )}
-    </GlassCard>
+    </>
   );
 }
 
