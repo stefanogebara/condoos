@@ -56,7 +56,7 @@ const DESTRUCTIVE_LABELS = [
   'desativar', 'deactivate', 'desactivar', 'désactiver',
   'remover', 'remove',
   'negar', 'deny', 'denegar', 'refuser',
-  'recusar', 'reject', 'rechazar', 'rejeter',
+  'recusar', 'rejeitar', 'reject', 'rechazar', 'rejeter',
   'sair', 'sign out', 'cerrar sesión', 'se déconnecter',
   'revogar', 'revoke', 'revocar', 'révoquer',
   'cancelar', 'cancel', 'annuler',
