@@ -196,7 +196,7 @@ export default function BoardApp() {
         title="Síndico"
         headerSlot={canUseMaintenance ? <WhatsAppHealthPill /> : undefined}
       />
-      <main className="w-full min-w-0 flex-1 px-4 sm:px-6 lg:px-10 py-8 max-w-6xl animate-fade-up">
+      <main className="w-full min-w-0 flex-1 px-4 sm:px-6 lg:px-10 py-8 max-w-6xl">
         <Suspense fallback={<div className="py-16 text-center text-sm text-dusk-300">{t('Carregando...')}</div>}>
           <Routes>
             <Route index                   element={<BoardIndex access={access} />} />

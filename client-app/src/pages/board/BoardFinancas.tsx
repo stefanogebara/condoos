@@ -971,49 +971,79 @@ function ReceivablesPanel({
           {t('Nenhum saldo aberto. Gere cobranças quando começar o próximo ciclo.')}
         </div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[720px]">
-            <thead>
-              <tr className="text-left text-xs uppercase tracking-wider text-dusk-300">
-                <th className="py-2 pr-3">{t('Unidade')}</th>
-                <th className="py-2 pr-3">{t('Cobrança')}</th>
-                <th className="py-2 pr-3">{t('Vencimento')}</th>
-                <th className="py-2 pr-3 text-right">{t('Restante')}</th>
-                <th className="py-2 pr-3">{t('Status')}</th>
-                <th className="py-2 text-right">{t('Ação')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {invoices.slice(0, 12).map((invoice) => (
-                <tr key={invoice.id} className="border-t border-white/60">
-                  <td className="py-3 pr-3">
-                    <div className="font-semibold text-dusk-500">{invoice.unit_number}</div>
-                    <div className="text-xs text-dusk-300 truncate max-w-[180px]">{invoice.resident_names || invoice.building_name}</div>
-                  </td>
-                  <td className="py-3 pr-3">
+        <>
+          <div className="md:hidden space-y-3">
+            {invoices.slice(0, 12).map((invoice) => (
+              <div key={invoice.id} className="rounded-3xl bg-white/60 border border-white/70 p-4 shadow-soft">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="font-semibold text-dusk-500">{t('Unidade')} {invoice.unit_number}</div>
+                    <div className="text-xs text-dusk-300">{invoice.resident_names || invoice.building_name}</div>
+                  </div>
+                  <InvoiceStatusBadge invoice={invoice} />
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <div className="text-xs uppercase tracking-wider text-dusk-300">{t('Cobrança')}</div>
                     <div className="text-dusk-500">{invoice.schedule_name || t('Cobrança avulsa')}</div>
                     <div className="text-xs text-dusk-300">{invoice.period}</div>
-                  </td>
-                  <td className="py-3 pr-3 text-dusk-400">{formatDate(invoice.due_date)}</td>
-                  <td className="py-3 pr-3 text-right font-mono font-semibold text-dusk-500">
-                    {formatCurrency(invoice.remaining_cents / 100, invoice.currency)}
-                  </td>
-                  <td className="py-3 pr-3">
-                    <InvoiceStatusBadge invoice={invoice} />
-                  </td>
-                  <td className="py-3 text-right">
-                    <Button size="sm" variant="ghost" leftIcon={<CreditCard className="w-4 h-4" />} onClick={() => onPay(invoice)}>
-                      {t('Registrar pago')}
-                    </Button>
-                  </td>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs uppercase tracking-wider text-dusk-300">{t('Restante')}</div>
+                    <div className="font-mono font-semibold text-dusk-500">{formatCurrency(invoice.remaining_cents / 100, invoice.currency)}</div>
+                    <div className="text-xs text-dusk-300">{formatDate(invoice.due_date)}</div>
+                  </div>
+                </div>
+                <Button className="mt-4 w-full" size="sm" variant="ghost" leftIcon={<CreditCard className="w-4 h-4" />} onClick={() => onPay(invoice)}>
+                  {t('Registrar pago')}
+                </Button>
+              </div>
+            ))}
+          </div>
+          <div className="hidden md:block overflow-x-auto">
+            <table className="w-full text-sm min-w-[720px]">
+              <thead>
+                <tr className="text-left text-xs uppercase tracking-wider text-dusk-300">
+                  <th className="py-2 pr-3">{t('Unidade')}</th>
+                  <th className="py-2 pr-3">{t('Cobrança')}</th>
+                  <th className="py-2 pr-3">{t('Vencimento')}</th>
+                  <th className="py-2 pr-3 text-right">{t('Restante')}</th>
+                  <th className="py-2 pr-3">{t('Status')}</th>
+                  <th className="py-2 text-right">{t('Ação')}</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-          {invoices.length > 12 && (
-            <p className="text-xs text-dusk-300 mt-3">{t('Mostrando as 12 cobranças abertas mais antigas. Exporte CSV para ver tudo.')}</p>
-          )}
-        </div>
+              </thead>
+              <tbody>
+                {invoices.slice(0, 12).map((invoice) => (
+                  <tr key={invoice.id} className="border-t border-white/60">
+                    <td className="py-3 pr-3">
+                      <div className="font-semibold text-dusk-500">{invoice.unit_number}</div>
+                      <div className="text-xs text-dusk-300 truncate max-w-[180px]">{invoice.resident_names || invoice.building_name}</div>
+                    </td>
+                    <td className="py-3 pr-3">
+                      <div className="text-dusk-500">{invoice.schedule_name || t('Cobrança avulsa')}</div>
+                      <div className="text-xs text-dusk-300">{invoice.period}</div>
+                    </td>
+                    <td className="py-3 pr-3 text-dusk-400">{formatDate(invoice.due_date)}</td>
+                    <td className="py-3 pr-3 text-right font-mono font-semibold text-dusk-500">
+                      {formatCurrency(invoice.remaining_cents / 100, invoice.currency)}
+                    </td>
+                    <td className="py-3 pr-3">
+                      <InvoiceStatusBadge invoice={invoice} />
+                    </td>
+                    <td className="py-3 text-right">
+                      <Button size="sm" variant="ghost" leftIcon={<CreditCard className="w-4 h-4" />} onClick={() => onPay(invoice)}>
+                        {t('Registrar pago')}
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {invoices.length > 12 && (
+              <p className="text-xs text-dusk-300 mt-3">{t('Mostrando as 12 cobranças abertas mais antigas. Exporte CSV para ver tudo.')}</p>
+            )}
+          </div>
+        </>
       )}
     </GlassCard>
   );
