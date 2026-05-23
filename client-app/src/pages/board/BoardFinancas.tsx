@@ -374,8 +374,16 @@ export default function BoardFinancas() {
       {!data ? (
         <GlassCard className="p-6 text-sm text-dusk-300">{t('Carregando…')}</GlassCard>
       ) : data.expenses.length === 0 ? (
-        <GlassCard className="p-6 text-sm text-dusk-300 text-center">
-          {t('Nenhuma despesa registrada nos últimos 12 meses. Comece pelas contas fixas (luz, água, condomínio da empresa de portaria).')}
+        <GlassCard className="p-6 text-sm text-dusk-300 flex flex-col items-center gap-3 text-center">
+          <span>{t('Nenhuma despesa registrada nos últimos 12 meses. Comece pelas contas fixas (luz, água, condomínio da empresa de portaria).')}</span>
+          <Button
+            size="sm"
+            variant="primary"
+            leftIcon={<Plus className="w-4 h-4" />}
+            onClick={() => setShowExpenseForm(true)}
+          >
+            {t('Lançar primeira despesa')}
+          </Button>
         </GlassCard>
       ) : (
         <div className="space-y-2">
@@ -798,8 +806,11 @@ function DuesSchedulePanel({ schedules, onNew }: { schedules: DuesSchedule[]; on
       </div>
 
       {schedules.length === 0 ? (
-        <div className="rounded-2xl bg-white/55 border border-white/70 p-4 text-sm text-dusk-300">
-          {t('Nenhuma regra de cobrança ainda. Crie a mensalidade do condomínio ou uma taxa recorrente.')}
+        <div className="rounded-2xl bg-white/55 border border-white/70 p-5 text-sm text-dusk-300 flex flex-col items-start gap-3">
+          <span>{t('Nenhuma regra de cobrança ainda. Crie a mensalidade do condomínio ou uma taxa recorrente.')}</span>
+          <Button size="sm" variant="primary" leftIcon={<Plus className="w-4 h-4" />} onClick={onNew}>
+            {t('Criar primeira regra')}
+          </Button>
         </div>
       ) : (
         <div className="space-y-2">

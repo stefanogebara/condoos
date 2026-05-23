@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
   AlertTriangle,
+  ArrowRight,
   BarChart3,
   CalendarDays,
   ClipboardList,
@@ -12,6 +13,7 @@ import {
   Printer,
   ReceiptText,
   RefreshCw,
+  Sparkles,
   Vote,
   Wallet,
   Wrench,
@@ -238,6 +240,26 @@ export default function BoardReports() {
   const localizedSummary = useMemo(() => (packet ? summaryBullets(packet, tr) : []), [packet, locale]);
   const localizedRisks = useMemo(() => (packet ? riskCards(packet, tr) : []), [packet, locale]);
   const localizedSteps = useMemo(() => (packet ? nextSteps(packet, tr) : []), [packet, locale]);
+
+  // Brand-new buildings produce a report where every SectionCard is just
+  // a stack of "Nenhum X" placeholders. Detect that and collapse the four
+  // detail cards into a single onboarding card so the admin sees a path
+  // forward instead of a wall of empty mini-panels.
+  const isZeroActivity = useMemo(() => {
+    if (!packet) return false;
+    return (
+      packet.finances.expense_count === 0
+      && packet.finances.receivables.open_invoice_count === 0
+      && packet.summary.open_ticket_count === 0
+      && packet.tickets.work_orders.active.length === 0
+      && packet.proposals.active_count === 0
+      && packet.proposals.closed_count === 0
+      && packet.meetings.upcoming_count === 0
+      && packet.meetings.completed_count === 0
+      && packet.announcements.recent.length === 0
+      && packet.vendors.count === 0
+    );
+  }, [packet]);
 
   const metrics = useMemo(() => {
     if (!packet) return [];
@@ -472,6 +494,7 @@ export default function BoardReports() {
             </GlassCard>
           </div>
 
+          {isZeroActivity ? <ZeroActivityCard tr={tr} /> : (
           <div className="grid gap-5 xl:grid-cols-2">
             <SectionCard title={tr('Finanças')} icon={<Wallet className="h-5 w-5 text-sage-600" />}>
               <div className="grid gap-3 sm:grid-cols-2">
@@ -618,6 +641,7 @@ export default function BoardReports() {
               </MiniPanel>
             </SectionCard>
           </div>
+          )}
         </div>
       ) : null}
     </>
@@ -696,4 +720,64 @@ function MiniStat({ label, value }: { label: string; value: string }) {
 
 function EmptyLine({ children }: { children: React.ReactNode }) {
   return <div className="rounded-2xl bg-white/45 px-4 py-3 text-sm text-dusk-300">{children}</div>;
+}
+
+function ZeroActivityCard({ tr }: { tr: (key: string) => string }) {
+  const actions: Array<{ to: string; icon: React.ReactNode; title: string; detail: string }> = [
+    {
+      to: '/board/financas',
+      icon: <Wallet className="h-5 w-5 text-sage-600" />,
+      title: tr('Lançar primeira despesa'),
+      detail: tr('Comece pelas contas fixas (luz, água, portaria).'),
+    },
+    {
+      to: '/board/tickets',
+      icon: <Wrench className="h-5 w-5 text-sage-600" />,
+      title: tr('Abrir primeiro chamado'),
+      detail: tr('Registre manutenções e reparos com fornecedor.'),
+    },
+    {
+      to: '/board/proposals',
+      icon: <Vote className="h-5 w-5 text-sage-600" />,
+      title: tr('Criar primeira proposta'),
+      detail: tr('Coloque uma decisão em votação dos moradores.'),
+    },
+    {
+      to: '/board/services',
+      icon: <BarChart3 className="h-5 w-5 text-sage-600" />,
+      title: tr('Cadastrar fornecedor'),
+      detail: tr('Monte a rede operacional reutilizável do prédio.'),
+    },
+  ];
+  return (
+    <GlassCard variant="clay" className="p-6">
+      <div className="flex items-center gap-2 text-dusk-500">
+        <Sparkles className="h-5 w-5 text-sage-600" />
+        <h2 className="font-display text-xl">{tr('Mês ainda sem movimentação')}</h2>
+      </div>
+      <p className="mt-2 text-sm text-dusk-300">
+        {tr('Esse relatório mostra o que aconteceu no mês. Comece por uma das ações abaixo para preencher o pacote.')}
+      </p>
+      <div className="mt-5 grid gap-3 sm:grid-cols-2">
+        {actions.map((action) => (
+          <Link
+            key={action.to}
+            to={action.to}
+            className="group flex items-start gap-3 rounded-3xl bg-white/55 p-4 shadow-clay transition hover:bg-white/75"
+          >
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-sage-100">
+              {action.icon}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-semibold text-dusk-500">{action.title}</span>
+                <ArrowRight className="h-4 w-4 text-dusk-300 transition group-hover:translate-x-0.5 group-hover:text-sage-600" />
+              </div>
+              <p className="mt-1 text-xs text-dusk-300">{action.detail}</p>
+            </div>
+          </Link>
+        ))}
+      </div>
+    </GlassCard>
+  );
 }
