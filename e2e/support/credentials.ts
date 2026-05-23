@@ -26,3 +26,13 @@ export function credentialsFor(role: E2ERole): Credentials {
     password: process.env[`${prefix}_PASSWORD`] || defaults[role].password,
   };
 }
+
+export function hasExplicitCredentialsFor(role: E2ERole): boolean {
+  const prefix = prefixes[role];
+  return Boolean(process.env[`${prefix}_EMAIL`] && process.env[`${prefix}_PASSWORD`]);
+}
+
+export function isProdE2ETarget(): boolean {
+  const target = process.env.E2E_BASE_URL || process.env.E2E_API_URL || '';
+  return /^https?:\/\//i.test(target) && !/localhost|127\.0\.0\.1/i.test(target);
+}

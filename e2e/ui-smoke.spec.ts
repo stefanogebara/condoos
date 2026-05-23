@@ -1,7 +1,7 @@
 // Full UI smoke — click through every board + resident page and verify each
 // renders its main heading and role-appropriate navigation.
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
-import { credentialsFor } from './support/credentials';
+import { credentialsFor, hasExplicitCredentialsFor, isProdE2ETarget } from './support/credentials';
 import { gotoApp } from './support/navigation';
 
 const apiURL = process.env.E2E_API_URL
@@ -9,6 +9,19 @@ const apiURL = process.env.E2E_API_URL
 
 type Session = { token: string; user: any };
 const sessionCache = new Map<string, Session>();
+const prodCredentialVars = {
+  admin: 'E2E_ADMIN_EMAIL/E2E_ADMIN_PASSWORD',
+  resident: 'E2E_RESIDENT_EMAIL/E2E_RESIDENT_PASSWORD',
+} as const;
+
+function skipIfMissingProdCredentials(...roles: Array<'admin' | 'resident'>) {
+  if (!isProdE2ETarget()) return;
+  const missing = roles.filter((role) => !hasExplicitCredentialsFor(role));
+  test.skip(
+    missing.length > 0,
+    `requires explicit production credentials (${missing.map((role) => prodCredentialVars[role]).join(', ')}); prod blocks seeded demo credentials`,
+  );
+}
 
 async function loginApi(request: APIRequestContext, email: string, password: string): Promise<Session> {
   const cached = sessionCache.get(email);
@@ -129,6 +142,7 @@ test.describe('resident UI pages render', () => {
     { path: '/app/settings',      heading: /Settings|Preferênc/i },
   ];
   test('all resident routes load', async ({ page, request }) => {
+    skipIfMissingProdCredentials('resident');
     test.setTimeout(120_000);  // 10 pages — same reason as board routes
     await browserLogin(page, request, 'resident');
 
@@ -159,6 +173,7 @@ test.describe('board UI pages render', () => {
     { path: '/board/documents',     heading: /Documents|Documentos/i },
   ];
   test('all board routes load', async ({ page, request }) => {
+    skipIfMissingProdCredentials('admin');
     test.setTimeout(120_000);  // 8 pages × ~5s each — needs more than the 45s default
     await browserLogin(page, request, 'admin');
 
@@ -177,6 +192,7 @@ test.describe('board UI pages render', () => {
 // ---------------------------------------------------------------------------
 
 test('resident: click on first existing proposal shows detail', async ({ page, request }) => {
+  skipIfMissingProdCredentials('resident');
   await browserLogin(page, request, 'resident');
   await gotoApp(page, '/app/proposals');
   const firstCard = page.locator('a[href*="/app/proposals/"]').first();
@@ -190,6 +206,7 @@ test('resident: click on first existing proposal shows detail', async ({ page, r
 });
 
 test('resident: settings page has phone input + opt-in checkbox + save', async ({ page, request }) => {
+  skipIfMissingProdCredentials('resident');
   await browserLogin(page, request, 'resident');
   await gotoApp(page, '/app/settings');
   await expect(page.getByRole('heading', { name: /Settings|Preferênc/i })).toBeVisible();
@@ -204,6 +221,7 @@ test('resident: settings page has phone input + opt-in checkbox + save', async (
 // ---------------------------------------------------------------------------
 
 test('board overview: stat cards render', async ({ page, request }) => {
+  skipIfMissingProdCredentials('admin');
   await browserLogin(page, request, 'admin');
   await gotoApp(page, '/board');
   // The overview surfaces several numeric stats — just verify the page doesn't
@@ -213,6 +231,7 @@ test('board overview: stat cards render', async ({ page, request }) => {
 });
 
 test('board assemblies: "New assembly" button opens the form', async ({ page, request }) => {
+  skipIfMissingProdCredentials('admin');
   await browserLogin(page, request, 'admin');
   await gotoApp(page, '/board/assemblies');
   const btn = page.getByRole('button', { name: /New assembly|Nova assembleia/i });
@@ -223,6 +242,7 @@ test('board assemblies: "New assembly" button opens the form', async ({ page, re
 });
 
 test('board residents: table renders + import roster button visible', async ({ page, request }) => {
+  skipIfMissingProdCredentials('admin');
   await browserLogin(page, request, 'admin');
   await gotoApp(page, '/board/residents');
   await expect(page.getByRole('heading', { name: /Residents|Moradores/i })).toBeVisible();
@@ -234,6 +254,7 @@ test('board residents: table renders + import roster button visible', async ({ p
 // ---------------------------------------------------------------------------
 
 test('logout: Sign out button clears session and redirects', async ({ page, request, isMobile }) => {
+  skipIfMissingProdCredentials('resident');
   await browserLogin(page, request, 'resident');
   await gotoApp(page, '/app');
 

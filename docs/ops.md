@@ -372,6 +372,12 @@ npm run test:e2e:prod:safe    # Desktop + mobile production-safe UI/i18n/a11y sw
 npm run audit:perf:prod       # Lighthouse budgets for public production pages
 ```
 
+When these commands run locally without `E2E_ADMIN_*` / `E2E_RESIDENT_*`,
+public production smoke still runs, but authenticated UI checks skip instead of
+falling back to seeded demo credentials. CI still runs
+`scripts/verify-prod-credentials.mjs` first, so missing or drifted secrets fail
+fast before browser tests start.
+
 `test:e2e:prod:safe` is deliberately limited to read-only or form-open browser
 flows. Do not point the full mutating local E2E suite at production unless the
 database is disposable or a cleanup plan is in place.
