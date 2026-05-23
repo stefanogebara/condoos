@@ -38,8 +38,8 @@ export default function Announcements() {
                   {a.source === 'ai_decision' && <Badge tone="sage">{t('Decisão pela IA')}</Badge>}
                   <span className="text-xs text-dusk-200 ml-auto">{formatDate(a.created_at)}</span>
                 </div>
-                <h3 className="font-display text-xl text-dusk-500 mt-2">{t(a.title)}</h3>
-                <p className="text-dusk-300 mt-2 whitespace-pre-line leading-relaxed">{t(a.body)}</p>
+                <h3 data-user-content className="font-display text-xl text-dusk-500 mt-2">{t(a.title)}</h3>
+                <p data-user-content className="text-dusk-300 mt-2 whitespace-pre-line leading-relaxed">{t(a.body)}</p>
                 <div className="mt-3 text-xs text-dusk-200">{t('Postado por')} {a.first_name} {a.last_name}</div>
               </div>
             </div>

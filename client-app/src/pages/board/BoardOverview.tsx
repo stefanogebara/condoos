@@ -358,7 +358,7 @@ export default function BoardOverview() {
           <Link key={p.id} to={`/board/proposals/${p.id}`}>
             <GlassCard variant="clay" hover className="p-5">
               <Badge tone={p.status === 'voting' ? 'peach' : 'sage'}>{tr(STATUS_LABEL[p.status] || p.status)}</Badge>
-              <h3 className="font-semibold text-dusk-500 mt-2">{tr(p.title)}</h3>
+              <h3 data-user-content className="font-semibold text-dusk-500 mt-2">{tr(p.title)}</h3>
               {p.status === 'voting' && (
                 <div className="mt-3 flex items-center justify-between text-xs">
                   <span className="text-sage-700 font-semibold">{p.votes.yes} {tr('sim')}</span>

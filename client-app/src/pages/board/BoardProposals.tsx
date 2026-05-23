@@ -209,8 +209,8 @@ function Section({ title, items }: { title: string; items: any[] }) {
                 {p.ai_drafted === 1 && <Badge tone="sage">{t('Redigido pela IA')}</Badge>}
                 {p.category && <Badge tone="neutral">{t(p.category)}</Badge>}
               </div>
-              <h3 className="font-display text-lg text-dusk-500">{t(p.title)}</h3>
-              <p className="text-sm text-dusk-300 mt-2 line-clamp-2">{t(p.description)}</p>
+              <h3 data-user-content className="font-display text-lg text-dusk-500">{t(p.title)}</h3>
+              <p data-user-content className="text-sm text-dusk-300 mt-2 line-clamp-2">{t(p.description)}</p>
               <div className="flex items-center justify-between mt-4 pt-4 border-t border-white/50 text-xs">
                 <span className="text-dusk-200">{t('por')} {p.author_first}</span>
                 {p.status === 'voting' ? (

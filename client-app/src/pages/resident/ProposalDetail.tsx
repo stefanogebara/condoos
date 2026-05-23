@@ -170,7 +170,7 @@ export default function ProposalDetail() {
     <>
       <Link to="/app/proposals" className="inline-flex items-center gap-1 text-sm text-dusk-300 hover:text-dusk-500 mb-4"><ArrowLeft className="w-4 h-4" /> {t('Voltar')}</Link>
       <PageHeader
-        title={t(p.title)}
+        title={<span data-user-content>{t(p.title)}</span>}
         subtitle={`${t('Proposto por')} ${p.author_first} ${p.author_last}${p.estimated_cost ? ` · ~${formatCurrency(p.estimated_cost)}` : ''}`}
       />
       <div className="flex items-center gap-2 mb-6 flex-wrap">

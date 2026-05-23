@@ -250,10 +250,10 @@ export default function Overview() {
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <h3 className="font-semibold text-dusk-500">{t(a.title)}</h3>
+                    <h3 data-user-content className="font-semibold text-dusk-500">{t(a.title)}</h3>
                     {a.source !== 'manual' && <Badge tone="sage">{t('Redigido pela IA')}</Badge>}
                   </div>
-                  <p className="text-sm text-dusk-300 mt-1 line-clamp-2">{t(a.body)}</p>
+                  <p data-user-content className="text-sm text-dusk-300 mt-1 line-clamp-2">{t(a.body)}</p>
                   <div className="text-xs text-dusk-200 mt-2">{formatDate(a.created_at)}</div>
                 </div>
               </div>
@@ -268,7 +268,7 @@ export default function Overview() {
             <Link key={p.id} to={`/app/proposals/${p.id}`}>
               <GlassCard variant="clay" hover className="p-5">
                 <Badge tone={p.status === 'voting' ? 'peach' : 'sage'}>{t(PROPOSAL_STATUS[p.status] || p.status)}</Badge>
-                <h3 className="font-semibold text-dusk-500 mt-2 line-clamp-2">{t(p.title)}</h3>
+                <h3 data-user-content className="font-semibold text-dusk-500 mt-2 line-clamp-2">{t(p.title)}</h3>
                 {p.status === 'voting' && (
                   <div className="mt-3 flex items-center gap-1 text-xs">
                     <div className="flex-1 h-1.5 rounded-full bg-white/60 overflow-hidden flex">
