@@ -15,6 +15,7 @@ import {
   upsertBudgetTargets,
   unitInCondo,
   userCanSeeUnit,
+  voidInvoice,
 } from '../lib/finance';
 import { assertFileReadyForUse, attachFileToTarget, fileDownloadPath } from '../lib/files';
 import { defaultCurrencyForCondo } from '../lib/condo-settings';
@@ -45,6 +46,10 @@ const paymentSchema = z.object({
   method: z.string().min(1).max(40).default('manual'),
   paid_at: z.string().datetime().optional(),
   reference: z.string().max(120).optional(),
+});
+
+const voidInvoiceSchema = z.object({
+  reason: z.string().max(500).optional(),
 });
 
 const paymentProofSchema = z.object({
@@ -245,6 +250,26 @@ router.post('/invoices', requireAuth, requireRole('board_admin'), requireBoardCa
     invoice_ids: result.invoice_ids,
     skipped_unit_ids: result.skipped_unit_ids,
   }, 201);
+});
+
+router.post('/invoices/:id/void', requireAuth, requireRole('board_admin'), requireBoardCapability('finance'), (req: AuthedRequest, res) => {
+  const parsed = voidInvoiceSchema.safeParse(req.body || {});
+  if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
+  const condoId = getActiveCondoId(req);
+  const invoiceId = Number(req.params.id);
+  if (!Number.isInteger(invoiceId) || invoiceId <= 0) return fail(res, 'invalid_invoice_id', 400);
+
+  const result = voidInvoice({ condoId, invoice_id: invoiceId });
+  if (!result.ok) return fail(res, result.error, result.status, result.details);
+
+  audit(req, {
+    action: 'finance.invoice_void',
+    target_type: 'invoice',
+    target_id: invoiceId,
+    condominium_id: condoId,
+    metadata: { reason: parsed.data.reason?.trim() || null, already_void: !!result.already_void },
+  });
+  return ok(res, result);
 });
 
 router.get('/statements/:unit_id', requireAuth, (req: AuthedRequest, res) => {

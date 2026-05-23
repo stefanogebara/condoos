@@ -378,9 +378,12 @@ falling back to seeded demo credentials. CI still runs
 `scripts/verify-prod-credentials.mjs` first, so missing or drifted secrets fail
 fast before browser tests start.
 
-`test:e2e:prod:safe` is deliberately limited to read-only or form-open browser
-flows. Do not point the full mutating local E2E suite at production unless the
-database is disposable or a cleanup plan is in place.
+`test:e2e:prod:safe` is deliberately limited to read-only, form-open, or
+self-cleaning browser flows. The finance modal spec creates a one-off invoice
+with notes prefixed `E2E finance modal dismissal`, targets that exact invoice in
+the UI, and voids it through the audited `/api/finance/invoices/:id/void`
+endpoint in cleanup. Do not point the full mutating local E2E suite at
+production unless the database is disposable or a cleanup plan is in place.
 
 ## Full Audit Workflow
 

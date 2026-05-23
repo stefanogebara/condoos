@@ -94,6 +94,13 @@ export interface PaymentSuccess {
   remaining_cents?: number;
 }
 
+export interface VoidInvoiceSuccess {
+  ok: true;
+  id: number;
+  status: 'void';
+  already_void?: boolean;
+}
+
 export interface PaymentProofInput {
   condoId: number;
   invoice_id: number;
@@ -340,11 +347,11 @@ export function getBudgetSummary(condoId: number, month: string): BudgetSummary 
 function existingInvoice(unitId: number, period: string, scheduleId?: number): { id: number } | undefined {
   if (scheduleId) {
     return db.prepare(
-      `SELECT id FROM invoices WHERE unit_id = ? AND period = ? AND schedule_id = ?`
+      `SELECT id FROM invoices WHERE unit_id = ? AND period = ? AND schedule_id = ? AND status <> 'void'`
     ).get(unitId, period, scheduleId) as { id: number } | undefined;
   }
   return db.prepare(
-    `SELECT id FROM invoices WHERE unit_id = ? AND period = ? AND schedule_id IS NULL`
+    `SELECT id FROM invoices WHERE unit_id = ? AND period = ? AND schedule_id IS NULL AND status <> 'void'`
   ).get(unitId, period) as { id: number } | undefined;
 }
 
@@ -597,6 +604,43 @@ export function recordPayment(input: PaymentInput): PaymentSuccess | FinanceErro
     invoice_status: result.invoice_status,
     remaining_cents: result.remaining_cents,
   };
+}
+
+export function voidInvoice(input: {
+  condoId: number;
+  invoice_id: number;
+}): VoidInvoiceSuccess | FinanceError {
+  const invoice = db.prepare(
+    `SELECT * FROM invoices WHERE id = ? AND condominium_id = ?`
+  ).get(input.invoice_id, input.condoId) as InvoiceRow | undefined;
+  if (!invoice) return { ok: false, error: 'invoice_not_found', status: 404 };
+  if (invoice.status === 'void') {
+    return { ok: true, id: invoice.id, status: 'void', already_void: true };
+  }
+
+  const paymentCount = db.prepare(
+    `SELECT COUNT(*) AS count FROM payments WHERE invoice_id = ?`
+  ).get(invoice.id) as { count: number };
+  if (Number(paymentCount.count || 0) > 0) {
+    return { ok: false, error: 'invoice_has_payments', status: 409 };
+  }
+
+  const activeProofCount = db.prepare(
+    `SELECT COUNT(*) AS count
+     FROM payment_proofs
+     WHERE invoice_id = ? AND status IN ('pending', 'approved')`
+  ).get(invoice.id) as { count: number };
+  if (Number(activeProofCount.count || 0) > 0) {
+    return { ok: false, error: 'invoice_has_payment_proofs', status: 409 };
+  }
+
+  db.prepare(
+    `UPDATE invoices
+     SET status = 'void', updated_at = CURRENT_TIMESTAMP
+     WHERE id = ? AND condominium_id = ?`
+  ).run(invoice.id, input.condoId);
+
+  return { ok: true, id: invoice.id, status: 'void' };
 }
 
 export function submitPaymentProof(input: PaymentProofInput): PaymentProofSuccess | FinanceError {

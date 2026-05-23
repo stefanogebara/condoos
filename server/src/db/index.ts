@@ -290,11 +290,27 @@ function migrateProposalsInconclusiveStatus() {
   }
 }
 
+function migrateInvoiceUniqueIndexAllowsVoidRegeneration() {
+  const row = db.prepare(
+    `SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'idx_invoices_unit_period_schedule'`
+  ).get() as { sql?: string } | undefined;
+  if (row?.sql?.includes("WHERE status <> 'void'")) return;
+
+  db.exec(`
+    DROP INDEX IF EXISTS idx_invoices_unit_period_schedule;
+    CREATE UNIQUE INDEX idx_invoices_unit_period_schedule
+      ON invoices(unit_id, period, schedule_id)
+      WHERE status <> 'void';
+  `);
+  console.log('[migrate] adjusted invoice uniqueness to ignore void invoices');
+}
+
 export function initSchema() {
   const sql = fs.readFileSync(SCHEMA_PATH, 'utf8');
   db.exec(sql);
   migrateUsersCondoNullable();
   migrateProposalsInconclusiveStatus();
+  migrateInvoiceUniqueIndexAllowsVoidRegeneration();
   // Must run AFTER the additive column migrations below so phone +
   // whatsapp_opt_in already exist in the source table.
 

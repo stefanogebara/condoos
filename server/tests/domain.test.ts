@@ -32,6 +32,7 @@ import {
   rejectPaymentProof,
   submitPaymentProof,
   upsertBudgetTargets,
+  voidInvoice,
 } from '../src/lib/finance';
 import { requireAuth, requireBoardCapability, revokeUserTokens, signToken } from '../src/lib/auth';
 import { canAssignTicketToUser, listTicketTimeline, markTicketAgentFailed, recordTicketEvent } from '../src/lib/tickets';
@@ -3025,6 +3026,36 @@ test('finance: manual invoice generation skips duplicate null-schedule invoices'
   assert.equal(count.count, 1);
 });
 
+test('finance: voided manual invoices can be regenerated for the same period', () => {
+  resetDb();
+  const { condoId, unit101 } = createCondoFixture();
+
+  const first = generateInvoices({
+    condoId,
+    amount_cents: 125000,
+    currency: 'BRL',
+    period: '2026-05',
+    unit_ids: [unit101],
+  });
+  assert.equal(first.ok, true);
+  const firstId = (first as any).invoice_ids[0];
+
+  const voided = voidInvoice({ condoId, invoice_id: firstId });
+  assert.equal(voided.ok, true);
+  assert.equal((voided as any).status, 'void');
+
+  const regenerated = generateInvoices({
+    condoId,
+    amount_cents: 125000,
+    currency: 'BRL',
+    period: '2026-05',
+    unit_ids: [unit101],
+  });
+  assert.equal(regenerated.ok, true);
+  assert.equal((regenerated as any).created_count, 1);
+  assert.notEqual((regenerated as any).invoice_ids[0], firstId);
+});
+
 test('finance: scheduled monthly dues generate invoices idempotently', () => {
   resetDb();
   const { condoId, unit101, unit102 } = createCondoFixture();
@@ -3127,6 +3158,42 @@ test('finance: payments are reference-idempotent and cannot overpay invoices', (
   });
   assert.equal(extra.ok, false);
   assert.equal((extra as any).error, 'invoice_already_paid');
+});
+
+test('finance: voiding paid invoices is blocked and voiding is idempotent', () => {
+  resetDb();
+  const { condoId, unit101 } = createCondoFixture();
+  const boardId = createUser('finance-void-board@example.com', 'board_admin');
+  const invoiceId = Number(db.prepare(
+    `INSERT INTO invoices (condominium_id, unit_id, amount_cents, currency, period, due_date)
+     VALUES (?, ?, 10000, 'BRL', '2026-05', '2026-05-10T12:00:00.000Z')`
+  ).run(condoId, unit101).lastInsertRowid);
+
+  const voided = voidInvoice({ condoId, invoice_id: invoiceId });
+  assert.equal(voided.ok, true);
+  assert.equal((voided as any).status, 'void');
+
+  const again = voidInvoice({ condoId, invoice_id: invoiceId });
+  assert.equal(again.ok, true);
+  assert.equal((again as any).already_void, true);
+
+  const paidInvoiceId = Number(db.prepare(
+    `INSERT INTO invoices (condominium_id, unit_id, amount_cents, currency, period, due_date)
+     VALUES (?, ?, 10000, 'BRL', '2026-06', '2026-06-10T12:00:00.000Z')`
+  ).run(condoId, unit101).lastInsertRowid);
+  const payment = recordPayment({
+    condoId,
+    invoice_id: paidInvoiceId,
+    amount_cents: 10000,
+    method: 'pix',
+    reference: 'VOID-BLOCK',
+    created_by_user_id: boardId,
+  });
+  assert.equal(payment.ok, true);
+
+  const blocked = voidInvoice({ condoId, invoice_id: paidInvoiceId });
+  assert.equal(blocked.ok, false);
+  assert.equal((blocked as any).error, 'invoice_has_payments');
 });
 
 test('finance: resident payment proof approval creates a payment after admin review', () => {

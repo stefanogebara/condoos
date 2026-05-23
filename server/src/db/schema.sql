@@ -622,7 +622,8 @@ CREATE TABLE IF NOT EXISTS invoices (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_unit_period_schedule
-  ON invoices(unit_id, period, schedule_id);
+  ON invoices(unit_id, period, schedule_id)
+  WHERE status <> 'void';
 CREATE INDEX IF NOT EXISTS idx_invoices_condo_status
   ON invoices(condominium_id, status, due_date);
 

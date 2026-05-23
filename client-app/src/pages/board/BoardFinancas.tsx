@@ -974,7 +974,11 @@ function ReceivablesPanel({
         <>
           <div className="md:hidden space-y-3">
             {invoices.slice(0, 12).map((invoice) => (
-              <div key={invoice.id} className="rounded-3xl bg-white/60 border border-white/70 p-4 shadow-soft">
+              <div
+                key={invoice.id}
+                className="rounded-3xl bg-white/60 border border-white/70 p-4 shadow-soft"
+                data-testid={`finance-invoice-${invoice.id}`}
+              >
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="font-semibold text-dusk-500">{t('Unidade')} {invoice.unit_number}</div>
@@ -994,7 +998,14 @@ function ReceivablesPanel({
                     <div className="text-xs text-dusk-300">{formatDate(invoice.due_date)}</div>
                   </div>
                 </div>
-                <Button className="mt-4 w-full" size="sm" variant="ghost" leftIcon={<CreditCard className="w-4 h-4" />} onClick={() => onPay(invoice)}>
+                <Button
+                  className="mt-4 w-full"
+                  size="sm"
+                  variant="ghost"
+                  leftIcon={<CreditCard className="w-4 h-4" />}
+                  onClick={() => onPay(invoice)}
+                  data-testid={`finance-pay-invoice-${invoice.id}`}
+                >
                   {t('Registrar pago')}
                 </Button>
               </div>
@@ -1014,7 +1025,11 @@ function ReceivablesPanel({
               </thead>
               <tbody>
                 {invoices.slice(0, 12).map((invoice) => (
-                  <tr key={invoice.id} className="border-t border-white/60">
+                  <tr
+                    key={invoice.id}
+                    className="border-t border-white/60"
+                    data-testid={`finance-invoice-${invoice.id}`}
+                  >
                     <td className="py-3 pr-3">
                       <div className="font-semibold text-dusk-500">{invoice.unit_number}</div>
                       <div className="text-xs text-dusk-300 truncate max-w-[180px]">{invoice.resident_names || invoice.building_name}</div>
@@ -1031,7 +1046,13 @@ function ReceivablesPanel({
                       <InvoiceStatusBadge invoice={invoice} />
                     </td>
                     <td className="py-3 text-right">
-                      <Button size="sm" variant="ghost" leftIcon={<CreditCard className="w-4 h-4" />} onClick={() => onPay(invoice)}>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        leftIcon={<CreditCard className="w-4 h-4" />}
+                        onClick={() => onPay(invoice)}
+                        data-testid={`finance-pay-invoice-${invoice.id}`}
+                      >
                         {t('Registrar pago')}
                       </Button>
                     </td>
