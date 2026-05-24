@@ -195,9 +195,10 @@ test('Proposals: Nova proposta CTA + Análise pré-votação card on discussion 
     await expect(page.getByRole('button', { name: re.analyzeWithAi })).toBeVisible();
   } finally {
     if (proposalId) {
-      await request.delete(`${apiURL}/proposals/${proposalId}`, {
+      const cleanup = await request.delete(`${apiURL}/proposals/${proposalId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
+      expect(cleanup.ok(), `proposal cleanup failed: ${cleanup.status()} ${await cleanup.text()}`).toBeTruthy();
     }
   }
 });
