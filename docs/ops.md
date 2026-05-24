@@ -382,8 +382,14 @@ fast before browser tests start.
 self-cleaning browser flows. The finance modal spec creates a one-off invoice
 with notes prefixed `E2E finance modal dismissal`, targets that exact invoice in
 the UI, and voids it through the audited `/api/finance/invoices/:id/void`
-endpoint in cleanup. Do not point the full mutating local E2E suite at
-production unless the database is disposable or a cleanup plan is in place.
+endpoint in cleanup. The proposal walkthrough creates a temporary `E2E
+pre-vote analysis ...` discussion proposal and deletes it through the audited
+`DELETE /api/proposals/:id` endpoint, which only accepts clean discussion
+proposals with no votes, comments, announcements, or action items. The upload
+integrity check is storage-driver-aware: local API uploads reject short bodies at
+PUT time, while R2/direct uploads fail closed at `/api/uploads/complete` if the
+object is absent. Do not point the full mutating local E2E suite at production
+unless the database is disposable or a cleanup plan is in place.
 
 ## Full Audit Workflow
 

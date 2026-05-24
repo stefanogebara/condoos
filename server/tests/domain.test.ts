@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import express from 'express';
+import type { AddressInfo } from 'net';
 import db from '../src/db';
 import { claimPendingInvitesForUser } from '../src/lib/invites';
 import { canVote, getProposalVoteTally, resolveVoteOutcome, computeQuorum, countEligibleVoters } from '../src/lib/proposal-tally';
@@ -34,7 +36,8 @@ import {
   upsertBudgetTargets,
   voidInvoice,
 } from '../src/lib/finance';
-import { requireAuth, requireBoardCapability, revokeUserTokens, signToken } from '../src/lib/auth';
+import { requireAuth, requireActiveMembership, requireBoardCapability, revokeUserTokens, signToken } from '../src/lib/auth';
+import proposalsRoutes from '../src/routes/proposals';
 import { canAssignTicketToUser, listTicketTimeline, markTicketAgentFailed, recordTicketEvent } from '../src/lib/tickets';
 import { createTicketQuote, listTicketQuotes, updateTicketQuoteStatus } from '../src/lib/ticket-quotes';
 import { createAgentRun, finishAgentRunFailure, finishAgentRunSuccess, reapStaleAgentRuns } from '../src/lib/agent-runs';
@@ -936,6 +939,86 @@ function responseRecorder() {
   } as any;
   return { calls, res };
 }
+
+test('proposals route deletes only clean discussion proposals and restores linked suggestions', async () => {
+  resetDb();
+  const { condoId } = createCondoFixture();
+  const adminId = createUser('proposal-cleanup-admin@example.com', 'board_admin');
+  db.prepare(`UPDATE users SET condominium_id = ? WHERE id = ?`).run(condoId, adminId);
+
+  const app = express();
+  app.use(express.json());
+  app.use('/api/proposals', requireAuth, requireActiveMembership, proposalsRoutes);
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise<void>((resolve, reject) => {
+    if (server.listening) return resolve();
+    server.once('listening', resolve);
+    server.once('error', reject);
+  });
+
+  try {
+    const { port } = server.address() as AddressInfo;
+    const baseUrl = `http://127.0.0.1:${port}`;
+    const headers = {
+      Authorization: `Bearer ${signToken(adminId)}`,
+      'Content-Type': 'application/json',
+    };
+
+    const blockedProposalId = Number(db.prepare(
+      `INSERT INTO proposals (condominium_id, author_id, title, description, status)
+       VALUES (?, ?, 'Keep history', 'This proposal has activity.', 'discussion')`
+    ).run(condoId, adminId).lastInsertRowid);
+    db.prepare(
+      `INSERT INTO proposal_comments (proposal_id, author_id, body)
+       VALUES (?, ?, 'Do not delete active records')`
+    ).run(blockedProposalId, adminId);
+
+    const blocked = await fetch(`${baseUrl}/api/proposals/${blockedProposalId}`, { method: 'DELETE', headers });
+    assert.equal(blocked.status, 409);
+    const blockedBody = await blocked.json() as any;
+    assert.equal(blockedBody.error, 'proposal_has_activity');
+    assert.equal(blockedBody.details.comments, 1);
+    assert.equal(
+      (db.prepare(`SELECT COUNT(*) AS count FROM proposals WHERE id = ?`).get(blockedProposalId) as any).count,
+      1,
+    );
+
+    const suggestionId = Number(db.prepare(
+      `INSERT INTO suggestions (condominium_id, author_id, body, status)
+       VALUES (?, ?, 'Paint the lobby', 'open')`
+    ).run(condoId, adminId).lastInsertRowid);
+    const proposalId = Number(db.prepare(
+      `INSERT INTO proposals (condominium_id, author_id, title, description, status, source_suggestion_id)
+       VALUES (?, ?, 'Paint the lobby', 'Temporary E2E proposal.', 'discussion', ?)`
+    ).run(condoId, adminId, suggestionId).lastInsertRowid);
+    db.prepare(`UPDATE suggestions SET status='promoted', promoted_proposal_id=? WHERE id=?`).run(proposalId, suggestionId);
+
+    const deleted = await fetch(`${baseUrl}/api/proposals/${proposalId}`, { method: 'DELETE', headers });
+    assert.equal(deleted.status, 200);
+    const deletedBody = await deleted.json() as any;
+    assert.deepEqual(deletedBody.data, { id: proposalId, deleted: true });
+    assert.equal(
+      (db.prepare(`SELECT COUNT(*) AS count FROM proposals WHERE id = ?`).get(proposalId) as any).count,
+      0,
+    );
+    const suggestion = db.prepare(
+      `SELECT status, promoted_proposal_id FROM suggestions WHERE id = ?`
+    ).get(suggestionId) as any;
+    assert.equal(suggestion.status, 'open');
+    assert.equal(suggestion.promoted_proposal_id, null);
+
+    const auditRow = db.prepare(
+      `SELECT action, target_id FROM audit_log WHERE action='proposal.delete' AND target_id=?`
+    ).get(proposalId) as any;
+    assert.equal(auditRow.action, 'proposal.delete');
+  } finally {
+    if (server.listening) {
+      await new Promise<void>((resolve, reject) => {
+        server.close((err) => err ? reject(err) : resolve());
+      });
+    }
+  }
+});
 
 test('CSV-style pending invite claim preserves membership settings', () => {
   resetDb();

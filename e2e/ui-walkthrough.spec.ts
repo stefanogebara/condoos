@@ -166,26 +166,40 @@ test('Finanças: shows resumo por categoria + at least one expense row', async (
 test('Proposals: Nova proposta CTA + Análise pré-votação card on discussion item', async ({ page, request }) => {
   test.setTimeout(45_000);
   await seedSession(page, request, 'admin');
-
-  // List page
-  await gotoApp(page, '/board/proposals');
-  await expect(page.getByRole('heading', { name: re.proposals }).first()).toBeVisible();
-  await expect(page.getByRole('button', { name: re.newProposal })).toBeVisible();
-
-  // Find a discussion proposal via the API (avoids relying on seed order)
   const creds = credentialsFor('admin');
   const { token } = await loginApi(request, creds.email, creds.password);
-  const list = await request.get(`${apiURL}/proposals`, { headers: { Authorization: `Bearer ${token}` } });
-  const rows = (await list.json()).data as Array<{ id: number; status: string }>;
-  const discussionId = rows.find((r) => r.status === 'discussion')?.id;
-  test.skip(!discussionId, 'no proposal in discussion to assert the cost card');
+  let proposalId: number | undefined;
 
-  await gotoApp(page, `/board/proposals/${discussionId}`);
-  // The cost-analysis card surfaces in two states: with breakdown ("Análise
-  // pré-votação" + a breakdown), or empty ("Custo não definido" warning).
-  // Either way the heading is there.
-  await expect(page.getByRole('heading', { name: re.preVoteAnalysis }).first()).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByRole('button', { name: re.analyzeWithAi })).toBeVisible();
+  try {
+    const created = await request.post(`${apiURL}/proposals`, {
+      headers: { Authorization: `Bearer ${token}` },
+      data: {
+        title: `E2E pre-vote analysis ${Date.now()}`,
+        description: 'Temporary production-safe proposal used to verify the board pre-vote analysis card.',
+        category: 'maintenance',
+        estimated_cost: 12345,
+      },
+    });
+    expect(created.ok(), `proposal create failed: ${created.status()} ${await created.text()}`).toBeTruthy();
+    proposalId = (await created.json()).data.id;
+
+    // List page
+    await gotoApp(page, '/board/proposals');
+    await expect(page.getByRole('heading', { name: re.proposals }).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: re.newProposal })).toBeVisible();
+
+    await gotoApp(page, `/board/proposals/${proposalId}`);
+    // The self-seeded discussion proposal guarantees the pre-vote analysis
+    // surface exists in every tenant without depending on existing data.
+    await expect(page.getByRole('heading', { name: re.preVoteAnalysis }).first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('button', { name: re.analyzeWithAi })).toBeVisible();
+  } finally {
+    if (proposalId) {
+      await request.delete(`${apiURL}/proposals/${proposalId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    }
+  }
 });
 
 // ---------------------------------------------------------------------------

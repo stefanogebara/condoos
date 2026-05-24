@@ -286,4 +286,38 @@ router.post('/:id/status', requireAuth, requireRole('board_admin'), requireBoard
   return ok(res, { id, status });
 });
 
+router.delete('/:id', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
+  const condoId = getActiveCondoId(req);
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) return fail(res, 'invalid_id', 400);
+  const p = getScopedProposal(id, condoId);
+  if (!p) return fail(res, 'not_found', 404);
+  if (p.status !== 'discussion') return fail(res, 'cannot_delete_non_discussion_proposal', 409);
+
+  const activity = db.prepare(
+    `SELECT
+       (SELECT COUNT(*) FROM proposal_votes WHERE proposal_id = ?) AS votes,
+       (SELECT COUNT(*) FROM proposal_comments WHERE proposal_id = ?) AS comments,
+       (SELECT COUNT(*) FROM announcements WHERE related_proposal_id = ?) AS announcements,
+       (SELECT COUNT(*) FROM action_items WHERE proposal_id = ?) AS action_items`
+  ).get(id, id, id, id) as { votes: number; comments: number; announcements: number; action_items: number };
+  if (activity.votes || activity.comments || activity.announcements || activity.action_items) {
+    return fail(res, 'proposal_has_activity', 409, activity);
+  }
+
+  const tx = db.transaction(() => {
+    db.prepare(`UPDATE suggestions SET status='open', promoted_proposal_id=NULL WHERE promoted_proposal_id=?`).run(id);
+    db.prepare(`DELETE FROM proposals WHERE id = ? AND condominium_id = ?`).run(id, condoId);
+  });
+  tx();
+  audit(req, {
+    action: 'proposal.delete',
+    target_type: 'proposal',
+    target_id: id,
+    condominium_id: condoId,
+    metadata: { title: p.title, status: p.status },
+  });
+  return ok(res, { id, deleted: true });
+});
+
 export default router;

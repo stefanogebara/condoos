@@ -200,7 +200,7 @@ test('uploaded document shows a size chip on both board and resident views (Phas
   }
 });
 
-test('upload API rejects truncated local uploads before completion', async ({ request }) => {
+test('upload completion rejects incomplete uploads before publishing', async ({ request }) => {
   const admin = await loginRole(request, 'admin');
   const declaredBytes = Buffer.from('complete payload');
   const truncatedBytes = Buffer.from('short');
@@ -220,14 +220,19 @@ test('upload API rejects truncated local uploads before completion', async ({ re
     expect(presign.ok(), `presign failed: ${presign.status()} ${await presign.text()}`).toBeTruthy();
     const presigned = (await presign.json()).data;
     fileId = presigned.file.id;
-    test.skip(presigned.upload_method !== 'api', 'local API upload integrity only; R2 size integrity is checked on complete in production upload audits');
-
-    const uploaded = await request.put(resolveUploadUrl(String(presigned.upload_url)), {
-      headers: uploadHeaders(presigned, admin),
-      data: truncatedBytes,
-    });
-    expect(uploaded.status()).toBe(400);
-    expect((await uploaded.json()).error).toBe('file_size_mismatch');
+    if (presigned.upload_method === 'api') {
+      const uploaded = await request.put(resolveUploadUrl(String(presigned.upload_url)), {
+        headers: uploadHeaders(presigned, admin),
+        data: truncatedBytes,
+      });
+      expect(uploaded.status()).toBe(400);
+      expect((await uploaded.json()).error).toBe('file_size_mismatch');
+    } else {
+      // R2/direct uploads are completed only after the server HEADs the object.
+      // Leaving the object absent proves completion fails closed without
+      // writing a disposable object into the production bucket.
+      expect(presigned.upload_method).toBe('put');
+    }
 
     const completed = await request.post(`${apiURL}/uploads/complete`, {
       headers: { Authorization: `Bearer ${admin.token}` },
