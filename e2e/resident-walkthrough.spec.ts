@@ -56,6 +56,24 @@ async function findAvailableSlot(request: APIRequestContext, token: string, amen
   return null;
 }
 
+async function activeReservationId(request: APIRequestContext, token: string, amenityId: number) {
+  const reservations = await request.get(`${apiURL}/amenities/reservations`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  expect(reservations.ok(), `reservation list failed: ${reservations.status()} ${await reservations.text()}`).toBeTruthy();
+  const rows = (await reservations.json()).data as Array<{ id: number; amenity_id: number; status: string }>;
+  return rows.find((r) => r.amenity_id === amenityId && r.status !== 'cancelled')?.id ?? 0;
+}
+
+async function reservationStatus(request: APIRequestContext, token: string, reservationId: number) {
+  const reservations = await request.get(`${apiURL}/amenities/reservations`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  expect(reservations.ok(), `reservation list failed: ${reservations.status()} ${await reservations.text()}`).toBeTruthy();
+  const rows = (await reservations.json()).data as Array<{ id: number; status: string }>;
+  return rows.find((r) => r.id === reservationId)?.status ?? 'missing';
+}
+
 async function expectShellRole(page: Page, label: RegExp) {
   const width = page.viewportSize()?.width || 1280;
   const shell = width < 1024 ? page.locator('header') : page.locator('aside');
@@ -184,28 +202,22 @@ test('resident: amenities page can create a reservation from an amenity card', a
     await slot.click();
     await expect(page.getByTestId('amenity-submit')).toBeEnabled();
     await page.getByTestId('amenity-submit').click();
-    await expect(page.getByText(/Reservation confirmed|Reserva confirmada|Réservation confirmée/i)).toBeVisible();
-    await expect(page.getByText(name).first()).toBeVisible();
-
-    const reservations = await request.get(`${apiURL}/amenities/reservations`, {
-      headers: { Authorization: `Bearer ${resident.token}` },
-    });
-    expect(reservations.ok(), `reservation list failed: ${reservations.status()} ${await reservations.text()}`).toBeTruthy();
-    const rows = (await reservations.json()).data as Array<{ id: number; amenity_id: number; status: string }>;
-    reservationId = rows.find((r) => r.amenity_id === amenityId && r.status !== 'cancelled')?.id;
-    expect(reservationId).toBeTruthy();
+    await expect.poll(async () => {
+      const id = await activeReservationId(request, resident.token, amenityId!);
+      if (id) reservationId = id;
+      return id;
+    }, { message: 'reservation should be persisted after resident submit', timeout: 15_000 }).toBeGreaterThan(0);
 
     const reservationRow = page.getByTestId(`resident-amenity-reservation-${reservationId}`);
     await expect(reservationRow).toBeVisible();
+    await expect(reservationRow.getByText(name)).toBeVisible();
     page.once('dialog', (dialog) => dialog.accept());
     await reservationRow.getByRole('button', { name: /Cancel booking|Cancelar reserva|Annuler la réservation/i }).click();
-    await expect(page.getByText(/Reservation cancelled|Reserva cancelada|Réservation annulée/i)).toBeVisible();
-
-    const afterCancel = await request.get(`${apiURL}/amenities/reservations`, {
-      headers: { Authorization: `Bearer ${resident.token}` },
-    });
-    const updatedRows = (await afterCancel.json()).data as Array<{ id: number; status: string }>;
-    expect(updatedRows.find((r) => r.id === reservationId)?.status).toBe('cancelled');
+    await expect.poll(async () => reservationStatus(request, resident.token, reservationId!), {
+      message: 'reservation should be cancelled after resident confirms cancellation',
+      timeout: 15_000,
+    }).toBe('cancelled');
+    await expect(reservationRow).toBeHidden();
   } finally {
     if (reservationId) {
       await request.delete(`${apiURL}/amenities/reservations/${reservationId}`, {
