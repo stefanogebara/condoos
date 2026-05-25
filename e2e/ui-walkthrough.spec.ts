@@ -82,6 +82,7 @@ const re = {
   spendBreakdown: /Para onde está indo o dinheiro|Where the money is going|A dónde va el dinero|Où va l’argent/i,
   noSpend: /Sem despesas registradas|No expenses recorded|Sin gastos registrados|Aucune dépense enregistrée/i,
   displayedUnit: /Unidade exibida|Displayed unit|Unidad mostrada|Lot affiché/i,
+  todayInUnit: /Today in your unit|Hoje na sua unidade|Hoy en tu unidad|Aujourd’hui dans votre lot/i,
   visitors: /^(Visitantes|Visitors|Visiteurs)$/i,
   newVisitor: /Novo visitante|New visitor|Nuevo visitante|Nouveau visiteur/i,
   partyNotice: /Vai ter festa\? Avise a portaria|Having a party\? Let the front desk know|¿Habrá fiesta\? Avisa a portería|Il y a une fête \? Prévenez la conciergerie/i,
@@ -205,8 +206,23 @@ test('Proposals: Nova proposta CTA + Análise pré-votação card on discussion 
 });
 
 // ---------------------------------------------------------------------------
-// 5. Resident Transparência: read-only spend view.
+// 5. Resident Transparência: spend and dues view.
 // ---------------------------------------------------------------------------
+
+test('Resident: overview does not fetch an undisplayed finance statement', async ({ page, request }) => {
+  await seedSession(page, request, 'resident');
+  let statementRequests = 0;
+  await page.route('**/api/finance/statements/*', async (route) => {
+    statementRequests += 1;
+    await route.continue();
+  });
+
+  const dashboardLoaded = page.waitForResponse((response) => response.url().includes('/api/dashboard/actions') && response.ok());
+  await gotoApp(page, '/app');
+  await dashboardLoaded;
+  await expect(page.getByRole('heading', { name: re.todayInUnit })).toBeVisible();
+  expect(statementRequests).toBe(0);
+});
 
 test('Resident: Transparência renders the spend dashboard', async ({ page, request }) => {
   test.setTimeout(45_000);

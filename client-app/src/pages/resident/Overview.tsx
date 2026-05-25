@@ -27,9 +27,6 @@ interface Visitor { id: number; visitor_name: string; visitor_type: string; stat
 interface Reservation { id: number; amenity_name: string; starts_at: string; }
 interface Proposal { id: number; title: string; status: string; votes: { yes: number; no: number; abstain: number; total: number }; }
 interface Announcement { id: number; title: string; body: string; created_at: string; source: string; }
-interface Membership { status: string; unit_id: number; unit_number: string; building_name: string; }
-interface Invoice { id: number; amount_cents: number; due_date: string; status: string; paid_cents: number; }
-interface Statement { balance_cents: number; invoices: Invoice[]; }
 interface DashboardQuickAction { label: string; path: string; body?: Record<string, unknown>; success_label?: string; }
 interface DashboardAction {
   id: string;
@@ -45,10 +42,6 @@ interface DashboardAction {
 interface DashboardPayload {
   actions: DashboardAction[];
   unread_count: number;
-}
-
-function remainingCents(invoice: Invoice) {
-  return Math.max(0, Number(invoice.amount_cents || 0) - Number(invoice.paid_cents || 0));
 }
 
 const PROPOSAL_STATUS: Record<string, string> = {
@@ -77,7 +70,6 @@ export default function Overview() {
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [anns, setAnns] = useState<Announcement[]>([]);
-  const [statement, setStatement] = useState<Statement | null>(null);
   const [dashboard, setDashboard] = useState<DashboardPayload | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -86,17 +78,6 @@ export default function Overview() {
     const loadDashboard = () => apiGet<DashboardPayload>('/dashboard/actions').then((next) => {
       if (alive) setDashboard(next);
     });
-    async function loadStatement() {
-      const rows = await apiGet<Membership[]>('/onboarding/me');
-      if (!alive) return;
-      const active = rows.find((m) => m.status === 'active');
-      if (!active) {
-        setStatement(null);
-        return;
-      }
-      const next = await apiGet<Statement>(`/finance/statements/${active.unit_id}`);
-      if (alive) setStatement(next);
-    }
     const loads = [
       apiGet<Pkg[]>('/packages').then(setPkgs),
       apiGet<Visitor[]>('/visitors').then(setVisitors),
@@ -104,7 +85,6 @@ export default function Overview() {
       apiGet<Proposal[]>('/proposals').then(setProposals),
       apiGet<Announcement[]>('/announcements').then(setAnns),
       loadDashboard(),
-      loadStatement(),
     ];
     Promise.allSettled(loads).then((results) => {
       if (!alive) return;
@@ -119,9 +99,6 @@ export default function Overview() {
   const pendingVisitors = visitors.filter((v) => v.status === 'pending' || v.status === 'approved');
   const openProposals = proposals.filter((p) => p.status === 'voting' || p.status === 'discussion');
   const futureReservations = reservations.filter((r) => new Date(r.starts_at) > new Date());
-  const openInvoices = (statement?.invoices || [])
-    .filter((invoice) => invoice.status !== 'void' && remainingCents(invoice) > 0)
-    .sort((a, b) => a.due_date.localeCompare(b.due_date));
   const actionItems = dashboard?.actions || [];
 
   async function runQuickAction(action: DashboardAction, quick: DashboardQuickAction) {
