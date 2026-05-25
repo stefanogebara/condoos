@@ -1,5 +1,5 @@
 // Resident "Transparência" — money out (expenses) and money owed (dues).
-// Read-only view backed by /api/finance/expenses and /api/finance/statements.
+// Residents can review statements and submit payment proof for board approval.
 import React, { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { AlertCircle, CheckCircle2, ExternalLink, FileText, ReceiptText, Sparkles, UploadCloud, Wallet, X } from 'lucide-react';
@@ -111,18 +111,32 @@ export default function Transparencia() {
   const [data, setData] = useState<ExpenseList | null>(null);
   const [budgetSummary, setBudgetSummary] = useState<BudgetSummary | null>(null);
   const [memberships, setMemberships] = useState<Membership[]>([]);
+  const [selectedUnitId, setSelectedUnitId] = useState<number | null>(null);
   const [statement, setStatement] = useState<Statement | null>(null);
   const [statementLoading, setStatementLoading] = useState(true);
   const [proofTarget, setProofTarget] = useState<Invoice | null>(null);
 
-  async function loadStatement(activeMemberships?: Membership[]) {
-    const active = activeMemberships || memberships;
-    if (active.length === 0) {
+  async function loadStatement(unitId = selectedUnitId || memberships[0]?.unit_id) {
+    if (!unitId) {
       setStatement(null);
       return;
     }
-    const next = await apiGet<Statement>(`/finance/statements/${active[0].unit_id}`);
+    const next = await apiGet<Statement>(`/finance/statements/${unitId}`);
     setStatement(next);
+  }
+
+  async function selectUnit(unitId: number) {
+    const previousUnitId = selectedUnitId;
+    setSelectedUnitId(unitId);
+    setStatementLoading(true);
+    try {
+      await loadStatement(unitId);
+    } catch {
+      setSelectedUnitId(previousUnitId);
+      toast.error(tr('Não foi possível atualizar cobranças'));
+    } finally {
+      setStatementLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -142,11 +156,13 @@ export default function Transparencia() {
         const active = rows.filter((m) => m.status === 'active');
         setMemberships(active);
         if (active.length === 0) {
+          setSelectedUnitId(null);
           setStatement(null);
           setStatementLoading(false);
           return;
         }
         try {
+          setSelectedUnitId(active[0].unit_id);
           const next = await apiGet<Statement>(`/finance/statements/${active[0].unit_id}`);
           if (alive) setStatement(next);
         } catch {
@@ -158,6 +174,7 @@ export default function Transparencia() {
       .catch(() => {
         if (!alive) return;
         setMemberships([]);
+        setSelectedUnitId(null);
         setStatement(null);
         setStatementLoading(false);
       });
@@ -175,9 +192,11 @@ export default function Transparencia() {
       <ResidentStatement
         statement={statement}
         memberships={memberships}
+        selectedUnitId={selectedUnitId}
         loading={statementLoading}
         tr={tr}
         onProof={setProofTarget}
+        onSelectUnit={selectUnit}
       />
 
       {proofTarget && (
@@ -350,15 +369,19 @@ function TransparencyBudgetSummary({
 function ResidentStatement({
   statement,
   memberships,
+  selectedUnitId,
   loading,
   tr,
   onProof,
+  onSelectUnit,
 }: {
   statement: Statement | null;
   memberships: Membership[];
+  selectedUnitId: number | null;
   loading: boolean;
   tr: (key: string) => string;
   onProof: (invoice: Invoice) => void;
+  onSelectUnit: (unitId: number) => void;
 }) {
   if (loading) {
     return <GlassCard className="p-6 text-sm text-dusk-300 mb-4">{tr('Carregando…')}</GlassCard>;
@@ -392,13 +415,31 @@ function ResidentStatement({
             <div className="flex items-center gap-2 mb-1">
               <Wallet className="w-5 h-5 text-dusk-400" />
               <h3 className="font-display text-lg text-dusk-500">{tr('Minha unidade')}</h3>
-              <Badge tone="neutral">{tr('Apto')} {statement.unit.number}</Badge>
+              <Badge tone="neutral"><span data-testid="statement-unit-number">{tr('Apto')} {statement.unit.number}</span></Badge>
             </div>
             <p className="text-xs text-dusk-300">{statement.unit.building_name}</p>
+            {memberships.length > 1 && (
+              <label className="block mt-3 max-w-xs text-xs uppercase tracking-wider text-dusk-300">
+                {tr('Unidade exibida')}
+                <select
+                  className="input mt-1 text-sm normal-case tracking-normal"
+                  aria-label={tr('Unidade exibida')}
+                  value={selectedUnitId || ''}
+                  disabled={loading}
+                  onChange={(event) => onSelectUnit(Number(event.target.value))}
+                >
+                  {memberships.map((membership) => (
+                    <option key={membership.unit_id} value={membership.unit_id}>
+                      {tr('Apto')} {membership.unit_number} - {membership.building_name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
           </div>
           <div className="text-right">
             <div className="text-xs uppercase tracking-wider text-dusk-300">{tr('Saldo aberto')}</div>
-            <div className="font-display text-2xl text-dusk-500">{formatCurrency(statement.balance_cents / 100)}</div>
+            <div data-testid="statement-balance" className="font-display text-2xl text-dusk-500">{formatCurrency(statement.balance_cents / 100)}</div>
             {statement.balance_cents === 0 && (
               <div className="inline-flex items-center gap-1 text-xs text-sage-700 mt-1">
                 <CheckCircle2 className="w-3.5 h-3.5" /> {tr('Em dia')}

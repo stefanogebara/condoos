@@ -81,6 +81,7 @@ const re = {
   transparency: /^(Transparência|Transparency|Transparencia|Transparence)$/i,
   spendBreakdown: /Para onde está indo o dinheiro|Where the money is going|A dónde va el dinero|Où va l’argent/i,
   noSpend: /Sem despesas registradas|No expenses recorded|Sin gastos registrados|Aucune dépense enregistrée/i,
+  displayedUnit: /Unidade exibida|Displayed unit|Unidad mostrada|Lot affiché/i,
   visitors: /^(Visitantes|Visitors|Visiteurs)$/i,
   newVisitor: /Novo visitante|New visitor|Nuevo visitante|Nouveau visiteur/i,
   partyNotice: /Vai ter festa\? Avise a portaria|Having a party\? Let the front desk know|¿Habrá fiesta\? Avisa a portería|Il y a une fête \? Prévenez la conciergerie/i,
@@ -219,6 +220,59 @@ test('Resident: Transparência renders the spend dashboard', async ({ page, requ
   const breakdown = page.getByRole('heading', { name: re.spendBreakdown });
   const empty = page.getByText(re.noSpend);
   await expect(breakdown.or(empty)).toBeVisible({ timeout: 15_000 });
+});
+
+test('Resident: Transparência switches statements for multiple active units', async ({ page, request }) => {
+  await seedSession(page, request, 'resident');
+
+  await page.route('**/api/onboarding/me', async (route) => {
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: [
+          { status: 'active', unit_id: 101, unit_number: '101', building_name: 'Torre A' },
+          { status: 'active', unit_id: 202, unit_number: '202', building_name: 'Torre B' },
+          { status: 'active', unit_id: 303, unit_number: '303', building_name: 'Torre C' },
+        ],
+      }),
+    });
+  });
+  await page.route('**/api/finance/statements/*', async (route) => {
+    if (route.request().url().endsWith('/303')) {
+      await route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'temporary_failure' }) });
+      return;
+    }
+    const secondUnit = route.request().url().endsWith('/202');
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          unit: {
+            id: secondUnit ? 202 : 101,
+            number: secondUnit ? '202' : '101',
+            building_name: secondUnit ? 'Torre B' : 'Torre A',
+          },
+          invoices: [],
+          payments: [],
+          payment_proofs: [],
+          balance_cents: secondUnit ? 45600 : 12300,
+        },
+      }),
+    });
+  });
+
+  await gotoApp(page, '/app/transparencia');
+  const selector = page.getByLabel(re.displayedUnit);
+  await expect(selector).toBeVisible();
+  await expect(page.getByTestId('statement-unit-number')).toContainText('101');
+
+  await selector.selectOption('202');
+  await expect(page.getByTestId('statement-unit-number')).toContainText('202');
+  await expect(page.getByTestId('statement-balance')).toContainText('456');
+
+  await page.getByLabel(re.displayedUnit).selectOption('303');
+  await expect(page.getByLabel(re.displayedUnit)).toHaveValue('202');
+  await expect(page.getByTestId('statement-unit-number')).toContainText('202');
 });
 
 // ---------------------------------------------------------------------------

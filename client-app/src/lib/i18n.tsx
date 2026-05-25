@@ -660,6 +660,7 @@ const phrases: Copy[] = [
   c('Quando o síndico começar a lançar as despesas do prédio, elas aparecem aqui automaticamente — com valor, fornecedor e link do recibo.', 'When the board starts logging building expenses, they appear here automatically — with amount, vendor, and receipt link.', 'Cuando el administrador empiece a registrar los gastos del edificio, aparecerán aquí automáticamente — con valor, proveedor y enlace del recibo.', 'Quand le syndic commence à enregistrer les dépenses de l’immeuble, elles apparaissent ici automatiquement — avec montant, prestataire et lien vers le reçu.'),
   c('Lançamentos', 'Expenses', 'Gastos', 'Dépenses'),
   c('Minha unidade', 'My unit', 'Mi unidad', 'Mon lot'),
+  c('Unidade exibida', 'Displayed unit', 'Unidad mostrada', 'Lot affiché'),
   c('Minhas cobranças', 'My charges', 'Mis cobros', 'Mes appels de charges'),
   c('Saldo aberto', 'Open balance', 'Saldo pendiente', 'Solde ouvert'),
   c('Em dia', 'Up to date', 'Al día', 'À jour'),
