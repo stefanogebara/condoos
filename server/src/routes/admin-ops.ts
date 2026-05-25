@@ -7,7 +7,7 @@ import { requireAuth, requireRole, requireBoardCapability, AuthedRequest } from 
 import { ok, fail, asyncHandler } from '../lib/respond';
 import { createRateLimit } from '../lib/rate-limit';
 import { audit } from '../lib/audit';
-import { runBackup, getBackupStatus, backupConfigured, verifyBackupObject, runRestoreDrill, runRestoreBootDrill } from '../lib/backup';
+import { runBackup, getBackupStatus, getBackupFreshness, backupConfigured, verifyBackupObject, runRestoreDrill, runRestoreBootDrill } from '../lib/backup';
 import { getWhatsAppStatus } from '../lib/whatsapp';
 import { privateCreateBuildingRequired } from '../lib/private-access';
 import { getQueueStatusSnapshot } from '../lib/agent-dispatch-queue';
@@ -46,9 +46,11 @@ const backupRestoreBootDrillRateLimit = createRateLimit({
   key: (req) => String((req as AuthedRequest).user?.id || req.ip || 'unknown'),
 });
 
-router.get('/backup/status', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (_req: AuthedRequest, res) => {
-  return ok(res, getBackupStatus());
-});
+router.get('/backup/status', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), asyncHandler(async (_req: AuthedRequest, res) => {
+  const status = getBackupStatus();
+  const freshness = await getBackupFreshness();
+  return ok(res, { ...status, freshness });
+}));
 
 router.get('/integrations/status', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (_req: AuthedRequest, res) => {
   const activeSetupCodes = db.prepare(

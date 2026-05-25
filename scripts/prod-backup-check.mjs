@@ -21,6 +21,7 @@ const shouldRestoreBootDrill = hasFlag('--restore-boot-drill');
 const shouldRestoreDrill = hasFlag('--restore-drill') || shouldRunBackup;
 const shouldVerifyBackup = hasFlag('--verify') || shouldRunBackup;
 const requireConfigured = hasFlag('--require-configured');
+const requireFresh = hasFlag('--require-fresh');
 const rateLimitBypassSecret =
   process.env.E2E_RATE_LIMIT_BYPASS_SECRET
   || process.env.CONDOOS_RATE_LIMIT_BYPASS_SECRET
@@ -67,6 +68,18 @@ async function main() {
   const status = await jsonRequest('/admin/backup/status', { headers: auth });
   if (requireConfigured && !status.configured) {
     throw new Error('production backups are not configured');
+  }
+  if (requireFresh) {
+    const freshness = status.freshness || {};
+    if (freshness.stale === true) {
+      const where = freshness.latest_object_key
+        ? `latest=${freshness.latest_object_key} age=${freshness.age_hours}h threshold=${freshness.stale_threshold_hours}h`
+        : `error=${freshness.error || 'unknown'} threshold=${freshness.stale_threshold_hours}h`;
+      throw new Error(`backup freshness check failed (stale): ${where}`);
+    }
+    if (!freshness.ok && freshness.error && freshness.error !== 'no_backup_objects') {
+      throw new Error(`backup freshness check errored: ${freshness.error}`);
+    }
   }
 
   let run = null;
@@ -148,6 +161,13 @@ async function main() {
     bucket_configured: !!status.bucket,
     retention_days: status.retention_days,
     last_attempt_at: status.last_attempt_at || null,
+    freshness_ok: status.freshness?.ok ?? null,
+    freshness_stale: status.freshness?.stale ?? null,
+    freshness_latest_object_key: status.freshness?.latest_object_key || null,
+    freshness_latest_object_at: status.freshness?.latest_object_at || null,
+    freshness_age_hours: status.freshness?.age_hours ?? null,
+    freshness_stale_threshold_hours: status.freshness?.stale_threshold_hours ?? null,
+    freshness_error: status.freshness?.error || null,
     ran_backup: !!run,
     backup_key: run?.key || null,
     backup_size_bytes: run?.size_bytes || null,

@@ -4690,6 +4690,147 @@ test('backup: restore boot drill starts an isolated API against the restored sna
   }
 });
 
+test('backup: freshness reports not_configured when storage is absent', async () => {
+  const { getBackupFreshness } = loadFreshBackupModule();
+  const result = await getBackupFreshness();
+  assert.equal(result.ok, false);
+  assert.equal(result.error, 'not_configured');
+  assert.equal(result.stale, undefined);
+});
+
+test('backup: freshness flags stale when latest object older than threshold', async () => {
+  const { S3Client } = await import('@aws-sdk/client-s3');
+  const keys = [
+    'BACKUP_S3_BUCKET', 'BACKUP_S3_ACCESS_KEY', 'BACKUP_S3_SECRET_KEY',
+    'BACKUP_S3_ENDPOINT', 'BACKUP_S3_REGION', 'BACKUP_S3_KEY_PREFIX',
+    'BACKUP_STALE_HOURS',
+    'R2_BUCKET', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_ENDPOINT', 'R2_REGION',
+  ];
+  const previousEnv = new Map(keys.map((k) => [k, process.env[k]]));
+  const originalSend = S3Client.prototype.send;
+  try {
+    for (const k of keys) delete process.env[k];
+    process.env.R2_BUCKET = 'condoos-private-uploads';
+    process.env.R2_ACCESS_KEY_ID = 'r2-access';
+    process.env.R2_SECRET_ACCESS_KEY = 'r2-secret';
+    process.env.R2_ENDPOINT = 'https://example.r2.cloudflarestorage.com';
+    process.env.R2_REGION = 'auto';
+    process.env.BACKUP_STALE_HOURS = '36';
+
+    const ancient = new Date(Date.now() - 72 * 3_600_000); // 72h old
+    S3Client.prototype.send = async (command: any) => {
+      if (command.constructor.name === 'ListObjectsV2Command') {
+        return {
+          Contents: [
+            { Key: 'condoos-sqlite/condoos-ancient.sqlite.gz', LastModified: ancient, Size: 999 },
+          ],
+        };
+      }
+      throw new Error(`unexpected command ${command.constructor.name}`);
+    };
+
+    const { getBackupFreshness } = loadFreshBackupModule();
+    const result = await getBackupFreshness();
+    assert.equal(result.ok, true);
+    assert.equal(result.stale, true);
+    assert.equal(result.stale_threshold_hours, 36);
+    assert.equal(result.latest_object_key, 'condoos-sqlite/condoos-ancient.sqlite.gz');
+    assert.ok((result.age_hours || 0) >= 71);
+  } finally {
+    S3Client.prototype.send = originalSend;
+    for (const [k, v] of previousEnv) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+    loadFreshBackupModule();
+  }
+});
+
+test('backup: freshness reports fresh when latest object is recent', async () => {
+  const { S3Client } = await import('@aws-sdk/client-s3');
+  const keys = [
+    'BACKUP_S3_BUCKET', 'BACKUP_S3_ACCESS_KEY', 'BACKUP_S3_SECRET_KEY',
+    'BACKUP_S3_ENDPOINT', 'BACKUP_S3_REGION', 'BACKUP_S3_KEY_PREFIX',
+    'BACKUP_STALE_HOURS',
+    'R2_BUCKET', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_ENDPOINT', 'R2_REGION',
+  ];
+  const previousEnv = new Map(keys.map((k) => [k, process.env[k]]));
+  const originalSend = S3Client.prototype.send;
+  try {
+    for (const k of keys) delete process.env[k];
+    process.env.R2_BUCKET = 'condoos-private-uploads';
+    process.env.R2_ACCESS_KEY_ID = 'r2-access';
+    process.env.R2_SECRET_ACCESS_KEY = 'r2-secret';
+    process.env.R2_ENDPOINT = 'https://example.r2.cloudflarestorage.com';
+    process.env.R2_REGION = 'auto';
+
+    const recent = new Date(Date.now() - 2 * 3_600_000); // 2h old
+    S3Client.prototype.send = async (command: any) => {
+      if (command.constructor.name === 'ListObjectsV2Command') {
+        return {
+          Contents: [
+            { Key: 'condoos-sqlite/condoos-old.sqlite.gz', LastModified: new Date('2026-01-01T00:00:00Z'), Size: 111 },
+            { Key: 'condoos-sqlite/condoos-fresh.sqlite.gz', LastModified: recent, Size: 222 },
+          ],
+        };
+      }
+      throw new Error(`unexpected command ${command.constructor.name}`);
+    };
+
+    const { getBackupFreshness } = loadFreshBackupModule();
+    const result = await getBackupFreshness();
+    assert.equal(result.ok, true);
+    assert.equal(result.stale, false);
+    assert.equal(result.latest_object_key, 'condoos-sqlite/condoos-fresh.sqlite.gz');
+    assert.ok((result.age_hours || 0) < 3);
+  } finally {
+    S3Client.prototype.send = originalSend;
+    for (const [k, v] of previousEnv) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+    loadFreshBackupModule();
+  }
+});
+
+test('backup: freshness reports no_objects when bucket is empty', async () => {
+  const { S3Client } = await import('@aws-sdk/client-s3');
+  const keys = [
+    'BACKUP_S3_BUCKET', 'BACKUP_S3_ACCESS_KEY', 'BACKUP_S3_SECRET_KEY',
+    'BACKUP_S3_ENDPOINT', 'BACKUP_S3_REGION', 'BACKUP_S3_KEY_PREFIX',
+    'R2_BUCKET', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_ENDPOINT', 'R2_REGION',
+  ];
+  const previousEnv = new Map(keys.map((k) => [k, process.env[k]]));
+  const originalSend = S3Client.prototype.send;
+  try {
+    for (const k of keys) delete process.env[k];
+    process.env.R2_BUCKET = 'condoos-private-uploads';
+    process.env.R2_ACCESS_KEY_ID = 'r2-access';
+    process.env.R2_SECRET_ACCESS_KEY = 'r2-secret';
+    process.env.R2_ENDPOINT = 'https://example.r2.cloudflarestorage.com';
+    process.env.R2_REGION = 'auto';
+
+    S3Client.prototype.send = async (command: any) => {
+      if (command.constructor.name === 'ListObjectsV2Command') return { Contents: [] };
+      throw new Error(`unexpected command ${command.constructor.name}`);
+    };
+
+    const { getBackupFreshness } = loadFreshBackupModule();
+    const result = await getBackupFreshness();
+    assert.equal(result.ok, true);
+    assert.equal(result.stale, true);
+    assert.equal(result.latest_object_key, undefined);
+    assert.equal(result.error, 'no_backup_objects');
+  } finally {
+    S3Client.prototype.send = originalSend;
+    for (const [k, v] of previousEnv) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+    loadFreshBackupModule();
+  }
+});
+
 test('backup: db.backup() produces a readable consistent snapshot', async () => {
   // Don't go through runBackup() (it needs S3). Just prove the underlying
   // snapshot mechanism works end-to-end: write data, snapshot, reopen,

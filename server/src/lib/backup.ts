@@ -44,6 +44,9 @@ const ACCESS_KEY = process.env.BACKUP_S3_ACCESS_KEY || process.env.R2_ACCESS_KEY
 const SECRET_KEY = process.env.BACKUP_S3_SECRET_KEY || process.env.R2_SECRET_ACCESS_KEY || '';
 const KEY_PREFIX = (process.env.BACKUP_S3_KEY_PREFIX || 'condoos-sqlite').replace(/\/$/, '');
 const RETENTION_DAYS = Math.max(1, Number(process.env.BACKUP_RETENTION_DAYS || 30));
+// Daily cadence + 12h buffer for clock drift / a single missed run.
+// Bumping past 36h means a fully missed day passes silently.
+const STALE_THRESHOLD_HOURS = Math.max(1, Number(process.env.BACKUP_STALE_HOURS || 36));
 
 export function backupConfigured(): boolean {
   return !!(BUCKET && ACCESS_KEY && SECRET_KEY);
@@ -556,6 +559,58 @@ export function getBackupStatus() {
     last_attempt_at: lastAttemptAt,
     last_result: lastResult,
   };
+}
+
+export interface BackupFreshnessResult {
+  ok: boolean;
+  latest_object_key?: string;
+  latest_object_at?: string;
+  age_hours?: number;
+  stale_threshold_hours: number;
+  stale?: boolean;
+  error?: string;
+}
+
+// Source-of-truth freshness check: the in-memory lastAttemptAt resets on
+// every Fly machine restart, so it can lie after a deploy. The objects in
+// the bucket don't. List them, find the newest, compute age. If the last
+// successful backup is older than STALE_THRESHOLD_HOURS, the scheduler has
+// stalled silently — which is what we want a daily audit job to catch.
+export async function getBackupFreshness(): Promise<BackupFreshnessResult> {
+  if (!backupConfigured()) {
+    return { ok: false, stale_threshold_hours: STALE_THRESHOLD_HOURS, error: 'not_configured' };
+  }
+  try {
+    const client = s3Client();
+    const list = await client.send(new ListObjectsV2Command({ Bucket: BUCKET, Prefix: `${KEY_PREFIX}/` }));
+    const latest = latestBackupObject((list.Contents || []) as _Object[]);
+    if (!latest?.Key || !latest.LastModified) {
+      // No objects yet — treat as stale so a fresh prod with a broken
+      // scheduler doesn't quietly look "fine".
+      return {
+        ok: true,
+        stale: true,
+        stale_threshold_hours: STALE_THRESHOLD_HOURS,
+        error: 'no_backup_objects',
+      };
+    }
+    const ageMs = Date.now() - latest.LastModified.getTime();
+    const ageHours = ageMs / 3_600_000;
+    return {
+      ok: true,
+      latest_object_key: latest.Key,
+      latest_object_at: latest.LastModified.toISOString(),
+      age_hours: Number(ageHours.toFixed(2)),
+      stale_threshold_hours: STALE_THRESHOLD_HOURS,
+      stale: ageHours > STALE_THRESHOLD_HOURS,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      stale_threshold_hours: STALE_THRESHOLD_HOURS,
+      error: (err as Error).message || 'backup_freshness_failed',
+    };
+  }
 }
 
 // Compute ms until the next BACKUP_HOUR_UTC (default 03:00 UTC — a quiet

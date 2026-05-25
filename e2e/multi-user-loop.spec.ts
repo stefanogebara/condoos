@@ -20,8 +20,10 @@
 //   5. Admin sets quorum=0% + 1h voting window (so any vote passes)
 //   6. Admin transitions proposal: discussion → voting
 //   7. Admin votes 'yes'
-//   8. Resident votes 'yes'
-//   9. Assert tally: 2 yes, 0 no, 0 abstain
+//   8. Each available resident votes 'yes' (1, 2, or 3 residents
+//      depending on which E2E_RESIDENT*/E2E_RESIDENT2_*/E2E_RESIDENT3_*
+//      env pairs are set — see voter-count detection below)
+//   9. Assert tally: N yes (1 admin + R residents), 0 no, 0 abstain
 //  10. Admin closes proposal: voting → approved
 //  11. Cleanup: best-effort soft-delete the ticket
 //
@@ -30,7 +32,9 @@
 // proposal stays as 'approved' (harmless — they pile up but the
 // dashboard truncates).
 //
-// Skips when E2E_ADMIN_*/E2E_RESIDENT_* are not present.
+// Skips when E2E_ADMIN_*/E2E_RESIDENT_* are not present. Optional
+// E2E_RESIDENT2_*/E2E_RESIDENT3_* upgrade the assertion from 2-voter
+// to 3-voter / 4-voter without changing the test shape.
 
 import { expect, test, type APIRequestContext } from '@playwright/test';
 
@@ -41,6 +45,16 @@ const adminEmail = process.env.E2E_ADMIN_EMAIL;
 const adminPassword = process.env.E2E_ADMIN_PASSWORD;
 const residentEmail = process.env.E2E_RESIDENT_EMAIL;
 const residentPassword = process.env.E2E_RESIDENT_PASSWORD;
+
+// Optional extra residents. Provisioned via
+// scripts/provision-e2e-residents.mjs and wired as GitHub secrets.
+// When all 3 pairs are set, the test asserts a 3-voter tally; when
+// only the primary resident is present, it asserts a 2-voter tally.
+type ResidentCreds = { email: string; password: string };
+const extraResidentCreds: ResidentCreds[] = [
+  { email: process.env.E2E_RESIDENT2_EMAIL || '', password: process.env.E2E_RESIDENT2_PASSWORD || '' },
+  { email: process.env.E2E_RESIDENT3_EMAIL || '', password: process.env.E2E_RESIDENT3_PASSWORD || '' },
+].filter((c): c is ResidentCreds => !!c.email && !!c.password);
 
 type Session = { token: string; user: { id: number; role: string } };
 
@@ -54,7 +68,7 @@ function authHeaders(session: Session): Record<string, string> {
   return { Authorization: `Bearer ${session.token}` };
 }
 
-test('multi-user loop: ticket → agent → proposal → 2-voter tally → close', async ({ request }) => {
+test('multi-user loop: ticket → agent → proposal → N-voter tally → close', async ({ request }) => {
   test.skip(!adminEmail || !adminPassword || !residentEmail || !residentPassword,
     'requires E2E_ADMIN_* and E2E_RESIDENT_* credentials');
 
@@ -62,6 +76,17 @@ test('multi-user loop: ticket → agent → proposal → 2-voter tally → close
   const resident = await login(request, residentEmail!, residentPassword!);
   const adminH = authHeaders(admin);
   const residentH = authHeaders(resident);
+
+  // Each entry is one ballot's auth headers. Admin + primary resident
+  // are always present; the extras are skipped when their secrets
+  // aren't configured. Expected yes count = residentHs.length + 1
+  // (the +1 is the admin's own vote, cast separately below).
+  const residentHs: Array<Record<string, string>> = [residentH];
+  for (const creds of extraResidentCreds) {
+    const extra = await login(request, creds.email, creds.password);
+    residentHs.push(authHeaders(extra));
+  }
+  const expectedYes = residentHs.length + 1;
 
   // Make sure auto-dispatch is ON so step 3 has a queue row to wait on.
   // Same setup as pilot-ticket-lifecycle.
@@ -161,27 +186,32 @@ test('multi-user loop: ticket → agent → proposal → 2-voter tally → close
     });
     expect(adminVote.ok(), `admin vote failed: ${adminVote.status()} ${await adminVote.text()}`).toBeTruthy();
 
-    // ───── 8. Resident votes yes ────────────────────────────────────
-    const residentVote = await request.post(`${apiURL}/proposals/${proposalId}/vote`, {
-      headers: residentH,
-      data: { choice: 'yes' },
-    });
-    expect(residentVote.ok(), `resident vote failed: ${residentVote.status()} ${await residentVote.text()}`).toBeTruthy();
+    // ───── 8. Each available resident votes yes ─────────────────────
+    // Loop over residentHs so the test scales 1 → 2 → 3 residents
+    // automatically based on which E2E_RESIDENT* secrets are set.
+    for (let i = 0; i < residentHs.length; i++) {
+      const r = residentHs[i];
+      const vote = await request.post(`${apiURL}/proposals/${proposalId}/vote`, {
+        headers: r,
+        data: { choice: 'yes' },
+      });
+      expect(vote.ok(), `resident #${i + 1} vote failed: ${vote.status()} ${await vote.text()}`).toBeTruthy();
+    }
 
-    // ───── 9. Tally matches (2 yes, 0 no, 0 abstain) ────────────────
+    // ───── 9. Tally matches (expectedYes yes, 0 no, 0 abstain) ──────
     // GET /proposals/:id returns the tally under `votes` (yes / no /
     // abstain / total — see proposal-tally.ts) and a quorum block
-    // alongside. Both should reflect both ballots and a met quorum.
+    // alongside. Both should reflect every ballot and a met quorum.
     const fetched = await request.get(`${apiURL}/proposals/${proposalId}`, { headers: adminH });
     expect(fetched.ok()).toBeTruthy();
     const body = (await fetched.json()).data;
     const votes = body.votes;
     expect(votes, `proposal ${proposalId} response missing votes: ${JSON.stringify(body)}`).toBeTruthy();
-    expect(votes.yes, 'expected 2 yes votes (admin + resident)').toBe(2);
+    expect(votes.yes, `expected ${expectedYes} yes votes (admin + ${residentHs.length} resident${residentHs.length === 1 ? '' : 's'})`).toBe(expectedYes);
     expect(votes.no || 0).toBe(0);
     expect(votes.abstain || 0).toBe(0);
-    expect(votes.total).toBe(2);
-    expect(body.quorum?.quorum_met, 'quorum should be met at 0% with 2 ballots cast').toBe(true);
+    expect(votes.total).toBe(expectedYes);
+    expect(body.quorum?.quorum_met, `quorum should be met at 0% with ${expectedYes} ballots cast`).toBe(true);
 
     // ───── 10. Close proposal: voting → approved ────────────────────
     const approved = await request.post(`${apiURL}/proposals/${proposalId}/status`, {

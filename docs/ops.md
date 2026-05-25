@@ -327,6 +327,203 @@ intentionally small; it exercises the live client, auth, dashboard, tickets,
 finance, integrations, and agent queue status under bounded concurrency so it
 can run in CI without becoming a load test against customers.
 
+## Backup Freshness (Stale-Scheduler Alert)
+
+`GET /api/admin/backup/status` includes a `freshness` block computed by listing
+the bucket and reading the newest object's `LastModified`:
+
+```json
+{
+  "freshness": {
+    "ok": true,
+    "latest_object_key": "condoos-sqlite/condoos-2026-05-25T03-00-15.sqlite.gz",
+    "latest_object_at": "2026-05-25T03:00:15.000Z",
+    "age_hours": 4.31,
+    "stale_threshold_hours": 36,
+    "stale": false
+  }
+}
+```
+
+The bucket is the source of truth — the scheduler's in-memory `last_attempt_at`
+resets on every Fly machine restart, so it can show `null` even when prod is
+healthy. The bucket's `LastModified` survives restarts.
+
+`stale` is `true` when `age_hours > stale_threshold_hours` (default 36h —
+24h daily cadence plus a 12h buffer for clock drift or one missed run). Tune
+via `BACKUP_STALE_HOURS` on Fly when needed.
+
+`audit:prod:backup` now enforces freshness with `--require-fresh`. The scheduled
+`Full Audit` GitHub Action runs daily at 07:23 UTC, so a silently-stalled
+scheduler turns into a failed CI run within 24h of the missed window.
+
+If `audit:prod:backup` fails with `backup freshness check failed (stale)`:
+
+1. Check Fly logs for the most recent `[backup]` line:
+   ```bash
+   flyctl logs -a condoos-api | grep "\[backup\]" | tail -20
+   ```
+2. Trigger one manual snapshot to bridge the gap and confirm credentials still
+   work:
+   ```bash
+   npm run audit:prod:backup:run
+   ```
+3. If `[backup] failed:` lines reference `AccessDenied`, `InvalidAccessKeyId`,
+   or `NoSuchBucket`, the R2/S3 credentials have drifted. Rotate and re-set
+   `BACKUP_S3_*` (or `R2_*`) secrets on Fly, then `flyctl deploy -a condoos-api`.
+
+## Restoring From a Production Backup (Runbook)
+
+**When to use:** the Fly `/data` volume is lost, corrupted, or you need to roll
+back to a known-good snapshot. This is destructive against the live DB. Read
+the whole runbook before running step 4.
+
+**Prerequisites:**
+
+- `flyctl` authenticated against the `condoos-api` app.
+- `BACKUP_S3_*` (or `R2_*`) credentials available locally for the storage
+  bucket where snapshots live.
+- The S3-compatible CLI of your choice (`aws s3` works against R2 with
+  `--endpoint-url`).
+
+### Step 1 — Confirm the bucket has a usable backup
+
+Hit the status endpoint via the audit script. This is non-destructive and just
+proves you can talk to S3, that the bucket has at least one object, and that
+the latest one isn't stale:
+
+```bash
+npm run audit:prod:backup
+```
+
+Expected: `"ok": true`, `freshness_stale: false`.
+
+### Step 2 — Dry-run restore against a temp DB
+
+Prove the backup is actually restorable end-to-end. This runs server-side on
+the Fly machine, downloads the snapshot to `/tmp`, opens it as SQLite, runs
+`PRAGMA integrity_check` + `PRAGMA foreign_key_check`, and does a writable
+probe — without touching the live DB:
+
+```bash
+npm run audit:prod:restore-drill
+```
+
+Then the stronger drill — boot a real API process against the restored snapshot
+on a separate port and hit `/api/health`:
+
+```bash
+npm run audit:prod:restore-boot
+```
+
+If either drill fails, stop. Pick an older snapshot via `--key` and retry
+(see Step 5 below). Do not proceed to a destructive restore against a backup
+that fails the drills.
+
+### Step 3 — Capture the current DB before overwriting
+
+Even if the live DB is suspected-bad, take one final on-disk snapshot via Fly
+SSH so the failed state is recoverable for forensics:
+
+```bash
+flyctl ssh console -a condoos-api -C "sh -lc 'cp /data/condoos.sqlite /data/condoos.sqlite.before-restore-$(date -u +%Y%m%dT%H%M%SZ)'"
+```
+
+### Step 4 — Restore (destructive)
+
+Pull the chosen snapshot onto the Fly machine and replace `/data/condoos.sqlite`
+with it. Stop the API first so no in-flight write races the swap:
+
+```bash
+# 4a. Find the key you want from the bucket. Latest is usually right; for a
+#     point-in-time rollback, list explicit keys:
+flyctl ssh console -a condoos-api
+
+# Inside the machine:
+KEY='condoos-sqlite/condoos-YYYY-MM-DDTHH-MM-SS.sqlite.gz'
+TMP=/tmp/restore-$(date -u +%Y%m%dT%H%M%SZ).sqlite
+
+# 4b. Download + gunzip. The same R2 secrets the backup writer uses are
+#     already in the machine env, so we just need the AWS CLI (or call the
+#     same S3 SDK via a small node one-liner if AWS CLI isn't installed):
+node -e "
+  const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
+  const fs = require('fs');
+  const zlib = require('zlib');
+  const { pipeline } = require('stream/promises');
+  const client = new S3Client({
+    region: process.env.BACKUP_S3_REGION || process.env.R2_REGION || 'auto',
+    endpoint: process.env.BACKUP_S3_ENDPOINT || process.env.R2_ENDPOINT,
+    credentials: {
+      accessKeyId: process.env.BACKUP_S3_ACCESS_KEY || process.env.R2_ACCESS_KEY_ID,
+      secretAccessKey: process.env.BACKUP_S3_SECRET_KEY || process.env.R2_SECRET_ACCESS_KEY,
+    },
+    forcePathStyle: true,
+  });
+  (async () => {
+    const obj = await client.send(new GetObjectCommand({
+      Bucket: process.env.BACKUP_S3_BUCKET || process.env.R2_BUCKET,
+      Key: process.env.RESTORE_KEY,
+    }));
+    await pipeline(obj.Body, zlib.createGunzip(), fs.createWriteStream(process.env.RESTORE_OUT));
+  })();
+" 2>&1
+
+# Then run it with env:
+RESTORE_KEY=$KEY RESTORE_OUT=$TMP node /tmp/restore-fetch.mjs
+
+# 4c. Integrity-check the downloaded file before swap:
+sqlite3 $TMP 'PRAGMA integrity_check;'   # must print: ok
+
+# 4d. Atomic swap. The Fly machine doesn't auto-restart on file replace, but
+#     better-sqlite3 holds an open fd against the old inode; do a clean
+#     process restart afterwards:
+mv $TMP /data/condoos.sqlite
+exit
+
+# 4e. Restart the API so the new file is the one opened on next connect:
+flyctl machine restart -a condoos-api
+```
+
+### Step 5 — Restore from a non-latest snapshot
+
+If the most recent snapshot is bad (e.g., it caught corruption mid-window),
+pass `--key` to the audit script to drill against an older one before
+restoring:
+
+```bash
+# Pass through the script as --key=condoos-sqlite/...sqlite.gz; the
+# /admin/backup/restore-drill endpoint accepts an explicit key in the
+# JSON body. Forward it on the CLI:
+node scripts/prod-backup-check.mjs --require-configured --restore-drill --key=condoos-sqlite/condoos-YYYY-MM-DDTHH-MM-SS.sqlite.gz
+```
+
+(The script's `--key` passthrough is currently implicit — the API accepts
+`{"key":"..."}` on `/admin/backup/restore-drill`. If you need a specific older
+key, edit `prod-backup-check.mjs` to set `body: JSON.stringify({ key: ... })`
+or hit the endpoint directly with `curl`.)
+
+### Step 6 — Verify after restore
+
+After the API restarts:
+
+```bash
+# Health
+curl -fsS https://condoos-api.fly.dev/api/health | jq
+
+# Smoke the board admin login + one read
+npm run audit:prod:credentials
+
+# Re-trigger one fresh backup so the post-restore state is itself backed up
+npm run audit:prod:backup:run
+```
+
+### Step 7 — Rollback the restore
+
+If the restored DB is itself bad, the pre-restore snapshot from Step 3 is on
+the machine as `/data/condoos.sqlite.before-restore-*`. Swap it back the same
+way (Step 4d) and restart.
+
 ## Production E2E Against Vercel
 
 Vercel Deployment Protection can show the Security Checkpoint to automated
@@ -422,6 +619,29 @@ Optional GitHub variables:
 E2E_EXPECT_GOOGLE=1
 E2E_EXPECT_WHATSAPP=1
 ```
+
+Optional extra residents for richer `multi-user-loop.spec.ts` coverage:
+
+```text
+E2E_RESIDENT2_EMAIL
+E2E_RESIDENT2_PASSWORD
+E2E_RESIDENT3_EMAIL
+E2E_RESIDENT3_PASSWORD
+```
+
+When all three resident pairs are set, the multi-user-loop spec asserts a
+4-voter tally (admin + 3 residents). With only the primary set, it falls
+back to a 2-voter tally automatically. To provision the extra prod accounts:
+
+```bash
+node scripts/provision-e2e-residents.mjs --password '<at-least-16-chars>'
+# Then set the GitHub secrets the script prints at the end.
+```
+
+The script is idempotent and re-aligns `password_hash` on subsequent runs, so
+it doubles as the rotation tool for these accounts. It attaches the new
+residents to the same unit as `e2e-resident@condoos.test` — `voter_eligibility
+= 'all'` only requires an active `user_unit` row, no new unit needed.
 
 Optional write-enabled live-provider secrets:
 
