@@ -272,7 +272,7 @@ router.post('/invoices/:id/void', requireAuth, requireRole('board_admin'), requi
   return ok(res, result);
 });
 
-router.get('/statements/:unit_id', requireAuth, (req: AuthedRequest, res) => {
+router.get('/statements/:unit_id', requireAuth, requireBoardCapability('finance'), (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const unitId = Number(req.params.unit_id);
   if (!Number.isInteger(unitId) || unitId <= 0) return fail(res, 'invalid_unit_id', 400);

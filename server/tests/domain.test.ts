@@ -38,6 +38,7 @@ import {
 } from '../src/lib/finance';
 import { requireAuth, requireActiveMembership, requireBoardCapability, revokeUserTokens, signToken } from '../src/lib/auth';
 import proposalsRoutes from '../src/routes/proposals';
+import financeRoutes from '../src/routes/finance';
 import { canAssignTicketToUser, listTicketTimeline, markTicketAgentFailed, recordTicketEvent } from '../src/lib/tickets';
 import { createTicketQuote, listTicketQuotes, updateTicketQuoteStatus } from '../src/lib/ticket-quotes';
 import { createAgentRun, finishAgentRunFailure, finishAgentRunSuccess, reapStaleAgentRuns } from '../src/lib/agent-runs';
@@ -4371,6 +4372,84 @@ test('finance: userCanSeeUnit rejects cross-unit reads from non-admin residents'
   const admin = createUser('board@example.com', 'board_admin');
   db.prepare(`UPDATE users SET condominium_id = ? WHERE id = ?`).run(condoId, admin);
   assert.equal(userCanSeeUnit(admin, 'board_admin', unit102, condoId), true);
+});
+
+test('finance statements require finance capability for scoped board staff', async () => {
+  resetDb();
+  const { condoId, unit101 } = createCondoFixture();
+  const agencyAdminId = createUser('statements-agency-admin@example.com', 'board_admin');
+  const maintenanceId = createUser('statements-maintenance@example.com');
+  const financeId = createUser('statements-finance@example.com');
+  const residentId = createUser('statements-resident@example.com');
+  const agency = linkCondominiumToAgency({
+    agencyName: 'Statement Access Management',
+    condominiumId: condoId,
+    userId: agencyAdminId,
+  });
+  assert.ok(agency);
+  upsertAgencyStaff({
+    agencyId: agency!.agencyId,
+    email: 'statements-maintenance@example.com',
+    role: 'maintenance_manager',
+    buildingIds: [condoId],
+  });
+  upsertAgencyStaff({
+    agencyId: agency!.agencyId,
+    email: 'statements-finance@example.com',
+    role: 'finance_manager',
+    buildingIds: [condoId],
+  });
+  db.prepare(`UPDATE users SET condominium_id = ? WHERE id = ?`).run(condoId, residentId);
+  db.prepare(
+    `INSERT INTO user_unit (user_id, unit_id, relationship, status, primary_contact, voting_weight)
+     VALUES (?, ?, 'tenant', 'active', 1, 1.0)`
+  ).run(residentId, unit101);
+  db.prepare(
+    `INSERT INTO invoices (condominium_id, unit_id, amount_cents, currency, period, due_date)
+     VALUES (?, ?, 12900, 'BRL', '2026-05', '2026-05-10T12:00:00.000Z')`
+  ).run(condoId, unit101);
+
+  const app = express();
+  app.use(express.json());
+  app.use('/api/finance', financeRoutes);
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise<void>((resolve, reject) => {
+    if (server.listening) return resolve();
+    server.once('listening', resolve);
+    server.once('error', reject);
+  });
+
+  try {
+    const { port } = server.address() as AddressInfo;
+    const url = `http://127.0.0.1:${port}/api/finance/statements/${unit101}`;
+    const getStatement = (userId: number) => fetch(url, {
+      headers: { Authorization: `Bearer ${signToken(userId)}` },
+    });
+
+    const maintenance = await getStatement(maintenanceId);
+    assert.equal(maintenance.status, 403);
+    assert.deepEqual(await maintenance.json(), {
+      success: false,
+      error: 'agency_capability_forbidden',
+      required_capability: 'finance',
+    });
+
+    const finance = await getStatement(financeId);
+    assert.equal(finance.status, 200);
+    const financeBody = await finance.json() as any;
+    assert.equal(financeBody.data.balance_cents, 12900);
+
+    const resident = await getStatement(residentId);
+    assert.equal(resident.status, 200);
+    const residentBody = await resident.json() as any;
+    assert.equal(residentBody.data.balance_cents, 12900);
+  } finally {
+    if (server.listening) {
+      await new Promise<void>((resolve, reject) => {
+        server.close((err) => err ? reject(err) : resolve());
+      });
+    }
+  }
 });
 
 function loadFreshBackupModule(): typeof import('../src/lib/backup') {
