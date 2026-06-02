@@ -118,6 +118,38 @@ export type AgencyPortfolioAttentionKind =
   | 'pending_residents'
   | 'proposals_missing_budget';
 
+export const AGENCY_PORTFOLIO_ATTENTION_KINDS: AgencyPortfolioAttentionKind[] = [
+  'urgent_tickets',
+  'recurring_problem_clusters',
+  'vendor_follow_up_problems',
+  'vendor_sla_problems',
+  'overdue_dues',
+  'pending_payment_proofs',
+  'pending_residents',
+  'proposals_missing_budget',
+];
+
+export const AGENCY_RISK_FOLLOWUP_STATUSES = ['open', 'in_progress', 'waiting', 'done'] as const;
+export type AgencyRiskFollowupStatus = typeof AGENCY_RISK_FOLLOWUP_STATUSES[number];
+
+export interface AgencyRiskFollowup {
+  id: number;
+  agency_id: number;
+  condominium_id: number;
+  kind: AgencyPortfolioAttentionKind;
+  record_id: string;
+  owner_user_id: number | null;
+  owner_email: string | null;
+  owner_name: string | null;
+  status: AgencyRiskFollowupStatus;
+  due_at: string | null;
+  note: string | null;
+  created_by_user_id: number | null;
+  updated_by_user_id: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface AgencyScorecardDrilldownRecord {
   id: number | string;
   title: string;
@@ -127,6 +159,7 @@ export interface AgencyScorecardDrilldownRecord {
   occurred_at: string | null;
   amount_cents?: number | null;
   currency?: string | null;
+  follow_up?: AgencyRiskFollowup | null;
 }
 
 export interface AgencyScorecardDrilldown {
@@ -621,10 +654,12 @@ function buildAgencyBuildingScorecard(
 }
 
 function buildAgencyScorecardDrilldowns(
+  agencyId: number,
   condominiumId: number,
   metrics: AgencyBuildingMetrics,
 ): AgencyScorecardDrilldown[] {
   const out: AgencyScorecardDrilldown[] = [];
+  const followups = loadAgencyRiskFollowupMap(agencyId, condominiumId);
   const add = (
     kind: AgencyPortfolioAttentionKind,
     route: string,
@@ -636,7 +671,10 @@ function buildAgencyScorecardDrilldowns(
       kind,
       route,
       count: countValue,
-      records: records.slice(0, 3),
+      records: records.slice(0, 3).map((record) => ({
+        ...record,
+        follow_up: followups.get(`${kind}:${String(record.id)}`) || null,
+      })),
     });
   };
 
@@ -908,6 +946,21 @@ const ATTENTION_CONFIG: Record<AgencyPortfolioAttentionKind, {
   proposals_missing_budget: { severity: 'info', route: '/board/proposals', priority: 5 },
 };
 
+export const AGENCY_RISK_KIND_CAPABILITIES: Record<AgencyPortfolioAttentionKind, AgencyBuildingCapability> = {
+  urgent_tickets: 'maintenance',
+  recurring_problem_clusters: 'maintenance',
+  vendor_follow_up_problems: 'maintenance',
+  vendor_sla_problems: 'maintenance',
+  overdue_dues: 'finance',
+  pending_payment_proofs: 'finance',
+  pending_residents: 'building_admin',
+  proposals_missing_budget: 'building_admin',
+};
+
+export function agencyRiskKindCapability(kind: AgencyPortfolioAttentionKind): AgencyBuildingCapability {
+  return AGENCY_RISK_KIND_CAPABILITIES[kind];
+}
+
 function buildingIdsForMembership(membership: AgencyMembership): number[] {
   const rows = db.prepare(
     `SELECT ac.condominium_id
@@ -928,6 +981,219 @@ function buildingIdsForMembership(membership: AgencyMembership): number[] {
      ORDER BY amb.condominium_id`
   ).all(membership.agency_id, membership.id) as Array<{ condominium_id: number }>;
   return assigned.map((row) => Number(row.condominium_id));
+}
+
+function isAgencyPortfolioAttentionKind(value: unknown): value is AgencyPortfolioAttentionKind {
+  return typeof value === 'string' && AGENCY_PORTFOLIO_ATTENTION_KINDS.includes(value as AgencyPortfolioAttentionKind);
+}
+
+function isAgencyRiskFollowupStatus(value: unknown): value is AgencyRiskFollowupStatus {
+  return typeof value === 'string' && (AGENCY_RISK_FOLLOWUP_STATUSES as readonly string[]).includes(value);
+}
+
+function assertAgencyMembershipCanAccessBuilding(
+  membership: AgencyMembership,
+  condominiumId: number,
+): void {
+  const allowedBuildingIds = buildingIdsForMembership(membership);
+  if (allowedBuildingIds.includes(condominiumId)) return;
+  throw Object.assign(new Error('agency_building_forbidden'), { status: 403 });
+}
+
+function assertAgencyRiskFollowupAccess(
+  membership: AgencyMembership,
+  condominiumId: number,
+  kind: AgencyPortfolioAttentionKind,
+): void {
+  assertAgencyMembershipCanAccessBuilding(membership, condominiumId);
+  assertAgencyMembershipCanUseCapability(membership, agencyRiskKindCapability(kind));
+}
+
+function assertAgencyRiskOwner(
+  agencyId: number,
+  condominiumId: number,
+  ownerUserId: number | null,
+): void {
+  if (!ownerUserId) return;
+  const ownerMembership = db.prepare(
+    `SELECT id, role
+     FROM agency_memberships
+     WHERE agency_id = ? AND user_id = ?
+     LIMIT 1`
+  ).get(agencyId, ownerUserId) as { id: number; role: AgencyRole } | undefined;
+  if (!ownerMembership) {
+    throw Object.assign(new Error('agency_owner_not_found'), { status: 400 });
+  }
+  if (ownerMembership.role === 'agency_admin') return;
+  const assigned = db.prepare(
+    `SELECT 1
+     FROM agency_member_buildings
+     WHERE agency_membership_id = ? AND condominium_id = ?
+     LIMIT 1`
+  ).get(ownerMembership.id, condominiumId);
+  if (!assigned) {
+    throw Object.assign(new Error('agency_owner_forbidden'), { status: 403 });
+  }
+}
+
+function mapAgencyRiskFollowup(row: any): AgencyRiskFollowup {
+  const ownerName = [row.owner_first_name, row.owner_last_name]
+    .map((part) => String(part || '').trim())
+    .filter(Boolean)
+    .join(' ');
+  return {
+    id: Number(row.id),
+    agency_id: Number(row.agency_id),
+    condominium_id: Number(row.condominium_id),
+    kind: row.kind,
+    record_id: String(row.record_id),
+    owner_user_id: row.owner_user_id == null ? null : Number(row.owner_user_id),
+    owner_email: row.owner_email || null,
+    owner_name: ownerName || row.owner_email || null,
+    status: row.status,
+    due_at: row.due_at || null,
+    note: row.note || null,
+    created_by_user_id: row.created_by_user_id == null ? null : Number(row.created_by_user_id),
+    updated_by_user_id: row.updated_by_user_id == null ? null : Number(row.updated_by_user_id),
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}
+
+function riskFollowupSelectSql(whereClause: string): string {
+  return `SELECT arf.id, arf.agency_id, arf.condominium_id, arf.kind, arf.record_id,
+                 arf.owner_user_id, owner.email AS owner_email,
+                 owner.first_name AS owner_first_name, owner.last_name AS owner_last_name,
+                 arf.status, arf.due_at, arf.note, arf.created_by_user_id,
+                 arf.updated_by_user_id, arf.created_at, arf.updated_at
+          FROM agency_risk_followups arf
+          LEFT JOIN users owner ON owner.id = arf.owner_user_id
+          ${whereClause}`;
+}
+
+function getAgencyRiskFollowupById(id: number): AgencyRiskFollowup | null {
+  const row = db.prepare(
+    riskFollowupSelectSql(`WHERE arf.id = ? LIMIT 1`)
+  ).get(id);
+  return row ? mapAgencyRiskFollowup(row) : null;
+}
+
+function loadAgencyRiskFollowupMap(
+  agencyId: number,
+  condominiumId: number,
+): Map<string, AgencyRiskFollowup> {
+  const rows = db.prepare(
+    riskFollowupSelectSql(
+      `WHERE arf.agency_id = ? AND arf.condominium_id = ?
+       ORDER BY datetime(arf.updated_at) DESC, arf.id DESC`
+    )
+  ).all(agencyId, condominiumId);
+  const out = new Map<string, AgencyRiskFollowup>();
+  for (const row of rows) {
+    const followup = mapAgencyRiskFollowup(row);
+    out.set(`${followup.kind}:${followup.record_id}`, followup);
+  }
+  return out;
+}
+
+export function listAgencyRiskFollowups(
+  membership: AgencyMembership,
+  condominiumId: number,
+): AgencyRiskFollowup[] {
+  assertAgencyMembershipCanAccessBuilding(membership, condominiumId);
+  const rows = db.prepare(
+    riskFollowupSelectSql(
+      `WHERE arf.agency_id = ? AND arf.condominium_id = ?
+       ORDER BY
+         CASE arf.status WHEN 'open' THEN 0 WHEN 'in_progress' THEN 1 WHEN 'waiting' THEN 2 ELSE 3 END,
+         CASE WHEN arf.due_at IS NULL THEN 1 ELSE 0 END,
+         datetime(arf.due_at) ASC,
+         datetime(arf.updated_at) DESC`
+    )
+  ).all(membership.agency_id, condominiumId);
+  return rows.map(mapAgencyRiskFollowup);
+}
+
+export function upsertAgencyRiskFollowup(
+  membership: AgencyMembership,
+  input: {
+    condominiumId: number;
+    kind: AgencyPortfolioAttentionKind;
+    recordId: number | string;
+    ownerUserId?: number | null;
+    status?: AgencyRiskFollowupStatus | null;
+    dueAt?: string | null;
+    note?: string | null;
+    actorUserId?: number | null;
+  },
+): AgencyRiskFollowup {
+  const condominiumId = Math.floor(Number(input.condominiumId));
+  if (!Number.isInteger(condominiumId) || condominiumId <= 0) {
+    throw Object.assign(new Error('invalid_condominium'), { status: 400 });
+  }
+  if (!isAgencyPortfolioAttentionKind(input.kind)) {
+    throw Object.assign(new Error('invalid_risk_kind'), { status: 400 });
+  }
+  assertAgencyRiskFollowupAccess(membership, condominiumId, input.kind);
+
+  const recordId = String(input.recordId ?? '').trim();
+  if (!recordId) throw Object.assign(new Error('invalid_record'), { status: 400 });
+
+  const status = input.status || 'open';
+  if (!isAgencyRiskFollowupStatus(status)) {
+    throw Object.assign(new Error('invalid_risk_status'), { status: 400 });
+  }
+
+  const ownerUserId = input.ownerUserId == null ? null : Math.floor(Number(input.ownerUserId));
+  if (ownerUserId != null && (!Number.isInteger(ownerUserId) || ownerUserId <= 0)) {
+    throw Object.assign(new Error('invalid_owner'), { status: 400 });
+  }
+  assertAgencyRiskOwner(membership.agency_id, condominiumId, ownerUserId);
+
+  const dueAt = input.dueAt?.trim() || null;
+  if (dueAt && Number.isNaN(Date.parse(dueAt))) {
+    throw Object.assign(new Error('invalid_due_at'), { status: 400 });
+  }
+
+  const note = input.note?.trim() || null;
+  if (note && note.length > 1000) {
+    throw Object.assign(new Error('note_too_long'), { status: 400 });
+  }
+
+  const result = db.prepare(
+    `INSERT INTO agency_risk_followups (
+       agency_id, condominium_id, kind, record_id, owner_user_id, status,
+       due_at, note, created_by_user_id, updated_by_user_id
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(agency_id, condominium_id, kind, record_id) DO UPDATE SET
+       owner_user_id = excluded.owner_user_id,
+       status = excluded.status,
+       due_at = excluded.due_at,
+       note = excluded.note,
+       updated_by_user_id = excluded.updated_by_user_id,
+       updated_at = CURRENT_TIMESTAMP`
+  ).run(
+    membership.agency_id,
+    condominiumId,
+    input.kind,
+    recordId,
+    ownerUserId,
+    status,
+    dueAt,
+    note,
+    input.actorUserId || null,
+    input.actorUserId || null,
+  );
+
+  const row = db.prepare(
+    `SELECT id
+     FROM agency_risk_followups
+     WHERE agency_id = ? AND condominium_id = ? AND kind = ? AND record_id = ?
+     LIMIT 1`
+  ).get(membership.agency_id, condominiumId, input.kind, recordId) as { id: number } | undefined;
+  const followup = getAgencyRiskFollowupById(Number(row?.id || result.lastInsertRowid));
+  if (!followup) throw Object.assign(new Error('agency_risk_followup_not_found'), { status: 500 });
+  return followup;
 }
 
 function buildAgencyPermissionReview(
@@ -1271,7 +1537,7 @@ export function buildAgencyPortfolio(membership: AgencyMembership): AgencyPortfo
       metrics,
       scorecard: buildAgencyBuildingScorecard(
         metrics,
-        buildAgencyScorecardDrilldowns(condo.id, metrics),
+        buildAgencyScorecardDrilldowns(membership.agency_id, condo.id, metrics),
       ),
     };
   });

@@ -21,6 +21,24 @@ interface AgencyBuildingMetrics {
   upcoming_meetings: number;
 }
 
+type AgencyRiskFollowupStatus = 'open' | 'in_progress' | 'waiting' | 'done';
+
+interface AgencyRiskFollowup {
+  id: number;
+  agency_id: number;
+  condominium_id: number;
+  kind: AgencyAttentionKind;
+  record_id: string;
+  owner_user_id: number | null;
+  owner_email: string | null;
+  owner_name: string | null;
+  status: AgencyRiskFollowupStatus;
+  due_at: string | null;
+  note: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 interface AgencyBuilding {
   id: number;
   name: string;
@@ -47,6 +65,7 @@ interface AgencyBuilding {
         occurred_at: string | null;
         amount_cents?: number | null;
         currency?: string | null;
+        follow_up?: AgencyRiskFollowup | null;
       }>;
     }>;
   };
@@ -85,6 +104,17 @@ const ATTENTION_SEVERITY: Record<AgencyAttentionKind, AgencyAttentionItem['sever
   pending_payment_proofs: 'warning',
   pending_residents: 'info',
   proposals_missing_budget: 'info',
+};
+
+const RISK_KIND_CAPABILITY: Record<AgencyAttentionKind, AgencyBuildingCapability> = {
+  urgent_tickets: 'maintenance',
+  recurring_problem_clusters: 'maintenance',
+  vendor_follow_up_problems: 'maintenance',
+  vendor_sla_problems: 'maintenance',
+  overdue_dues: 'finance',
+  pending_payment_proofs: 'finance',
+  pending_residents: 'building_admin',
+  proposals_missing_budget: 'building_admin',
 };
 
 interface AgencyAttentionItem {
@@ -356,6 +386,36 @@ function workOrderStatusLabel(status: WorkOrderStatus) {
   return t(labels[status] || status);
 }
 
+function riskFollowupStatusLabel(status: AgencyRiskFollowupStatus) {
+  const labels: Record<AgencyRiskFollowupStatus, string> = {
+    open: 'Aberto',
+    in_progress: 'Em andamento',
+    waiting: 'Aguardando',
+    done: 'Concluído',
+  };
+  return t(labels[status] || status);
+}
+
+function riskFollowupTone(status: AgencyRiskFollowupStatus) {
+  if (status === 'done') return 'sage' as const;
+  if (status === 'waiting') return 'warning' as const;
+  if (status === 'in_progress') return 'peach' as const;
+  return 'neutral' as const;
+}
+
+function toDateInput(value: string | null | undefined) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toISOString().slice(0, 10);
+}
+
+function dateInputToIso(value: string) {
+  if (!value) return null;
+  const date = new Date(`${value}T12:00:00.000Z`);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
 function monthLabel(month: string) {
   const date = new Date(`${month}-01T00:00:00`);
   if (Number.isNaN(date.getTime())) return month;
@@ -403,21 +463,163 @@ function ScoreBar({ label, value }: { label: string; value: number }) {
   );
 }
 
-function DrilldownRecord({ record }: { record: AgencyBuilding['scorecard']['drilldowns'][number]['records'][number] }) {
+function DrilldownRecord({
+  record,
+  staff,
+  canSave,
+  saving,
+  onSave,
+}: {
+  record: AgencyBuilding['scorecard']['drilldowns'][number]['records'][number];
+  staff: AgencyStaffMember[];
+  canSave: boolean;
+  saving: boolean;
+  onSave: (payload: {
+    owner_user_id: number | null;
+    status: AgencyRiskFollowupStatus;
+    due_at: string | null;
+    note: string | null;
+  }) => Promise<void>;
+}) {
+  const followup = record.follow_up || null;
+  const [expanded, setExpanded] = useState(false);
+  const [ownerUserId, setOwnerUserId] = useState(followup?.owner_user_id ? String(followup.owner_user_id) : '');
+  const [status, setStatus] = useState<AgencyRiskFollowupStatus>(followup?.status || 'open');
+  const [dueDate, setDueDate] = useState(toDateInput(followup?.due_at));
+  const [note, setNote] = useState(followup?.note || '');
+
+  useEffect(() => {
+    setOwnerUserId(followup?.owner_user_id ? String(followup.owner_user_id) : '');
+    setStatus(followup?.status || 'open');
+    setDueDate(toDateInput(followup?.due_at));
+    setNote(followup?.note || '');
+  }, [record.id, followup?.id, followup?.owner_user_id, followup?.status, followup?.due_at, followup?.note]);
+
+  const ownerOptions = useMemo(() => {
+    const options = staff.map((member) => ({
+      id: member.user_id,
+      label: [member.first_name, member.last_name].filter(Boolean).join(' ') || member.email,
+      email: member.email,
+    }));
+    if (followup?.owner_user_id && !options.some((option) => option.id === followup.owner_user_id)) {
+      options.push({
+        id: followup.owner_user_id,
+        label: followup.owner_name || followup.owner_email || t('Responsável atual'),
+        email: followup.owner_email || '',
+      });
+    }
+    return options;
+  }, [staff, followup?.owner_user_id, followup?.owner_name, followup?.owner_email]);
+
+  const followupSummary = followup
+    ? [
+      followup.owner_name || followup.owner_email || t('Sem responsável'),
+      followup.due_at ? formatDate(followup.due_at) : t('Sem prazo'),
+    ].filter(Boolean).join(' · ')
+    : t('Sem acompanhamento');
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    await onSave({
+      owner_user_id: ownerUserId ? Number(ownerUserId) : null,
+      status,
+      due_at: dateInputToIso(dueDate),
+      note: note.trim() || null,
+    });
+    setExpanded(false);
+  }
+
   return (
-    <div className="flex items-start justify-between gap-3 py-1.5">
-      <div className="min-w-0">
-        <div className="text-sm font-medium text-dusk-500 truncate" data-user-content>{record.title}</div>
-        <div className="text-xs text-dusk-300 truncate" data-user-content>
-          {[record.detail, record.status, record.occurred_at ? formatDateTime(record.occurred_at) : null]
-            .filter(Boolean)
-            .join(' · ')}
+    <div className="py-2">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-sm font-medium text-dusk-500 truncate" data-user-content>{record.title}</div>
+          <div className="text-xs text-dusk-300 truncate" data-user-content>
+            {[record.detail, record.status, record.occurred_at ? formatDateTime(record.occurred_at) : null]
+              .filter(Boolean)
+              .join(' · ')}
+          </div>
+          <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+            <Badge tone={riskFollowupTone(followup?.status || 'open')}>
+              {followup ? riskFollowupStatusLabel(followup.status) : t('Sem acompanhamento')}
+            </Badge>
+            <span className="text-[11px] text-dusk-300 truncate" data-user-content>{followupSummary}</span>
+          </div>
+        </div>
+        <div className="shrink-0 flex items-center gap-2">
+          {record.amount_cents != null && (
+            <span className="text-xs font-semibold text-dusk-400">
+              {record.currency || ''} {(record.amount_cents / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+          )}
+          {canSave && (
+            <Button type="button" variant="ghost" size="sm" onClick={() => setExpanded((value) => !value)}>
+              {followup ? t('Editar') : t('Acompanhar')}
+            </Button>
+          )}
         </div>
       </div>
-      {record.amount_cents != null && (
-        <span className="shrink-0 text-xs font-semibold text-dusk-400">
-          {record.currency || ''} {(record.amount_cents / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-        </span>
+
+      {expanded && canSave && (
+        <form onSubmit={submit} className="mt-3 rounded-2xl border border-white/70 bg-white/55 p-3 space-y-3">
+          <div className="grid sm:grid-cols-3 gap-2">
+            <label className="block">
+              <span className="text-[10px] uppercase tracking-[0.12em] text-dusk-300">{t('Estado')}</span>
+              <select
+                value={status}
+                onChange={(event) => setStatus(event.target.value as AgencyRiskFollowupStatus)}
+                className="mt-1 w-full rounded-2xl bg-white/70 border border-white/70 px-3 py-2 text-sm text-dusk-500 outline-none"
+              >
+                {(['open', 'in_progress', 'waiting', 'done'] as AgencyRiskFollowupStatus[]).map((item) => (
+                  <option key={item} value={item}>{riskFollowupStatusLabel(item)}</option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-[10px] uppercase tracking-[0.12em] text-dusk-300">{t('Responsável')}</span>
+              <select
+                value={ownerUserId}
+                onChange={(event) => setOwnerUserId(event.target.value)}
+                disabled={ownerOptions.length === 0}
+                className="mt-1 w-full rounded-2xl bg-white/70 border border-white/70 px-3 py-2 text-sm text-dusk-500 outline-none disabled:opacity-60"
+              >
+                <option value="">{t('Sem responsável')}</option>
+                {ownerOptions.map((owner) => (
+                  <option key={owner.id} value={owner.id}>
+                    {owner.label}{owner.email && owner.label !== owner.email ? ` · ${owner.email}` : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-[10px] uppercase tracking-[0.12em] text-dusk-300">{t('Prazo')}</span>
+              <input
+                type="date"
+                value={dueDate}
+                onChange={(event) => setDueDate(event.target.value)}
+                className="mt-1 w-full rounded-2xl bg-white/70 border border-white/70 px-3 py-2 text-sm text-dusk-500 outline-none"
+              />
+            </label>
+          </div>
+          <label className="block">
+            <span className="text-[10px] uppercase tracking-[0.12em] text-dusk-300">{t('Nota')}</span>
+            <textarea
+              rows={2}
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
+              placeholder={t('Próximo passo, ligação ou decisão esperada')}
+              className="mt-1 w-full rounded-2xl bg-white/70 border border-white/70 px-3 py-2 text-sm text-dusk-500 outline-none resize-none"
+            />
+          </label>
+          <div className="flex items-center justify-end gap-2">
+            <Button type="button" variant="ghost" size="sm" onClick={() => setExpanded(false)}>
+              {t('Cancelar')}
+            </Button>
+            <Button type="submit" variant="sage" size="sm" loading={saving}>
+              {t('Salvar acompanhamento')}
+            </Button>
+          </div>
+        </form>
       )}
     </div>
   );
@@ -518,6 +720,8 @@ export default function BoardAgencyPortfolio() {
   const [staffError, setStaffError] = useState<string | null>(null);
   const [createdStaffInvite, setCreatedStaffInvite] = useState<AgencyStaffInvite | null>(null);
   const [copiedStaffInvite, setCopiedStaffInvite] = useState(false);
+  const [followupSavingKey, setFollowupSavingKey] = useState<string | null>(null);
+  const [followupError, setFollowupError] = useState<string | null>(null);
   const [switchingBuildingId, setSwitchingBuildingId] = useState<number | null>(null);
   const [auditEvents, setAuditEvents] = useState<AgencyAuditEvent[]>([]);
   const [auditEventsLoading, setAuditEventsLoading] = useState(false);
@@ -853,6 +1057,40 @@ export default function BoardAgencyPortfolio() {
     await switchActiveBuilding(building, item.route);
   }
 
+  async function saveRiskFollowup(
+    buildingId: number,
+    kind: AgencyAttentionKind,
+    recordId: number | string,
+    payload: {
+      owner_user_id: number | null;
+      status: AgencyRiskFollowupStatus;
+      due_at: string | null;
+      note: string | null;
+    },
+  ) {
+    if (!primaryAgency) return;
+    const key = `${buildingId}:${kind}:${recordId}`;
+    setFollowupSavingKey(key);
+    setFollowupError(null);
+    try {
+      await apiPost<{ follow_up: AgencyRiskFollowup }>(`/agencies/${primaryAgency.id}/risk-followups`, {
+        condominium_id: buildingId,
+        kind,
+        record_id: String(recordId),
+        owner_user_id: payload.owner_user_id,
+        status: payload.status,
+        due_at: payload.due_at,
+        note: payload.note,
+      });
+      await load();
+      await loadAuditEvents(primaryAgency.id);
+    } catch {
+      setFollowupError(t('Não foi possível salvar o acompanhamento.'));
+    } finally {
+      setFollowupSavingKey(null);
+    }
+  }
+
   return (
     <>
       <div className="flex items-start justify-between gap-4 flex-wrap mb-8">
@@ -1154,6 +1392,11 @@ export default function BoardAgencyPortfolio() {
                     {building.scorecard.drilldowns.length > 0 && (
                       <div className="mt-4 border-t border-white/70 pt-4">
                         <div className="text-xs uppercase tracking-[0.12em] text-dusk-300 mb-2">{t('Registros que explicam o risco')}</div>
+                        {followupError && (
+                          <div className="mb-3 rounded-2xl bg-peach-100/70 border border-peach-200 text-sm text-peach-600 px-3 py-2">
+                            {followupError}
+                          </div>
+                        )}
                         <div className="space-y-3">
                           {building.scorecard.drilldowns.slice(0, 3).map((drilldown) => (
                             <div key={drilldown.kind} className="border-b border-white/60 pb-3 last:border-b-0 last:pb-0">
@@ -1177,7 +1420,14 @@ export default function BoardAgencyPortfolio() {
                                   <div className="text-sm text-dusk-300 py-2">{t('Sem registros recentes.')}</div>
                                 ) : (
                                   drilldown.records.map((record) => (
-                                    <DrilldownRecord key={`${drilldown.kind}:${record.id}`} record={record} />
+                                    <DrilldownRecord
+                                      key={`${drilldown.kind}:${record.id}`}
+                                      record={record}
+                                      staff={staff}
+                                      canSave={agencyCapabilitySet.has(RISK_KIND_CAPABILITY[drilldown.kind])}
+                                      saving={followupSavingKey === `${building.id}:${drilldown.kind}:${record.id}`}
+                                      onSave={(payload) => saveRiskFollowup(building.id, drilldown.kind, record.id, payload)}
+                                    />
                                   ))
                                 )}
                               </div>

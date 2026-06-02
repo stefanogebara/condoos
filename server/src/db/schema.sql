@@ -155,6 +155,32 @@ CREATE INDEX IF NOT EXISTS idx_agency_staff_invites_agency
 CREATE INDEX IF NOT EXISTS idx_agency_staff_invites_email
   ON agency_staff_invites(email, agency_id);
 
+CREATE TABLE IF NOT EXISTS agency_risk_followups (
+  id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+  agency_id           INTEGER NOT NULL REFERENCES agencies(id) ON DELETE CASCADE,
+  condominium_id      INTEGER NOT NULL REFERENCES condominiums(id) ON DELETE CASCADE,
+  kind                TEXT NOT NULL CHECK(kind IN (
+    'urgent_tickets','recurring_problem_clusters','vendor_follow_up_problems',
+    'vendor_sla_problems','overdue_dues','pending_payment_proofs',
+    'pending_residents','proposals_missing_budget'
+  )),
+  record_id           TEXT NOT NULL,
+  owner_user_id       INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  status              TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','in_progress','waiting','done')),
+  due_at              TEXT,
+  note                TEXT,
+  created_by_user_id  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  updated_by_user_id  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(agency_id, condominium_id, kind, record_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_agency_risk_followups_scope
+  ON agency_risk_followups(agency_id, condominium_id, status, due_at);
+CREATE INDEX IF NOT EXISTS idx_agency_risk_followups_owner
+  ON agency_risk_followups(owner_user_id, status, due_at);
+
 -- Packages waiting at front desk
 CREATE TABLE IF NOT EXISTS packages (
   id               INTEGER PRIMARY KEY AUTOINCREMENT,

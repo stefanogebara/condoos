@@ -433,10 +433,21 @@ This slice makes portfolio risk explainable from the command center:
 - Mark user-created/system-seeded record titles as content data so i18n sweeps do not confuse them with untranslated UI chrome.
 - Cover the drilldowns through the agency portfolio domain test, the portfolio browser walkthrough, and the Spanish admin i18n leak sweep.
 
+## Completed Slice: Agency Risk Follow-Ups
+
+This slice turns portfolio risk from a passive signal into owned operational work:
+
+- Add `agency_risk_followups` so each agency risk record can store owner, status, due date, note, actor, and timestamps.
+- Attach follow-up metadata directly to `/api/agencies/portfolio` scorecard drilldown records.
+- Add a scoped `POST /api/agencies/:agencyId/risk-followups` endpoint with audit logging.
+- Enforce building scope and role capability per risk kind: maintenance risks require maintenance access, finance risks require finance access, and resident/proposal risks require building-admin access.
+- Require assigned owners to belong to the agency and be scoped to the same building unless they are agency admins.
+- Add compact follow-up controls on `/board/portfolio` so managers can track, edit, assign, date, and close risks without leaving the command center.
+- Cover the behavior with the agency portfolio domain test, production build, and the portfolio browser walkthrough.
+
 ## Current Execution Slice: Enterprise Operations Hardening
 
 The next implementation slice should keep building on the private-enterprise plan:
 
 - Continue turning portfolio reporting into a true agency command center.
-- Add owner, due date, and follow-up state handling for agency risk items so the command center can track who is fixing each issue.
 - Keep production-safe i18n, build, server tests, and pilot smoke checks green before each push.

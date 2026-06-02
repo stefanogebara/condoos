@@ -62,6 +62,8 @@ import {
   createAgencyStaffInvite,
   createAgencySetupCode,
   disableAgencySetupCode,
+  listAgencyRiskFollowups,
+  upsertAgencyRiskFollowup,
   agencyUserCanUseBuildingCapability,
   linkCondominiumToAgency,
   listAgencyAuditEvents,
@@ -79,6 +81,7 @@ import { defaultCurrencyForCondo, getCondoSettings, updateCondoSettings } from '
 
 function resetDb() {
   const tables = [
+    'agency_risk_followups',
     'agency_staff_invites',
     'private_setup_code_activations',
     'agency_member_buildings',
@@ -442,6 +445,91 @@ test('agency portfolio CSV exports scoped building metrics', async () => {
   assert.match(csv, /health_score,risk_level,maintenance_score,finance_score,community_score/);
   assert.match(csv, /,1,3,1,1,1,1,/);
   assert.match(csv, /,49,critical,30,86,80,/);
+});
+
+test('agency risk follow-ups attach owner and due date to scoped drilldown records', () => {
+  resetDb();
+  const { condoId } = createCondoFixture();
+  const secondCondoId = Number(db.prepare(
+    `INSERT INTO condominiums (name, address, invite_code) VALUES ('Second Condo', '2 Main', 'TEST02')`
+  ).run().lastInsertRowid);
+  const adminId = createUser('portfolio-admin@example.com', 'board_admin');
+  const maintenanceId = createUser('maintenance@example.com', 'board_admin');
+  const scopedOnlyId = createUser('scoped-only@example.com', 'board_admin');
+  const residentId = createUser('resident@example.com', 'resident');
+  const agency = linkCondominiumToAgency({
+    agencyName: 'Quito Operations',
+    condominiumId: condoId,
+    userId: adminId,
+  });
+  assert.ok(agency);
+  db.prepare(
+    `INSERT INTO agency_condominiums (agency_id, condominium_id) VALUES (?, ?)`
+  ).run(agency!.agencyId, secondCondoId);
+  const ownerStaff = upsertAgencyStaff({
+    agencyId: agency!.agencyId,
+    email: 'maintenance@example.com',
+    role: 'maintenance_manager',
+    buildingIds: [condoId],
+  });
+  assert.equal(ownerStaff.assigned_building_ids[0], condoId);
+  const scopedStaff = upsertAgencyStaff({
+    agencyId: agency!.agencyId,
+    email: 'scoped-only@example.com',
+    role: 'maintenance_manager',
+    buildingIds: [secondCondoId],
+  });
+  assert.equal(scopedStaff.assigned_building_ids[0], secondCondoId);
+
+  const ticketId = Number(db.prepare(
+    `INSERT INTO tickets (condominium_id, reporter_id, title, description, category, priority, status, created_at, updated_at)
+     VALUES (?, ?, 'Elevator noise', 'Noise on floor 4', 'maintenance', 'urgent', 'open', '2026-05-02T10:00:00.000Z', '2026-05-02T10:00:00.000Z')`
+  ).run(condoId, residentId).lastInsertRowid);
+
+  const adminMembership = userAgencyMemberships(adminId)[0];
+  const followup = upsertAgencyRiskFollowup(adminMembership, {
+    condominiumId: condoId,
+    kind: 'urgent_tickets',
+    recordId: ticketId,
+    ownerUserId: maintenanceId,
+    status: 'in_progress',
+    dueAt: '2026-05-20T12:00:00.000Z',
+    note: 'Call elevator vendor before board check-in.',
+    actorUserId: adminId,
+  });
+  assert.equal(followup.kind, 'urgent_tickets');
+  assert.equal(followup.owner_email, 'maintenance@example.com');
+  assert.equal(followup.status, 'in_progress');
+  assert.equal(followup.due_at, '2026-05-20T12:00:00.000Z');
+
+  const portfolio = buildAgencyPortfolio(adminMembership);
+  const building = portfolio.buildings.find((item) => item.id === condoId);
+  assert.ok(building);
+  const urgentDrilldown = building.scorecard.drilldowns.find((item) => item.kind === 'urgent_tickets');
+  assert.ok(urgentDrilldown);
+  assert.equal(urgentDrilldown.records[0].follow_up?.owner_email, 'maintenance@example.com');
+  assert.equal(urgentDrilldown.records[0].follow_up?.status, 'in_progress');
+  assert.equal(urgentDrilldown.records[0].follow_up?.note, 'Call elevator vendor before board check-in.');
+
+  const listed = listAgencyRiskFollowups(adminMembership, condoId);
+  assert.equal(listed.length, 1);
+  assert.equal(listed[0].record_id, String(ticketId));
+
+  const scopedMembership = userAgencyMemberships(scopedOnlyId)[0];
+  assert.throws(
+    () => listAgencyRiskFollowups(scopedMembership, condoId),
+    /agency_building_forbidden/,
+  );
+  assert.throws(
+    () => upsertAgencyRiskFollowup(scopedMembership, {
+      condominiumId: condoId,
+      kind: 'urgent_tickets',
+      recordId: ticketId,
+      status: 'done',
+      actorUserId: scopedOnlyId,
+    }),
+    /agency_building_forbidden/,
+  );
 });
 
 test('agency staff assignments scope portfolio building access', () => {

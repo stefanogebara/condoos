@@ -174,6 +174,21 @@ test('admin: agency portfolio renders trends and work-order story', async ({ pag
                 status: 'open',
                 route: '/board/tickets',
                 occurred_at: '2026-05-02T10:00:00.000Z',
+                follow_up: {
+                  id: 1,
+                  agency_id: 77,
+                  condominium_id: 45,
+                  kind: 'urgent_tickets',
+                  record_id: '10',
+                  owner_user_id: 501,
+                  owner_email: 'maintenance@example.com',
+                  owner_name: 'Maintenance Owner',
+                  status: 'in_progress',
+                  due_at: '2026-05-20T12:00:00.000Z',
+                  note: 'Call vendor before board check-in',
+                  created_at: '2026-05-18T12:00:00.000Z',
+                  updated_at: '2026-05-18T12:00:00.000Z',
+                },
               }],
             },
             {
@@ -224,7 +239,21 @@ test('admin: agency portfolio renders trends and work-order story', async ({ pag
   await page.route('**/api/agencies/77/staff', async (route) => route.fulfill({
     status: 200,
     contentType: 'application/json',
-    body: JSON.stringify({ data: { staff: [], invites: [] } }),
+    body: JSON.stringify({
+      data: {
+        staff: [{
+          id: 301,
+          user_id: 501,
+          email: 'maintenance@example.com',
+          first_name: 'Maintenance',
+          last_name: 'Owner',
+          role: 'maintenance_manager',
+          created_at: '2026-05-18T12:00:00.000Z',
+          assigned_building_ids: [45],
+        }],
+        invites: [],
+      },
+    }),
   }));
   await page.route('**/api/agencies/77/audit-events**', async (route) => route.fulfill({
     status: 200,
@@ -251,6 +280,8 @@ test('admin: agency portfolio renders trends and work-order story', async ({ pag
   await expect(page.getByText(/Chase stale vendor updates|Cobrar atualizações|Persigue actualizaciones|Relancez les mises/i).first()).toBeVisible();
   await expect(page.getByText(/Records explaining risk|Registros que explicam o risco/i)).toBeVisible();
   await expect(page.getByText('Elevator noise')).toBeVisible();
+  await expect(page.getByText(/In progress|Em andamento|En curso/i)).toBeVisible();
+  await expect(page.getByText(/Maintenance Owner/i)).toBeVisible();
   await expect(page.getByText('Garage gate repair').first()).toBeVisible();
 });
 

@@ -80,5 +80,6 @@ Enterprise-private readiness plus market hardening:
 - Surface recurring maintenance clusters in agency portfolio metrics, attention priorities, CSV exports, and monthly reports so managers can spot repeat building issues.
 - Surface stale vendor follow-ups in agency portfolio metrics, attention priorities, CSV exports, monthly reports, and pilot-readiness checks so managers can chase quiet vendors before a board meeting.
 - Surface exact risky records inside agency scorecards so managers can jump from health score to urgent tickets, overdue dues, vendor follow-ups, pending residents, and proposals missing budgets.
+- Let agency managers track each portfolio risk with an owner, due date, status, and note directly from the command center, with building/capability scope enforced server-side.
 - Summarize each building's monthly maintenance movement in agency reports: opened/resolved tickets, urgent tickets, work-order movement, stale vendor follow-ups, spend, and top categories.
 - Gate proposal voting behind a readiness score covering scope, budget, analysis, risks/impact, and a future voting deadline so residents vote with decision-grade context.

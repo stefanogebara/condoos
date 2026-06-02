@@ -4,6 +4,8 @@ import { AuthedRequest, requireAuth } from '../lib/auth';
 import { audit } from '../lib/audit';
 import { ok, fail, asyncHandler } from '../lib/respond';
 import {
+  AGENCY_PORTFOLIO_ATTENTION_KINDS,
+  AGENCY_RISK_FOLLOWUP_STATUSES,
   AGENCY_ROLES,
   AGENCY_EXPORT_KINDS,
   acceptAgencyStaffInvite,
@@ -26,9 +28,10 @@ import {
   switchAgencyActiveBuilding,
   updateAgencyStaff,
   upsertAgencyStaff,
+  upsertAgencyRiskFollowup,
   userAgencyMembership,
 } from '../lib/agencies';
-import type { AgencyRole } from '../lib/agencies';
+import type { AgencyPortfolioAttentionKind, AgencyRiskFollowupStatus, AgencyRole } from '../lib/agencies';
 import { sendAgencyStaffInviteEmail } from '../lib/email';
 import db from '../db';
 
@@ -51,6 +54,8 @@ const staffMemberParam = agencyIdParam.extend({
 });
 
 const agencyRoleSchema = z.enum(AGENCY_ROLES as [AgencyRole, ...AgencyRole[]]);
+const riskKindSchema = z.enum(AGENCY_PORTFOLIO_ATTENTION_KINDS as [AgencyPortfolioAttentionKind, ...AgencyPortfolioAttentionKind[]]);
+const riskFollowupStatusSchema = z.enum([...AGENCY_RISK_FOLLOWUP_STATUSES] as [AgencyRiskFollowupStatus, ...AgencyRiskFollowupStatus[]]);
 
 const setupCodeSchema = z.object({
   label: z.string().trim().min(1).max(120).optional(),
@@ -76,6 +81,16 @@ const acceptStaffInviteSchema = z.object({
 
 const activeBuildingSchema = z.object({
   condominium_id: z.coerce.number().int().positive(),
+});
+
+const riskFollowupSchema = z.object({
+  condominium_id: z.coerce.number().int().positive(),
+  kind: riskKindSchema,
+  record_id: z.union([z.string(), z.number()]).transform((value) => String(value).trim()).pipe(z.string().min(1).max(120)),
+  owner_user_id: z.coerce.number().int().positive().nullable().optional(),
+  status: riskFollowupStatusSchema.optional(),
+  due_at: z.string().datetime().nullable().optional(),
+  note: z.string().trim().max(1000).nullable().optional(),
 });
 
 const auditEventsQuerySchema = z.object({
@@ -186,6 +201,46 @@ router.get('/:agencyId/audit-events', requireAuth, asyncHandler(async (req: Auth
   const membership = agencyMembershipOrFail(req, res, params.agencyId, false);
   if (!membership) return;
   return ok(res, { events: listAgencyAuditEvents(membership, parsed.data.limit || 25) });
+}));
+
+router.post('/:agencyId/risk-followups', requireAuth, asyncHandler(async (req: AuthedRequest, res) => {
+  const params = parseParams(agencyIdParam, req);
+  if (!params) return fail(res, 'invalid_input', 400);
+  const parsed = riskFollowupSchema.safeParse(req.body);
+  if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
+  const membership = agencyMembershipOrFail(req, res, params.agencyId, false);
+  if (!membership) return;
+
+  try {
+    const followup = upsertAgencyRiskFollowup(membership, {
+      condominiumId: parsed.data.condominium_id,
+      kind: parsed.data.kind,
+      recordId: parsed.data.record_id,
+      ownerUserId: parsed.data.owner_user_id,
+      status: parsed.data.status,
+      dueAt: parsed.data.due_at,
+      note: parsed.data.note,
+      actorUserId: req.user!.id,
+    });
+    audit(req, {
+      action: 'agency.risk_followup_update',
+      condominium_id: parsed.data.condominium_id,
+      target_type: 'agency_risk_followup',
+      target_id: followup.id,
+      metadata: {
+        agency_id: params.agencyId,
+        kind: followup.kind,
+        record_id: followup.record_id,
+        owner_user_id: followup.owner_user_id,
+        status: followup.status,
+        due_at: followup.due_at,
+      },
+    });
+    return ok(res, { follow_up: followup });
+  } catch (err) {
+    if (failAgencyAccess(res, err)) return;
+    throw err;
+  }
 }));
 
 router.get('/:agencyId/staff', requireAuth, asyncHandler(async (req: AuthedRequest, res) => {
