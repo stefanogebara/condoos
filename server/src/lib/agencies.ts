@@ -108,6 +108,15 @@ export interface AgencyBuildingMetrics {
   upcoming_meetings: number;
 }
 
+export interface AgencyBuildingScorecard {
+  health_score: number;
+  risk_level: 'healthy' | 'watch' | 'critical';
+  maintenance_score: number;
+  finance_score: number;
+  community_score: number;
+  next_actions: string[];
+}
+
 export interface AgencyMaintenanceCategorySummary {
   category: string;
   count: number;
@@ -250,6 +259,7 @@ export interface AgencyPortfolio {
     address: string;
     invite_code: string | null;
     metrics: AgencyBuildingMetrics;
+    scorecard: AgencyBuildingScorecard;
   }>;
 }
 
@@ -524,6 +534,66 @@ function zeroMetrics(): AgencyBuildingMetrics {
     vendor_sla_problems: 0,
     proposals_missing_budget: 0,
     upcoming_meetings: 0,
+  };
+}
+
+function clampScore(value: number): number {
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function buildAgencyBuildingScorecard(metrics: AgencyBuildingMetrics): AgencyBuildingScorecard {
+  const maintenanceScore = clampScore(
+    100
+    - metrics.urgent_tickets * 20
+    - metrics.unresolved_tickets * 8
+    - metrics.recurring_problem_clusters * 15
+    - metrics.vendor_follow_up_problems * 11
+    - metrics.vendor_sla_problems * 20,
+  );
+  const financeScore = clampScore(
+    100
+    - metrics.overdue_dues * 14
+    - metrics.pending_payment_proofs * 8,
+  );
+  const communityScore = clampScore(
+    100
+    - metrics.pending_residents * 20
+    - metrics.proposals_missing_budget * 15,
+  );
+  const healthScore = clampScore(
+    maintenanceScore * 0.65
+    + financeScore * 0.2
+    + communityScore * 0.15,
+  );
+  const riskLevel: AgencyBuildingScorecard['risk_level'] = healthScore < 60
+    || metrics.urgent_tickets > 0
+    || metrics.vendor_sla_problems > 0
+    ? 'critical'
+    : healthScore < 80
+      || metrics.recurring_problem_clusters > 0
+      || metrics.vendor_follow_up_problems > 0
+      || metrics.overdue_dues > 0
+      ? 'watch'
+      : 'healthy';
+
+  const nextActions: string[] = [];
+  if (metrics.urgent_tickets > 0) nextActions.push('Resolve urgent tickets before the next board check-in.');
+  if (metrics.vendor_sla_problems > 0) nextActions.push('Escalate vendor SLA misses and update the work-order owner.');
+  if (metrics.recurring_problem_clusters > 0) nextActions.push('Group recurring problems into one work plan with owner and budget.');
+  if (metrics.vendor_follow_up_problems > 0) nextActions.push('Chase stale vendor updates and log next steps.');
+  if (metrics.overdue_dues > 0) nextActions.push('Review overdue dues and payment follow-up.');
+  if (metrics.pending_payment_proofs > 0) nextActions.push('Review pending payment proofs.');
+  if (metrics.pending_residents > 0) nextActions.push('Approve or reject pending resident access.');
+  if (metrics.proposals_missing_budget > 0) nextActions.push('Add budget analysis before opening proposal votes.');
+  if (nextActions.length === 0) nextActions.push('Keep the building on weekly monitoring.');
+
+  return {
+    health_score: healthScore,
+    risk_level: riskLevel,
+    maintenance_score: maintenanceScore,
+    finance_score: financeScore,
+    community_score: communityScore,
+    next_actions: nextActions.slice(0, 4),
   };
 }
 
@@ -884,23 +954,26 @@ export function buildAgencyPortfolio(membership: AgencyMembership): AgencyPortfo
       condo.id,
     );
 
+    const metrics = {
+      pending_residents: pendingResidents,
+      unresolved_tickets: openTickets,
+      urgent_tickets: urgentTickets,
+      recurring_problem_clusters: recurringProblemClusters,
+      vendor_follow_up_problems: vendorFollowUpProblems,
+      overdue_dues: overdueDues,
+      pending_payment_proofs: pendingPaymentProofs,
+      vendor_sla_problems: vendorSlaProblems,
+      proposals_missing_budget: proposalsMissingBudget,
+      upcoming_meetings: upcomingMeetings,
+    };
+
     return {
       id: condo.id,
       name: condo.name,
       address: condo.address,
       invite_code: condo.invite_code,
-      metrics: {
-        pending_residents: pendingResidents,
-        unresolved_tickets: openTickets,
-        urgent_tickets: urgentTickets,
-        recurring_problem_clusters: recurringProblemClusters,
-        vendor_follow_up_problems: vendorFollowUpProblems,
-        overdue_dues: overdueDues,
-        pending_payment_proofs: pendingPaymentProofs,
-        vendor_sla_problems: vendorSlaProblems,
-        proposals_missing_budget: proposalsMissingBudget,
-        upcoming_meetings: upcomingMeetings,
-      },
+      metrics,
+      scorecard: buildAgencyBuildingScorecard(metrics),
     };
   });
 
@@ -1609,6 +1682,12 @@ export function agencyPortfolioToCsv(portfolio: AgencyPortfolio): string {
     'vendor_sla_problems',
     'proposals_missing_budget',
     'upcoming_meetings',
+    'health_score',
+    'risk_level',
+    'maintenance_score',
+    'finance_score',
+    'community_score',
+    'next_actions',
   ];
   const lines = [headers.join(',')];
   for (const building of portfolio.buildings) {
@@ -1621,6 +1700,12 @@ export function agencyPortfolioToCsv(portfolio: AgencyPortfolio): string {
         address: building.address,
         invite_code: building.invite_code,
         ...building.metrics,
+        health_score: building.scorecard.health_score,
+        risk_level: building.scorecard.risk_level,
+        maintenance_score: building.scorecard.maintenance_score,
+        finance_score: building.scorecard.finance_score,
+        community_score: building.scorecard.community_score,
+        next_actions: building.scorecard.next_actions.join(' | '),
       };
       return csvCell(source[header]);
     }).join(','));

@@ -356,6 +356,13 @@ test('agency portfolio CSV exports scoped building metrics', async () => {
   assert.equal(portfolio.work_order_story[0].quote_count, 1);
   assert.equal(portfolio.work_order_story[0].selected_quote_count, 1);
   assert.equal(portfolio.work_order_story[0].route, '/board/tickets');
+  assert.equal(portfolio.buildings[0].scorecard.risk_level, 'critical');
+  assert.equal(portfolio.buildings[0].scorecard.health_score, 49);
+  assert.equal(portfolio.buildings[0].scorecard.maintenance_score, 30);
+  assert.equal(portfolio.buildings[0].scorecard.finance_score, 86);
+  assert.equal(portfolio.buildings[0].scorecard.community_score, 80);
+  assert.match(portfolio.buildings[0].scorecard.next_actions[0], /Resolve urgent tickets/);
+  assert.match(portfolio.buildings[0].scorecard.next_actions.join(' | '), /Chase stale vendor updates/);
 
   const report = buildAgencyMonthlyReport(membership, '2026-05');
   assert.equal(report.month, '2026-05');
@@ -414,7 +421,9 @@ test('agency portfolio CSV exports scoped building metrics', async () => {
   assert.match(csv, /Test Condo/);
   assert.match(csv, /recurring_problem_clusters/);
   assert.match(csv, /vendor_follow_up_problems/);
+  assert.match(csv, /health_score,risk_level,maintenance_score,finance_score,community_score/);
   assert.match(csv, /,1,3,1,1,1,1,/);
+  assert.match(csv, /,49,critical,30,86,80,/);
 });
 
 test('agency staff assignments scope portfolio building access', () => {

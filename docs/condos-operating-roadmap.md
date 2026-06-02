@@ -39,8 +39,8 @@ Every shipped feature must improve at least one promise:
    - Defer live processors until the workflow is trusted.
 
 4. **Maintenance as work orders**
-   - Ticket timeline events, quote comparison, quote decisions, recurring problem detection, vendor follow-up health, SLA alerts, resident-safe progress visibility, executive report snapshots, agency/building PDF reports, and per-building monthly maintenance/finance scoreboards are in place.
-   - Remaining work: trend charts and richer visual multi-building maintenance sections.
+   - Ticket timeline events, quote comparison, quote decisions, recurring problem detection, vendor follow-up health, SLA alerts, resident-safe progress visibility, executive report snapshots, agency/building PDF reports, per-building monthly maintenance/finance scoreboards, portfolio trends, work-order story, and visual operational health scorecards are in place.
+   - Remaining work: record-level drilldowns from portfolio scorecards into exact risky tickets, overdue dues, vendor follow-ups, and pending approvals.
 
 5. **Brazil + Ecuador readiness**
    - Building-level country, currency, timezone, locale, and governance mode are in place.
@@ -69,7 +69,7 @@ Enterprise-private readiness plus market hardening:
 
 - Keep production quality gates green, especially production-safe i18n sweeps.
 - Gate new building creation behind private setup codes by default outside development/test.
-- Add agency records, portfolio metrics, a prioritized attention queue, pilot readiness checklist, monthly agency report, private setup-code controls with activation tracking, staff email invites, scoped staff building assignments, permission review, assigned-building switching, and role-aware scoped portfolio/operations CSV exports above existing building workflows.
+- Add agency records, portfolio metrics, visual per-building health scorecards, a prioritized attention queue, pilot readiness checklist, monthly agency report, private setup-code controls with activation tracking, staff email invites, scoped staff building assignments, permission review, assigned-building switching, and role-aware scoped portfolio/operations CSV exports above existing building workflows.
 - Enforce scoped agency staff capabilities on server routes and board navigation so finance, maintenance, concierge, document/report, and building-admin access stay separated by role and assigned building.
 - Keep `/board/portfolio` as the shared agency entry point while scoped staff are redirected away from board pages outside their lane.
 - Add building-level Brazil/Ecuador market settings and currency defaults.

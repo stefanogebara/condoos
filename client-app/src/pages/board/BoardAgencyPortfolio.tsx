@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Ban, BarChart3, Building2, Calendar, CheckCircle2, ClipboardCheck, Copy, Download, FileArchive, FileText, KeyRound, ListChecks, LockKeyhole, PlusCircle, RefreshCw, ShieldCheck, Trash2, UserPlus, Users, Wallet, Wrench } from 'lucide-react';
+import { AlertTriangle, Ban, BarChart3, Building2, Calendar, CheckCircle2, ClipboardCheck, Copy, Download, FileArchive, FileText, Gauge, KeyRound, ListChecks, LockKeyhole, PlusCircle, RefreshCw, ShieldCheck, Trash2, UserPlus, Users, Wallet, Wrench } from 'lucide-react';
 import GlassCard from '../../components/GlassCard';
 import Badge from '../../components/Badge';
 import Button from '../../components/Button';
@@ -27,6 +27,14 @@ interface AgencyBuilding {
   address: string;
   invite_code: string | null;
   metrics: AgencyBuildingMetrics;
+  scorecard: {
+    health_score: number;
+    risk_level: 'healthy' | 'watch' | 'critical';
+    maintenance_score: number;
+    finance_score: number;
+    community_score: number;
+    next_actions: string[];
+  };
 }
 
 interface AgencyPermissionReview {
@@ -265,19 +273,6 @@ const operationalExports: Array<{ kind: AgencyExportKind; label: string; capabil
   { kind: 'audit', label: 'Auditoria', capability: 'building_admin' },
 ];
 
-const zeroBuildingMetrics: AgencyBuildingMetrics = {
-  pending_residents: 0,
-  unresolved_tickets: 0,
-  urgent_tickets: 0,
-  recurring_problem_clusters: 0,
-  vendor_follow_up_problems: 0,
-  overdue_dues: 0,
-  pending_payment_proofs: 0,
-  vendor_sla_problems: 0,
-  proposals_missing_budget: 0,
-  upcoming_meetings: 0,
-};
-
 function agencyRoleLabel(role: AgencyRole | string) {
   const labels: Record<string, string> = {
     agency_admin: 'Admin de administradora',
@@ -307,6 +302,21 @@ function attentionTone(severity: AgencyAttentionItem['severity']) {
   if (severity === 'critical') return 'peach' as const;
   if (severity === 'warning') return 'warning' as const;
   return 'sage' as const;
+}
+
+function scoreTone(level: AgencyBuilding['scorecard']['risk_level']) {
+  if (level === 'critical') return 'peach' as const;
+  if (level === 'watch') return 'warning' as const;
+  return 'sage' as const;
+}
+
+function scoreLabel(level: AgencyBuilding['scorecard']['risk_level']) {
+  const labels: Record<AgencyBuilding['scorecard']['risk_level'], string> = {
+    healthy: 'Saudável',
+    watch: 'Em observação',
+    critical: 'Crítico',
+  };
+  return t(labels[level]);
 }
 
 function workOrderStatusLabel(status: WorkOrderStatus) {
@@ -346,6 +356,24 @@ function StoryStep({ label, done }: { label: string; done: boolean }) {
       {done ? <CheckCircle2 className="w-3 h-3" /> : <span className="w-1.5 h-1.5 rounded-full bg-dusk-200" />}
       {t(label)}
     </span>
+  );
+}
+
+function ScoreBar({ label, value }: { label: string; value: number }) {
+  const safeValue = Math.max(0, Math.min(100, Math.round(value || 0)));
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-2 text-[11px] uppercase tracking-[0.1em] text-dusk-300">
+        <span>{t(label)}</span>
+        <span className="font-semibold text-dusk-500">{safeValue}</span>
+      </div>
+      <div className="mt-1 h-2 rounded-full bg-white/70 overflow-hidden">
+        <div
+          className={`h-full rounded-full ${safeValue < 60 ? 'bg-peach-400' : safeValue < 80 ? 'bg-clay-400' : 'bg-sage-500'}`}
+          style={{ width: `${safeValue}%` }}
+        />
+      </div>
+    </div>
   );
 }
 
@@ -733,7 +761,7 @@ export default function BoardAgencyPortfolio() {
     window.setTimeout(() => setCopiedStaffInvite(false), 1600);
   }
 
-  async function switchActiveBuilding(building: AgencyBuilding, route = '/board') {
+  async function switchActiveBuilding(building: Pick<AgencyBuilding, 'id'>, route = '/board') {
     if (!primaryAgency) return;
     if (user?.condominium_id === building.id) {
       window.location.href = route;
@@ -939,10 +967,7 @@ export default function BoardAgencyPortfolio() {
                           type="button"
                           variant="ghost"
                           size="sm"
-                          onClick={() => switchActiveBuilding(
-                            { id: story.condominium_id, name: story.condominium_name, address: '', invite_code: null, metrics: zeroBuildingMetrics },
-                            story.route,
-                          )}
+                          onClick={() => switchActiveBuilding({ id: story.condominium_id }, story.route)}
                           loading={switchingBuildingId === story.condominium_id}
                         >
                           {t('Abrir chamados')}
@@ -1045,6 +1070,40 @@ export default function BoardAgencyPortfolio() {
                       >
                         {t('Abrir prédio')}
                       </Button>
+                    </div>
+                  </div>
+                  <div className="mt-4 rounded-3xl border border-white/70 bg-white/55 p-4">
+                    <div className="flex items-start justify-between gap-4 flex-wrap">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-2xl bg-sage-100/80 border border-sage-200 flex items-center justify-center">
+                          <Gauge className="w-5 h-5 text-sage-700" />
+                        </div>
+                        <div>
+                          <div className="text-xs uppercase tracking-[0.14em] text-dusk-300">{t('Saúde operacional')}</div>
+                          <div className="font-display text-3xl text-dusk-500 leading-none mt-1">
+                            {building.scorecard.health_score}<span className="text-base text-dusk-300">/100</span>
+                          </div>
+                        </div>
+                      </div>
+                      <Badge tone={scoreTone(building.scorecard.risk_level)}>
+                        {scoreLabel(building.scorecard.risk_level)}
+                      </Badge>
+                    </div>
+                    <div className="grid sm:grid-cols-3 gap-3 mt-4">
+                      <ScoreBar label="Manutenção" value={building.scorecard.maintenance_score} />
+                      <ScoreBar label="Financeiro" value={building.scorecard.finance_score} />
+                      <ScoreBar label="Comunidade" value={building.scorecard.community_score} />
+                    </div>
+                    <div className="mt-4">
+                      <div className="text-xs uppercase tracking-[0.12em] text-dusk-300 mb-2">{t('Próximas ações')}</div>
+                      <div className="space-y-1.5">
+                        {building.scorecard.next_actions.slice(0, 3).map((action) => (
+                          <div key={action} className="flex items-start gap-2 text-sm text-dusk-400">
+                            <CheckCircle2 className="w-4 h-4 text-sage-700 mt-0.5 shrink-0" />
+                            <span>{t(action)}</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
                   <div className="grid sm:grid-cols-4 gap-2 mt-4">

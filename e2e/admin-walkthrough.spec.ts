@@ -151,6 +151,18 @@ test('admin: agency portfolio renders trends and work-order story', async ({ pag
         address: '1 Main',
         invite_code: 'TEST01',
         metrics,
+        scorecard: {
+          health_score: 49,
+          risk_level: 'critical',
+          maintenance_score: 30,
+          finance_score: 86,
+          community_score: 80,
+          next_actions: [
+            'Resolve urgent tickets before the next board check-in.',
+            'Group recurring problems into one work plan with owner and budget.',
+            'Chase stale vendor updates and log next steps.',
+          ],
+        },
       }],
     }],
   };
@@ -204,6 +216,11 @@ test('admin: agency portfolio renders trends and work-order story', async ({ pag
   await expect(page.getByText('Lift Vendor')).toBeVisible();
   await expect(page.getByText(/2 cotações|2 quotes/i)).toBeVisible();
   await expect(page.getByRole('button', { name: /Open tickets|Abrir chamados/i })).toBeVisible();
+  await expect(page.getByText(/Operational health|Saúde operacional/i)).toBeVisible();
+  await expect(page.getByText('49/100')).toBeVisible();
+  await expect(page.getByText(/Critical|Crítico/i)).toBeVisible();
+  await expect(page.getByText(/Maintenance|Manutenção/i).first()).toBeVisible();
+  await expect(page.getByText(/Chase stale vendor updates|Cobrar atualizações|Persigue actualizaciones|Relancez les mises/i).first()).toBeVisible();
 });
 
 test('admin: AI agent generates an operational plan', async ({ page, request }) => {

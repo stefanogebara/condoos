@@ -411,10 +411,22 @@ This slice makes resident votes harder to open without decision-grade context:
 - Update proposal E2E setup so tests open votes only after readiness is complete.
 - Cover the gate with server tests, production build, and targeted proposal E2E.
 
+## Completed Slice: Agency Operational Health Scorecards
+
+This slice makes the agency portfolio easier to sell and operate:
+
+- Add per-building operational health scorecards to `/api/agencies/portfolio`.
+- Break the score into maintenance, finance, and community/admin sub-scores.
+- Classify each building as healthy, watch, or critical.
+- Generate plain next actions from the same scoped metrics used by the portfolio attention queue.
+- Show the scorecard on `/board/portfolio` building cards with visual bars and localized next-action copy.
+- Extend portfolio CSV exports with score, risk level, sub-scores, and next actions.
+- Cover the scorecard through the agency portfolio domain test and the portfolio browser walkthrough.
+
 ## Current Execution Slice: Enterprise Operations Hardening
 
 The next implementation slice should keep building on the private-enterprise plan:
 
 - Continue turning portfolio reporting into a true agency command center.
-- Add richer visual scorecards and stronger multi-building agency priorities.
+- Turn scorecard next actions into record-level drilldowns for exact risky tickets, overdue dues, vendor follow-ups, and pending approvals.
 - Keep production-safe i18n, build, server tests, and pilot smoke checks green before each push.
