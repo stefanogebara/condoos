@@ -280,28 +280,28 @@ test('agency portfolio CSV exports scoped building metrics', async () => {
      VALUES (?, 'maintenance', 'Lift Vendor', 'Ana', '+593999000111')`
   ).run(condoId).lastInsertRowid);
   const ticketId = Number(db.prepare(
-    `INSERT INTO tickets (condominium_id, reporter_id, title, description, category, priority, status)
-     VALUES (?, ?, 'Elevator noise', 'Noise on floor 4', 'maintenance', 'urgent', 'open')`
+    `INSERT INTO tickets (condominium_id, reporter_id, title, description, category, priority, status, created_at, updated_at)
+     VALUES (?, ?, 'Elevator noise', 'Noise on floor 4', 'maintenance', 'urgent', 'open', '2026-05-02T10:00:00.000Z', '2026-05-02T10:00:00.000Z')`
   ).run(condoId, residentId).lastInsertRowid);
   db.prepare(
-    `INSERT INTO tickets (condominium_id, reporter_id, title, description, category, priority, status)
-     VALUES (?, ?, 'Elevator vibration', 'Second elevator complaint', 'maintenance', 'normal', 'open')`
+    `INSERT INTO tickets (condominium_id, reporter_id, title, description, category, priority, status, created_at, updated_at)
+     VALUES (?, ?, 'Elevator vibration', 'Second elevator complaint', 'maintenance', 'normal', 'open', '2026-05-03T10:00:00.000Z', '2026-05-03T10:00:00.000Z')`
   ).run(condoId, residentId);
   db.prepare(
-    `INSERT INTO tickets (condominium_id, reporter_id, title, description, category, priority, status, resolved_at)
-     VALUES (?, ?, 'Elevator smell', 'Third elevator complaint', 'maintenance', 'normal', 'resolved', '2026-05-14T10:00:00.000Z')`
+    `INSERT INTO tickets (condominium_id, reporter_id, title, description, category, priority, status, created_at, updated_at, resolved_at)
+     VALUES (?, ?, 'Elevator smell', 'Third elevator complaint', 'maintenance', 'normal', 'resolved', '2026-05-04T10:00:00.000Z', '2026-05-14T10:00:00.000Z', '2026-05-14T10:00:00.000Z')`
   ).run(condoId, residentId);
   const staleVendorTicketId = Number(db.prepare(
-    `INSERT INTO tickets (condominium_id, reporter_id, title, description, category, priority, status)
-     VALUES (?, ?, 'Garage gate vendor follow-up', 'Vendor has not sent update', 'access_control', 'normal', 'waiting')`
+    `INSERT INTO tickets (condominium_id, reporter_id, title, description, category, priority, status, created_at, updated_at)
+     VALUES (?, ?, 'Garage gate vendor follow-up', 'Vendor has not sent update', 'access_control', 'normal', 'waiting', '2026-05-05T10:00:00.000Z', '2026-05-05T10:00:00.000Z')`
   ).run(condoId, residentId).lastInsertRowid);
   db.prepare(
-    `INSERT INTO ticket_work_orders (ticket_id, title, status, completed_at)
-     VALUES (?, 'Elevator inspection', 'completed', '2026-05-12T10:00:00.000Z')`
+    `INSERT INTO ticket_work_orders (ticket_id, title, status, created_at, updated_at, completed_at)
+     VALUES (?, 'Elevator inspection', 'completed', '2026-05-10T10:00:00.000Z', '2026-05-12T10:00:00.000Z', '2026-05-12T10:00:00.000Z')`
   ).run(ticketId);
   db.prepare(
-    `INSERT INTO ticket_work_orders (ticket_id, service_contact_id, title, status, updated_at)
-     VALUES (?, ?, 'Garage gate repair', 'in_progress', datetime('now', '-8 day'))`
+    `INSERT INTO ticket_work_orders (ticket_id, service_contact_id, title, status, created_at, updated_at)
+     VALUES (?, ?, 'Garage gate repair', 'in_progress', '2026-05-11T10:00:00.000Z', datetime('now', '-8 day'))`
   ).run(staleVendorTicketId, vendorId);
   db.prepare(
     `INSERT INTO ticket_vendor_quotes (condominium_id, ticket_id, service_contact_id, vendor_name, quote_amount_cents, currency, status)
@@ -309,7 +309,7 @@ test('agency portfolio CSV exports scoped building metrics', async () => {
   ).run(condoId, staleVendorTicketId, vendorId);
   const invoiceId = Number(db.prepare(
     `INSERT INTO invoices (condominium_id, unit_id, amount_cents, currency, period, due_date, status)
-     VALUES (?, ?, 12000, 'USD', '2026-05', date('now', '-3 day'), 'overdue')`
+     VALUES (?, ?, 12000, 'USD', '2026-05', '2026-05-01', 'overdue')`
   ).run(condoId, unit101).lastInsertRowid);
   db.prepare(
     `INSERT INTO payments (condominium_id, invoice_id, amount_cents, method, paid_at)
