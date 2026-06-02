@@ -108,6 +108,34 @@ export interface AgencyBuildingMetrics {
   upcoming_meetings: number;
 }
 
+export type AgencyPortfolioAttentionKind =
+  | 'urgent_tickets'
+  | 'recurring_problem_clusters'
+  | 'vendor_follow_up_problems'
+  | 'vendor_sla_problems'
+  | 'overdue_dues'
+  | 'pending_payment_proofs'
+  | 'pending_residents'
+  | 'proposals_missing_budget';
+
+export interface AgencyScorecardDrilldownRecord {
+  id: number | string;
+  title: string;
+  detail: string | null;
+  status: string | null;
+  route: string;
+  occurred_at: string | null;
+  amount_cents?: number | null;
+  currency?: string | null;
+}
+
+export interface AgencyScorecardDrilldown {
+  kind: AgencyPortfolioAttentionKind;
+  route: string;
+  count: number;
+  records: AgencyScorecardDrilldownRecord[];
+}
+
 export interface AgencyBuildingScorecard {
   health_score: number;
   risk_level: 'healthy' | 'watch' | 'critical';
@@ -115,6 +143,7 @@ export interface AgencyBuildingScorecard {
   finance_score: number;
   community_score: number;
   next_actions: string[];
+  drilldowns: AgencyScorecardDrilldown[];
 }
 
 export interface AgencyMaintenanceCategorySummary {
@@ -189,16 +218,6 @@ export interface AgencyPermissionReview {
     name: string;
   }>;
 }
-
-export type AgencyPortfolioAttentionKind =
-  | 'urgent_tickets'
-  | 'recurring_problem_clusters'
-  | 'vendor_follow_up_problems'
-  | 'vendor_sla_problems'
-  | 'overdue_dues'
-  | 'pending_payment_proofs'
-  | 'pending_residents'
-  | 'proposals_missing_budget';
 
 export interface AgencyPortfolioAttentionItem {
   id: string;
@@ -541,7 +560,10 @@ function clampScore(value: number): number {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
 
-function buildAgencyBuildingScorecard(metrics: AgencyBuildingMetrics): AgencyBuildingScorecard {
+function buildAgencyBuildingScorecard(
+  metrics: AgencyBuildingMetrics,
+  drilldowns: AgencyScorecardDrilldown[] = [],
+): AgencyBuildingScorecard {
   const maintenanceScore = clampScore(
     100
     - metrics.urgent_tickets * 20
@@ -594,7 +616,281 @@ function buildAgencyBuildingScorecard(metrics: AgencyBuildingMetrics): AgencyBui
     finance_score: financeScore,
     community_score: communityScore,
     next_actions: nextActions.slice(0, 4),
+    drilldowns,
   };
+}
+
+function buildAgencyScorecardDrilldowns(
+  condominiumId: number,
+  metrics: AgencyBuildingMetrics,
+): AgencyScorecardDrilldown[] {
+  const out: AgencyScorecardDrilldown[] = [];
+  const add = (
+    kind: AgencyPortfolioAttentionKind,
+    route: string,
+    records: AgencyScorecardDrilldownRecord[],
+  ) => {
+    const countValue = Number(metrics[kind] || 0);
+    if (countValue <= 0) return;
+    out.push({
+      kind,
+      route,
+      count: countValue,
+      records: records.slice(0, 3),
+    });
+  };
+
+  add(
+    'urgent_tickets',
+    '/board/tickets',
+    (db.prepare(
+      `SELECT id, title, category, priority, status, updated_at
+       FROM tickets
+       WHERE condominium_id = ?
+         AND status NOT IN ('resolved','closed')
+         AND priority IN ('high','urgent')
+       ORDER BY CASE priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 ELSE 2 END,
+                datetime(updated_at) DESC,
+                id DESC
+       LIMIT 3`
+    ).all(condominiumId) as Array<{
+      id: number;
+      title: string;
+      category: string | null;
+      priority: string | null;
+      status: string | null;
+      updated_at: string | null;
+    }>).map((row) => ({
+      id: Number(row.id),
+      title: row.title,
+      detail: [row.category, row.priority].filter(Boolean).join(' · ') || null,
+      status: row.status,
+      route: '/board/tickets',
+      occurred_at: row.updated_at,
+    })),
+  );
+
+  add(
+    'recurring_problem_clusters',
+    '/board/tickets',
+    (db.prepare(
+      `SELECT LOWER(TRIM(COALESCE(NULLIF(category, ''), 'uncategorized'))) AS category,
+              COUNT(*) AS ticket_count,
+              MAX(updated_at) AS latest_at
+       FROM tickets
+       WHERE condominium_id = ?
+         AND status <> 'closed'
+         AND created_at >= datetime('now', '-180 day')
+       GROUP BY category
+       HAVING COUNT(*) >= 3
+       ORDER BY ticket_count DESC, datetime(latest_at) DESC
+       LIMIT 3`
+    ).all(condominiumId) as Array<{
+      category: string;
+      ticket_count: number;
+      latest_at: string | null;
+    }>).map((row) => ({
+      id: row.category,
+      title: `${row.category} (${Number(row.ticket_count)})`,
+      detail: null,
+      status: 'recurring',
+      route: '/board/tickets',
+      occurred_at: row.latest_at,
+    })),
+  );
+
+  const staleWorkOrderRows = (db.prepare(
+    `SELECT wo.id, wo.title, wo.status, wo.updated_at, wo.scheduled_for,
+            t.title AS ticket_title,
+            sc.company_name AS vendor_name
+     FROM ticket_work_orders wo
+     JOIN tickets t ON t.id = wo.ticket_id
+     LEFT JOIN service_contacts sc ON sc.id = wo.service_contact_id
+     WHERE t.condominium_id = ?
+       AND wo.service_contact_id IS NOT NULL
+       AND wo.status IN ('scheduled','in_progress')
+       AND wo.updated_at < datetime('now', '-7 day')
+     ORDER BY datetime(wo.updated_at) ASC, wo.id ASC
+     LIMIT 3`
+  ).all(condominiumId) as Array<{
+    id: number;
+    title: string;
+    status: string | null;
+    updated_at: string | null;
+    scheduled_for: string | null;
+    ticket_title: string | null;
+    vendor_name: string | null;
+  }>).map((row) => ({
+    id: Number(row.id),
+    title: row.title || row.ticket_title || `Work order ${row.id}`,
+    detail: row.vendor_name || row.ticket_title || null,
+    status: row.status,
+    route: '/board/tickets',
+    occurred_at: row.updated_at,
+  }));
+  add('vendor_follow_up_problems', '/board/tickets', staleWorkOrderRows);
+
+  add(
+    'vendor_sla_problems',
+    '/board/tickets',
+    (db.prepare(
+      `SELECT wo.id, wo.title, wo.status, wo.scheduled_for, wo.updated_at,
+              t.title AS ticket_title,
+              sc.company_name AS vendor_name
+       FROM ticket_work_orders wo
+       JOIN tickets t ON t.id = wo.ticket_id
+       LEFT JOIN service_contacts sc ON sc.id = wo.service_contact_id
+       WHERE t.condominium_id = ?
+         AND wo.status IN ('scheduled','in_progress')
+         AND wo.scheduled_for IS NOT NULL
+         AND wo.scheduled_for < CURRENT_TIMESTAMP
+       ORDER BY datetime(wo.scheduled_for) ASC, wo.id ASC
+       LIMIT 3`
+    ).all(condominiumId) as Array<{
+      id: number;
+      title: string;
+      status: string | null;
+      scheduled_for: string | null;
+      updated_at: string | null;
+      ticket_title: string | null;
+      vendor_name: string | null;
+    }>).map((row) => ({
+      id: Number(row.id),
+      title: row.title || row.ticket_title || `Work order ${row.id}`,
+      detail: row.vendor_name || row.ticket_title || null,
+      status: row.status,
+      route: '/board/tickets',
+      occurred_at: row.scheduled_for || row.updated_at,
+    })),
+  );
+
+  add(
+    'overdue_dues',
+    '/board/financas',
+    (db.prepare(
+      `SELECT i.id, i.amount_cents, i.currency, i.period, i.due_date, i.status,
+              un.number AS unit_number
+       FROM invoices i
+       LEFT JOIN units un ON un.id = i.unit_id
+       WHERE i.condominium_id = ?
+         AND i.status IN ('open','overdue')
+         AND i.due_date < date('now')
+       ORDER BY date(i.due_date) ASC, i.id ASC
+       LIMIT 3`
+    ).all(condominiumId) as Array<{
+      id: number;
+      amount_cents: number;
+      currency: string | null;
+      period: string | null;
+      due_date: string | null;
+      status: string | null;
+      unit_number: string | null;
+    }>).map((row) => ({
+      id: Number(row.id),
+      title: [row.unit_number, row.period || row.due_date].filter(Boolean).join(' · ') || `Invoice ${row.id}`,
+      detail: formatMoneyByCurrency([{ currency: row.currency, amount_cents: row.amount_cents }]),
+      status: row.status,
+      route: '/board/financas',
+      occurred_at: row.due_date,
+      amount_cents: Number(row.amount_cents || 0),
+      currency: row.currency,
+    })),
+  );
+
+  add(
+    'pending_payment_proofs',
+    '/board/financas',
+    (db.prepare(
+      `SELECT pp.id, pp.amount_cents, pp.method, pp.reference, pp.created_at, pp.status,
+              i.currency,
+              u.email,
+              TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '')) AS resident_name
+       FROM payment_proofs pp
+       JOIN invoices i ON i.id = pp.invoice_id
+       JOIN users u ON u.id = pp.resident_user_id
+       WHERE pp.condominium_id = ? AND pp.status = 'pending'
+       ORDER BY datetime(pp.created_at) ASC, pp.id ASC
+       LIMIT 3`
+    ).all(condominiumId) as Array<{
+      id: number;
+      amount_cents: number;
+      method: string | null;
+      reference: string | null;
+      created_at: string | null;
+      status: string | null;
+      currency: string | null;
+      email: string | null;
+      resident_name: string | null;
+    }>).map((row) => ({
+      id: Number(row.id),
+      title: [row.resident_name, row.email].filter(Boolean).join(' · ') || `Payment proof ${row.id}`,
+      detail: formatMoneyByCurrency([{ currency: row.currency, amount_cents: row.amount_cents }]),
+      status: row.status,
+      route: '/board/financas',
+      occurred_at: row.created_at,
+      amount_cents: Number(row.amount_cents || 0),
+      currency: row.currency,
+    })),
+  );
+
+  add(
+    'pending_residents',
+    '/board/pending',
+    (db.prepare(
+      `SELECT uu.id, uu.created_at, uu.status, un.number AS unit_number,
+              u.email,
+              TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '')) AS resident_name
+       FROM user_unit uu
+       JOIN units un ON un.id = uu.unit_id
+       JOIN buildings b ON b.id = un.building_id
+       JOIN users u ON u.id = uu.user_id
+       WHERE b.condominium_id = ? AND uu.status = 'pending'
+       ORDER BY datetime(uu.created_at) ASC, uu.id ASC
+       LIMIT 3`
+    ).all(condominiumId) as Array<{
+      id: number;
+      created_at: string | null;
+      status: string | null;
+      unit_number: string | null;
+      email: string | null;
+      resident_name: string | null;
+    }>).map((row) => ({
+      id: Number(row.id),
+      title: [row.resident_name, row.email].filter(Boolean).join(' · ') || `Resident request ${row.id}`,
+      detail: row.unit_number || null,
+      status: row.status,
+      route: '/board/pending',
+      occurred_at: row.created_at,
+    })),
+  );
+
+  add(
+    'proposals_missing_budget',
+    '/board/proposals',
+    (db.prepare(
+      `SELECT id, title, status, created_at
+       FROM proposals
+       WHERE condominium_id = ?
+         AND status IN ('discussion','voting')
+         AND estimated_cost IS NULL
+       ORDER BY datetime(created_at) DESC, id DESC
+       LIMIT 3`
+    ).all(condominiumId) as Array<{
+      id: number;
+      title: string;
+      status: string | null;
+      created_at: string | null;
+    }>).map((row) => ({
+      id: Number(row.id),
+      title: row.title,
+      detail: null,
+      status: row.status,
+      route: '/board/proposals',
+      occurred_at: row.created_at,
+    })),
+  );
+
+  return out;
 }
 
 const ATTENTION_CONFIG: Record<AgencyPortfolioAttentionKind, {
@@ -973,7 +1269,10 @@ export function buildAgencyPortfolio(membership: AgencyMembership): AgencyPortfo
       address: condo.address,
       invite_code: condo.invite_code,
       metrics,
-      scorecard: buildAgencyBuildingScorecard(metrics),
+      scorecard: buildAgencyBuildingScorecard(
+        metrics,
+        buildAgencyScorecardDrilldowns(condo.id, metrics),
+      ),
     };
   });
 

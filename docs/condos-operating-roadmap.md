@@ -39,8 +39,8 @@ Every shipped feature must improve at least one promise:
    - Defer live processors until the workflow is trusted.
 
 4. **Maintenance as work orders**
-   - Ticket timeline events, quote comparison, quote decisions, recurring problem detection, vendor follow-up health, SLA alerts, resident-safe progress visibility, executive report snapshots, agency/building PDF reports, per-building monthly maintenance/finance scoreboards, portfolio trends, work-order story, and visual operational health scorecards are in place.
-   - Remaining work: record-level drilldowns from portfolio scorecards into exact risky tickets, overdue dues, vendor follow-ups, and pending approvals.
+   - Ticket timeline events, quote comparison, quote decisions, recurring problem detection, vendor follow-up health, SLA alerts, resident-safe progress visibility, executive report snapshots, agency/building PDF reports, per-building monthly maintenance/finance scoreboards, portfolio trends, work-order story, visual operational health scorecards, and record-level portfolio scorecard drilldowns are in place.
+   - Remaining work: agency-level owners, due dates, and follow-up states for portfolio risk items.
 
 5. **Brazil + Ecuador readiness**
    - Building-level country, currency, timezone, locale, and governance mode are in place.
@@ -79,5 +79,6 @@ Enterprise-private readiness plus market hardening:
 - Keep maintenance decisions auditable: one selected quote per ticket, quote decision history in the admin timeline, and residents shielded from private vendor notes.
 - Surface recurring maintenance clusters in agency portfolio metrics, attention priorities, CSV exports, and monthly reports so managers can spot repeat building issues.
 - Surface stale vendor follow-ups in agency portfolio metrics, attention priorities, CSV exports, monthly reports, and pilot-readiness checks so managers can chase quiet vendors before a board meeting.
+- Surface exact risky records inside agency scorecards so managers can jump from health score to urgent tickets, overdue dues, vendor follow-ups, pending residents, and proposals missing budgets.
 - Summarize each building's monthly maintenance movement in agency reports: opened/resolved tickets, urgent tickets, work-order movement, stale vendor follow-ups, spend, and top categories.
 - Gate proposal voting behind a readiness score covering scope, budget, analysis, risks/impact, and a future voting deadline so residents vote with decision-grade context.

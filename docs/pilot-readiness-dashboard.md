@@ -50,11 +50,11 @@ This document separates what is real today from what still needs production wiri
 ## Not Production-Ready Yet
 
 - Production create-building fails closed when `PRIVATE_CREATE_BUILDING_REQUIRED` is unset. Only set `PRIVATE_CREATE_BUILDING_REQUIRED=0` on disposable demo/e2e deployments; public login/signup copy reflects private activation when the gate is enabled.
-- Ticket timeline events, SLA escalation rules, vendor quote comparison, quote selection/rejection decisions, recurring maintenance risk detection, vendor follow-up health, per-building maintenance summaries, executive report snapshots, agency/building PDF reports, portfolio trend reporting, walkthrough work-order story, visual operational health scorecards, and maintenance/finance scoreboards are real. Remaining maintenance hardening is deeper operational drill-downs from scorecard action to exact record lists.
+- Ticket timeline events, SLA escalation rules, vendor quote comparison, quote selection/rejection decisions, recurring maintenance risk detection, vendor follow-up health, per-building maintenance summaries, executive report snapshots, agency/building PDF reports, portfolio trend reporting, walkthrough work-order story, visual operational health scorecards, maintenance/finance scoreboards, and record-level portfolio scorecard drilldowns are real.
 - Market settings exist, but the remaining localization hardening is legal/governance wording, date/time formatting sweeps, and production seed-content cleanup per market.
 - Incident mode.
-- Portfolio dashboard is not yet a full agency command center: agency setup-code controls, staff email invites, assigned-building switching, scoped staff controls, server capability guardrails, frontend role-specific navigation, permission review, pilot readiness checklist, prioritized attention queue, monthly Markdown/PDF report, portfolio trends, work-order story, visual health scorecards, and role-aware scoped CSV exports exist, but deeper record-level operational drill-downs are still pending.
+- Portfolio dashboard is not yet a full agency command center: agency setup-code controls, staff email invites, assigned-building switching, scoped staff controls, server capability guardrails, frontend role-specific navigation, permission review, pilot readiness checklist, prioritized attention queue, monthly Markdown/PDF report, portfolio trends, work-order story, visual health scorecards, record-level scorecard drilldowns, and role-aware scoped CSV exports exist. Remaining hardening is richer filtering, assignment workflows, and agency-wide follow-up states.
 
 ## Next Pilot Upgrade
 
-The next buyer-visible upgrade should turn scorecard next actions into agency-level operational drill-downs that open exact risky tickets, overdue dues, vendor follow-ups, and pending approvals.
+The next buyer-visible upgrade should let agency managers assign owners, due dates, and follow-up states directly from portfolio risk items.

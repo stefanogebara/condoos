@@ -423,10 +423,20 @@ This slice makes the agency portfolio easier to sell and operate:
 - Extend portfolio CSV exports with score, risk level, sub-scores, and next actions.
 - Cover the scorecard through the agency portfolio domain test and the portfolio browser walkthrough.
 
+## Completed Slice: Agency Scorecard Drilldowns
+
+This slice makes portfolio risk explainable from the command center:
+
+- Add record-level drilldowns to each building scorecard for urgent tickets, recurring problem clusters, stale vendor work orders, overdue dues, pending payment proofs, pending residents, and proposals missing budget.
+- Return the exact risky records from `/api/agencies/portfolio` with scoped target routes so agency users can move from score to source workflow.
+- Show the top drilldowns on `/board/portfolio` building cards with localized labels and source-record snippets.
+- Mark user-created/system-seeded record titles as content data so i18n sweeps do not confuse them with untranslated UI chrome.
+- Cover the drilldowns through the agency portfolio domain test, the portfolio browser walkthrough, and the Spanish admin i18n leak sweep.
+
 ## Current Execution Slice: Enterprise Operations Hardening
 
 The next implementation slice should keep building on the private-enterprise plan:
 
 - Continue turning portfolio reporting into a true agency command center.
-- Turn scorecard next actions into record-level drilldowns for exact risky tickets, overdue dues, vendor follow-ups, and pending approvals.
+- Add owner, due date, and follow-up state handling for agency risk items so the command center can track who is fixing each issue.
 - Keep production-safe i18n, build, server tests, and pilot smoke checks green before each push.

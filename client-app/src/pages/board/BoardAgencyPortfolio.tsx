@@ -34,6 +34,21 @@ interface AgencyBuilding {
     finance_score: number;
     community_score: number;
     next_actions: string[];
+    drilldowns: Array<{
+      kind: AgencyAttentionKind;
+      route: string;
+      count: number;
+      records: Array<{
+        id: number | string;
+        title: string;
+        detail: string | null;
+        status: string | null;
+        route: string;
+        occurred_at: string | null;
+        amount_cents?: number | null;
+        currency?: string | null;
+      }>;
+    }>;
   };
 }
 
@@ -60,6 +75,17 @@ type AgencyAttentionKind =
   | 'pending_payment_proofs'
   | 'pending_residents'
   | 'proposals_missing_budget';
+
+const ATTENTION_SEVERITY: Record<AgencyAttentionKind, AgencyAttentionItem['severity']> = {
+  urgent_tickets: 'critical',
+  vendor_sla_problems: 'critical',
+  recurring_problem_clusters: 'warning',
+  vendor_follow_up_problems: 'warning',
+  overdue_dues: 'warning',
+  pending_payment_proofs: 'warning',
+  pending_residents: 'info',
+  proposals_missing_budget: 'info',
+};
 
 interface AgencyAttentionItem {
   id: string;
@@ -373,6 +399,26 @@ function ScoreBar({ label, value }: { label: string; value: number }) {
           style={{ width: `${safeValue}%` }}
         />
       </div>
+    </div>
+  );
+}
+
+function DrilldownRecord({ record }: { record: AgencyBuilding['scorecard']['drilldowns'][number]['records'][number] }) {
+  return (
+    <div className="flex items-start justify-between gap-3 py-1.5">
+      <div className="min-w-0">
+        <div className="text-sm font-medium text-dusk-500 truncate" data-user-content>{record.title}</div>
+        <div className="text-xs text-dusk-300 truncate" data-user-content>
+          {[record.detail, record.status, record.occurred_at ? formatDateTime(record.occurred_at) : null]
+            .filter(Boolean)
+            .join(' · ')}
+        </div>
+      </div>
+      {record.amount_cents != null && (
+        <span className="shrink-0 text-xs font-semibold text-dusk-400">
+          {record.currency || ''} {(record.amount_cents / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        </span>
+      )}
     </div>
   );
 }
@@ -1105,6 +1151,41 @@ export default function BoardAgencyPortfolio() {
                         ))}
                       </div>
                     </div>
+                    {building.scorecard.drilldowns.length > 0 && (
+                      <div className="mt-4 border-t border-white/70 pt-4">
+                        <div className="text-xs uppercase tracking-[0.12em] text-dusk-300 mb-2">{t('Registros que explicam o risco')}</div>
+                        <div className="space-y-3">
+                          {building.scorecard.drilldowns.slice(0, 3).map((drilldown) => (
+                            <div key={drilldown.kind} className="border-b border-white/60 pb-3 last:border-b-0 last:pb-0">
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <Badge tone={attentionTone(ATTENTION_SEVERITY[drilldown.kind] || 'info')}>{drilldown.count}</Badge>
+                                  <span className="text-sm font-semibold text-dusk-500 truncate">{attentionLabel(drilldown.kind)}</span>
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => switchActiveBuilding({ id: building.id }, drilldown.route)}
+                                  loading={switchingBuildingId === building.id}
+                                >
+                                  {t('Abrir lista')}
+                                </Button>
+                              </div>
+                              <div className="mt-1 divide-y divide-white/55">
+                                {drilldown.records.length === 0 ? (
+                                  <div className="text-sm text-dusk-300 py-2">{t('Sem registros recentes.')}</div>
+                                ) : (
+                                  drilldown.records.map((record) => (
+                                    <DrilldownRecord key={`${drilldown.kind}:${record.id}`} record={record} />
+                                  ))
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <div className="grid sm:grid-cols-4 gap-2 mt-4">
                     <Metric icon={AlertTriangle} label={t('Chamados')} value={building.metrics.unresolved_tickets} urgent />

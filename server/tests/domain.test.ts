@@ -363,6 +363,24 @@ test('agency portfolio CSV exports scoped building metrics', async () => {
   assert.equal(portfolio.buildings[0].scorecard.community_score, 80);
   assert.match(portfolio.buildings[0].scorecard.next_actions[0], /Resolve urgent tickets/);
   assert.match(portfolio.buildings[0].scorecard.next_actions.join(' | '), /Chase stale vendor updates/);
+  assert.deepEqual(
+    portfolio.buildings[0].scorecard.drilldowns.map((item) => item.kind),
+    ['urgent_tickets', 'recurring_problem_clusters', 'vendor_follow_up_problems', 'overdue_dues', 'pending_residents'],
+  );
+  assert.equal(portfolio.buildings[0].scorecard.drilldowns[0].records[0].title, 'Elevator noise');
+  assert.equal(portfolio.buildings[0].scorecard.drilldowns[0].records[0].route, '/board/tickets');
+  const vendorDrilldown = portfolio.buildings[0].scorecard.drilldowns.find((item) => item.kind === 'vendor_follow_up_problems');
+  assert.ok(vendorDrilldown);
+  assert.equal(vendorDrilldown.records[0].title, 'Garage gate repair');
+  assert.equal(vendorDrilldown.records[0].status, 'in_progress');
+  const duesDrilldown = portfolio.buildings[0].scorecard.drilldowns.find((item) => item.kind === 'overdue_dues');
+  assert.ok(duesDrilldown);
+  assert.match(duesDrilldown.records[0].title, /101/);
+  assert.equal(duesDrilldown.records[0].amount_cents, 12000);
+  assert.equal(duesDrilldown.records[0].currency, 'USD');
+  const pendingDrilldown = portfolio.buildings[0].scorecard.drilldowns.find((item) => item.kind === 'pending_residents');
+  assert.ok(pendingDrilldown);
+  assert.match(pendingDrilldown.records[0].title, /pending@example.com/);
 
   const report = buildAgencyMonthlyReport(membership, '2026-05');
   assert.equal(report.month, '2026-05');

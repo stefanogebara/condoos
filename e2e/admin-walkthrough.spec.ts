@@ -162,6 +162,34 @@ test('admin: agency portfolio renders trends and work-order story', async ({ pag
             'Group recurring problems into one work plan with owner and budget.',
             'Chase stale vendor updates and log next steps.',
           ],
+          drilldowns: [
+            {
+              kind: 'urgent_tickets',
+              route: '/board/tickets',
+              count: 1,
+              records: [{
+                id: 10,
+                title: 'Elevator noise',
+                detail: 'maintenance · urgent',
+                status: 'open',
+                route: '/board/tickets',
+                occurred_at: '2026-05-02T10:00:00.000Z',
+              }],
+            },
+            {
+              kind: 'vendor_follow_up_problems',
+              route: '/board/tickets',
+              count: 1,
+              records: [{
+                id: 11,
+                title: 'Garage gate repair',
+                detail: 'Lift Vendor',
+                status: 'in_progress',
+                route: '/board/tickets',
+                occurred_at: '2026-05-11T10:00:00.000Z',
+              }],
+            },
+          ],
         },
       }],
     }],
@@ -209,11 +237,11 @@ test('admin: agency portfolio renders trends and work-order story', async ({ pag
   await expect(page.getByText(/6-month trend|Tendência de 6 meses/i)).toBeVisible();
   await expect(page.getByText('USD 420.00')).toBeVisible();
   await expect(page.getByRole('heading', { name: /Ticket to completion|Chamado até conclusão/i })).toBeVisible();
-  await expect(page.getByText('Garage gate repair')).toBeVisible();
+  await expect(page.getByText('Garage gate repair').first()).toBeVisible();
   await expect(page.getByText('Garage gate vendor follow-up')).toBeVisible();
   await expect(page.getByText(/Vendor selected|Fornecedor definido/i)).toBeVisible();
   await expect(page.getByText(/Work order scheduled|Ordem agendada/i)).toBeVisible();
-  await expect(page.getByText('Lift Vendor')).toBeVisible();
+  await expect(page.getByText('Lift Vendor').first()).toBeVisible();
   await expect(page.getByText(/2 cotações|2 quotes/i)).toBeVisible();
   await expect(page.getByRole('button', { name: /Open tickets|Abrir chamados/i })).toBeVisible();
   await expect(page.getByText(/Operational health|Saúde operacional/i)).toBeVisible();
@@ -221,6 +249,9 @@ test('admin: agency portfolio renders trends and work-order story', async ({ pag
   await expect(page.getByText(/Critical|Crítico/i)).toBeVisible();
   await expect(page.getByText(/Maintenance|Manutenção/i).first()).toBeVisible();
   await expect(page.getByText(/Chase stale vendor updates|Cobrar atualizações|Persigue actualizaciones|Relancez les mises/i).first()).toBeVisible();
+  await expect(page.getByText(/Records explaining risk|Registros que explicam o risco/i)).toBeVisible();
+  await expect(page.getByText('Elevator noise')).toBeVisible();
+  await expect(page.getByText('Garage gate repair').first()).toBeVisible();
 });
 
 test('admin: AI agent generates an operational plan', async ({ page, request }) => {

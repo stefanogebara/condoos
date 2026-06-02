@@ -122,6 +122,12 @@ proposals without budgets. Each queue item carries the target building and board
 route so agency staff can switch into the exact workflow without hunting through
 menus.
 
+Each building scorecard also includes scoped drilldowns for the records behind
+the risk score: urgent tickets, recurring problem clusters, stale vendor work
+orders, overdue dues, pending payment proofs, pending residents, and proposals
+missing budgets. `/board/portfolio` shows the top records and an action to open
+the right building workflow.
+
 Agency admins can manage staff accounts from `/board/portfolio`: enter the
 staff email, pick an agency role, and assign the buildings they are allowed to
 see. If the user account already exists, the staff membership is attached
