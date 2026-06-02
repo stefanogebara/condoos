@@ -1,4 +1,5 @@
 import { expect, test, type Page, type APIRequestContext } from '@playwright/test';
+import { completeProposalReadiness } from './support/proposals';
 
 const apiURL = process.env.E2E_API_URL
   || (process.env.E2E_BASE_URL ? `${process.env.E2E_BASE_URL.replace(/\/$/, '')}/api` : 'http://127.0.0.1:4316/api');
@@ -99,9 +100,10 @@ test('backend rejects invalid bookings and closes tied manual decisions as incon
 
   const created = await request.post(`${apiURL}/proposals`, {
     headers: { Authorization: `Bearer ${admin.token}` },
-    data: { title: 'E2E tied proposal', description: 'Temporary E2E proposal', category: 'QA' },
+    data: { title: 'E2E tied proposal', description: 'Temporary E2E proposal with enough decision context for readiness validation.', category: 'QA' },
   });
   const proposalId = (await created.json()).data.id;
+  await completeProposalReadiness(request, apiURL, { Authorization: `Bearer ${admin.token}` }, proposalId);
   await request.post(`${apiURL}/proposals/${proposalId}/status`, {
     headers: { Authorization: `Bearer ${admin.token}` },
     data: { status: 'voting' },

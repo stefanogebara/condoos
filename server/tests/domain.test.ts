@@ -1021,6 +1021,90 @@ test('proposals route deletes only clean discussion proposals and restores linke
   }
 });
 
+test('proposal readiness blocks voting until decision information is complete', async () => {
+  resetDb();
+  const { condoId } = createCondoFixture();
+  const adminId = createUser('proposal-readiness-admin@example.com', 'board_admin');
+  db.prepare(`UPDATE users SET condominium_id = ? WHERE id = ?`).run(condoId, adminId);
+
+  const app = express();
+  app.use(express.json());
+  app.use('/api/proposals', requireAuth, requireActiveMembership, proposalsRoutes);
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise<void>((resolve, reject) => {
+    if (server.listening) return resolve();
+    server.once('listening', resolve);
+    server.once('error', reject);
+  });
+
+  try {
+    const { port } = server.address() as AddressInfo;
+    const baseUrl = `http://127.0.0.1:${port}`;
+    const headers = {
+      Authorization: `Bearer ${signToken(adminId)}`,
+      'Content-Type': 'application/json',
+    };
+    const closesAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    const proposalId = Number(db.prepare(
+      `INSERT INTO proposals (condominium_id, author_id, title, description, category, status, estimated_cost)
+       VALUES (?, ?, 'Replace garage gate motor', 'Replace the failing garage gate motor before residents lose reliable vehicle access.', 'maintenance', 'discussion', 120000)`
+    ).run(condoId, adminId).lastInsertRowid);
+
+    const blocked = await fetch(`${baseUrl}/api/proposals/${proposalId}/status`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ status: 'voting' }),
+    });
+    assert.equal(blocked.status, 409);
+    const blockedBody = await blocked.json() as any;
+    assert.equal(blockedBody.error, 'proposal_not_ready');
+    assert.equal(blockedBody.details.ready, false);
+    assert.ok(blockedBody.details.missing.includes('analysis'));
+    assert.ok(blockedBody.details.missing.includes('risks'));
+    assert.ok(blockedBody.details.missing.includes('voting_window'));
+
+    const patched = await fetch(`${baseUrl}/api/proposals/${proposalId}/readiness`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({
+        estimated_cost: 120000,
+        cost_breakdown: 'Motor and control board: $900\nLabor and installation: $300',
+        risk_summary: 'If the motor fails fully, vehicle access can be blocked during peak hours. Confirm warranty and manual override before approving.',
+      }),
+    });
+    assert.equal(patched.status, 200);
+
+    const compliance = await fetch(`${baseUrl}/api/proposals/${proposalId}/compliance`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ quorum_percent: 50, voting_closes_at: closesAt }),
+    });
+    assert.equal(compliance.status, 200);
+
+    const detail = await fetch(`${baseUrl}/api/proposals/${proposalId}`, { headers });
+    assert.equal(detail.status, 200);
+    const detailBody = await detail.json() as any;
+    assert.equal(detailBody.data.readiness.ready, true);
+    assert.equal(detailBody.data.readiness.score, 100);
+
+    const opened = await fetch(`${baseUrl}/api/proposals/${proposalId}/status`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ status: 'voting' }),
+    });
+    assert.equal(opened.status, 200);
+    const openedBody = await opened.json() as any;
+    assert.deepEqual(openedBody.data.readiness, detailBody.data.readiness);
+  } finally {
+    if (server.listening) {
+      await new Promise<void>((resolve, reject) => {
+        server.close((err) => err ? reject(err) : resolve());
+      });
+    }
+  }
+});
+
 test('CSV-style pending invite claim preserves membership settings', () => {
   resetDb();
   const { condoId, unit101 } = createCondoFixture();

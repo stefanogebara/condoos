@@ -37,6 +37,7 @@
 // to 3-voter / 4-voter without changing the test shape.
 
 import { expect, test, type APIRequestContext } from '@playwright/test';
+import { completeProposalReadiness } from './support/proposals';
 
 const apiURL = process.env.E2E_API_URL
   || (process.env.E2E_BASE_URL ? `${process.env.E2E_BASE_URL.replace(/\/$/, '')}/api` : 'http://127.0.0.1:4316/api');
@@ -145,8 +146,8 @@ test('multi-user loop: ticket → agent → proposal → N-voter tally → close
     expect(agentTerminal, `agent_run for ticket ${ticketId} did not reach terminal in 60s`).toBeTruthy();
 
     // ───── 4. Admin creates a proposal ──────────────────────────────
-    // estimated_cost > 0 is required by the discussion → voting gate
-    // (proposal-cost spec covers the inverse — empty cost rejected).
+    // Full readiness is required by the discussion → voting gate
+    // (proposal-cost spec covers the inverse — incomplete readiness rejected).
     const createdProposal = await request.post(`${apiURL}/proposals`, {
       headers: adminH,
       data: {
@@ -166,11 +167,7 @@ test('multi-user loop: ticket → agent → proposal → N-voter tally → close
     // this isolates the test from the building's roster size.
     const opensAt  = new Date().toISOString();
     const closesAt = new Date(Date.now() + 3_600_000).toISOString();
-    const compliance = await request.patch(`${apiURL}/proposals/${proposalId}/compliance`, {
-      headers: adminH,
-      data: { quorum_percent: 0, voting_opens_at: opensAt, voting_closes_at: closesAt },
-    });
-    expect(compliance.ok(), `compliance update failed: ${compliance.status()} ${await compliance.text()}`).toBeTruthy();
+    await completeProposalReadiness(request, apiURL, adminH, proposalId, { opensAt, closesAt, quorumPercent: 0 });
 
     // ───── 6. discussion → voting ───────────────────────────────────
     const opened = await request.post(`${apiURL}/proposals/${proposalId}/status`, {

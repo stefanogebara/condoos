@@ -50,11 +50,11 @@ This document separates what is real today from what still needs production wiri
 ## Not Production-Ready Yet
 
 - Production create-building fails closed when `PRIVATE_CREATE_BUILDING_REQUIRED` is unset. Only set `PRIVATE_CREATE_BUILDING_REQUIRED=0` on disposable demo/e2e deployments; public login/signup copy reflects private activation when the gate is enabled.
-- Ticket timeline events, SLA escalation rules, vendor quote comparison, quote selection/rejection decisions, recurring maintenance risk detection, vendor follow-up health, per-building maintenance summaries, executive report snapshots, agency/building PDF reports, and maintenance/finance scoreboards are real. Remaining maintenance hardening is richer report packaging such as trend charts and deeper visual scorecards.
+- Ticket timeline events, SLA escalation rules, vendor quote comparison, quote selection/rejection decisions, recurring maintenance risk detection, vendor follow-up health, per-building maintenance summaries, executive report snapshots, agency/building PDF reports, portfolio trend reporting, walkthrough work-order story, and maintenance/finance scoreboards are real. Remaining maintenance hardening is richer visual scorecards and deeper operational drill-downs.
 - Market settings exist, but the remaining localization hardening is legal/governance wording, date/time formatting sweeps, and production seed-content cleanup per market.
 - Incident mode.
-- Portfolio dashboard is not yet a full agency command center: agency setup-code controls, staff email invites, assigned-building switching, scoped staff controls, server capability guardrails, frontend role-specific navigation, permission review, pilot readiness checklist, prioritized attention queue, monthly Markdown/PDF report, and role-aware scoped CSV exports exist, but richer trend reporting is still pending.
+- Portfolio dashboard is not yet a full agency command center: agency setup-code controls, staff email invites, assigned-building switching, scoped staff controls, server capability guardrails, frontend role-specific navigation, permission review, pilot readiness checklist, prioritized attention queue, monthly Markdown/PDF report, portfolio trends, work-order story, and role-aware scoped CSV exports exist, but richer visual scorecards and operational drill-downs are still pending.
 
 ## Next Pilot Upgrade
 
-The next buyer-visible upgrade should keep strengthening agency reporting with trend charts and a walkthrough-ready work-order story.
+The next buyer-visible upgrade should keep strengthening agency reporting with richer visual scorecards and agency-level operational drill-downs.

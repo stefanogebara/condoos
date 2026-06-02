@@ -1,7 +1,7 @@
 // Pre-vote cost + risk analysis (#13).
 //
-// - discussion → voting transition is blocked until estimated_cost > 0
-//   (returns 409 missing_cost_estimate)
+// - discussion → voting transition is blocked until readiness is complete
+//   (returns 409 proposal_not_ready)
 // - POST /api/ai/proposals/:id/analyze-cost generates cost + risk fields
 //   (works with the OpenRouter key set, falls back gracefully without)
 import { expect, test, type APIRequestContext } from '@playwright/test';
@@ -32,7 +32,7 @@ async function createDiscussionProposal(request: APIRequestContext, token: strin
   return (await created.json()).data.id as number;
 }
 
-test('Proposals API: opening voting without estimated_cost is blocked with 409', async ({ request }) => {
+test('Proposals API: opening voting before readiness is complete is blocked with 409', async ({ request }) => {
   const token = await adminToken(request);
   const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 
@@ -42,22 +42,37 @@ test('Proposals API: opening voting without estimated_cost is blocked with 409',
     headers, data: { status: 'voting' },
   });
   expect(tryOpen.status()).toBe(409);
-  expect((await tryOpen.json()).error).toBe('missing_cost_estimate');
+  expect((await tryOpen.json()).error).toBe('proposal_not_ready');
 
-  // After patching a cost manually, the same transition should succeed.
-  // (Direct UPDATE via /proposals/:id endpoint isn't exposed; just call the
-  // proposals create endpoint with a cost. We'll re-create with an estimate.)
+  // After filling budget analysis, risk impact, and a future voting deadline,
+  // the same transition should succeed.
   const ok = await request.post(`${apiURL}/proposals`, {
     headers,
     data: {
       title: `E2E cost-gate-ok ${Date.now()}`,
-      description: 'Proposal with a fixed cost — voting transition expected.',
+      description: 'Proposal with complete readiness details so residents can vote with budget, risk, and timing context.',
       category: 'maintenance',
       estimated_cost: 12000,
     },
   });
   expect(ok.ok()).toBeTruthy();
   const okId = (await ok.json()).data.id as number;
+  const closesAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+  const readiness = await request.patch(`${apiURL}/proposals/${okId}/readiness`, {
+    headers,
+    data: {
+      estimated_cost: 12000,
+      cost_breakdown: 'Materials: 8000\nLabor: 4000',
+      risk_summary: 'Residents need advance notice and vendor access must be coordinated. Compare warranty before approving.',
+    },
+  });
+  expect(readiness.ok(), `readiness update failed: ${readiness.status()} ${await readiness.text()}`).toBeTruthy();
+  const compliance = await request.patch(`${apiURL}/proposals/${okId}/compliance`, {
+    headers,
+    data: { quorum_percent: 50, voting_closes_at: closesAt },
+  });
+  expect(compliance.ok(), `compliance update failed: ${compliance.status()} ${await compliance.text()}`).toBeTruthy();
 
   const transition = await request.post(`${apiURL}/proposals/${okId}/status`, {
     headers, data: { status: 'voting' },

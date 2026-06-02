@@ -1,6 +1,7 @@
 // Proposals advanced: voter eligibility change, compliance (quorum + window),
 // validation guards, and locked-once-voting-opens enforcement.
 import { expect, test, type APIRequestContext } from '@playwright/test';
+import { completeProposalReadiness } from './support/proposals';
 
 const apiURL = process.env.E2E_API_URL
   || (process.env.E2E_BASE_URL ? `${process.env.E2E_BASE_URL.replace(/\/$/, '')}/api` : 'http://127.0.0.1:4316/api');
@@ -21,7 +22,7 @@ async function loginApi(request: APIRequestContext, email: string, password: str
 async function createProposal(request: APIRequestContext, admH: Record<string, string>): Promise<number> {
   const r = await request.post(`${apiURL}/proposals`, {
     headers: admH,
-    data: { title: `E2E Proposal ${Date.now()}`, description: 'Proposta para testes avançados.', estimated_cost: 1000 },
+    data: { title: `E2E Proposal ${Date.now()}`, description: 'Proposta para testes avançados com contexto suficiente para validação de prontidão.', estimated_cost: 1000 },
   });
   expect(r.ok(), `create proposal failed: ${r.status()} ${await r.text()}`).toBeTruthy();
   return (await r.json()).data.id as number;
@@ -161,6 +162,7 @@ test('Proposals: eligibility is locked once voting opens', async ({ request }) =
   const propId = await createProposal(request, admH);
 
   // Advance to voting status
+  await completeProposalReadiness(request, apiURL, admH, propId);
   const statusRes = await request.post(`${apiURL}/proposals/${propId}/status`, {
     headers: admH,
     data: { status: 'voting' },

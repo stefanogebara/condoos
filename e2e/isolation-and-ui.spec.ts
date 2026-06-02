@@ -6,6 +6,7 @@
 // We only have one admin account on prod, so cross-tenant isolation is tested via
 // fabricated-IDs + list-filter assertions rather than a second real tenant.
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
+import { completeProposalReadiness } from './support/proposals';
 
 const apiURL = process.env.E2E_API_URL
   || (process.env.E2E_BASE_URL ? `${process.env.E2E_BASE_URL.replace(/\/$/, '')}/api` : 'http://127.0.0.1:4312/api');
@@ -275,17 +276,15 @@ test('vote-closer: expired voting window transitions status within 80s', async (
   // Create a proposal to isolate the test.
   const createRes = await request.post(`${apiURL}/proposals`, {
     headers,
-    data: { title: `Vote-closer canary ${Date.now()}`, description: 'Canary for the auto-close poller.', category: 'maintenance', estimated_cost: 1000 },
+    data: { title: `Vote-closer canary ${Date.now()}`, description: 'Canary proposal for the auto-close poller with enough scope for readiness.', category: 'maintenance', estimated_cost: 1000 },
   });
   expect(createRes.ok()).toBeTruthy();
   const proposalId = (await createRes.json()).data.id;
 
-  // Set voting window with closes_at in the past, then flip to 'voting'.
-  const past = new Date(Date.now() - 30 * 1000).toISOString();
-  await request.patch(`${apiURL}/proposals/${proposalId}/compliance`, {
-    headers,
-    data: { quorum_percent: 0, voting_closes_at: past },
-  });
+  // Set a near-future close so readiness allows opening, then the poller
+  // observes the expired window on its next cadence.
+  const closesSoon = new Date(Date.now() + 2_000).toISOString();
+  await completeProposalReadiness(request, apiURL, headers, proposalId, { closesAt: closesSoon, quorumPercent: 0 });
   const voteRes = await request.post(`${apiURL}/proposals/${proposalId}/status`, {
     headers,
     data: { status: 'voting' },

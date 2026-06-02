@@ -3,6 +3,7 @@
 // the cleanup script (server/scripts/cleanup-test-pollution.js) to remove
 // junk after a run.
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
+import { completeProposalReadiness } from './support/proposals';
 
 const apiURL = process.env.E2E_API_URL
   || (process.env.E2E_BASE_URL ? `${process.env.E2E_BASE_URL.replace(/\/$/, '')}/api` : 'http://127.0.0.1:4316/api');
@@ -148,10 +149,11 @@ test('AI: admin closes voting → AI writes decision summary + announcement', as
   // Create a fresh proposal in voting state with a couple of votes
   const created = await request.post(`${apiURL}/proposals`, {
     headers,
-    data: { title: `E2E decision ${Date.now()}`, description: 'Proposta para validar o fluxo de decisão da IA.', category: 'maintenance', estimated_cost: 12000 },
+    data: { title: `E2E decision ${Date.now()}`, description: 'Proposta para validar o fluxo de decisão da IA com contexto suficiente para votação.', category: 'maintenance', estimated_cost: 12000 },
   });
   const propId = (await created.json()).data.id;
   // Move to voting
+  await completeProposalReadiness(request, apiURL, headers, propId);
   await request.post(`${apiURL}/proposals/${propId}/status`, { headers, data: { status: 'voting' } });
   // Cast a yes vote as admin
   await request.post(`${apiURL}/proposals/${propId}/vote`, { headers, data: { choice: 'yes' } });

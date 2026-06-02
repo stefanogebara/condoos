@@ -13,6 +13,7 @@ import {
   resolveFinalOutcome,
 } from '../lib/proposal-tally';
 import { notifyCondoResidents } from '../lib/whatsapp';
+import { buildProposalReadiness } from '../lib/proposal-readiness';
 
 const router = Router();
 
@@ -25,6 +26,10 @@ function getScopedProposal(id: number, condoId: number) {
   ).get(id, condoId) as any;
 }
 
+function attachProposalStatus(proposal: any) {
+  return attachVoteTally({ ...proposal, readiness: buildProposalReadiness(proposal) });
+}
+
 router.get('/', requireAuth, (req: AuthedRequest, res) => {
   const condoId = getActiveCondoId(req);
   const rows = db.prepare(
@@ -35,7 +40,7 @@ router.get('/', requireAuth, (req: AuthedRequest, res) => {
        CASE p.status WHEN 'voting' THEN 1 WHEN 'discussion' THEN 2 WHEN 'approved' THEN 3 WHEN 'rejected' THEN 4 ELSE 5 END,
        p.created_at DESC`
   ).all(condoId) as any[];
-  return ok(res, rows.map(attachVoteTally));
+  return ok(res, rows.map(attachProposalStatus));
 });
 
 router.get('/:id', requireAuth, (req: AuthedRequest, res) => {
@@ -65,6 +70,7 @@ router.get('/:id', requireAuth, (req: AuthedRequest, res) => {
     ...p,
     votes: tally,
     quorum,
+    readiness: buildProposalReadiness(p),
     comments,
     voters: visibleVoters,
     my_vote: myVote,
@@ -114,7 +120,7 @@ router.post('/', requireAuth, (req: AuthedRequest, res) => {
   const row = db.prepare(
     `INSERT INTO proposals (condominium_id, author_id, title, description, category, estimated_cost, ai_drafted, source_suggestion_id, voter_eligibility, status)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'discussion')`
-  ).run(condoId, u.id, title, description, category || null, estimated_cost || null, ai_drafted ? 1 : 0, source_suggestion_id || null, eligibility);
+  ).run(condoId, u.id, title, description, category || null, estimated_cost ?? null, ai_drafted ? 1 : 0, source_suggestion_id || null, eligibility);
   if (source_suggestion_id) {
     db.prepare(`UPDATE suggestions SET status='promoted', promoted_proposal_id=? WHERE id=?`)
       .run(row.lastInsertRowid, source_suggestion_id);
@@ -127,6 +133,59 @@ router.post('/', requireAuth, (req: AuthedRequest, res) => {
     metadata: { source_suggestion_id: source_suggestion_id || null, voter_eligibility: eligibility },
   });
   return ok(res, { id: row.lastInsertRowid });
+});
+
+const proposalReadinessSchema = z.object({
+  estimated_cost: z.number().int().min(0).optional().nullable(),
+  cost_breakdown: z.string().max(2_000).optional().nullable(),
+  risk_summary: z.string().max(1_500).optional().nullable(),
+}).refine((body) => (
+  body.estimated_cost !== undefined ||
+  body.cost_breakdown !== undefined ||
+  body.risk_summary !== undefined
+), { message: 'nothing_to_update' });
+
+router.patch('/:id/readiness', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {
+  const condoId = getActiveCondoId(req);
+  const id = Number(req.params.id);
+  const p = getScopedProposal(id, condoId);
+  if (!p) return fail(res, 'not_found', 404);
+  if (p.status !== 'discussion') return fail(res, 'locked_once_voting_opens', 409);
+  const parsed = proposalReadinessSchema.safeParse(req.body);
+  if (!parsed.success) return fail(res, 'invalid_input', 400, parsed.error.flatten());
+
+  const sets: string[] = [];
+  const vals: any[] = [];
+  if (parsed.data.estimated_cost !== undefined) {
+    sets.push('estimated_cost = ?');
+    vals.push(parsed.data.estimated_cost);
+  }
+  if (parsed.data.cost_breakdown !== undefined) {
+    sets.push('cost_breakdown = ?');
+    vals.push((parsed.data.cost_breakdown || '').trim() || null);
+  }
+  if (parsed.data.risk_summary !== undefined) {
+    sets.push('risk_summary = ?');
+    vals.push((parsed.data.risk_summary || '').trim() || null);
+  }
+  if (sets.length === 0) return fail(res, 'nothing_to_update');
+  sets.push('updated_at = CURRENT_TIMESTAMP');
+  vals.push(id);
+  db.prepare(`UPDATE proposals SET ${sets.join(', ')} WHERE id = ?`).run(...vals);
+  const updated = getScopedProposal(id, condoId);
+  const readiness = buildProposalReadiness(updated);
+  audit(req, {
+    action: 'proposal.readiness_update',
+    target_type: 'proposal',
+    target_id: id,
+    condominium_id: condoId,
+    metadata: {
+      readiness_score: readiness.score,
+      missing: readiness.missing,
+      estimated_cost: parsed.data.estimated_cost ?? null,
+    },
+  });
+  return ok(res, { id, readiness });
 });
 
 router.post('/:id/comments', requireAuth, (req: AuthedRequest, res) => {
@@ -257,12 +316,9 @@ router.post('/:id/status', requireAuth, requireRole('board_admin'), requireBoard
   const p = getScopedProposal(id, condoId);
   if (!p) return fail(res, 'not_found', 404);
 
-  // Pre-vote cost analysis (#13): block discussion → voting unless the
-  // proposal has at least an estimated_cost. Voters need a number on screen
-  // to make an informed call. Admin can fill it manually or hit the
-  // "Analisar com IA" button which calls /api/ai/proposals/:id/analyze-cost.
-  if (status === 'voting' && p.status === 'discussion' && (!p.estimated_cost || p.estimated_cost <= 0)) {
-    return fail(res, 'missing_cost_estimate', 409);
+  const readiness = buildProposalReadiness(p);
+  if (status === 'voting' && p.status === 'discussion' && !readiness.ready) {
+    return fail(res, 'proposal_not_ready', 409, readiness);
   }
 
   db.prepare(`UPDATE proposals SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(status, id);
@@ -283,7 +339,7 @@ router.post('/:id/status', requireAuth, requireRole('board_admin'), requireBoard
     condominium_id: condoId,
     metadata: { from: p.status, to: status },
   });
-  return ok(res, { id, status });
+  return ok(res, { id, status, readiness });
 });
 
 router.delete('/:id', requireAuth, requireRole('board_admin'), requireBoardCapability('building_admin'), (req: AuthedRequest, res) => {

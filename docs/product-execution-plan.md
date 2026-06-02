@@ -400,10 +400,21 @@ This slice makes portfolio access safer before private pilots:
 - Keep non-admin agency staff scoped: they can use their assigned building view, but do not receive the agency-wide permission review.
 - Cover the permission review with server tests.
 
+## Completed Slice: Proposal Voting Readiness
+
+This slice makes resident votes harder to open without decision-grade context:
+
+- Add a computed proposal readiness score with checks for clear scope, budget, cost analysis, risks/impact, and a future voting deadline.
+- Block discussion -> voting until readiness is complete, returning `proposal_not_ready` with the missing checks.
+- Add an admin `PATCH /api/proposals/:id/readiness` endpoint for manual budget basis and risk/impact notes, so managers can paste vendor quotes or correct AI output before opening a vote.
+- Show the readiness score, missing checklist, and manual analysis controls on the board proposal detail page.
+- Update proposal E2E setup so tests open votes only after readiness is complete.
+- Cover the gate with server tests, production build, and targeted proposal E2E.
+
 ## Current Execution Slice: Enterprise Operations Hardening
 
 The next implementation slice should keep building on the private-enterprise plan:
 
-- Expand portfolio reporting into a true agency command center.
-- Add trend charts and stronger multi-building agency priorities.
+- Continue turning portfolio reporting into a true agency command center.
+- Add richer visual scorecards and stronger multi-building agency priorities.
 - Keep production-safe i18n, build, server tests, and pilot smoke checks green before each push.

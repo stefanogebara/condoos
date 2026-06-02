@@ -52,7 +52,7 @@ Every shipped feature must improve at least one promise:
    - Add arrival/check-in history, resident notification fallback, party guest search, and package/delivery handoff audit.
 
 7. **AI moat on trusted workflows**
-   - Add cited Building Memory answers, explain-expense, proposal readiness score, incident mode, and board packet PDF export.
+   - Add cited Building Memory answers, explain-expense, incident mode, and deeper board packet automation.
 
 8. **Production reliability and pilot operations**
    - Add health/integration status, backup checks, Sentry/PostHog routines, production smoke gates, and pilot-safe mode.
@@ -80,3 +80,4 @@ Enterprise-private readiness plus market hardening:
 - Surface recurring maintenance clusters in agency portfolio metrics, attention priorities, CSV exports, and monthly reports so managers can spot repeat building issues.
 - Surface stale vendor follow-ups in agency portfolio metrics, attention priorities, CSV exports, monthly reports, and pilot-readiness checks so managers can chase quiet vendors before a board meeting.
 - Summarize each building's monthly maintenance movement in agency reports: opened/resolved tickets, urgent tickets, work-order movement, stale vendor follow-ups, spend, and top categories.
+- Gate proposal voting behind a readiness score covering scope, budget, analysis, risks/impact, and a future voting deadline so residents vote with decision-grade context.

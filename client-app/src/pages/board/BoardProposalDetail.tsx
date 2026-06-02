@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { ArrowLeft, Sparkles, Play, Check, X, MessageCircle, Vote, AlertTriangle, Calculator } from 'lucide-react';
+import { ArrowLeft, Sparkles, Play, Check, X, MessageCircle, Vote, AlertTriangle, Calculator, ClipboardCheck } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 import GlassCard from '../../components/GlassCard';
 import Badge from '../../components/Badge';
@@ -11,6 +11,13 @@ import { apiGet, apiPatch, apiPost } from '../../lib/api';
 import { formatCurrency, formatDate, t } from '../../lib/i18n';
 
 const QUORUM_OPTIONS = [0, 25, 50, 67, 75];
+
+interface ReadinessCheck {
+  key: string;
+  label: string;
+  ready: boolean;
+  hint: string;
+}
 
 const PROPOSAL_STATUS_LABEL: Record<string, string> = {
   discussion: 'em discussão', voting: 'em votação', approved: 'aprovada',
@@ -43,6 +50,7 @@ export default function BoardProposalDetail() {
   const [decision, setDecision] = useState<any>(null);
   const [explainer, setExplainer] = useState<string | null>(null);
   const [form, setForm] = useState<{ quorum: number; opens: string; closes: string }>({ quorum: 0, opens: '', closes: '' });
+  const [readinessForm, setReadinessForm] = useState({ estimated_cost: '', cost_breakdown: '', risk_summary: '' });
 
   const load = useCallback(() => apiGet<any>(`/proposals/${id}`).then((d) => {
     setP(d);
@@ -50,6 +58,11 @@ export default function BoardProposalDetail() {
       quorum: d.quorum_percent || 0,
       opens:  toLocalInput(d.voting_opens_at),
       closes: toLocalInput(d.voting_closes_at),
+    });
+    setReadinessForm({
+      estimated_cost: d.estimated_cost !== null && d.estimated_cost !== undefined ? String(Math.round(Number(d.estimated_cost))) : '',
+      cost_breakdown: d.cost_breakdown || '',
+      risk_summary: d.risk_summary || '',
     });
     if (d.ai_summary)      { try { setSummary(JSON.parse(d.ai_summary)); } catch {} }
     if (d.ai_explainer)    setExplainer(d.ai_explainer);
@@ -80,8 +93,8 @@ export default function BoardProposalDetail() {
       load();
     } catch (err: any) {
       const code = err?.response?.data?.error;
-      if (code === 'missing_cost_estimate') {
-        toast.error(t('Adicione um custo estimado antes de abrir a votação. Use "Analisar com IA" se preferir.'));
+      if (code === 'proposal_not_ready') {
+        toast.error(t('Complete a prontidão antes de abrir a votação.'));
       } else {
         toast.error(code || t('Falha ao atualizar status'));
       }
@@ -96,6 +109,23 @@ export default function BoardProposalDetail() {
       load();
     } catch (err: any) {
       toast.error(err?.response?.data?.error || t('Falha ao analisar com IA'));
+    } finally { setBusy(false); }
+  }
+
+  async function saveReadiness() {
+    setBusy(true);
+    try {
+      const rawCost = readinessForm.estimated_cost.trim();
+      const parsedCost = rawCost ? Number(rawCost.replace(/[^\d]/g, '')) : null;
+      await apiPatch(`/proposals/${id}/readiness`, {
+        estimated_cost: parsedCost,
+        cost_breakdown: readinessForm.cost_breakdown,
+        risk_summary: readinessForm.risk_summary,
+      });
+      toast.success(t('Prontidão atualizada'));
+      load();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || t('Falha ao salvar prontidão'));
     } finally { setBusy(false); }
   }
 
@@ -174,6 +204,33 @@ export default function BoardProposalDetail() {
         <p data-user-content className="text-dusk-400 whitespace-pre-line leading-relaxed">{t(p.description)}</p>
       </GlassCard>
 
+      {p.status === 'discussion' && p.readiness && (
+        <GlassCard variant={p.readiness.ready ? 'clay-sage' : 'clay'} className="p-6 mb-6">
+          <div className="flex items-start justify-between gap-4 flex-wrap mb-4">
+            <div>
+              <h3 className="font-display text-lg text-dusk-500 flex items-center gap-2">
+                <ClipboardCheck className="w-5 h-5 text-dusk-400" /> {t('Prontidão para votação')}
+              </h3>
+              <p className="text-sm text-dusk-300 mt-1">
+                {t('A votação só abre quando custo, análise, riscos e janela estiverem claros.')}
+              </p>
+            </div>
+            <Badge tone={p.readiness.ready ? 'sage' : 'warning'}>{p.readiness.score}%</Badge>
+          </div>
+          <div className="grid md:grid-cols-2 gap-3">
+            {p.readiness.checks.map((check: ReadinessCheck) => (
+              <div key={check.key} className="rounded-2xl border border-white/60 bg-white/35 p-3">
+                <div className="flex items-center gap-2 text-sm font-medium text-dusk-500">
+                  {check.ready ? <Check className="w-4 h-4 text-sage-700" /> : <AlertTriangle className="w-4 h-4 text-amber-700" />}
+                  {t(check.label)}
+                </div>
+                {!check.ready && <p className="text-xs text-dusk-300 mt-1">{t(check.hint)}</p>}
+              </div>
+            ))}
+          </div>
+        </GlassCard>
+      )}
+
       {/* Pre-vote analysis (#13) — block opening voting until estimated_cost is set. */}
       {(p.status === 'discussion' || p.cost_breakdown || p.risk_summary) && (
         <GlassCard variant={p.estimated_cost > 0 ? 'clay-sage' : 'clay'} className="p-6 mb-6">
@@ -195,7 +252,7 @@ export default function BoardProposalDetail() {
           {p.cost_breakdown ? (
             <div>
               <div className="text-xs uppercase tracking-wider text-dusk-300 mb-1 font-medium">{t('Custos')}</div>
-              <pre className="text-sm text-dusk-400 whitespace-pre-wrap font-sans leading-relaxed">{t(p.cost_breakdown)}</pre>
+              <pre data-user-content className="text-sm text-dusk-400 whitespace-pre-wrap font-sans leading-relaxed">{p.cost_breakdown}</pre>
             </div>
           ) : (
             <p className="text-sm text-dusk-300">
@@ -207,7 +264,49 @@ export default function BoardProposalDetail() {
               <div className="text-xs uppercase tracking-wider text-dusk-300 mb-1 font-medium flex items-center gap-1">
                 <AlertTriangle className="w-3 h-3" /> {t('Riscos e considerações')}
               </div>
-              <p className="text-sm text-dusk-400 leading-relaxed whitespace-pre-line">{t(p.risk_summary)}</p>
+              <p data-user-content className="text-sm text-dusk-400 leading-relaxed whitespace-pre-line">{p.risk_summary}</p>
+            </div>
+          )}
+          {p.status === 'discussion' && (
+            <div className="mt-5 pt-5 border-t border-white/60 space-y-3">
+              <div className="grid md:grid-cols-2 gap-3">
+                <label className="block text-xs text-dusk-300 font-medium">
+                  {t('Custo estimado')}
+                  <input
+                    className="input mt-1"
+                    type="text"
+                    inputMode="numeric"
+                    value={readinessForm.estimated_cost}
+                    onChange={(e) => setReadinessForm({ ...readinessForm, estimated_cost: e.target.value })}
+                    placeholder={t('ex: 47000')}
+                  />
+                </label>
+                <label className="block text-xs text-dusk-300 font-medium">
+                  {t('Base do orçamento')}
+                  <textarea
+                    className="input mt-1 min-h-[96px]"
+                    value={readinessForm.cost_breakdown}
+                    onChange={(e) => setReadinessForm({ ...readinessForm, cost_breakdown: e.target.value })}
+                    placeholder={t('Cole a cotação, itens principais ou explique por que não há custo direto.')}
+                    maxLength={2000}
+                  />
+                </label>
+              </div>
+              <label className="block text-xs text-dusk-300 font-medium">
+                {t('Riscos, impacto e alternativas')}
+                <textarea
+                  className="input mt-1 min-h-[100px]"
+                  value={readinessForm.risk_summary}
+                  onChange={(e) => setReadinessForm({ ...readinessForm, risk_summary: e.target.value })}
+                  placeholder={t('Explique impacto nos moradores, dependências, riscos e alternativas mais baratas se existirem.')}
+                  maxLength={1500}
+                />
+              </label>
+              <div className="flex justify-end">
+                <Button size="sm" variant="primary" onClick={saveReadiness} loading={busy}>
+                  {t('Salvar prontidão')}
+                </Button>
+              </div>
             </div>
           )}
         </GlassCard>
