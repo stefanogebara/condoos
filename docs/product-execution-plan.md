@@ -456,6 +456,16 @@ This slice makes agency owner/date commitments portable outside the dashboard:
 - Keep follow-up report data scoped to the same agency/building/capability rules as the portfolio queue.
 - Cover the behavior through the agency portfolio domain test.
 
+## Completed Slice: Agency Follow-Up Triage Filters
+
+This slice makes the agency command center faster for real managers:
+
+- Add status filters to the `/board/portfolio` follow-up queue for all, overdue, open, in-progress, and waiting commitments.
+- Add building-level filtering when an agency has multiple linked buildings.
+- Show filtered/total queue counts and a clear empty state when filters have no matches.
+- Keep new queue labels localized across Portuguese, English, Spanish, and French.
+- Cover the behavior through the agency portfolio browser walkthrough, production build, and Spanish admin i18n leak sweep.
+
 ## Current Execution Slice: Enterprise Operations Hardening
 
 The next implementation slice should keep building on the private-enterprise plan:

@@ -22,6 +22,7 @@ interface AgencyBuildingMetrics {
 }
 
 type AgencyRiskFollowupStatus = 'open' | 'in_progress' | 'waiting' | 'done';
+type AgencyRiskFollowupFilter = 'all' | 'overdue' | AgencyRiskFollowupStatus;
 
 interface AgencyRiskFollowup {
   id: number;
@@ -334,6 +335,14 @@ const operationalExports: Array<{ kind: AgencyExportKind; label: string; capabil
   { kind: 'tickets', label: 'Chamados', capability: 'maintenance' },
   { kind: 'work-orders', label: 'Ordens de serviço', capability: 'maintenance' },
   { kind: 'audit', label: 'Auditoria', capability: 'building_admin' },
+];
+
+const followupFilters: Array<{ value: AgencyRiskFollowupFilter; label: string }> = [
+  { value: 'all', label: 'Todos' },
+  { value: 'overdue', label: 'Atrasados' },
+  { value: 'open', label: 'Abertos' },
+  { value: 'in_progress', label: 'Em andamento' },
+  { value: 'waiting', label: 'Aguardando' },
 ];
 
 function agencyRoleLabel(role: AgencyRole | string) {
@@ -729,6 +738,8 @@ export default function BoardAgencyPortfolio() {
   const [copiedStaffInvite, setCopiedStaffInvite] = useState(false);
   const [followupSavingKey, setFollowupSavingKey] = useState<string | null>(null);
   const [followupError, setFollowupError] = useState<string | null>(null);
+  const [followupFilter, setFollowupFilter] = useState<AgencyRiskFollowupFilter>('all');
+  const [followupBuildingFilter, setFollowupBuildingFilter] = useState('all');
   const [switchingBuildingId, setSwitchingBuildingId] = useState<number | null>(null);
   const [auditEvents, setAuditEvents] = useState<AgencyAuditEvent[]>([]);
   const [auditEventsLoading, setAuditEventsLoading] = useState(false);
@@ -797,6 +808,13 @@ export default function BoardAgencyPortfolio() {
     [primaryAgency, status, permissionReview],
   );
   const pilotReadinessReady = pilotReadiness.filter((item) => item.ready).length;
+  const followupQueue = primaryAgency?.risk_followups || [];
+  const filteredFollowups = useMemo(() => followupQueue.filter((item) => {
+    if (followupBuildingFilter !== 'all' && String(item.condominium_id) !== followupBuildingFilter) return false;
+    if (followupFilter === 'all') return true;
+    if (followupFilter === 'overdue') return item.overdue;
+    return item.status === followupFilter;
+  }), [followupQueue, followupBuildingFilter, followupFilter]);
   const trendMax = useMemo(() => Math.max(
     1,
     ...((primaryAgency?.trends || []).flatMap((point) => [
@@ -878,6 +896,11 @@ export default function BoardAgencyPortfolio() {
     }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [primaryAgency?.id, primaryAgency?.role]);
+
+  useEffect(() => {
+    setFollowupFilter('all');
+    setFollowupBuildingFilter('all');
+  }, [primaryAgency?.id]);
 
   async function createCode(e: React.FormEvent) {
     e.preventDefault();
@@ -1463,20 +1486,57 @@ export default function BoardAgencyPortfolio() {
                     <ListChecks className="w-5 h-5 text-sage-700" />
                     <h2 className="font-display text-xl text-dusk-500">{t('Acompanhamentos')}</h2>
                   </div>
-                  <Badge tone={(primaryAgency.risk_followups || []).some((item) => item.overdue) ? 'warning' : 'sage'}>
-                    {(primaryAgency.risk_followups || []).length}
+                  <Badge tone={followupQueue.some((item) => item.overdue) ? 'warning' : 'sage'}>
+                    {filteredFollowups.length}/{followupQueue.length}
                   </Badge>
                 </div>
                 <p className="text-sm text-dusk-300 mb-4">
                   {t('Riscos com dono e prazo para acompanhar esta semana.')}
                 </p>
-                {(primaryAgency.risk_followups || []).length === 0 ? (
+                {followupQueue.length > 0 && (
+                  <div className="space-y-2 mb-4">
+                    <div className="flex items-center gap-1.5 flex-wrap" aria-label={t('Filtrar acompanhamentos por estado')}>
+                      {followupFilters.map((filter) => (
+                        <button
+                          key={filter.value}
+                          type="button"
+                          onClick={() => setFollowupFilter(filter.value)}
+                          className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                            followupFilter === filter.value
+                              ? 'bg-dusk-400 text-cream-50 border-dusk-400'
+                              : 'bg-white/55 text-dusk-300 border-white/70 hover:bg-white/75'
+                          }`}
+                        >
+                          {t(filter.label)}
+                        </button>
+                      ))}
+                    </div>
+                    {primaryAgency.buildings.length > 1 && (
+                      <select
+                        value={followupBuildingFilter}
+                        onChange={(event) => setFollowupBuildingFilter(event.target.value)}
+                        className="w-full rounded-2xl bg-white/60 border border-white/70 px-3 py-2 text-sm text-dusk-400 outline-none"
+                        aria-label={t('Filtrar acompanhamentos por prédio')}
+                      >
+                        <option value="all">{t('Todos os prédios')}</option>
+                        {primaryAgency.buildings.map((building) => (
+                          <option key={building.id} value={building.id}>{building.name}</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                )}
+                {followupQueue.length === 0 ? (
                   <div className="rounded-2xl border border-white/70 bg-white/50 px-3 py-4 text-sm text-dusk-300">
                     {t('Sem acompanhamentos abertos.')}
                   </div>
+                ) : filteredFollowups.length === 0 ? (
+                  <div className="rounded-2xl border border-white/70 bg-white/50 px-3 py-4 text-sm text-dusk-300">
+                    {t('Nenhum acompanhamento corresponde aos filtros.')}
+                  </div>
                 ) : (
                   <div className="space-y-2">
-                    {(primaryAgency.risk_followups || []).slice(0, 6).map((item) => (
+                    {filteredFollowups.slice(0, 8).map((item) => (
                       <div key={item.id} className="rounded-2xl border border-white/70 bg-white/60 px-3 py-3">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
@@ -1510,6 +1570,11 @@ export default function BoardAgencyPortfolio() {
                         </div>
                       </div>
                     ))}
+                    {filteredFollowups.length > 8 && (
+                      <div className="text-xs text-dusk-300 px-1">
+                        {t('Mostrando os 8 acompanhamentos mais urgentes. Ajuste os filtros ou exporte o relatório para ver mais.')}
+                      </div>
+                    )}
                   </div>
                 )}
               </GlassCard>

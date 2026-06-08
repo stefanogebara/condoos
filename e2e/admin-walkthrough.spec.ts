@@ -132,9 +132,26 @@ test('admin: agency portfolio renders trends and work-order story', async ({ pag
         due_at: '2026-05-20T12:00:00.000Z',
         note: 'Call vendor before board check-in',
         route: '/board/tickets',
-        overdue: false,
+        overdue: true,
         created_at: '2026-05-18T12:00:00.000Z',
         updated_at: '2026-05-18T12:00:00.000Z',
+      }, {
+        id: 2,
+        agency_id: 77,
+        condominium_id: 46,
+        condominium_name: 'North Tower',
+        kind: 'overdue_dues',
+        record_id: '22',
+        owner_user_id: 502,
+        owner_email: 'finance@example.com',
+        owner_name: 'Budget Owner',
+        status: 'waiting',
+        due_at: '2026-06-20T12:00:00.000Z',
+        note: 'Confirm payment promise before report export',
+        route: '/board/finances',
+        overdue: false,
+        created_at: '2026-05-19T12:00:00.000Z',
+        updated_at: '2026-05-19T12:00:00.000Z',
       }],
       trends: [
         { month: '2025-12', tickets_opened: 1, tickets_resolved: 1, work_orders_opened: 0, work_orders_completed: 0, maintenance_spend_cents: 0, maintenance_spend: 'USD 0.00', overdue_dues: 0 },
@@ -224,6 +241,34 @@ test('admin: agency portfolio renders trends and work-order story', async ({ pag
             },
           ],
         },
+      }, {
+        id: 46,
+        name: 'North Tower',
+        address: '2 Main',
+        invite_code: 'NORTH1',
+        metrics: {
+          pending_residents: 0,
+          unresolved_tickets: 0,
+          urgent_tickets: 0,
+          recurring_problem_clusters: 0,
+          vendor_follow_up_problems: 0,
+          overdue_dues: 1,
+          pending_payment_proofs: 0,
+          vendor_sla_problems: 0,
+          proposals_missing_budget: 0,
+          upcoming_meetings: 0,
+        },
+        scorecard: {
+          health_score: 78,
+          risk_level: 'watch',
+          maintenance_score: 88,
+          finance_score: 64,
+          community_score: 90,
+          next_actions: [
+            'Review overdue dues and payment follow-up.',
+          ],
+          drilldowns: [],
+        },
       }],
     }],
   };
@@ -291,11 +336,20 @@ test('admin: agency portfolio renders trends and work-order story', async ({ pag
   await expect(page.getByText('Lift Vendor').first()).toBeVisible();
   await expect(page.getByText(/2 cotações|2 quotes/i)).toBeVisible();
   await expect(page.getByRole('button', { name: /Open tickets|Abrir chamados/i })).toBeVisible();
-  await expect(page.getByText(/Operational health|Saúde operacional/i)).toBeVisible();
+  await expect(page.getByText(/Operational health|Saúde operacional/i).first()).toBeVisible();
   await expect(page.getByText('49/100')).toBeVisible();
   await expect(page.getByText(/Critical|Crítico/i)).toBeVisible();
   await expect(page.getByRole('heading', { name: /Follow-ups|Acompanhamentos/i })).toBeVisible();
   await expect(page.getByText(/Risks with an owner|Riscos com dono/i)).toBeVisible();
+  await expect(page.getByText('Confirm payment promise before report export')).toBeVisible();
+  await page.getByRole('button', { name: /Overdue|Atrasados/i }).click();
+  await expect(page.getByText('Call vendor before board check-in')).toBeVisible();
+  await expect(page.getByText('Confirm payment promise before report export')).toBeHidden();
+  await page.getByRole('button', { name: /All|Todos/i }).first().click();
+  await page.getByLabel(/Filter follow-ups by building|Filtrar acompanhamentos por prédio/i).selectOption('46');
+  await expect(page.getByText('Confirm payment promise before report export')).toBeVisible();
+  await expect(page.getByText('Call vendor before board check-in')).toBeHidden();
+  await page.getByLabel(/Filter follow-ups by building|Filtrar acompanhamentos por prédio/i).selectOption('all');
   await expect(page.getByText(/Maintenance|Manutenção/i).first()).toBeVisible();
   await expect(page.getByText(/Chase stale vendor updates|Cobrar atualizações|Persigue actualizaciones|Relancez les mises/i).first()).toBeVisible();
   await expect(page.getByText(/Records explaining risk|Registros que explicam o risco/i)).toBeVisible();
