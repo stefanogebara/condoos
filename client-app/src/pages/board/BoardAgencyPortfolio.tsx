@@ -124,6 +124,13 @@ const RISK_KIND_CAPABILITY: Record<AgencyAttentionKind, AgencyBuildingCapability
   proposals_missing_budget: 'building_admin',
 };
 
+const ESCALATION_KINDS: AgencyAttentionKind[] = [
+  'urgent_tickets',
+  'vendor_sla_problems',
+  'vendor_follow_up_problems',
+  'recurring_problem_clusters',
+];
+
 interface AgencyAttentionItem {
   id: string;
   kind: AgencyAttentionKind;
@@ -269,6 +276,16 @@ interface PilotReadinessItem {
   label: string;
   okDetail: string;
   reviewDetail: string;
+}
+
+interface AgencyEscalationItem {
+  id: string;
+  buildingId: number;
+  buildingName: string;
+  kind: AgencyAttentionKind;
+  severity: AgencyAttentionItem['severity'];
+  route: string;
+  record: AgencyBuilding['scorecard']['drilldowns'][number]['records'][number];
 }
 
 function Metric({ icon: Icon, label, value, urgent = false }: { icon: any; label: string; value: number; urgent?: boolean }) {
@@ -417,6 +434,21 @@ function riskFollowupTone(status: AgencyRiskFollowupStatus) {
   if (status === 'waiting') return 'warning' as const;
   if (status === 'in_progress') return 'peach' as const;
   return 'neutral' as const;
+}
+
+function isFollowupOverdue(followup: AgencyRiskFollowup | null | undefined) {
+  if (!followup?.due_at || followup.status === 'done') return false;
+  const due = new Date(followup.due_at);
+  return !Number.isNaN(due.getTime()) && due.getTime() < Date.now();
+}
+
+function escalationSortValue(item: AgencyEscalationItem) {
+  const severityWeight = item.severity === 'critical' ? 400 : item.severity === 'warning' ? 250 : 100;
+  const followup = item.record.follow_up || null;
+  const overdueWeight = isFollowupOverdue(followup) ? 80 : 0;
+  const unownedWeight = !followup?.owner_user_id ? 40 : 0;
+  const time = item.record.occurred_at ? new Date(item.record.occurred_at).getTime() : 0;
+  return severityWeight + overdueWeight + unownedWeight + (Number.isNaN(time) ? 0 : Math.min(30, Math.floor(time / 8.64e7) % 30));
 }
 
 function toDateInput(value: string | null | undefined) {
@@ -818,6 +850,30 @@ export default function BoardAgencyPortfolio() {
     if (followupFilter === 'overdue') return item.overdue;
     return item.status === followupFilter;
   }), [followupQueue, followupBuildingFilter, followupFilter]);
+  const escalationItems = useMemo<AgencyEscalationItem[]>(() => {
+    if (!primaryAgency) return [];
+    const items: AgencyEscalationItem[] = [];
+    primaryAgency.buildings.forEach((building) => {
+      building.scorecard.drilldowns
+        .filter((drilldown) => ESCALATION_KINDS.includes(drilldown.kind))
+        .forEach((drilldown) => {
+          drilldown.records.forEach((record) => {
+            items.push({
+              id: `${building.id}:${drilldown.kind}:${record.id}`,
+              buildingId: building.id,
+              buildingName: building.name,
+              kind: drilldown.kind,
+              severity: ATTENTION_SEVERITY[drilldown.kind] || 'info',
+              route: record.route || drilldown.route,
+              record,
+            });
+          });
+        });
+    });
+    return items.sort((a, b) => escalationSortValue(b) - escalationSortValue(a));
+  }, [primaryAgency]);
+  const criticalEscalationCount = escalationItems.filter((item) => item.severity === 'critical').length;
+  const overdueEscalationCount = escalationItems.filter((item) => isFollowupOverdue(item.record.follow_up)).length;
   const bulkOwnerOptions = useMemo(() => {
     const targetBuildingIds = Array.from(new Set(filteredFollowups.map((item) => item.condominium_id)));
     return staff
@@ -1434,6 +1490,73 @@ export default function BoardAgencyPortfolio() {
                         </Button>
                       </div>
                     ))}
+                  </div>
+                )}
+              </GlassCard>
+
+              <GlassCard className="p-5">
+                <div className="flex items-start justify-between gap-3 flex-wrap mb-4">
+                  <div>
+                    <div className="text-xs uppercase tracking-[0.14em] text-dusk-300 flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4" /> {t('Escalações')}
+                    </div>
+                    <h2 className="font-display text-2xl text-dusk-500 mt-1">{t('Problemas que travam a operação')}</h2>
+                    <p className="text-sm text-dusk-300 mt-1">
+                      {t('Chamados urgentes, SLA perdido e fornecedores sem retorno em todos os prédios permitidos.')}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap justify-end">
+                    <Badge tone={criticalEscalationCount > 0 ? 'peach' : 'sage'}>
+                      {criticalEscalationCount} {t('críticos')}
+                    </Badge>
+                    <Badge tone={overdueEscalationCount > 0 ? 'warning' : 'neutral'}>
+                      {overdueEscalationCount} {t('acompanhamentos atrasados')}
+                    </Badge>
+                  </div>
+                </div>
+                {escalationItems.length === 0 ? (
+                  <div className="rounded-2xl border border-white/70 bg-white/50 px-3 py-4 text-sm text-dusk-300">
+                    {t('Nenhuma escalação operacional agora.')}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {escalationItems.slice(0, 8).map((item) => (
+                      <div key={item.id} className="rounded-3xl border border-white/70 bg-white/60 p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Badge tone={attentionTone(item.severity)}>{attentionLabel(item.kind)}</Badge>
+                              {isFollowupOverdue(item.record.follow_up) && <Badge tone="warning">{t('Atrasado')}</Badge>}
+                            </div>
+                            <div className="mt-1 text-xs text-dusk-300 truncate" data-user-content>{item.buildingName}</div>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => switchActiveBuilding({ id: item.buildingId }, item.route)}
+                            loading={switchingBuildingId === item.buildingId}
+                            leftIcon={<Building2 className="w-4 h-4" />}
+                          >
+                            {t('Abrir')}
+                          </Button>
+                        </div>
+                        <div className="mt-2 border-t border-white/60 pt-2">
+                          <DrilldownRecord
+                            record={item.record}
+                            staff={staff}
+                            canSave={agencyCapabilitySet.has(RISK_KIND_CAPABILITY[item.kind])}
+                            saving={followupSavingKey === `${item.buildingId}:${item.kind}:${item.record.id}`}
+                            onSave={(payload) => saveRiskFollowup(item.buildingId, item.kind, item.record.id, payload)}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                    {escalationItems.length > 8 && (
+                      <div className="text-xs text-dusk-300 px-1">
+                        {t('Mostrando as 8 escalações mais importantes. Use os cartões dos prédios para ver todos os registros.')}
+                      </div>
+                    )}
                   </div>
                 )}
               </GlassCard>

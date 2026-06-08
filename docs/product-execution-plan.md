@@ -487,9 +487,19 @@ This slice lets agency managers rebalance portfolio work without opening every r
 - Localize the bulk owner/date controls and validation errors across Portuguese, English, Spanish, and French.
 - Extend the agency portfolio browser walkthrough to prove bulk date and owner changes update only the filtered building item.
 
+## Completed Slice: Agency Escalation View
+
+This slice makes the portfolio page feel more like a management-company command center:
+
+- Add a cross-building escalation section on `/board/portfolio` for urgent tickets, missed vendor SLAs, stale vendor follow-ups, and recurring maintenance clusters.
+- Rank escalations so critical, overdue, and unowned records float to the top.
+- Show the building, risk type, source record, owner/status/due-date follow-up, and open-building action in one place.
+- Reuse the existing audited follow-up controls so managers can assign, date, note, or close escalation records without creating a second workflow.
+- Localize the new section across Portuguese, English, Spanish, and French and cover it in the agency portfolio browser walkthrough.
+
 ## Current Execution Slice: Enterprise Operations Hardening
 
 The next implementation slice should keep building on the private-enterprise plan:
 
-- Continue turning portfolio reporting into a true agency command center.
+- Continue turning portfolio reporting into a true agency command center with deeper SLA automation, escalation aging, and cross-building vendor intelligence.
 - Keep production-safe i18n, build, server tests, and pilot smoke checks green before each push.

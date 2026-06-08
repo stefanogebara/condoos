@@ -376,10 +376,14 @@ test('admin: agency portfolio renders trends and work-order story', async ({ pag
   await expect(page.getByRole('button', { name: /Open tickets|Abrir chamados/i })).toBeVisible();
   await expect(page.getByText(/Operational health|Saúde operacional/i).first()).toBeVisible();
   await expect(page.getByText('49/100')).toBeVisible();
-  await expect(page.getByText(/Critical|Crítico/i)).toBeVisible();
+  await expect(page.getByText(/^(Critical|Crítico)$/i)).toBeVisible();
   await expect(page.getByRole('heading', { name: /Follow-ups|Acompanhamentos/i })).toBeVisible();
   await expect(page.getByText(/Risks with an owner|Riscos com dono/i)).toBeVisible();
   await expect(page.getByText('Confirm payment promise before report export')).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Problems blocking operations|Problemas que travam a operação/i })).toBeVisible();
+  await expect(page.getByText(/Urgent tickets, missed SLAs|Chamados urgentes, SLA perdido/i)).toBeVisible();
+  await expect(page.getByText('Test Condo').first()).toBeVisible();
+  await expect(page.getByText('Elevator noise').first()).toBeVisible();
   await page.getByRole('button', { name: /Overdue|Atrasados/i }).click();
   await expect(page.getByText('Call vendor before board check-in')).toBeVisible();
   await expect(page.getByText('Confirm payment promise before report export')).toBeHidden();
@@ -419,7 +423,7 @@ test('admin: agency portfolio renders trends and work-order story', async ({ pag
   await expect(page.getByText(/Maintenance|Manutenção/i).first()).toBeVisible();
   await expect(page.getByText(/Chase stale vendor updates|Cobrar atualizações|Persigue actualizaciones|Relancez les mises/i).first()).toBeVisible();
   await expect(page.getByText(/Records explaining risk|Registros que explicam o risco/i)).toBeVisible();
-  await expect(page.getByText('Elevator noise')).toBeVisible();
+  await expect(page.getByText('Elevator noise').first()).toBeVisible();
   await expect(page.getByText(/In progress|Em andamento|En curso/i).first()).toBeVisible();
   await expect(page.getByText(/Maintenance Owner/i).first()).toBeVisible();
   await expect(page.getByText('Garage gate repair').first()).toBeVisible();
