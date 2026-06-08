@@ -466,6 +466,16 @@ This slice makes the agency command center faster for real managers:
 - Keep new queue labels localized across Portuguese, English, Spanish, and French.
 - Cover the behavior through the agency portfolio browser walkthrough, production build, and Spanish admin i18n leak sweep.
 
+## Completed Slice: Agency Bulk Follow-Up Completion
+
+This slice starts turning filtered queues into action batches:
+
+- Add a bulk action on `/board/portfolio` to mark the currently filtered follow-up queue as done.
+- Reuse the existing scoped `POST /api/agencies/:agencyId/risk-followups` endpoint so each bulk item still passes agency role, building scope, risk-kind capability, owner validation, and audit logging.
+- Preserve each follow-up's owner, due date, and note while changing only the status to done.
+- Localize the bulk-action label and failure message across Portuguese, English, Spanish, and French.
+- Cover the behavior through the agency portfolio browser walkthrough, proving only the filtered overdue item is updated.
+
 ## Current Execution Slice: Enterprise Operations Hardening
 
 The next implementation slice should keep building on the private-enterprise plan:

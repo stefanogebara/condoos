@@ -272,12 +272,41 @@ test('admin: agency portfolio renders trends and work-order story', async ({ pag
       }],
     }],
   };
+  const bulkFollowupUpdates: any[] = [];
 
   await page.route('**/api/agencies/portfolio', async (route) => route.fulfill({
     status: 200,
     contentType: 'application/json',
     body: JSON.stringify({ data: portfolio }),
   }));
+  await page.route('**/api/agencies/77/risk-followups', async (route) => {
+    if (route.request().method() !== 'POST') return route.continue();
+    const body = route.request().postDataJSON();
+    bulkFollowupUpdates.push(body);
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          follow_up: {
+            id: body.record_id === '10' ? 1 : 2,
+            agency_id: 77,
+            condominium_id: body.condominium_id,
+            kind: body.kind,
+            record_id: body.record_id,
+            owner_user_id: body.owner_user_id,
+            owner_email: body.owner_user_id === 501 ? 'maintenance@example.com' : 'finance@example.com',
+            owner_name: body.owner_user_id === 501 ? 'Maintenance Owner' : 'Budget Owner',
+            status: body.status,
+            due_at: body.due_at,
+            note: body.note,
+            created_at: '2026-05-18T12:00:00.000Z',
+            updated_at: '2026-05-21T12:00:00.000Z',
+          },
+        },
+      }),
+    });
+  });
   await page.route('**/api/admin/integrations/status', async (route) => route.fulfill({
     status: 200,
     contentType: 'application/json',
@@ -345,6 +374,14 @@ test('admin: agency portfolio renders trends and work-order story', async ({ pag
   await page.getByRole('button', { name: /Overdue|Atrasados/i }).click();
   await expect(page.getByText('Call vendor before board check-in')).toBeVisible();
   await expect(page.getByText('Confirm payment promise before report export')).toBeHidden();
+  await page.getByRole('button', { name: /Mark filtered as done|Marcar filtrados como concluídos/i }).click();
+  await expect.poll(() => bulkFollowupUpdates.length).toBe(1);
+  expect(bulkFollowupUpdates[0]).toMatchObject({
+    condominium_id: 45,
+    kind: 'urgent_tickets',
+    record_id: '10',
+    status: 'done',
+  });
   await page.getByRole('button', { name: /All|Todos/i }).first().click();
   await page.getByLabel(/Filter follow-ups by building|Filtrar acompanhamentos por prédio/i).selectOption('46');
   await expect(page.getByText('Confirm payment promise before report export')).toBeVisible();

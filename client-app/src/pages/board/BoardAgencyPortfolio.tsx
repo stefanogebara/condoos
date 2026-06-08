@@ -740,6 +740,7 @@ export default function BoardAgencyPortfolio() {
   const [followupError, setFollowupError] = useState<string | null>(null);
   const [followupFilter, setFollowupFilter] = useState<AgencyRiskFollowupFilter>('all');
   const [followupBuildingFilter, setFollowupBuildingFilter] = useState('all');
+  const [bulkFollowupSaving, setBulkFollowupSaving] = useState(false);
   const [switchingBuildingId, setSwitchingBuildingId] = useState<number | null>(null);
   const [auditEvents, setAuditEvents] = useState<AgencyAuditEvent[]>([]);
   const [auditEventsLoading, setAuditEventsLoading] = useState(false);
@@ -1118,6 +1119,29 @@ export default function BoardAgencyPortfolio() {
       setFollowupError(t('Não foi possível salvar o acompanhamento.'));
     } finally {
       setFollowupSavingKey(null);
+    }
+  }
+
+  async function markFilteredFollowupsDone() {
+    if (!primaryAgency || filteredFollowups.length === 0) return;
+    setBulkFollowupSaving(true);
+    setFollowupError(null);
+    try {
+      await Promise.all(filteredFollowups.map((item) => apiPost<{ follow_up: AgencyRiskFollowup }>(`/agencies/${primaryAgency.id}/risk-followups`, {
+        condominium_id: item.condominium_id,
+        kind: item.kind,
+        record_id: item.record_id,
+        owner_user_id: item.owner_user_id,
+        status: 'done',
+        due_at: item.due_at,
+        note: item.note,
+      })));
+      await load();
+      await loadAuditEvents(primaryAgency.id);
+    } catch {
+      setFollowupError(t('Não foi possível concluir os acompanhamentos filtrados.'));
+    } finally {
+      setBulkFollowupSaving(false);
     }
   }
 
@@ -1523,6 +1547,19 @@ export default function BoardAgencyPortfolio() {
                           <option key={building.id} value={building.id}>{building.name}</option>
                         ))}
                       </select>
+                    )}
+                    {filteredFollowups.length > 0 && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="w-full"
+                        onClick={markFilteredFollowupsDone}
+                        loading={bulkFollowupSaving}
+                        leftIcon={<CheckCircle2 className="w-4 h-4" />}
+                      >
+                        {t('Marcar filtrados como concluídos')}
+                      </Button>
                     )}
                   </div>
                 )}
