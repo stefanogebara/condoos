@@ -150,6 +150,12 @@ export interface AgencyRiskFollowup {
   updated_at: string;
 }
 
+export interface AgencyRiskFollowupQueueItem extends AgencyRiskFollowup {
+  condominium_name: string;
+  route: string;
+  overdue: boolean;
+}
+
 export interface AgencyScorecardDrilldownRecord {
   id: number | string;
   title: string;
@@ -303,6 +309,7 @@ export interface AgencyPortfolio {
   totals: AgencyBuildingMetrics;
   permission_review: AgencyPermissionReview | null;
   attention: AgencyPortfolioAttentionItem[];
+  risk_followups: AgencyRiskFollowupQueueItem[];
   trends: AgencyPortfolioTrendPoint[];
   work_order_story: AgencyWorkOrderStory[];
   buildings: Array<{
@@ -1264,6 +1271,52 @@ function buildAgencyAttentionQueue(
     .slice(0, 12);
 }
 
+function buildAgencyRiskFollowupQueue(
+  membership: AgencyMembership,
+  condominiumIds: number[],
+): AgencyRiskFollowupQueueItem[] {
+  if (condominiumIds.length === 0) return [];
+  const rows = db.prepare(
+    `SELECT arf.id, arf.agency_id, arf.condominium_id, arf.kind, arf.record_id,
+            arf.owner_user_id, owner.email AS owner_email,
+            owner.first_name AS owner_first_name, owner.last_name AS owner_last_name,
+            arf.status, arf.due_at, arf.note, arf.created_by_user_id,
+            arf.updated_by_user_id, arf.created_at, arf.updated_at,
+            c.name AS condominium_name
+     FROM agency_risk_followups arf
+     JOIN condominiums c ON c.id = arf.condominium_id
+     LEFT JOIN users owner ON owner.id = arf.owner_user_id
+     WHERE arf.agency_id = ?
+       AND arf.condominium_id IN (${placeholders(condominiumIds)})
+       AND arf.status <> 'done'
+     ORDER BY
+       CASE WHEN arf.due_at IS NOT NULL AND datetime(arf.due_at) < CURRENT_TIMESTAMP THEN 0 ELSE 1 END,
+       CASE WHEN arf.due_at IS NULL THEN 1 ELSE 0 END,
+       datetime(arf.due_at) ASC,
+       datetime(arf.updated_at) DESC,
+       arf.id DESC
+     LIMIT 24`
+  ).all(membership.agency_id, ...condominiumIds) as Array<any & { condominium_name: string }>;
+
+  return rows
+    .map((row) => {
+      const followup = mapAgencyRiskFollowup(row);
+      return {
+        ...followup,
+        condominium_name: row.condominium_name,
+        route: ATTENTION_CONFIG[followup.kind].route,
+        overdue: !!followup.due_at
+          && Date.parse(followup.due_at) < Date.now()
+          && followup.status !== 'done',
+      };
+    })
+    .filter((followup) => agencyMembershipCanUseCapability(
+      membership,
+      agencyRiskKindCapability(followup.kind),
+    ))
+    .slice(0, 12);
+}
+
 function monthSequenceEnding(endMonth: string, months = 6): string[] {
   const [year, month] = endMonth.split('-').map(Number);
   const end = new Date(Date.UTC(year, month - 1, 1));
@@ -1560,6 +1613,7 @@ export function buildAgencyPortfolio(membership: AgencyMembership): AgencyPortfo
       ? buildAgencyPermissionReview(membership.agency_id, buildings)
       : null,
     attention: buildAgencyAttentionQueue(buildings),
+    risk_followups: buildAgencyRiskFollowupQueue(membership, allowedBuildingIds),
     trends: buildAgencyPortfolioTrends(allowedBuildingIds),
     work_order_story: buildAgencyWorkOrderStory(allowedBuildingIds),
     buildings,

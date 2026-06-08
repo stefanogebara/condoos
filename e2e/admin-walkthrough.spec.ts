@@ -118,6 +118,24 @@ test('admin: agency portfolio renders trends and work-order story', async ({ pag
         buildings_without_direct_staff: [],
       },
       attention: [],
+      risk_followups: [{
+        id: 1,
+        agency_id: 77,
+        condominium_id: 45,
+        condominium_name: 'Test Condo',
+        kind: 'urgent_tickets',
+        record_id: '10',
+        owner_user_id: 501,
+        owner_email: 'maintenance@example.com',
+        owner_name: 'Maintenance Owner',
+        status: 'in_progress',
+        due_at: '2026-05-20T12:00:00.000Z',
+        note: 'Call vendor before board check-in',
+        route: '/board/tickets',
+        overdue: false,
+        created_at: '2026-05-18T12:00:00.000Z',
+        updated_at: '2026-05-18T12:00:00.000Z',
+      }],
       trends: [
         { month: '2025-12', tickets_opened: 1, tickets_resolved: 1, work_orders_opened: 0, work_orders_completed: 0, maintenance_spend_cents: 0, maintenance_spend: 'USD 0.00', overdue_dues: 0 },
         { month: '2026-01', tickets_opened: 2, tickets_resolved: 1, work_orders_opened: 1, work_orders_completed: 0, maintenance_spend_cents: 10000, maintenance_spend: 'USD 100.00', overdue_dues: 0 },
@@ -276,12 +294,14 @@ test('admin: agency portfolio renders trends and work-order story', async ({ pag
   await expect(page.getByText(/Operational health|Saúde operacional/i)).toBeVisible();
   await expect(page.getByText('49/100')).toBeVisible();
   await expect(page.getByText(/Critical|Crítico/i)).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Follow-ups|Acompanhamentos/i })).toBeVisible();
+  await expect(page.getByText(/Risks with an owner|Riscos com dono/i)).toBeVisible();
   await expect(page.getByText(/Maintenance|Manutenção/i).first()).toBeVisible();
   await expect(page.getByText(/Chase stale vendor updates|Cobrar atualizações|Persigue actualizaciones|Relancez les mises/i).first()).toBeVisible();
   await expect(page.getByText(/Records explaining risk|Registros que explicam o risco/i)).toBeVisible();
   await expect(page.getByText('Elevator noise')).toBeVisible();
-  await expect(page.getByText(/In progress|Em andamento|En curso/i)).toBeVisible();
-  await expect(page.getByText(/Maintenance Owner/i)).toBeVisible();
+  await expect(page.getByText(/In progress|Em andamento|En curso/i).first()).toBeVisible();
+  await expect(page.getByText(/Maintenance Owner/i).first()).toBeVisible();
   await expect(page.getByText('Garage gate repair').first()).toBeVisible();
 });
 

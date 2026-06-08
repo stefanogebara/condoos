@@ -510,12 +510,18 @@ test('agency risk follow-ups attach owner and due date to scoped drilldown recor
   assert.equal(urgentDrilldown.records[0].follow_up?.owner_email, 'maintenance@example.com');
   assert.equal(urgentDrilldown.records[0].follow_up?.status, 'in_progress');
   assert.equal(urgentDrilldown.records[0].follow_up?.note, 'Call elevator vendor before board check-in.');
+  assert.equal(portfolio.risk_followups.length, 1);
+  assert.equal(portfolio.risk_followups[0].owner_email, 'maintenance@example.com');
+  assert.equal(portfolio.risk_followups[0].condominium_name, 'Test Condo');
+  assert.equal(portfolio.risk_followups[0].route, '/board/tickets');
 
   const listed = listAgencyRiskFollowups(adminMembership, condoId);
   assert.equal(listed.length, 1);
   assert.equal(listed[0].record_id, String(ticketId));
 
   const scopedMembership = userAgencyMemberships(scopedOnlyId)[0];
+  const scopedPortfolio = buildAgencyPortfolio(scopedMembership);
+  assert.equal(scopedPortfolio.risk_followups.length, 0);
   assert.throws(
     () => listAgencyRiskFollowups(scopedMembership, condoId),
     /agency_building_forbidden/,

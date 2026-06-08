@@ -443,6 +443,7 @@ This slice turns portfolio risk from a passive signal into owned operational wor
 - Enforce building scope and role capability per risk kind: maintenance risks require maintenance access, finance risks require finance access, and resident/proposal risks require building-admin access.
 - Require assigned owners to belong to the agency and be scoped to the same building unless they are agency admins.
 - Add compact follow-up controls on `/board/portfolio` so managers can track, edit, assign, date, and close risks without leaving the command center.
+- Add an agency follow-up queue on `/board/portfolio` so managers can see open/overdue risk follow-ups without scanning every building card.
 - Cover the behavior with the agency portfolio domain test, production build, and the portfolio browser walkthrough.
 
 ## Current Execution Slice: Enterprise Operations Hardening

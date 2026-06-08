@@ -39,6 +39,12 @@ interface AgencyRiskFollowup {
   updated_at: string;
 }
 
+interface AgencyRiskFollowupQueueItem extends AgencyRiskFollowup {
+  condominium_name: string;
+  route: string;
+  overdue: boolean;
+}
+
 interface AgencyBuilding {
   id: number;
   name: string;
@@ -169,6 +175,7 @@ interface AgencyPortfolio {
   totals: AgencyBuildingMetrics;
   permission_review: AgencyPermissionReview | null;
   attention: AgencyAttentionItem[];
+  risk_followups?: AgencyRiskFollowupQueueItem[];
   trends: AgencyTrendPoint[];
   work_order_story: AgencyWorkOrderStory[];
   buildings: AgencyBuilding[];
@@ -1450,6 +1457,63 @@ export default function BoardAgencyPortfolio() {
             </div>
 
             <div className="space-y-5">
+              <GlassCard className="p-5 h-fit">
+                <div className="flex items-start justify-between gap-3 mb-2">
+                  <div className="flex items-center gap-2">
+                    <ListChecks className="w-5 h-5 text-sage-700" />
+                    <h2 className="font-display text-xl text-dusk-500">{t('Acompanhamentos')}</h2>
+                  </div>
+                  <Badge tone={(primaryAgency.risk_followups || []).some((item) => item.overdue) ? 'warning' : 'sage'}>
+                    {(primaryAgency.risk_followups || []).length}
+                  </Badge>
+                </div>
+                <p className="text-sm text-dusk-300 mb-4">
+                  {t('Riscos com dono e prazo para acompanhar esta semana.')}
+                </p>
+                {(primaryAgency.risk_followups || []).length === 0 ? (
+                  <div className="rounded-2xl border border-white/70 bg-white/50 px-3 py-4 text-sm text-dusk-300">
+                    {t('Sem acompanhamentos abertos.')}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {(primaryAgency.risk_followups || []).slice(0, 6).map((item) => (
+                      <div key={item.id} className="rounded-2xl border border-white/70 bg-white/60 px-3 py-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <Badge tone={item.overdue ? 'warning' : riskFollowupTone(item.status)}>
+                                {item.overdue ? t('Atrasado') : riskFollowupStatusLabel(item.status)}
+                              </Badge>
+                              <span className="font-medium text-dusk-500">{attentionLabel(item.kind)}</span>
+                            </div>
+                            <div className="text-xs text-dusk-300 mt-1 truncate" data-user-content>
+                              {item.condominium_name}
+                            </div>
+                            <div className="text-xs text-dusk-300 mt-1 truncate" data-user-content>
+                              {[item.owner_name || item.owner_email || t('Sem responsável'), item.due_at ? formatDate(item.due_at) : t('Sem prazo')]
+                                .filter(Boolean)
+                                .join(' · ')}
+                            </div>
+                            {item.note && (
+                              <div className="text-xs text-dusk-300 mt-1 line-clamp-2" data-user-content>{item.note}</div>
+                            )}
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => switchActiveBuilding({ id: item.condominium_id }, item.route)}
+                            loading={switchingBuildingId === item.condominium_id}
+                          >
+                            {t('Ver')}
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </GlassCard>
+
               {canReviewEnterprise && (
                 <>
                   <GlassCard className="p-5 h-fit">
