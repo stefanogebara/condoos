@@ -323,7 +323,24 @@ test('agency portfolio CSV exports scoped building metrics', async () => {
      VALUES (?, 3000, 'USD', 'maintenance', 'Elevator Co', 'Elevator inspection', '2026-05-16', 'https://example.com/receipt.pdf')`
   ).run(condoId);
 
+  const maintenanceOwnerId = createUser('maintenance-owner@example.com', 'board_admin');
+  upsertAgencyStaff({
+    agencyId: agency!.agencyId,
+    email: 'maintenance-owner@example.com',
+    role: 'maintenance_manager',
+    buildingIds: [condoId],
+  });
   const membership = userAgencyMemberships(adminId)[0];
+  upsertAgencyRiskFollowup(membership, {
+    condominiumId: condoId,
+    kind: 'vendor_follow_up_problems',
+    recordId: staleVendorTicketId,
+    ownerUserId: maintenanceOwnerId,
+    status: 'waiting',
+    dueAt: '2026-05-20T12:00:00.000Z',
+    note: 'Get vendor update before board check-in.',
+    actorUserId: adminId,
+  });
   const portfolio = buildAgencyPortfolio(membership);
   assert.deepEqual(portfolio.capabilities, ['building_admin', 'finance', 'maintenance', 'concierge', 'documents', 'reports']);
   assert.equal(portfolio.totals.pending_residents, 1);
@@ -359,6 +376,8 @@ test('agency portfolio CSV exports scoped building metrics', async () => {
   assert.equal(portfolio.work_order_story[0].quote_count, 1);
   assert.equal(portfolio.work_order_story[0].selected_quote_count, 1);
   assert.equal(portfolio.work_order_story[0].route, '/board/tickets');
+  assert.equal(portfolio.risk_followups.length, 1);
+  assert.equal(portfolio.risk_followups[0].owner_email, 'maintenance-owner@example.com');
   assert.equal(portfolio.buildings[0].scorecard.risk_level, 'critical');
   assert.equal(portfolio.buildings[0].scorecard.health_score, 49);
   assert.equal(portfolio.buildings[0].scorecard.maintenance_score, 30);
@@ -394,6 +413,8 @@ test('agency portfolio CSV exports scoped building metrics', async () => {
   assert.equal(report.summary.receipt_coverage_average_percent, 100);
   assert.match(report.summary.headline, /Quito Operations has 5 portfolio attention item/);
   assert.match(report.summary.top_risks[0], /Test Condo: 1 urgent tickets/);
+  assert.equal(report.risk_followups.length, 1);
+  assert.equal(report.risk_followups[0].owner_email, 'maintenance-owner@example.com');
   const reportMayTrend = report.trends.find((point) => point.month === '2026-05');
   assert.ok(reportMayTrend);
   assert.equal(reportMayTrend.tickets_opened, 4);
@@ -422,6 +443,9 @@ test('agency portfolio CSV exports scoped building metrics', async () => {
   assert.match(report.markdown, /vendor follow-up problem/);
   assert.match(report.markdown, /Executive snapshot/);
   assert.match(report.markdown, /Portfolio health score: 72\/100 \(critical\)/);
+  assert.match(report.markdown, /Open risk follow-ups/);
+  assert.match(report.markdown, /maintenance-owner@example.com/);
+  assert.match(report.markdown, /Get vendor update before board check-in/);
   assert.match(report.markdown, /Six-month trend/);
   assert.match(report.markdown, /\| 2026-05 \| 4 \| 1 \| 2 \| 1 \| USD 30.00 \| 1 \|/);
   assert.match(report.markdown, /Maintenance scoreboard/);
@@ -443,6 +467,8 @@ test('agency portfolio CSV exports scoped building metrics', async () => {
   assert.match(csv, /recurring_problem_clusters/);
   assert.match(csv, /vendor_follow_up_problems/);
   assert.match(csv, /health_score,risk_level,maintenance_score,finance_score,community_score/);
+  assert.match(csv, /open_risk_followups,overdue_risk_followups,risk_followup_commitments/);
+  assert.match(csv, /maintenance-owner@example.com/);
   assert.match(csv, /,1,3,1,1,1,1,/);
   assert.match(csv, /,49,critical,30,86,80,/);
 });

@@ -446,6 +446,16 @@ This slice turns portfolio risk from a passive signal into owned operational wor
 - Add an agency follow-up queue on `/board/portfolio` so managers can see open/overdue risk follow-ups without scanning every building card.
 - Cover the behavior with the agency portfolio domain test, production build, and the portfolio browser walkthrough.
 
+## Completed Slice: Agency Follow-Ups In Reports
+
+This slice makes agency owner/date commitments portable outside the dashboard:
+
+- Include open agency risk follow-ups in monthly Markdown reports.
+- Include open agency risk follow-ups in monthly PDF reports.
+- Add open/overdue follow-up counts and commitment summaries to the portfolio CSV export.
+- Keep follow-up report data scoped to the same agency/building/capability rules as the portfolio queue.
+- Cover the behavior through the agency portfolio domain test.
+
 ## Current Execution Slice: Enterprise Operations Hardening
 
 The next implementation slice should keep building on the private-enterprise plan:

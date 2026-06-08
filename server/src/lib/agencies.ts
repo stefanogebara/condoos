@@ -293,6 +293,7 @@ export interface AgencyMonthlyReport {
   totals: AgencyBuildingMetrics;
   summary: AgencyMonthlyReportSummary;
   attention: AgencyPortfolioAttentionItem[];
+  risk_followups: AgencyRiskFollowupQueueItem[];
   trends: AgencyPortfolioTrendPoint[];
   buildings: AgencyMonthlyReportBuilding[];
   markdown: string;
@@ -2307,9 +2308,14 @@ export function agencyPortfolioToCsv(portfolio: AgencyPortfolio): string {
     'finance_score',
     'community_score',
     'next_actions',
+    'open_risk_followups',
+    'overdue_risk_followups',
+    'risk_followup_commitments',
   ];
   const lines = [headers.join(',')];
   for (const building of portfolio.buildings) {
+    const buildingFollowups = portfolio.risk_followups.filter((followup) => followup.condominium_id === building.id);
+    const riskFollowupCommitments = buildingFollowups.map((followup) => agencyRiskFollowupCommitment(followup)).join(' | ');
     lines.push(headers.map((header) => {
       const source: Record<string, unknown> = {
         agency_id: portfolio.id,
@@ -2325,6 +2331,9 @@ export function agencyPortfolioToCsv(portfolio: AgencyPortfolio): string {
         finance_score: building.scorecard.finance_score,
         community_score: building.scorecard.community_score,
         next_actions: building.scorecard.next_actions.join(' | '),
+        open_risk_followups: buildingFollowups.length,
+        overdue_risk_followups: buildingFollowups.filter((followup) => followup.overdue).length,
+        risk_followup_commitments: riskFollowupCommitments,
       };
       return csvCell(source[header]);
     }).join(','));
@@ -2493,6 +2502,28 @@ function formatTopMaintenanceCategories(categories: AgencyMaintenanceCategorySum
   return categories.map((row) => `${markdownText(row.category)} (${row.count})`).join(', ');
 }
 
+function agencyRiskFollowupDueLabel(followup: AgencyRiskFollowupQueueItem): string {
+  if (!followup.due_at) return 'no due date';
+  return followup.due_at.slice(0, 10);
+}
+
+function agencyRiskFollowupOwnerLabel(followup: AgencyRiskFollowupQueueItem): string {
+  if (followup.owner_name && followup.owner_email) {
+    return `${followup.owner_name} (${followup.owner_email})`;
+  }
+  return followup.owner_name || followup.owner_email || 'unassigned';
+}
+
+function agencyRiskFollowupCommitment(followup: AgencyRiskFollowupQueueItem): string {
+  const owner = agencyRiskFollowupOwnerLabel(followup);
+  const due = agencyRiskFollowupDueLabel(followup);
+  const risk = followup.kind.replace(/_/g, ' ');
+  const status = followup.status.replace(/_/g, ' ');
+  const overdue = followup.overdue ? ' overdue' : '';
+  const note = followup.note ? ` - ${followup.note}` : '';
+  return `${followup.condominium_name}: ${risk} #${followup.record_id} - ${status}${overdue}, owner ${owner}, due ${due}${note}`;
+}
+
 function buildAgencyMonthlyReportSummary(input: {
   agencyName: string;
   totals: AgencyBuildingMetrics;
@@ -2581,6 +2612,28 @@ function buildAgencyMonthlyReportMarkdown(report: Omit<AgencyMonthlyReport, 'mar
     for (const item of report.attention.slice(0, 12)) {
       lines.push(`- ${markdownText(item.condominium_name)}: ${item.count} ${item.kind.replace(/_/g, ' ')} (${item.severity})`);
     }
+  }
+
+  lines.push(
+    '',
+    '## Open risk follow-ups',
+  );
+
+  if (report.risk_followups.length === 0) {
+    lines.push('- No open owner/date commitments right now.');
+  } else {
+    lines.push(
+      '| Building | Risk | Status | Owner | Due | Note |',
+      '| --- | --- | --- | --- | --- | --- |',
+      ...report.risk_followups.slice(0, 12).map((followup) => `| ${[
+        markdownTableCell(followup.condominium_name),
+        markdownTableCell(`${followup.kind.replace(/_/g, ' ')} #${followup.record_id}`),
+        markdownTableCell(`${followup.status.replace(/_/g, ' ')}${followup.overdue ? ' overdue' : ''}`),
+        markdownTableCell(agencyRiskFollowupOwnerLabel(followup)),
+        markdownTableCell(agencyRiskFollowupDueLabel(followup)),
+        markdownTableCell(followup.note || ''),
+      ].join(' | ')} |`),
+    );
   }
 
   lines.push(
@@ -2722,6 +2775,15 @@ export async function buildAgencyMonthlyReportPdf(report: AgencyMonthlyReport): 
     }
   }
 
+  writePdfHeading(doc, 'Open risk follow-ups');
+  if (report.risk_followups.length === 0) {
+    writePdfBullet(doc, 'No open owner/date commitments right now.');
+  } else {
+    for (const followup of report.risk_followups.slice(0, 12)) {
+      writePdfBullet(doc, agencyRiskFollowupCommitment(followup));
+    }
+  }
+
   writePdfHeading(doc, 'Portfolio totals');
   [
     `Pending residents: ${report.totals.pending_residents}`,
@@ -2845,6 +2907,7 @@ export function buildAgencyMonthlyReport(membership: AgencyMembership, monthInpu
     totals: portfolio.totals,
     summary,
     attention: portfolio.attention,
+    risk_followups: portfolio.risk_followups,
     trends: buildAgencyPortfolioTrends(portfolio.buildings.map((building) => building.id), month),
     buildings,
   };
