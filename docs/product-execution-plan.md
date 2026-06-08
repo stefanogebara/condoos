@@ -476,6 +476,17 @@ This slice starts turning filtered queues into action batches:
 - Localize the bulk-action label and failure message across Portuguese, English, Spanish, and French.
 - Cover the behavior through the agency portfolio browser walkthrough, proving only the filtered overdue item is updated.
 
+## Completed Slice: Agency Bulk Follow-Up Assignment
+
+This slice lets agency managers rebalance portfolio work without opening every risk record:
+
+- Add bulk owner assignment for the currently filtered follow-up queue on `/board/portfolio`.
+- Add bulk due-date updates for the currently filtered follow-up queue.
+- Keep bulk assignment/date changes scoped to the visible filters, so a manager can target one building, one status, or overdue work only.
+- Reuse the audited follow-up endpoint for each updated record instead of adding an unaudited shortcut.
+- Localize the bulk owner/date controls and validation errors across Portuguese, English, Spanish, and French.
+- Extend the agency portfolio browser walkthrough to prove bulk date and owner changes update only the filtered building item.
+
 ## Current Execution Slice: Enterprise Operations Hardening
 
 The next implementation slice should keep building on the private-enterprise plan:

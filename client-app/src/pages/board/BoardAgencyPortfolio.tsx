@@ -741,6 +741,8 @@ export default function BoardAgencyPortfolio() {
   const [followupFilter, setFollowupFilter] = useState<AgencyRiskFollowupFilter>('all');
   const [followupBuildingFilter, setFollowupBuildingFilter] = useState('all');
   const [bulkFollowupSaving, setBulkFollowupSaving] = useState(false);
+  const [bulkOwnerUserId, setBulkOwnerUserId] = useState('');
+  const [bulkDueDate, setBulkDueDate] = useState('');
   const [switchingBuildingId, setSwitchingBuildingId] = useState<number | null>(null);
   const [auditEvents, setAuditEvents] = useState<AgencyAuditEvent[]>([]);
   const [auditEventsLoading, setAuditEventsLoading] = useState(false);
@@ -816,6 +818,27 @@ export default function BoardAgencyPortfolio() {
     if (followupFilter === 'overdue') return item.overdue;
     return item.status === followupFilter;
   }), [followupQueue, followupBuildingFilter, followupFilter]);
+  const bulkOwnerOptions = useMemo(() => {
+    const targetBuildingIds = Array.from(new Set(filteredFollowups.map((item) => item.condominium_id)));
+    return staff
+      .filter((member) => {
+        if (member.role === 'agency_admin') return true;
+        if (targetBuildingIds.length === 0) return true;
+        const assignedBuildingIds = member.assigned_building_ids || [];
+        return targetBuildingIds.every((buildingId) => assignedBuildingIds.includes(buildingId));
+      })
+      .map((member) => ({
+        id: member.user_id,
+        label: [member.first_name, member.last_name].filter(Boolean).join(' ') || member.email,
+        email: member.email,
+      }));
+  }, [staff, filteredFollowups]);
+
+  useEffect(() => {
+    if (bulkOwnerUserId && !bulkOwnerOptions.some((owner) => String(owner.id) === bulkOwnerUserId)) {
+      setBulkOwnerUserId('');
+    }
+  }, [bulkOwnerUserId, bulkOwnerOptions]);
   const trendMax = useMemo(() => Math.max(
     1,
     ...((primaryAgency?.trends || []).flatMap((point) => [
@@ -1122,27 +1145,53 @@ export default function BoardAgencyPortfolio() {
     }
   }
 
-  async function markFilteredFollowupsDone() {
+  async function updateFilteredFollowups(
+    apply: (item: AgencyRiskFollowupQueueItem) => Partial<Pick<AgencyRiskFollowup, 'owner_user_id' | 'status' | 'due_at' | 'note'>>,
+  ) {
     if (!primaryAgency || filteredFollowups.length === 0) return;
     setBulkFollowupSaving(true);
     setFollowupError(null);
     try {
-      await Promise.all(filteredFollowups.map((item) => apiPost<{ follow_up: AgencyRiskFollowup }>(`/agencies/${primaryAgency.id}/risk-followups`, {
-        condominium_id: item.condominium_id,
-        kind: item.kind,
-        record_id: item.record_id,
-        owner_user_id: item.owner_user_id,
-        status: 'done',
-        due_at: item.due_at,
-        note: item.note,
-      })));
+      await Promise.all(filteredFollowups.map((item) => {
+        const next = apply(item);
+        return apiPost<{ follow_up: AgencyRiskFollowup }>(`/agencies/${primaryAgency.id}/risk-followups`, {
+          condominium_id: item.condominium_id,
+          kind: item.kind,
+          record_id: item.record_id,
+          owner_user_id: next.owner_user_id ?? item.owner_user_id,
+          status: next.status ?? item.status,
+          due_at: next.due_at ?? item.due_at,
+          note: next.note ?? item.note,
+        });
+      }));
       await load();
       await loadAuditEvents(primaryAgency.id);
     } catch {
-      setFollowupError(t('Não foi possível concluir os acompanhamentos filtrados.'));
+      setFollowupError(t('Não foi possível atualizar os acompanhamentos filtrados.'));
     } finally {
       setBulkFollowupSaving(false);
     }
+  }
+
+  async function markFilteredFollowupsDone() {
+    await updateFilteredFollowups(() => ({ status: 'done' }));
+  }
+
+  async function assignFilteredFollowups() {
+    if (!bulkOwnerUserId) {
+      setFollowupError(t('Selecione um responsável para atribuir.'));
+      return;
+    }
+    await updateFilteredFollowups(() => ({ owner_user_id: Number(bulkOwnerUserId) }));
+  }
+
+  async function updateFilteredFollowupDueDate() {
+    const dueAt = dateInputToIso(bulkDueDate);
+    if (!dueAt) {
+      setFollowupError(t('Escolha um prazo para atualizar.'));
+      return;
+    }
+    await updateFilteredFollowups(() => ({ due_at: dueAt }));
   }
 
   return (
@@ -1549,17 +1598,68 @@ export default function BoardAgencyPortfolio() {
                       </select>
                     )}
                     {filteredFollowups.length > 0 && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="w-full"
-                        onClick={markFilteredFollowupsDone}
-                        loading={bulkFollowupSaving}
-                        leftIcon={<CheckCircle2 className="w-4 h-4" />}
-                      >
-                        {t('Marcar filtrados como concluídos')}
-                      </Button>
+                      <div className="rounded-2xl border border-white/70 bg-white/45 p-3 space-y-2">
+                        <div className="text-[10px] uppercase tracking-[0.12em] text-dusk-300">
+                          {t('Ações em lote')}
+                        </div>
+                        <div className="grid sm:grid-cols-[1fr_auto] gap-2">
+                          <select
+                            value={bulkOwnerUserId}
+                            onChange={(event) => setBulkOwnerUserId(event.target.value)}
+                            disabled={bulkOwnerOptions.length === 0}
+                            className="w-full rounded-2xl bg-white/70 border border-white/70 px-3 py-2 text-sm text-dusk-500 outline-none disabled:opacity-60"
+                            aria-label={t('Responsável em lote')}
+                          >
+                            <option value="">{t('Escolha responsável')}</option>
+                            {bulkOwnerOptions.map((owner) => (
+                              <option key={owner.id} value={owner.id}>
+                                {owner.label}{owner.email && owner.label !== owner.email ? ` · ${owner.email}` : ''}
+                              </option>
+                            ))}
+                          </select>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={assignFilteredFollowups}
+                            loading={bulkFollowupSaving}
+                            disabled={bulkOwnerOptions.length === 0}
+                            leftIcon={<UserPlus className="w-4 h-4" />}
+                          >
+                            {t('Atribuir filtrados')}
+                          </Button>
+                        </div>
+                        <div className="grid sm:grid-cols-[1fr_auto] gap-2">
+                          <input
+                            type="date"
+                            value={bulkDueDate}
+                            onChange={(event) => setBulkDueDate(event.target.value)}
+                            className="w-full rounded-2xl bg-white/70 border border-white/70 px-3 py-2 text-sm text-dusk-500 outline-none"
+                            aria-label={t('Prazo em lote')}
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={updateFilteredFollowupDueDate}
+                            loading={bulkFollowupSaving}
+                            leftIcon={<Calendar className="w-4 h-4" />}
+                          >
+                            {t('Atualizar prazo')}
+                          </Button>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="w-full"
+                          onClick={markFilteredFollowupsDone}
+                          loading={bulkFollowupSaving}
+                          leftIcon={<CheckCircle2 className="w-4 h-4" />}
+                        >
+                          {t('Marcar filtrados como concluídos')}
+                        </Button>
+                      </div>
                     )}
                   </div>
                 )}

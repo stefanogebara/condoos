@@ -342,6 +342,15 @@ test('admin: agency portfolio renders trends and work-order story', async ({ pag
           role: 'maintenance_manager',
           created_at: '2026-05-18T12:00:00.000Z',
           assigned_building_ids: [45],
+        }, {
+          id: 302,
+          user_id: 503,
+          email: 'director@example.com',
+          first_name: 'Portfolio',
+          last_name: 'Director',
+          role: 'agency_admin',
+          created_at: '2026-05-18T12:00:00.000Z',
+          assigned_building_ids: [],
         }],
         invites: [],
       },
@@ -386,6 +395,26 @@ test('admin: agency portfolio renders trends and work-order story', async ({ pag
   await page.getByLabel(/Filter follow-ups by building|Filtrar acompanhamentos por prédio/i).selectOption('46');
   await expect(page.getByText('Confirm payment promise before report export')).toBeVisible();
   await expect(page.getByText('Call vendor before board check-in')).toBeHidden();
+  await page.getByLabel(/Bulk due date|Prazo em lote/i).fill('2026-06-28');
+  await page.getByRole('button', { name: /Update due date|Atualizar prazo/i }).click();
+  await expect.poll(() => bulkFollowupUpdates.length).toBe(2);
+  expect(bulkFollowupUpdates[1]).toMatchObject({
+    condominium_id: 46,
+    kind: 'overdue_dues',
+    record_id: '22',
+    status: 'waiting',
+    due_at: '2026-06-28T12:00:00.000Z',
+  });
+  await page.getByLabel(/Bulk owner|Responsável em lote/i).selectOption('503');
+  await page.getByRole('button', { name: /Assign filtered|Atribuir filtrados/i }).click();
+  await expect.poll(() => bulkFollowupUpdates.length).toBe(3);
+  expect(bulkFollowupUpdates[2]).toMatchObject({
+    condominium_id: 46,
+    kind: 'overdue_dues',
+    record_id: '22',
+    owner_user_id: 503,
+    status: 'waiting',
+  });
   await page.getByLabel(/Filter follow-ups by building|Filtrar acompanhamentos por prédio/i).selectOption('all');
   await expect(page.getByText(/Maintenance|Manutenção/i).first()).toBeVisible();
   await expect(page.getByText(/Chase stale vendor updates|Cobrar atualizações|Persigue actualizaciones|Relancez les mises/i).first()).toBeVisible();
