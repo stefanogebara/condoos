@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { credentialsFor } from './support/credentials';
+import { credentialsFor, prodCredentialSkipReason } from './support/credentials';
 
 // Strict PT-leak detector. Runs the app in en-US/es-ES/fr-FR locale,
 // crawls every important page, and FAILS if any text node still contains
@@ -7,6 +7,9 @@ import { credentialsFor } from './support/credentials';
 
 const apiURL = process.env.E2E_API_URL
   || (process.env.E2E_BASE_URL ? `${process.env.E2E_BASE_URL}/api` : 'http://127.0.0.1:4312/api');
+const adminScanAuthSkip = prodCredentialSkipReason(['admin', 'resident']);
+const residentScanAuthSkip = prodCredentialSkipReason(['resident']);
+const conciergeScanAuthSkip = prodCredentialSkipReason(['porteiro']);
 
 // PT-only markers — substrings that are Portuguese AND not valid English/Spanish/French.
 // Diacritic-bearing tokens are the safest signals: `ção`, `ões`, `ão`, `também`, `não`,
@@ -357,6 +360,7 @@ test.describe('i18n reverse-leak scan — pt-BR (no EN strings should leak)', ()
   test.use({ locale: 'pt-BR', timezoneId: 'America/Sao_Paulo' });
 
   test('admin pages have no EN leaks (pt-BR)', async ({ page }) => {
+    test.skip(Boolean(adminScanAuthSkip), adminScanAuthSkip || '');
     await setLocaleAndReload(page, 'pt-BR' as 'en-US');
     await loginAs(page, 'admin');
     await seedCommunityTicket(page);
@@ -372,6 +376,7 @@ test.describe('i18n reverse-leak scan — pt-BR (no EN strings should leak)', ()
   });
 
   test('resident pages have no EN leaks (pt-BR)', async ({ page }) => {
+    test.skip(Boolean(residentScanAuthSkip), residentScanAuthSkip || '');
     await setLocaleAndReload(page, 'pt-BR' as 'en-US');
     await loginAs(page, 'resident');
     const results = [] as Array<{ path: string; leaks: Leak[] }>;
@@ -404,6 +409,7 @@ for (const locale of ['en-US', 'es-ES', 'fr-FR'] as const) {
     });
 
     test(`admin pages have no PT leaks (${locale})`, async ({ page }) => {
+      test.skip(Boolean(adminScanAuthSkip), adminScanAuthSkip || '');
       await setLocaleAndReload(page, locale);
       await loginAs(page, 'admin');
       await seedCommunityTicket(page);
@@ -416,6 +422,7 @@ for (const locale of ['en-US', 'es-ES', 'fr-FR'] as const) {
     });
 
     test(`resident pages have no PT leaks (${locale})`, async ({ page }) => {
+      test.skip(Boolean(residentScanAuthSkip), residentScanAuthSkip || '');
       await setLocaleAndReload(page, locale);
       await loginAs(page, 'resident');
       const results = [] as Array<{ path: string; leaks: Leak[] }>;
@@ -427,6 +434,7 @@ for (const locale of ['en-US', 'es-ES', 'fr-FR'] as const) {
     });
 
     test(`porteiro pages have no PT leaks (${locale})`, async ({ page }) => {
+      test.skip(Boolean(conciergeScanAuthSkip), conciergeScanAuthSkip || '');
       await setLocaleAndReload(page, locale);
       await loginAs(page, 'porteiro');
       const results = [] as Array<{ path: string; leaks: Leak[] }>;

@@ -36,3 +36,15 @@ export function isProdE2ETarget(): boolean {
   const target = process.env.E2E_BASE_URL || process.env.E2E_API_URL || '';
   return /^https?:\/\//i.test(target) && !/localhost|127\.0\.0\.1/i.test(target);
 }
+
+export function prodCredentialSkipReason(roles: E2ERole[]): string | null {
+  if (!isProdE2ETarget()) return null;
+  const missing = Array.from(new Set(
+    roles
+      .filter((role) => !hasExplicitCredentialsFor(role))
+      .map((role) => prefixes[role]),
+  ));
+  if (missing.length === 0) return null;
+  const required = missing.map((prefix) => `${prefix}_EMAIL/${prefix}_PASSWORD`).join(', ');
+  return `production E2E target requires explicit private pilot credentials: ${required}`;
+}

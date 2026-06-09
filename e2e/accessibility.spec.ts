@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
-import { credentialsFor } from './support/credentials';
+import { credentialsFor, prodCredentialSkipReason } from './support/credentials';
 import { gotoApp } from './support/navigation';
 
 const apiURL = process.env.E2E_API_URL
@@ -8,6 +8,8 @@ const apiURL = process.env.E2E_API_URL
 
 type Session = { token: string; user: any };
 const sessionCache = new Map<string, Session>();
+const residentAuthSkip = prodCredentialSkipReason(['resident']);
+const boardAuthSkip = prodCredentialSkipReason(['admin', 'concierge']);
 
 async function loginApi(request: APIRequestContext, email: string, password: string): Promise<Session> {
   const cached = sessionCache.get(email);
@@ -64,6 +66,7 @@ test.describe('accessibility audit', () => {
 
   test('resident app pages have no serious WCAG violations', async ({ page, request }) => {
     test.setTimeout(240_000);
+    test.skip(Boolean(residentAuthSkip), residentAuthSkip || '');
     await seedSession(page, request, 'resident');
     for (const route of ['/app', '/app/proposals', '/app/visitors', '/app/amenities', '/app/settings']) {
       await test.step(route, async () => {
@@ -76,6 +79,7 @@ test.describe('accessibility audit', () => {
 
   test('board and concierge pages have no serious WCAG violations', async ({ page, request }) => {
     test.setTimeout(240_000);
+    test.skip(Boolean(boardAuthSkip), boardAuthSkip || '');
     await seedSession(page, request, 'admin');
     for (const route of ['/board', '/board/proposals', '/board/edificio', '/board/financas', '/board/residents']) {
       await test.step(route, async () => {

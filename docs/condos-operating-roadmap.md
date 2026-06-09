@@ -58,7 +58,7 @@ Every shipped feature must improve at least one promise:
    - Add health/integration status, backup checks, Sentry/PostHog routines, production smoke gates, and pilot-safe mode.
 
 9. **Revenue packaging**
-   - Add Brazil/Ecuador landing copy, pricing, pilot onboarding checklist, 15-minute sales script, and ROI proof.
+   - Add Brazil/Ecuador landing copy, pricing, pilot onboarding checklist, 15-minute sales script, outbound playbook, and ROI proof.
 
 10. **Management-company expansion**
    - Add portfolio dashboards, staff permissions, white-label basics, deeper cross-building vendor scorecards, and multi-building monthly reports on top of the single-building workflows.
@@ -90,3 +90,4 @@ Enterprise-private readiness plus market hardening:
 - Include open agency risk follow-ups in agency monthly reports, PDFs, and portfolio CSV exports so owner/date commitments survive outside the browser.
 - Summarize each building's monthly maintenance movement in agency reports: opened/resolved tickets, urgent tickets, work-order movement, stale vendor follow-ups, spend, and top categories.
 - Gate proposal voting behind a readiness score covering scope, budget, analysis, risks/impact, and a future voting deadline so residents vote with decision-grade context.
+- Keep `docs/pre-outreach-readiness-checklist.md` and `docs/outreach-playbook.md` as the sales-readiness source of truth before lead volume increases.

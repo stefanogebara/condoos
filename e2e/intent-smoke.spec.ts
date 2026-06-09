@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { isProdE2ETarget } from './support/credentials';
 import { gotoApp } from './support/navigation';
 
 test('Landing CTAs route by intent', async ({ page }) => {
@@ -43,6 +44,10 @@ test('Login exposes signup path for residents with invite codes', async ({ page 
 });
 
 test('Signup with invite code creates account and lands on join flow', async ({ page }) => {
+  test.skip(
+    isProdE2ETarget() && process.env.E2E_ALLOW_PROD_SIGNUP_MUTATION !== '1',
+    'production-safe smoke skips account-creating signup unless explicitly enabled',
+  );
   await gotoApp(page, '/signup?intent=join&code=DEMO123');
   const tag = Date.now();
   await page.getByRole('textbox', { name: 'Nome', exact: true }).fill('E2E');

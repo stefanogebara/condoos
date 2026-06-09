@@ -46,6 +46,10 @@ not seeded demo credentials. Set `E2E_ADMIN_EMAIL`, `E2E_ADMIN_PASSWORD`,
 `E2E_RESIDENT_EMAIL`, `E2E_RESIDENT_PASSWORD`, `E2E_CONCIERGE_EMAIL`, and
 `E2E_CONCIERGE_PASSWORD` in the local shell or CI secrets before running the
 production-safe suites against real production.
+When those credentials are missing on a production target, authenticated specs
+skip instead of falling back to demo accounts. Account-creating signup smoke is
+also skipped on production unless `E2E_ALLOW_PROD_SIGNUP_MUTATION=1` is set for
+a disposable or prepared environment.
 
 `audit:prod:hardening` is intentionally strict: it requires production email
 verification, Turnstile captcha, and a client CSP that allows Turnstile script,

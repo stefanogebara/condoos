@@ -518,6 +518,16 @@ This slice gives management agencies a cross-building vendor view:
 - Keep concierge-only agency staff from receiving maintenance vendor data.
 - Cover the card in the agency portfolio browser walkthrough and localize the labels across Portuguese, English, Spanish, and French.
 
+## Completed Slice: Pre-Outreach Readiness And Sales Motion
+
+This slice turns "start outreach" into a controlled operating process:
+
+- Added a pre-outreach readiness checklist with local, production-safe, integration, demo-data, and manual walkthrough gates.
+- Added a private B2B outreach playbook for management agencies and selected buildings.
+- Defined ICP, buying signals, disqualifiers, lead scoring, CRM fields, outreach sequence, demo script, pilot offer, objection handling, and weekly outreach rhythm.
+- Kept the sales motion aligned with private setup-code activation instead of public self-serve building creation.
+- Linked the readiness and outreach docs from the operating roadmap so the next lead/client push has one source of truth.
+
 ## Current Execution Slice: Enterprise Operations Hardening
 
 The next implementation slice should keep building on the private-enterprise plan:

@@ -1,15 +1,19 @@
 // Comprehensive resident click-through. Mirrors admin-walkthrough.spec but
 // for /app/* routes. Each test is non-destructive on prod.
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
-import { credentialsFor } from './support/credentials';
+import { credentialsFor, prodCredentialSkipReason } from './support/credentials';
 
 const apiURL = process.env.E2E_API_URL
   || (process.env.E2E_BASE_URL ? `${process.env.E2E_BASE_URL.replace(/\/$/, '')}/api` : 'http://127.0.0.1:4316/api');
 
 type Session = { token: string; user: any };
 const sessionCache = new Map<string, Session>();
+const residentAuthSkip = prodCredentialSkipReason(['admin', 'resident']);
 
 test.describe.configure({ timeout: 90_000 });
+test.beforeEach(() => {
+  test.skip(Boolean(residentAuthSkip), residentAuthSkip || '');
+});
 
 async function loginApi(request: APIRequestContext, email: string, password: string): Promise<Session> {
   const cached = sessionCache.get(email);

@@ -11,7 +11,7 @@
 // /auth/login. seedSession() does an API login once per role and pre-loads
 // the JWT into localStorage so each test skips the login form entirely.
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
-import { credentialsFor } from './support/credentials';
+import { credentialsFor, prodCredentialSkipReason } from './support/credentials';
 import { gotoApp } from './support/navigation';
 
 const apiURL = process.env.E2E_API_URL
@@ -19,6 +19,11 @@ const apiURL = process.env.E2E_API_URL
 
 type Session = { token: string; user: any };
 const sessionCache = new Map<string, Session>();
+const uiAuthSkip = prodCredentialSkipReason(['admin', 'resident', 'concierge']);
+
+test.beforeEach(() => {
+  test.skip(Boolean(uiAuthSkip), uiAuthSkip || '');
+});
 
 async function openDrawerIfMobile(page: Page) {
   const vp = page.viewportSize();

@@ -1,11 +1,16 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
-import { credentialsFor } from './support/credentials';
+import { credentialsFor, prodCredentialSkipReason } from './support/credentials';
 
 const apiURL = process.env.E2E_API_URL
   || (process.env.E2E_BASE_URL ? `${process.env.E2E_BASE_URL.replace(/\/$/, '')}/api` : 'http://127.0.0.1:6312/api');
 const apiOrigin = apiURL.replace(/\/api\/?$/, '');
 
 type Session = { token: string; user: any };
+const documentAuthSkip = prodCredentialSkipReason(['admin', 'resident']);
+
+test.beforeEach(() => {
+  test.skip(Boolean(documentAuthSkip), documentAuthSkip || '');
+});
 
 async function loginApi(request: APIRequestContext, email: string, password: string): Promise<Session> {
   const res = await request.post(`${apiURL}/auth/login`, { data: { email, password } });
