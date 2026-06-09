@@ -182,6 +182,24 @@ test('admin: agency portfolio renders trends and work-order story', async ({ pag
         selected_quote_count: 1,
         route: '/board/tickets',
       }],
+      vendor_intelligence: [{
+        service_contact_id: 3001,
+        vendor_name: 'Lift Vendor',
+        category: 'maintenance',
+        condominium_id: 45,
+        condominium_name: 'Test Condo',
+        building_count: 2,
+        building_names: ['Test Condo', 'North Tower'],
+        active_work_orders: 1,
+        completed_work_orders: 3,
+        late_work_orders: 1,
+        stale_work_orders: 1,
+        total_spend_cents: 75000,
+        total_spend: 'USD 750.00',
+        latest_activity_at: '2026-05-20T10:00:00.000Z',
+        risk_level: 'critical',
+        route: '/board/tickets',
+      }],
       buildings: [{
         id: 45,
         name: 'Test Condo',
@@ -375,10 +393,15 @@ test('admin: agency portfolio renders trends and work-order story', async ({ pag
   await expect(page.getByText(/Work order scheduled|Ordem agendada/i)).toBeVisible();
   await expect(page.getByText('Lift Vendor').first()).toBeVisible();
   await expect(page.getByText(/2 cotações|2 quotes/i)).toBeVisible();
-  await expect(page.getByRole('button', { name: /Open tickets|Abrir chamados/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Open tickets|Abrir chamados/i }).first()).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Vendor intelligence|Inteligência de fornecedores/i })).toBeVisible();
+  await expect(page.getByText(/Late, stale, and active vendor work|Fornecedores atrasados/i)).toBeVisible();
+  await expect(page.getByText('USD 750.00')).toBeVisible();
+  await expect(page.getByText(/^(2 buildings|2 prédios|2 edificios)$/i)).toBeVisible();
+  await expect(page.getByText(/1 late|1 atrasado/i)).toBeVisible();
   await expect(page.getByText(/Operational health|Saúde operacional/i).first()).toBeVisible();
   await expect(page.getByText('49/100')).toBeVisible();
-  await expect(page.getByText(/^(Critical|Crítico)$/i)).toBeVisible();
+  await expect(page.getByText(/^(Critical|Crítico)$/i).first()).toBeVisible();
   await expect(page.getByRole('heading', { name: /Follow-ups|Acompanhamentos/i })).toBeVisible();
   await expect(page.getByText(/Risks with an owner|Riscos com dono/i)).toBeVisible();
   await expect(page.getByText('Confirm payment promise before report export')).toBeVisible();

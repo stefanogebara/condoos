@@ -175,6 +175,25 @@ interface AgencyWorkOrderStory {
   route: string;
 }
 
+interface AgencyVendorIntelligence {
+  service_contact_id: number;
+  vendor_name: string;
+  category: string;
+  condominium_id: number;
+  condominium_name: string;
+  building_count: number;
+  building_names: string[];
+  active_work_orders: number;
+  completed_work_orders: number;
+  late_work_orders: number;
+  stale_work_orders: number;
+  total_spend_cents: number;
+  total_spend: string;
+  latest_activity_at: string | null;
+  risk_level: 'healthy' | 'watch' | 'critical';
+  route: string;
+}
+
 interface AgencyPortfolio {
   id: number;
   name: string;
@@ -187,6 +206,7 @@ interface AgencyPortfolio {
   risk_followups?: AgencyRiskFollowupQueueItem[];
   trends: AgencyTrendPoint[];
   work_order_story: AgencyWorkOrderStory[];
+  vendor_intelligence?: AgencyVendorIntelligence[];
   buildings: AgencyBuilding[];
 }
 
@@ -416,6 +436,24 @@ function scoreLabel(level: AgencyBuilding['scorecard']['risk_level']) {
     critical: 'Crítico',
   };
   return t(labels[level]);
+}
+
+function vendorRiskTone(level: AgencyVendorIntelligence['risk_level']) {
+  if (level === 'critical') return 'peach' as const;
+  if (level === 'watch') return 'warning' as const;
+  return 'sage' as const;
+}
+
+function vendorBuildingCountLabel(count: number) {
+  return `${count} ${t(count === 1 ? 'prédio' : 'prédios')}`;
+}
+
+function vendorLateCountLabel(count: number) {
+  return `${count} ${t(count === 1 ? 'atrasado' : 'atrasados')}`;
+}
+
+function vendorStaleCountLabel(count: number) {
+  return `${count} ${t('sem atualização')}`;
 }
 
 function workOrderStatusLabel(status: WorkOrderStatus) {
@@ -923,6 +961,9 @@ export default function BoardAgencyPortfolio() {
     () => escalationItems.filter((item) => escalationMatchesFilter(item, escalationFilter)),
     [escalationItems, escalationFilter],
   );
+  const vendorIntelligence = primaryAgency?.vendor_intelligence || [];
+  const criticalVendorCount = vendorIntelligence.filter((vendor) => vendor.risk_level === 'critical').length;
+  const staleVendorCount = vendorIntelligence.filter((vendor) => vendor.stale_work_orders > 0).length;
   const bulkOwnerOptions = useMemo(() => {
     const targetBuildingIds = Array.from(new Set(filteredFollowups.map((item) => item.condominium_id)));
     return staff
@@ -1495,6 +1536,84 @@ export default function BoardAgencyPortfolio() {
               )}
             </GlassCard>
           </div>
+
+          <GlassCard className="p-5 mb-6">
+            <div className="flex items-start justify-between gap-3 flex-wrap mb-4">
+              <div>
+                <div className="text-xs uppercase tracking-[0.14em] text-dusk-300 flex items-center gap-2">
+                  <Wrench className="w-4 h-4" /> {t('Scorecard de fornecedores')}
+                </div>
+                <h2 className="font-display text-2xl text-dusk-500 mt-1">{t('Inteligência de fornecedores')}</h2>
+                <p className="text-sm text-dusk-300 mt-1">
+                  {t('Fornecedores atrasados, sem atualização e ativos em todos os prédios permitidos.')}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap justify-end">
+                <Badge tone={criticalVendorCount > 0 ? 'peach' : 'sage'}>
+                  {criticalVendorCount} {t('críticos')}
+                </Badge>
+                <Badge tone={staleVendorCount > 0 ? 'warning' : 'neutral'}>
+                  {staleVendorCount} {t('sem atualização')}
+                </Badge>
+              </div>
+            </div>
+            {vendorIntelligence.length === 0 ? (
+              <div className="rounded-2xl border border-white/70 bg-white/50 px-3 py-4 text-sm text-dusk-300">
+                {t('Nenhum fornecedor com ordens de serviço no portfólio ainda.')}
+              </div>
+            ) : (
+              <div className="grid lg:grid-cols-2 gap-3">
+                {vendorIntelligence.map((vendor) => (
+                  <div key={`${vendor.service_contact_id}:${vendor.vendor_name}`} className="rounded-3xl border border-white/70 bg-white/60 p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Badge tone={vendorRiskTone(vendor.risk_level)}>{scoreLabel(vendor.risk_level)}</Badge>
+                          <Badge tone="neutral">{vendorBuildingCountLabel(vendor.building_count)}</Badge>
+                          {vendor.late_work_orders > 0 && <Badge tone="peach">{vendorLateCountLabel(vendor.late_work_orders)}</Badge>}
+                          {vendor.stale_work_orders > 0 && <Badge tone="warning">{vendorStaleCountLabel(vendor.stale_work_orders)}</Badge>}
+                        </div>
+                        <h3 className="font-semibold text-dusk-500 mt-2 truncate" data-user-content>{vendor.vendor_name}</h3>
+                        <p className="text-xs text-dusk-300 mt-1 truncate" data-user-content>
+                          {[vendor.category, vendor.building_names?.join(', ') || vendor.condominium_name].filter(Boolean).join(' · ')}
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => switchActiveBuilding({ id: vendor.condominium_id }, vendor.route)}
+                        loading={switchingBuildingId === vendor.condominium_id}
+                        leftIcon={<Building2 className="w-4 h-4" />}
+                      >
+                        {t('Abrir chamados')}
+                      </Button>
+                    </div>
+                    <div className="mt-3 grid grid-cols-4 gap-2 text-xs text-dusk-300">
+                      <div className="rounded-2xl bg-white/55 px-2.5 py-2">
+                        <div className="uppercase tracking-[0.1em] text-[10px]">{t('Ativas')}</div>
+                        <div className="font-medium text-dusk-500 truncate">{vendor.active_work_orders}</div>
+                      </div>
+                      <div className="rounded-2xl bg-white/55 px-2.5 py-2">
+                        <div className="uppercase tracking-[0.1em] text-[10px]">{t('Concluídas')}</div>
+                        <div className="font-medium text-dusk-500 truncate">{vendor.completed_work_orders}</div>
+                      </div>
+                      <div className="rounded-2xl bg-white/55 px-2.5 py-2">
+                        <div className="uppercase tracking-[0.1em] text-[10px]">{t('Gasto aprovado')}</div>
+                        <div className="font-medium text-dusk-500 truncate">{vendor.total_spend}</div>
+                      </div>
+                      <div className="rounded-2xl bg-white/55 px-2.5 py-2">
+                        <div className="uppercase tracking-[0.1em] text-[10px]">{t('Última atividade')}</div>
+                        <div className="font-medium text-dusk-500 truncate">
+                          {vendor.latest_activity_at ? formatDateTime(vendor.latest_activity_at) : t('Sem data')}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </GlassCard>
 
           <div className="grid lg:grid-cols-[1fr,360px] gap-5">
             <div className="space-y-3">

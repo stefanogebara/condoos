@@ -303,8 +303,8 @@ test('agency portfolio CSV exports scoped building metrics', async () => {
      VALUES (?, 'Elevator inspection', 'completed', '2026-05-10T10:00:00.000Z', '2026-05-12T10:00:00.000Z', '2026-05-12T10:00:00.000Z')`
   ).run(ticketId);
   db.prepare(
-    `INSERT INTO ticket_work_orders (ticket_id, service_contact_id, title, status, created_at, updated_at)
-     VALUES (?, ?, 'Garage gate repair', 'in_progress', '2026-05-11T10:00:00.000Z', datetime('now', '-8 day'))`
+    `INSERT INTO ticket_work_orders (ticket_id, service_contact_id, title, status, approved_amount_cents, created_at, updated_at)
+     VALUES (?, ?, 'Garage gate repair', 'in_progress', 42000, '2026-05-11T10:00:00.000Z', datetime('now', '-8 day'))`
   ).run(staleVendorTicketId, vendorId);
   db.prepare(
     `INSERT INTO ticket_vendor_quotes (condominium_id, ticket_id, service_contact_id, vendor_name, quote_amount_cents, currency, status)
@@ -376,6 +376,19 @@ test('agency portfolio CSV exports scoped building metrics', async () => {
   assert.equal(portfolio.work_order_story[0].quote_count, 1);
   assert.equal(portfolio.work_order_story[0].selected_quote_count, 1);
   assert.equal(portfolio.work_order_story[0].route, '/board/tickets');
+  assert.equal(portfolio.vendor_intelligence.length, 1);
+  assert.equal(portfolio.vendor_intelligence[0].vendor_name, 'Lift Vendor');
+  assert.equal(portfolio.vendor_intelligence[0].category, 'maintenance');
+  assert.equal(portfolio.vendor_intelligence[0].building_count, 1);
+  assert.deepEqual(portfolio.vendor_intelligence[0].building_names, ['Test Condo']);
+  assert.equal(portfolio.vendor_intelligence[0].active_work_orders, 1);
+  assert.equal(portfolio.vendor_intelligence[0].completed_work_orders, 0);
+  assert.equal(portfolio.vendor_intelligence[0].late_work_orders, 0);
+  assert.equal(portfolio.vendor_intelligence[0].stale_work_orders, 1);
+  assert.equal(portfolio.vendor_intelligence[0].total_spend_cents, 42000);
+  assert.equal(portfolio.vendor_intelligence[0].total_spend, 'BRL 420.00');
+  assert.equal(portfolio.vendor_intelligence[0].risk_level, 'watch');
+  assert.equal(portfolio.vendor_intelligence[0].route, '/board/tickets');
   assert.equal(portfolio.risk_followups.length, 1);
   assert.equal(portfolio.risk_followups[0].owner_email, 'maintenance-owner@example.com');
   assert.equal(portfolio.buildings[0].scorecard.risk_level, 'critical');

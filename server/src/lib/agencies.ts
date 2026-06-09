@@ -244,6 +244,25 @@ export interface AgencyWorkOrderStory {
   route: string;
 }
 
+export interface AgencyVendorIntelligence {
+  service_contact_id: number;
+  vendor_name: string;
+  category: string;
+  condominium_id: number;
+  condominium_name: string;
+  building_count: number;
+  building_names: string[];
+  active_work_orders: number;
+  completed_work_orders: number;
+  late_work_orders: number;
+  stale_work_orders: number;
+  total_spend_cents: number;
+  total_spend: string;
+  latest_activity_at: string | null;
+  risk_level: 'healthy' | 'watch' | 'critical';
+  route: string;
+}
+
 export interface AgencyPermissionReview {
   total_staff: number;
   agency_admins: number;
@@ -313,6 +332,7 @@ export interface AgencyPortfolio {
   risk_followups: AgencyRiskFollowupQueueItem[];
   trends: AgencyPortfolioTrendPoint[];
   work_order_story: AgencyWorkOrderStory[];
+  vendor_intelligence: AgencyVendorIntelligence[];
   buildings: Array<{
     id: number;
     name: string;
@@ -1464,6 +1484,125 @@ function buildAgencyWorkOrderStory(condominiumIds: number[]): AgencyWorkOrderSto
   }));
 }
 
+function buildAgencyVendorIntelligence(condominiumIds: number[]): AgencyVendorIntelligence[] {
+  if (condominiumIds.length === 0) return [];
+  const ids = placeholders(condominiumIds);
+  const rows = db.prepare(
+    `SELECT LOWER(TRIM(sc.company_name)) AS vendor_key,
+            LOWER(TRIM(COALESCE(NULLIF(sc.category, ''), 'general'))) AS category_key,
+            MIN(sc.id) AS service_contact_id,
+            MAX(sc.company_name) AS vendor_name,
+            MAX(COALESCE(NULLIF(sc.category, ''), 'general')) AS category,
+            MIN(c.id) AS condominium_id,
+            MIN(c.name) AS condominium_name,
+            COUNT(DISTINCT c.id) AS building_count,
+            SUM(CASE WHEN wo.status IN ('scheduled','in_progress') THEN 1 ELSE 0 END) AS active_work_orders,
+            SUM(CASE WHEN wo.status = 'completed' THEN 1 ELSE 0 END) AS completed_work_orders,
+            SUM(CASE
+              WHEN wo.status IN ('scheduled','in_progress')
+               AND wo.scheduled_for IS NOT NULL
+               AND datetime(wo.scheduled_for) < CURRENT_TIMESTAMP THEN 1
+              ELSE 0
+            END) AS late_work_orders,
+            SUM(CASE
+              WHEN wo.status IN ('scheduled','in_progress')
+               AND datetime(wo.updated_at) < datetime('now', '-7 day') THEN 1
+              ELSE 0
+            END) AS stale_work_orders,
+            SUM(COALESCE(wo.approved_amount_cents, 0)) AS total_spend_cents,
+            MAX(COALESCE(wo.completed_at, wo.updated_at, wo.created_at)) AS latest_activity_at
+     FROM ticket_work_orders wo
+     JOIN tickets t ON t.id = wo.ticket_id
+     JOIN condominiums c ON c.id = t.condominium_id
+     JOIN service_contacts sc ON sc.id = wo.service_contact_id
+     WHERE t.condominium_id IN (${ids})
+       AND wo.service_contact_id IS NOT NULL
+       AND TRIM(sc.company_name) <> ''
+       AND wo.status <> 'cancelled'
+     GROUP BY vendor_key, category_key
+     ORDER BY
+       late_work_orders DESC,
+       stale_work_orders DESC,
+       active_work_orders DESC,
+       total_spend_cents DESC,
+       datetime(latest_activity_at) DESC
+     LIMIT 6`
+  ).all(...condominiumIds) as Array<{
+    vendor_key: string;
+    category_key: string;
+    service_contact_id: number;
+    vendor_name: string | null;
+    category: string | null;
+    condominium_id: number;
+    condominium_name: string | null;
+    building_count: number;
+    active_work_orders: number;
+    completed_work_orders: number;
+    late_work_orders: number;
+    stale_work_orders: number;
+    total_spend_cents: number;
+    latest_activity_at: string | null;
+  }>;
+
+  return rows.map((row) => {
+    const buildingRows = db.prepare(
+      `SELECT DISTINCT c.name
+       FROM ticket_work_orders wo
+       JOIN tickets t ON t.id = wo.ticket_id
+       JOIN condominiums c ON c.id = t.condominium_id
+       JOIN service_contacts sc ON sc.id = wo.service_contact_id
+       WHERE t.condominium_id IN (${ids})
+         AND LOWER(TRIM(sc.company_name)) = ?
+         AND LOWER(TRIM(COALESCE(NULLIF(sc.category, ''), 'general'))) = ?
+         AND wo.status <> 'cancelled'
+       ORDER BY c.name
+       LIMIT 5`
+    ).all(...condominiumIds, row.vendor_key, row.category_key) as Array<{ name: string }>;
+    const spendRows = db.prepare(
+      `SELECT c.currency, COALESCE(SUM(wo.approved_amount_cents), 0) AS amount_cents
+       FROM ticket_work_orders wo
+       JOIN tickets t ON t.id = wo.ticket_id
+       JOIN condominiums c ON c.id = t.condominium_id
+       JOIN service_contacts sc ON sc.id = wo.service_contact_id
+       WHERE t.condominium_id IN (${ids})
+         AND LOWER(TRIM(sc.company_name)) = ?
+         AND LOWER(TRIM(COALESCE(NULLIF(sc.category, ''), 'general'))) = ?
+         AND wo.status <> 'cancelled'
+       GROUP BY c.currency
+       ORDER BY c.currency`
+    ).all(...condominiumIds, row.vendor_key, row.category_key) as Array<{
+      currency: string | null;
+      amount_cents: number | null;
+    }>;
+    const late = Number(row.late_work_orders || 0);
+    const stale = Number(row.stale_work_orders || 0);
+    const active = Number(row.active_work_orders || 0);
+    const riskLevel: AgencyVendorIntelligence['risk_level'] = late > 0
+      ? 'critical'
+      : stale > 0 || active > 0
+        ? 'watch'
+        : 'healthy';
+    return {
+      service_contact_id: Number(row.service_contact_id),
+      vendor_name: row.vendor_name || 'Vendor',
+      category: row.category || 'general',
+      condominium_id: Number(row.condominium_id),
+      condominium_name: row.condominium_name || '',
+      building_count: Number(row.building_count || 0),
+      building_names: buildingRows.map((building) => building.name),
+      active_work_orders: active,
+      completed_work_orders: Number(row.completed_work_orders || 0),
+      late_work_orders: late,
+      stale_work_orders: stale,
+      total_spend_cents: Number(row.total_spend_cents || 0),
+      total_spend: formatMoneyByCurrency(spendRows),
+      latest_activity_at: row.latest_activity_at,
+      risk_level: riskLevel,
+      route: '/board/tickets',
+    };
+  });
+}
+
 export function buildAgencyPortfolio(membership: AgencyMembership): AgencyPortfolio {
   const allowedBuildingIds = buildingIdsForMembership(membership);
   const placeholders = allowedBuildingIds.map(() => '?').join(',');
@@ -1617,6 +1756,9 @@ export function buildAgencyPortfolio(membership: AgencyMembership): AgencyPortfo
     risk_followups: buildAgencyRiskFollowupQueue(membership, allowedBuildingIds),
     trends: buildAgencyPortfolioTrends(allowedBuildingIds),
     work_order_story: buildAgencyWorkOrderStory(allowedBuildingIds),
+    vendor_intelligence: agencyMembershipCanUseCapability(membership, 'maintenance')
+      ? buildAgencyVendorIntelligence(allowedBuildingIds)
+      : [],
     buildings,
   };
 }

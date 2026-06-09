@@ -507,9 +507,20 @@ This slice makes the escalation view faster for real agency operators:
 - Keep each filtered record editable through the existing audited risk follow-up controls.
 - Cover the filters and aging badges in the agency portfolio browser walkthrough and localize the new labels across Portuguese, English, Spanish, and French.
 
+## Completed Slice: Agency Portfolio Vendor Intelligence
+
+This slice gives management agencies a cross-building vendor view:
+
+- Add a scoped `vendor_intelligence` section to `/api/agencies/portfolio` for maintenance-capable agency roles.
+- Group vendor work across allowed buildings by saved service-contact company/category.
+- Show active work orders, completed work orders, late scheduled work, stale work, approved spend by building currency, latest activity, affected buildings, and risk level.
+- Add a buyer-facing vendor intelligence card to `/board/portfolio` with one-click navigation into the representative building's ticket workflow.
+- Keep concierge-only agency staff from receiving maintenance vendor data.
+- Cover the card in the agency portfolio browser walkthrough and localize the labels across Portuguese, English, Spanish, and French.
+
 ## Current Execution Slice: Enterprise Operations Hardening
 
 The next implementation slice should keep building on the private-enterprise plan:
 
-- Continue turning portfolio reporting into a true agency command center with deeper SLA automation, escalation aging reports, and cross-building vendor intelligence.
+- Continue turning portfolio reporting into a true agency command center with deeper SLA automation, incident response, and richer vendor scorecards.
 - Keep production-safe i18n, build, server tests, and pilot smoke checks green before each push.
