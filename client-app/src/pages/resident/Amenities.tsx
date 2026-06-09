@@ -345,6 +345,8 @@ export default function Amenities() {
                         disabled={!slot.available}
                         onClick={() => setSelectedSlot(slot)}
                         data-testid="amenity-slot"
+                        data-starts-at={slot.starts_at}
+                        data-ends-at={slot.ends_at}
                         className={`p-3 rounded-2xl border text-left transition ${active ? 'bg-sage-100 border-sage-300' : 'bg-white/60 border-white/70 hover:bg-white/80'} ${slot.available ? 'text-dusk-500' : 'opacity-45 pointer-events-none'}`}
                       >
                         <div className="text-sm font-semibold">

@@ -200,7 +200,8 @@ test('resident: amenities page can create a reservation from an amenity card', a
     await expect(page.getByTestId('amenity-booking-form')).toBeVisible();
 
     await page.getByTestId('amenity-date').fill(slotChoice.dateStr);
-    const slot = page.locator('[data-testid="amenity-slot"]:not([disabled])').first();
+    const expectedSlot = String(slotChoice.freeSlot.starts_at).replace(/"/g, '\\"');
+    const slot = page.locator(`[data-testid="amenity-slot"][data-starts-at="${expectedSlot}"]`);
     await expect(slot).toBeVisible();
     await expect(slot).toBeEnabled();
     await slot.click();
