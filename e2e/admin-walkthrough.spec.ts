@@ -87,6 +87,8 @@ test('admin: document vault page renders', async ({ page, request }) => {
 
 test('admin: agency portfolio renders trends and work-order story', async ({ page, request }) => {
   await adminLogin(page, request);
+  const oldEscalationAt = new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString();
+  const recentEscalationAt = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
   const metrics = {
     pending_residents: 1,
     unresolved_tickets: 3,
@@ -208,7 +210,7 @@ test('admin: agency portfolio renders trends and work-order story', async ({ pag
                 detail: 'maintenance · urgent',
                 status: 'open',
                 route: '/board/tickets',
-                occurred_at: '2026-05-02T10:00:00.000Z',
+                occurred_at: oldEscalationAt,
                 follow_up: {
                   id: 1,
                   agency_id: 77,
@@ -236,7 +238,7 @@ test('admin: agency portfolio renders trends and work-order story', async ({ pag
                 detail: 'Lift Vendor',
                 status: 'in_progress',
                 route: '/board/tickets',
-                occurred_at: '2026-05-11T10:00:00.000Z',
+                occurred_at: recentEscalationAt,
               }],
             },
           ],
@@ -382,9 +384,21 @@ test('admin: agency portfolio renders trends and work-order story', async ({ pag
   await expect(page.getByText('Confirm payment promise before report export')).toBeVisible();
   await expect(page.getByRole('heading', { name: /Problems blocking operations|Problemas que travam a operação/i })).toBeVisible();
   await expect(page.getByText(/Urgent tickets, missed SLAs|Chamados urgentes, SLA perdido/i)).toBeVisible();
-  await expect(page.getByText('Test Condo').first()).toBeVisible();
-  await expect(page.getByText('Elevator noise').first()).toBeVisible();
-  await page.getByRole('button', { name: /Overdue|Atrasados/i }).click();
+  const escalationCard = page.locator('[data-testid="agency-escalations"]');
+  await expect(escalationCard).toContainText(/30\+ days|30\+ dias/i);
+  await expect(escalationCard.getByRole('button', { name: /Unowned|Sem dono/i })).toBeVisible();
+  await expect(escalationCard.getByRole('button', { name: /Vendor\/SLA|Fornecedor\/SLA/i })).toBeVisible();
+  await expect(escalationCard.getByText('Test Condo').first()).toBeVisible();
+  await expect(escalationCard.getByText('Elevator noise').first()).toBeVisible();
+  await escalationCard.getByRole('button', { name: /Unowned|Sem dono/i }).click();
+  await expect(escalationCard.getByText('Garage gate repair').first()).toBeVisible();
+  await expect(escalationCard.getByText('Elevator noise').first()).toBeHidden();
+  await escalationCard.getByRole('button', { name: /Vendor\/SLA|Fornecedor\/SLA/i }).click();
+  await expect(escalationCard.getByText('Garage gate repair').first()).toBeVisible();
+  await escalationCard.getByRole('button', { name: /All|Todos/i }).click();
+  await expect(escalationCard.getByText('Elevator noise').first()).toBeVisible();
+  const followupFilterGroup = page.getByLabel(/Filter follow-ups by state|Filtrar acompanhamentos por estado/i);
+  await followupFilterGroup.getByRole('button', { name: /Overdue|Atrasados/i }).click();
   await expect(page.getByText('Call vendor before board check-in')).toBeVisible();
   await expect(page.getByText('Confirm payment promise before report export')).toBeHidden();
   await page.getByRole('button', { name: /Mark filtered as done|Marcar filtrados como concluídos/i }).click();
@@ -395,7 +409,7 @@ test('admin: agency portfolio renders trends and work-order story', async ({ pag
     record_id: '10',
     status: 'done',
   });
-  await page.getByRole('button', { name: /All|Todos/i }).first().click();
+  await followupFilterGroup.getByRole('button', { name: /All|Todos/i }).click();
   await page.getByLabel(/Filter follow-ups by building|Filtrar acompanhamentos por prédio/i).selectOption('46');
   await expect(page.getByText('Confirm payment promise before report export')).toBeVisible();
   await expect(page.getByText('Call vendor before board check-in')).toBeHidden();

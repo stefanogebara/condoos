@@ -497,9 +497,19 @@ This slice makes the portfolio page feel more like a management-company command 
 - Reuse the existing audited follow-up controls so managers can assign, date, note, or close escalation records without creating a second workflow.
 - Localize the new section across Portuguese, English, Spanish, and French and cover it in the agency portfolio browser walkthrough.
 
+## Completed Slice: Agency Escalation Aging And Filters
+
+This slice makes the escalation view faster for real agency operators:
+
+- Add aging buckets to escalation records so stale issues show as new, 7-29 days, or 30+ days.
+- Add a 30+ day summary badge so old unresolved issues are visible before a board or agency check-in.
+- Add escalation filters for all, critical, overdue, unowned, vendor/SLA, and recurring records.
+- Keep each filtered record editable through the existing audited risk follow-up controls.
+- Cover the filters and aging badges in the agency portfolio browser walkthrough and localize the new labels across Portuguese, English, Spanish, and French.
+
 ## Current Execution Slice: Enterprise Operations Hardening
 
 The next implementation slice should keep building on the private-enterprise plan:
 
-- Continue turning portfolio reporting into a true agency command center with deeper SLA automation, escalation aging, and cross-building vendor intelligence.
+- Continue turning portfolio reporting into a true agency command center with deeper SLA automation, escalation aging reports, and cross-building vendor intelligence.
 - Keep production-safe i18n, build, server tests, and pilot smoke checks green before each push.

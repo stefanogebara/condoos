@@ -23,6 +23,7 @@ interface AgencyBuildingMetrics {
 
 type AgencyRiskFollowupStatus = 'open' | 'in_progress' | 'waiting' | 'done';
 type AgencyRiskFollowupFilter = 'all' | 'overdue' | AgencyRiskFollowupStatus;
+type AgencyEscalationFilter = 'all' | 'critical' | 'overdue' | 'unowned' | 'vendor' | 'recurring';
 
 interface AgencyRiskFollowup {
   id: number;
@@ -362,6 +363,15 @@ const followupFilters: Array<{ value: AgencyRiskFollowupFilter; label: string }>
   { value: 'waiting', label: 'Aguardando' },
 ];
 
+const escalationFilters: Array<{ value: AgencyEscalationFilter; label: string }> = [
+  { value: 'all', label: 'Todos' },
+  { value: 'critical', label: 'Críticos' },
+  { value: 'overdue', label: 'Atrasados' },
+  { value: 'unowned', label: 'Sem dono' },
+  { value: 'vendor', label: 'Fornecedor/SLA' },
+  { value: 'recurring', label: 'Recorrentes' },
+];
+
 function agencyRoleLabel(role: AgencyRole | string) {
   const labels: Record<string, string> = {
     agency_admin: 'Admin de administradora',
@@ -442,13 +452,46 @@ function isFollowupOverdue(followup: AgencyRiskFollowup | null | undefined) {
   return !Number.isNaN(due.getTime()) && due.getTime() < Date.now();
 }
 
+function escalationAgeDays(record: AgencyEscalationItem['record']) {
+  if (!record.occurred_at) return null;
+  const occurredAt = new Date(record.occurred_at);
+  if (Number.isNaN(occurredAt.getTime())) return null;
+  return Math.max(0, Math.floor((Date.now() - occurredAt.getTime()) / 86_400_000));
+}
+
+function escalationAgeLabel(record: AgencyEscalationItem['record']) {
+  const days = escalationAgeDays(record);
+  if (days === null) return t('Sem data');
+  if (days >= 30) return t('30+ dias');
+  if (days >= 7) return t('7-29 dias');
+  return t('Novo');
+}
+
+function escalationAgeTone(record: AgencyEscalationItem['record']) {
+  const days = escalationAgeDays(record);
+  if (days === null) return 'neutral' as const;
+  if (days >= 30) return 'warning' as const;
+  if (days >= 7) return 'peach' as const;
+  return 'sage' as const;
+}
+
+function escalationMatchesFilter(item: AgencyEscalationItem, filter: AgencyEscalationFilter) {
+  if (filter === 'all') return true;
+  if (filter === 'critical') return item.severity === 'critical';
+  if (filter === 'overdue') return isFollowupOverdue(item.record.follow_up);
+  if (filter === 'unowned') return !item.record.follow_up?.owner_user_id;
+  if (filter === 'vendor') return item.kind === 'vendor_follow_up_problems' || item.kind === 'vendor_sla_problems';
+  if (filter === 'recurring') return item.kind === 'recurring_problem_clusters';
+  return true;
+}
+
 function escalationSortValue(item: AgencyEscalationItem) {
   const severityWeight = item.severity === 'critical' ? 400 : item.severity === 'warning' ? 250 : 100;
   const followup = item.record.follow_up || null;
   const overdueWeight = isFollowupOverdue(followup) ? 80 : 0;
   const unownedWeight = !followup?.owner_user_id ? 40 : 0;
-  const time = item.record.occurred_at ? new Date(item.record.occurred_at).getTime() : 0;
-  return severityWeight + overdueWeight + unownedWeight + (Number.isNaN(time) ? 0 : Math.min(30, Math.floor(time / 8.64e7) % 30));
+  const ageWeight = Math.min(90, escalationAgeDays(item.record) || 0);
+  return severityWeight + overdueWeight + unownedWeight + ageWeight;
 }
 
 function toDateInput(value: string | null | undefined) {
@@ -772,6 +815,7 @@ export default function BoardAgencyPortfolio() {
   const [followupError, setFollowupError] = useState<string | null>(null);
   const [followupFilter, setFollowupFilter] = useState<AgencyRiskFollowupFilter>('all');
   const [followupBuildingFilter, setFollowupBuildingFilter] = useState('all');
+  const [escalationFilter, setEscalationFilter] = useState<AgencyEscalationFilter>('all');
   const [bulkFollowupSaving, setBulkFollowupSaving] = useState(false);
   const [bulkOwnerUserId, setBulkOwnerUserId] = useState('');
   const [bulkDueDate, setBulkDueDate] = useState('');
@@ -874,6 +918,11 @@ export default function BoardAgencyPortfolio() {
   }, [primaryAgency]);
   const criticalEscalationCount = escalationItems.filter((item) => item.severity === 'critical').length;
   const overdueEscalationCount = escalationItems.filter((item) => isFollowupOverdue(item.record.follow_up)).length;
+  const staleEscalationCount = escalationItems.filter((item) => (escalationAgeDays(item.record) || 0) >= 30).length;
+  const filteredEscalations = useMemo(
+    () => escalationItems.filter((item) => escalationMatchesFilter(item, escalationFilter)),
+    [escalationItems, escalationFilter],
+  );
   const bulkOwnerOptions = useMemo(() => {
     const targetBuildingIds = Array.from(new Set(filteredFollowups.map((item) => item.condominium_id)));
     return staff
@@ -1494,7 +1543,7 @@ export default function BoardAgencyPortfolio() {
                 )}
               </GlassCard>
 
-              <GlassCard className="p-5">
+              <GlassCard className="p-5" data-testid="agency-escalations">
                 <div className="flex items-start justify-between gap-3 flex-wrap mb-4">
                   <div>
                     <div className="text-xs uppercase tracking-[0.14em] text-dusk-300 flex items-center gap-2">
@@ -1512,21 +1561,48 @@ export default function BoardAgencyPortfolio() {
                     <Badge tone={overdueEscalationCount > 0 ? 'warning' : 'neutral'}>
                       {overdueEscalationCount} {t('acompanhamentos atrasados')}
                     </Badge>
+                    <Badge tone={staleEscalationCount > 0 ? 'warning' : 'neutral'}>
+                      {staleEscalationCount} {t('30+ dias')}
+                    </Badge>
                   </div>
                 </div>
+                {escalationItems.length > 0 && (
+                  <div className="flex items-center gap-1.5 flex-wrap mb-4" aria-label={t('Filtrar escalações')}>
+                    {escalationFilters.map((filter) => (
+                      <button
+                        key={filter.value}
+                        type="button"
+                        onClick={() => setEscalationFilter(filter.value)}
+                        className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                          escalationFilter === filter.value
+                            ? 'bg-dusk-400 text-cream-50 border-dusk-400'
+                            : 'bg-white/55 text-dusk-300 border-white/70 hover:bg-white/75'
+                        }`}
+                      >
+                        {t(filter.label)}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {escalationItems.length === 0 ? (
                   <div className="rounded-2xl border border-white/70 bg-white/50 px-3 py-4 text-sm text-dusk-300">
                     {t('Nenhuma escalação operacional agora.')}
                   </div>
+                ) : filteredEscalations.length === 0 ? (
+                  <div className="rounded-2xl border border-white/70 bg-white/50 px-3 py-4 text-sm text-dusk-300">
+                    {t('Nenhuma escalação neste filtro.')}
+                  </div>
                 ) : (
                   <div className="space-y-3">
-                    {escalationItems.slice(0, 8).map((item) => (
+                    {filteredEscalations.slice(0, 8).map((item) => (
                       <div key={item.id} className="rounded-3xl border border-white/70 bg-white/60 p-3">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
                               <Badge tone={attentionTone(item.severity)}>{attentionLabel(item.kind)}</Badge>
+                              <Badge tone={escalationAgeTone(item.record)}>{escalationAgeLabel(item.record)}</Badge>
                               {isFollowupOverdue(item.record.follow_up) && <Badge tone="warning">{t('Atrasado')}</Badge>}
+                              {!item.record.follow_up?.owner_user_id && <Badge tone="neutral">{t('Sem dono')}</Badge>}
                             </div>
                             <div className="mt-1 text-xs text-dusk-300 truncate" data-user-content>{item.buildingName}</div>
                           </div>
@@ -1552,7 +1628,7 @@ export default function BoardAgencyPortfolio() {
                         </div>
                       </div>
                     ))}
-                    {escalationItems.length > 8 && (
+                    {filteredEscalations.length > 8 && (
                       <div className="text-xs text-dusk-300 px-1">
                         {t('Mostrando as 8 escalações mais importantes. Use os cartões dos prédios para ver todos os registros.')}
                       </div>

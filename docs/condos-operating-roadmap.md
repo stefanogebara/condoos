@@ -39,8 +39,8 @@ Every shipped feature must improve at least one promise:
    - Defer live processors until the workflow is trusted.
 
 4. **Maintenance as work orders**
-   - Ticket timeline events, quote comparison, quote decisions, recurring problem detection, vendor follow-up health, SLA alerts, resident-safe progress visibility, executive report snapshots, agency/building PDF reports, per-building monthly maintenance/finance scoreboards, portfolio trends, work-order story, visual operational health scorecards, record-level portfolio scorecard drilldowns, cross-building escalation view, agency-level owners/due dates/follow-up states, a filtered open follow-up queue, and bulk completion/reassignment/due-date updates for the filtered queue are in place.
-   - Remaining work: richer SLA escalation automation, incident mode, escalation aging, and deeper cross-building vendor intelligence.
+   - Ticket timeline events, quote comparison, quote decisions, recurring problem detection, vendor follow-up health, SLA alerts, resident-safe progress visibility, executive report snapshots, agency/building PDF reports, per-building monthly maintenance/finance scoreboards, portfolio trends, work-order story, visual operational health scorecards, record-level portfolio scorecard drilldowns, cross-building escalation view, escalation aging/filtering, agency-level owners/due dates/follow-up states, a filtered open follow-up queue, and bulk completion/reassignment/due-date updates for the filtered queue are in place.
+   - Remaining work: richer SLA escalation automation, incident mode, escalation aging reports, and deeper cross-building vendor intelligence.
 
 5. **Brazil + Ecuador readiness**
    - Building-level country, currency, timezone, locale, and governance mode are in place.
@@ -85,7 +85,7 @@ Enterprise-private readiness plus market hardening:
 - Filter the agency follow-up queue by status and building so portfolio managers can triage overdue, waiting, and building-specific commitments quickly.
 - Let managers mark the currently filtered follow-up queue done through the audited follow-up endpoint.
 - Let managers reassign or move due dates for the currently filtered follow-up queue through the same audited follow-up endpoint.
-- Show a cross-building escalation view for urgent tickets, missed vendor SLAs, stale vendor follow-ups, and recurring maintenance clusters, with the same audited owner/date/status controls.
+- Show a cross-building escalation view for urgent tickets, missed vendor SLAs, stale vendor follow-ups, and recurring maintenance clusters, with aging buckets, operational filters, and the same audited owner/date/status controls.
 - Include open agency risk follow-ups in agency monthly reports, PDFs, and portfolio CSV exports so owner/date commitments survive outside the browser.
 - Summarize each building's monthly maintenance movement in agency reports: opened/resolved tickets, urgent tickets, work-order movement, stale vendor follow-ups, spend, and top categories.
 - Gate proposal voting behind a readiness score covering scope, budget, analysis, risks/impact, and a future voting deadline so residents vote with decision-grade context.
