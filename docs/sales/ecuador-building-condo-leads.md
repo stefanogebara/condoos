@@ -1,0 +1,203 @@
+# Ecuador Direct Building And Condo Lead Research
+
+Research date: 2026-06-10  
+Focus: direct outreach targets in Ecuador: named residential buildings, condominium towers, gated communities, and vacation-apartment complexes in main cities and popular beach markets.
+
+## Executive Summary
+
+This list is different from the management-agency list. These are direct building/community targets where CONDOS could be sold through the board, administrator, developer handoff, property manager, or owner committee.
+
+The best direct-building wedge is:
+
+- Premium city towers with guards, amenities, alicuotas, visitor traffic, packages, reservations, and active owner committees.
+- Large urbanizations around Guayaquil, Samborondon, Daule, and Via a la Costa, because guard/visitor/package flow is daily pain.
+- Vacation-apartment buildings in Manta, Salinas, Punta Blanca, Playas, Tonsupa, Same, and Atacames, because owners are often absent, guests rotate, guards need clear approval lists, and amenities/reservations matter.
+
+Direct building outreach is harder than agency outreach because the decision maker is not always public. The play is to use public project pages, listing brokers, developer sales offices, building lobbies, and owner groups to identify the administrator or board president.
+
+## Scoring Rubric
+
+Score is 0-100:
+
+- Operations fit, 30 pts: guard/security, packages, visitors, shared amenities, alicuotas, maintenance, documents.
+- Owner/value density, 20 pts: high-value units, many apartments, premium area, absentee/vacation owners.
+- Reachability path, 15 pts: official developer/site, active listings, sales office, broker pages, public social channels.
+- Urgency of pain, 15 pts: rentals, vacation guests, large communities, 24/7 security, amenity scheduling.
+- Strategic reference value, 10 pts: recognizable building, iconic project, strong demo story.
+- Confidence, 10 pts: how strong and current the public evidence is.
+
+Confidence:
+
+- High: official project/developer page or multiple reliable listings.
+- Medium: strong marketplace/social evidence but direct administrator not identified.
+- Low: promising building/community, but name or current status needs manual verification.
+
+## Top Direct Leads
+
+| Rank | Building / Community | City / Area | Segment | Score | Confidence | Why It Fits CONDOS | First Outreach Route | Source |
+|---:|---|---|---|---:|---|---|---|---|
+| 1 | Torres Bellini I-IV / Ciudad del Rio | Guayaquil, Puerto Santa Ana | Premium city towers | 96 | High | Large high-end riverfront tower complex with rentals, alicuotas, concierge/security, packages, owners and tenants. Great fit for visitor, package, reservation, ticket, and transparency workflows. | Building lobby/admin, Puerto Santa Ana brokers, Bellini owner/rental listings. | https://mundosurint.com/property/torre-bellini-puerto-santa-ana/ |
+| 2 | IQON Residences | Quito, La Carolina | Iconic premium tower | 95 | High | 32-story residential mixed-use tower with 215 residences and many amenities. Ideal reference building for premium resident/admin/guard experience. | Uribe Schwarzkopf sales/admin channel, building concierge, listing brokers. | https://www.mchap.co/mchap-2024-projects/iqon-residences |
+| 3 | Aquarela Cumbaya | Quito/Cumbaya | Premium multi-building residences | 94 | High | Large landscaped residential project with major shared amenities and high owner value. Strong fit for amenity booking, resident communication, documents, and maintenance. | Uribe Schwarzkopf, Cumbaya brokers, building administration. | https://landing.uribeschwarzkopf.com/lp-aquarela |
+| 4 | Grand Bay Manta | Manta, Barbasquillo | Beachfront resort condos | 94 | High | Four towers, hundreds of units, ocean views, resort amenities, pools, beach access, investment/vacation positioning. Perfect for absentee owners, guest approvals, amenities, and guard flow. | Developer/sales channels, Ecuador Shores Realty, owner listings. | https://www.owninecuador.com/grandbay |
+| 5 | Ocean Club / Torre Mediterranea / Torre Atlantis | Playas, Ocean Club sector | Beach condo resort | 93 | High | Strong vacation-owner signal, multiple apartment listings, private beach/club amenities, alicuotas, guest flow, security. | Ocean Club administration, rental brokers, owner groups. | https://www.plusvalia.com/venta/departamentos/guayas/playas/norte-de-playas |
+| 6 | Karibao Resort Town | Playas / Engabao | Beach resort town | 93 | High | Major resort-style beach community with lots, apartments, amenities, security, vacation use, and owner/investor positioning. | Pronobis/Karibao sales and resort administration. | https://pronobis.com.ec/proyectos/karibao/ |
+| 7 | Elite Tower | Salinas, San Lorenzo | Beachfront premium tower | 92 | High | 14-floor oceanfront project with suites, departments, penthouses, controlled access, security, pool, gym, sauna and social areas. | Official sales office, building administrator, brokers. | https://elitetower.com.ec/ |
+| 8 | EPIQ Residences | Quito, La Carolina | Premium mixed-use tower | 92 | High | Completed 24/25-story tower by BIG, residences/offices in La Carolina; strong visitor, package, amenities, board transparency fit. | Uribe Schwarzkopf, brokers, building admin. | https://big.dk/projects/epiq-residences-3797 |
+| 9 | The Hills | Guayaquil, Puerto Santa Ana | Premium residential project | 91 | High | New Puerto Santa Ana residential project, strong pre-delivery moment to sell admin/owner onboarding before chaos forms. | Uribe Schwarzkopf sales team; developer handoff. | https://uribeschwarzkopf.com/proyectos/ |
+| 10 | YOO Guayaquil | Guayaquil, Puerto Santa Ana | Premium residential tower | 91 | High | New Puerto Santa Ana residences with international design brand and likely high service expectations. | Uribe Schwarzkopf sales/admin handoff. | https://uribeschwarzkopf.com/proyectos/ |
+| 11 | Qorner | Quito, La Carolina | Premium tower | 90 | High | Recognizable La Carolina residential tower by Safdie Architects, high-value owners and amenities. | Uribe Schwarzkopf, listing brokers, lobby/admin. | https://uribeschwarzkopf.com/proyectos-quito/ |
+| 12 | Unique | Quito, La Carolina | Premium tower | 90 | High | Delivered Carlos Zapata residential tower; strong reference value and high owner density. | Uribe Schwarzkopf delivered-building network, brokers. | https://uribeschwarzkopf.com/proyectos-quito/ |
+| 13 | MarBlanco | Punta Blanca / Salinas | Beach apartments | 89 | High | Punta Blanca apartment project with 1-4 bedroom units; strong second-home/vacation ownership signal. | Vintimilla Constructora and listing brokers. | https://www.vintimillaconstructora.com/marblanco |
+| 14 | Makana Resort | Tonsupa | Beach resort condos/hotel | 89 | High | Frontline beach resort with suites/apartments, 24h guardianía signal in rentals, pools/jacuzzis and recurring vacation traffic. | Resort administration, suite owners, rental channels. | https://ownerdirect.com/property/suite-frente-al-mar-en-el-makana-resort-tonsupa/HA-1217851121 |
+| 15 | Diamond Beach / Grand Diamond Beach | Tonsupa | Beach condo tower | 88 | High | Vacation apartment listings describe it as a desired/full-service Tonsupa complex with pool, beach, elevator, security-style amenities. | Building administration, rental brokers, owner groups. | https://www.airbnb.co.cr/diamond-beach-ecuador/stays/apartments |
+| 16 | Casa Blanca / Club Casablanca | Same | Beach condo community | 88 | High | Many vacation apartments, security 24/7 references, beachfront units, high absentee-owner/guest flow. | Club/urbanization administration and rental operators. | https://www.airbnb.com.sv/club-casablanca-ecuador/stays |
+| 17 | Ciudad Celeste / Villa Club / La Joya / Villa del Rey macro corridor | Samborondon, Daule, La Aurora | Large urbanization ecosystem | 88 | High | Public source says the corridor has 97,300+ residents. This is a massive guard, resident communication, package, dues, and maintenance market. | Developer groups, individual urbanization admins, ADMTOSCANO-style admin agencies. | https://ciudadceleste.com/ |
+| 18 | La Maison Cuenca | Cuenca, Ordonez Lasso | Hotel-residential tower | 87 | High | 17-story hotel/residential building with exclusive residences; strong pre-opening/admin setup opportunity. | Uribe Schwarzkopf, La Maison sales. | https://uribeschwarzkopf.com/lamaison/ |
+| 19 | Mykonos | Manta, Barbasquillo | Beach/city condo building | 87 | High | Listings show alicuotas, rentals, ocean views, access to beach, 24/7 security signals. Strong fit for vacation + resident operations. | Building admin, Barbasquillo brokers, owner listings. | https://www.plusvalia.com/venta/departamentos/manabi/manta/barbasquillo/con-vista-al-mar |
+| 20 | Poseidon | Manta, Barbasquillo | Hotel/condo beachfront | 87 | High | Oceanfront apartments and hotel-style building; rental/investment traffic, reception, amenities, visitors. | Hotel/building admin, unit owners, brokers. | https://www.realtor.com/international/ec/barbasquillo-manabi-manabi-province-120092429331/ |
+| 21 | Kona Bay | Salinas, Chipipe | Beach apartment building | 86 | High | Seven-floor luxury building, 35 units, rooftop, controlled elevator/card access, near beach. Good for smaller premium pilot. | Official project website and sales team. | https://edificiokonabay.com/ |
+| 22 | Qanvas | Quito, La Carolina | Premium residential/mixed-use | 86 | High | Built La Carolina project with residences/offices. Good premium urban tower pilot. | Uribe Schwarzkopf/building admin. | https://uribeschwarzkopf.com/proyectos-quito/ |
+| 23 | Qapital | Quito, La Carolina | Premium project | 86 | High | Kengo Kuma La Carolina residential project; pre-delivery onboarding opportunity. | Uribe Schwarzkopf sales/admin handoff. | https://uribeschwarzkopf.com/proyectos-quito/ |
+| 24 | Qondesa | Quito, La Carolina | Premium mixed-use residences | 86 | High | MAD Architects project with residences/offices/commercial; ideal for structured owner/admin setup. | Uribe Schwarzkopf sales/admin handoff. | https://uribeschwarzkopf.com/proyectos-quito/ |
+| 25 | Oh Residencias | Quito/Cumbaya | Premium residences | 85 | High | Delivered Cumbaya residential project; high-value residents and amenities. | Uribe Schwarzkopf delivered-building network. | https://uribeschwarzkopf.com/proyectos-quito/ |
+| 26 | YOO Quito | Quito, Gonzalez Suarez | Premium residences | 85 | High | Delivered premium residential project in a high-income Quito sector. | Building lobby/admin, Uribe Schwarzkopf network. | https://uribeschwarzkopf.com/proyectos-quito/ |
+| 27 | YOO Cumbaya | Quito/Cumbaya | Premium residences | 85 | High | Delivered Cumbaya mixed-use residential project; likely high expectations for service and amenities. | Building/admin network and brokers. | https://uribeschwarzkopf.com/proyectos-quito/ |
+| 28 | Aurora | Quito/Cumbaya | Premium residences | 84 | High | Delivered/last-units Cumbaya residential project; useful in Cumbaya cluster campaign. | Uribe Schwarzkopf/brokers. | https://uribeschwarzkopf.com/proyectos-quito/ |
+| 29 | Botaniqo | Quito/Cumbaya | Premium residences | 84 | High | In-construction Cumbaya residential project; good pre-launch operations sale. | Developer sales/admin handoff. | https://uribeschwarzkopf.com/proyectos-quito/ |
+| 30 | Porto Manta / Marina Blue | Manta | Gated coastal residential project | 84 | High | Sustainable project within Marina Blue with homes and condos; gated/coastal owner community. | MLS/developer brokers, Marina Blue admin. | https://mls-ecuador.com/es/proyectos/homes-condos-ecuador__portomanta |
+| 31 | San Marino Building | Manta, Playa Murcielago | Beachfront luxury building | 83 | Medium | Rent in Manta lists San Marino as an elegant beachfront luxury apartment building with private beach access. | Rent in Manta/property managers, building lobby/admin. | https://rentinmanta.com/buildings |
+| 32 | Portomare Building | Manta, Playa Murcielago | Beachfront luxury building | 83 | Medium | Same source lists Portomare as elegant beachfront luxury apartment building, long-term and limited short-term rentals. | Rent in Manta/property managers, building admin. | https://rentinmanta.com/buildings |
+| 33 | El Navegante | Manta | Beachfront apartment building | 82 | Medium | Rent in Manta describes oceanfront apartments, garage parking, 24h security, and holiday/weekend demand. | Property managers and lobby/admin. | https://rentinmanta.com/buildings |
+| 34 | Bay View Apartments | Salinas, Chipipe | Beachfront apartments | 82 | High | Frontline Chipipe apartment project with luxury finishes and developer history of many beach buildings. | GeoBienes / ARENES S.A. project channel. | https://geobienes.com/proyectos/bay-view-apartments-frente-la-playa-de-chipipe |
+| 35 | Bay Point Apartments | Salinas, San Lorenzo | Beachfront apartments | 81 | Medium | Mentioned by ARENES/GeoBienes as recently delivered luxury beachfront project; verify direct admin. | Developer/project network. | https://geobienes.com/proyectos/bay-view-apartments-frente-la-playa-de-chipipe |
+| 36 | Montecarlo | Salinas, San Lorenzo | Beachfront condo | 81 | Medium | Realtor listing cluster identifies Condominio Montecarlo on Malecon de San Lorenzo; good smaller condo target. | Broker/listing route, building lobby/admin. | https://www.realtor.com/international/ec/elite-tower-near-the-coast-and-oceanfront-apartment-for-sale-in-san-lorenzo-salinassan-lorenzo-salinas-salinas-santa-elena-province-120087364951/ |
+| 37 | Playa Almendro Resort | Tonsupa | Beach apartment/resort | 81 | Medium | Vacation listings show apartment units in Playa Almendro with pool/amenities and family guest flow. | Resort/building administration, rental brokers. | https://ownerdirect.com/property/departamentos-frente-al-mar/BC-3642016 |
+| 38 | Playa Azul Resort | Tonsupa | Beach apartment/resort | 80 | Medium | Vacation listing references oceanfront Playa Azul Resort in Tonsupa; likely guard/guest/amenity workflow. | Resort/admin and rental operators. | https://ownerdirect.com/property/departamentos-frente-al-mar/BC-3642016 |
+| 39 | Club del Pacifico | Tonsupa | Beach condo/apartment | 80 | Medium | Vacation-rental evidence shows 3-bedroom apartment in Club del Pacifico with pool/parking style amenities. | Building admin/rental host route. | https://www.bedroomvillas.com/property/departamento-club-del-pac%C3%ADfico/AB-35225125 |
+| 40 | Iconic Tonsupa | Tonsupa | Beach apartment tower | 80 | Medium | Plusvalia snippet describes 23-floor project with 1-3 bedroom apartments, commercial, parking and storage. | Listing broker/developer route. | https://www.plusvalia.com/venta/departamentos/ecuador/q-diamond-beach-tonsupa |
+| 41 | Otero | Cuenca, San Sebastian / Tomebamba | Premium city residential | 80 | High | 70 apartments, 11 floors and rooftop; fits documents, alicuotas, amenities and maintenance workflows. | Luxe Home Projects / developer channel. | https://www.luxehomeprojects.com/proyectos/venta/cuenca |
+| 42 | Torre de Mayo | Cuenca, Primero de Mayo | Premium city residential | 79 | High | Luxury apartments with rooftop, jacuzzi, BBQ, gym, kids room and gardens. Good amenity/resident pilot. | Solbicon / broker developer channel. | https://solbicon.ec/propiedad/torre-de-mayo/ |
+| 43 | NOA | Cuenca, Ordonez Lasso | Mixed-use apartments/offices | 78 | High | New suites/apartments/offices in high-value corridor; fit for building launch/admin setup. | Proyectos Ecuador / broker channel. | https://proyectosecuador.com/proyecto/noa-av-ordonez-lasso/ |
+| 44 | Plaza Santa Ana | Cuenca, Centro Historico | City residential | 77 | Medium | FazWaz lists a new central residential project; verify building administrator and occupancy. | Listing broker route. | https://www.fazwaz.com.ec/departamento-en-venta/ecuador/azuay/cuenca/cuenca |
+| 45 | AARU | Cuenca, Paucarbamba | City residential project | 77 | Medium | FazWaz lists AARU as project on Av. Paucarbamba with apartments and rooftop/garden style amenities. | Listing/developer verification. | https://www.fazwaz.com.ec/departamento-en-venta/ecuador/azuay/cuenca/cuenca |
+| 46 | Riverside | Samborondon, Km 2.5 | Gated residential project | 77 | High | Project page says strategic high-plusvalia Samborondon location and security 24 hours. Guard/resident workflows are central. | Galjosa / project sales and urbanization admin. | https://galjosa.com/urbanizacion-riverside/ |
+| 47 | Vizcaya Plaza y Residencias 2 | Samborondon / Ciudad Celeste | Apartments + mixed-use | 77 | High | 80 apartments plus offices/commercial, guardianía 24h, pool, jacuzzi, gym, kids areas, sports courts and BBQ zones. | Listing broker / project admin. | https://www.plusvalia.com/venta/departamentos/guayas/q-ciudad-celeste |
+| 48 | Barranca Samborondon | Samborondon | Premium apartments | 76 | Medium | Project page mentions 24h security, gas centralizado and high-comfort apartment buildings. | Trivo/project route. | https://trivo.com.ec/propiedades/barranca-samborondon/ |
+| 49 | Costa Brisa | Guayaquil, Via a la Costa | Apartments in urbanization | 76 | Medium | Listing shows apartments available in urbanization, a good guard/visitor/package fit if community is active. | Polibienes/listing route; verify admin. | https://polibienes.com/propiedad/departamentos-disponibles-en-urbanizacion-en-via-a-la-costa/ |
+| 50 | Casole | Samborondon-Daule | Residential project | 75 | High | Uribe Schwarzkopf project in Samborondon-Daule corridor; useful as developer-handoff target. | Uribe Schwarzkopf sales/admin handoff. | https://uribeschwarzkopf.com/proyectos/ |
+| 51 | Ustay | Samborondon-Daule | Residential project | 75 | High | Uribe Schwarzkopf last-units residential project in Samborondon-Daule corridor. | Developer and broker route. | https://uribeschwarzkopf.com/proyectos/ |
+| 52 | Santana Lofts | Guayaquil, Puerto Santa Ana | Urban apartment building | 75 | Medium | Puerto Santa Ana listings reference Santana Lofts among Bellini/Riverfront/Spazio cluster. | Puerto Santa Ana brokers and building admin. | https://www.plusvalia.com/venta/departamentos/guayas/guayaquil/puerto-santa-ana/con-2-habitaciones/con-vista-a-la-ciudad |
+| 53 | Riverfront | Guayaquil, Puerto Santa Ana | Urban apartment building | 75 | Medium | Part of Puerto Santa Ana residential cluster; strong visitor/package/rental operations potential. | Building admin/brokers. | https://www.vrbo.com/7997214ha |
+| 54 | Spazio | Guayaquil, Puerto Santa Ana | Urban tower | 74 | Medium | Mentioned as part of Puerto Santa Ana/Ciudad del Rio cluster near Bellini and Riverfront. | Building admin/brokers. | https://www.vrbo.com/7997214ha |
+| 55 | Amazonas Parc | Quito, La Mariscal | City residential | 74 | High | Delivered/last-units Uribe Schwarzkopf residential/office project in La Mariscal. | Developer/building admin. | https://uribeschwarzkopf.com/proyectos-quito/ |
+| 56 | 12 Parc | Quito, La Floresta | City residential | 74 | High | Delivered La Floresta residential project; medium-sized urban pilot. | Developer/building admin. | https://uribeschwarzkopf.com/proyectos-quito/ |
+| 57 | Almar Punta Blanca | Punta Blanca | Beach apartments | 73 | Low | Social evidence suggests beachfront apartment project; verify current status and administration before outreach. | Developer/social channel verification. | https://www.facebook.com/traversoyperez/videos/almar-punta-blanca/1042078176215430/ |
+| 58 | Playa Pelikano | Manta | New coastal condo project | 72 | Low | Social/news evidence says new autosustainable condo project in Manta; verify official developer/contact. | Local developer/news route. | https://www.facebook.com/100064763736343/posts/manta-un-nuevo-condominio-se-levanta-en-manta-se-trata-de-playa-pelikano-el-prim/1262649739237139/ |
+| 59 | Playas Village | Playas Villamil | Beach homes/suites/apartments | 72 | Medium | Official site sells houses, suites, and apartments with sea views; likely owners/investors. | Official sales team. | https://playasvillage.com/ |
+| 60 | Mar Azul 1 | Playas / Via Data | Small beach condo | 65 | Medium | Small 4-unit project, less scalable but easy pilot if accessible. Lower priority because fewer units. | Developer/listing route. | https://www.properati.com.ec/proyecto/14032-32-e816-a76a32641479-a6f15b8d-bbc3-47f2 |
+
+## Best First Outreach Clusters
+
+### Cluster 1: Puerto Santa Ana, Guayaquil
+
+Start with Torres Bellini, YOO Guayaquil, The Hills, Santana Lofts, Riverfront, and Spazio.
+
+Why: dense buildings, premium residents, rentals, packages, guard/reception flow, high visibility. If one tower becomes a pilot, nearby towers become easier.
+
+Pitch: "CONDOS helps Puerto Santa Ana buildings reduce WhatsApp disorder: visitor approval, packages, amenity reservations, maintenance tickets, alicuotas/payment proof, documents, and board reports."
+
+### Cluster 2: Quito / Cumbaya Premium Towers
+
+Start with IQON, EPIQ, Aquarela, Qorner, Unique, YOO Quito, YOO Cumbaya, Oh Residencias, Qanvas.
+
+Why: iconic buildings need polished operations. These are good reference customers if we can reach the board/admin.
+
+Pitch: "Your building already sells a premium lifestyle. CONDOS makes the daily operation feel premium too: guard flow, resident action feed, transparent money, amenities, and maintenance evidence."
+
+### Cluster 3: Manta Vacation And Investment Buildings
+
+Start with Grand Bay Manta, Mykonos, Poseidon, Porto Manta/Marina Blue, San Marino, Portomare, El Navegante.
+
+Why: mix of permanent residents, vacation owners, Airbnb/short-term guests, guards, beach access, and amenities. CONDOS can reduce entry confusion and owner anxiety.
+
+Pitch: "Owners are often away. CONDOS lets them approve guests, recurring visitors, packages, deliveries, tickets, documents, and building notices from one app."
+
+### Cluster 4: Salinas / Punta Blanca
+
+Start with Elite Tower, Kona Bay, MarBlanco, Bay View, Bay Point, Montecarlo.
+
+Why: second-home owners, heavy holiday traffic, beachfront buildings, amenities, security, and alicuotas.
+
+Pitch: "For beach buildings, CONDOS gives guards a clean expected-visitors list and gives absent owners visibility into payments, maintenance, documents, and announcements."
+
+### Cluster 5: Playas / Engabao
+
+Start with Karibao, Ocean Club, Playas Village, Mar Azul.
+
+Why: very strong vacation/investment owner profile; guest and amenity workflows matter more than complex enterprise accounting at first.
+
+Pitch: "Reduce holiday entrance chaos and owner WhatsApps: pre-approved guests, parties, package/delivery notices, amenity slots, maintenance, and owner transparency."
+
+### Cluster 6: Tonsupa / Same / Atacames
+
+Start with Diamond Beach, Makana, Casa Blanca/Same, Playa Almendro, Playa Azul, Club del Pacifico, Iconic Tonsupa.
+
+Why: some of Ecuador's clearest vacation-apartment density. Owners rent units and guards need to know who can enter.
+
+Pitch: "For vacation condo buildings, CONDOS is the guard-owner-resident bridge: expected guests, recurring visitors, party lists, deliveries, tickets, documents, and announcements."
+
+## How To Reach Direct Building Decision Makers
+
+1. Find the current administrator:
+   - Call/WhatsApp the public project sales office.
+   - Ask listing brokers who manages the building.
+   - Visit the lobby and ask for the administrator's email or board contact.
+   - Search owner/rental Facebook groups for the building name.
+
+2. Do not pitch as generic software:
+   - Pitch a narrow building pilot.
+   - Use one problem: visitor/guard flow for vacation buildings, or resident/admin command center for city towers.
+
+3. Use building-specific subject lines:
+   - "Piloto privado para ordenar visitas y paquetes en Torres Bellini"
+   - "Una app para residentes y administración de IQON/EPIQ"
+   - "Menos llamadas al guardia en feriados para Ocean Club"
+
+4. Offer a 15-minute operational demo:
+   - Resident pre-approves a guest.
+   - Guard sees the visitor list.
+   - Resident receives package/delivery notification.
+   - Admin sees tickets, payments/proofs, reservations, documents, and announcements.
+
+## First 20 To Pursue
+
+1. Torres Bellini I-IV
+2. IQON Residences
+3. Aquarela Cumbaya
+4. Grand Bay Manta
+5. Ocean Club Playas
+6. Karibao Resort Town
+7. Elite Tower Salinas
+8. EPIQ Residences
+9. The Hills Puerto Santa Ana
+10. YOO Guayaquil
+11. Qorner
+12. Unique
+13. MarBlanco Punta Blanca
+14. Makana Resort Tonsupa
+15. Diamond Beach / Grand Diamond Beach Tonsupa
+16. Club Casablanca Same
+17. Ciudad Celeste / La Joya / Villa Club / Villa del Rey corridor
+18. La Maison Cuenca
+19. Mykonos Manta
+20. Poseidon Manta
+
+## Research Notes And Caveats
+
+- Direct building sales require manual decision-maker discovery. Most building administrators and board presidents are not listed publicly.
+- Developers are useful for new projects, especially before delivery, but delivered buildings may already have independent administrators.
+- Real estate listings prove the building exists and show alicuotas/amenities, but they are not always an official administration contact.
+- Vacation-rental pages are strong evidence of absentee owners and rotating guest traffic, but they should not be used to message individual guests.
+- Lower-confidence social leads should be verified before serious outreach.
+
