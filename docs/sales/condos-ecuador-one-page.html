@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CONDOS para administradoras y edificios en Ecuador</title>
+    <style>
+      @page {
+        size: Letter;
+        margin: 0;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color: #312724;
+        background: #f4efe5;
+      }
+
+      .page {
+        width: 8.5in;
+        min-height: 11in;
+        padding: 0.52in 0.58in;
+        background:
+          radial-gradient(circle at 90% 88%, rgba(132, 158, 122, 0.28), transparent 28%),
+          linear-gradient(135deg, #fffaf1 0%, #f0eadf 58%, #e6eadb 100%);
+        overflow: hidden;
+      }
+
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 24px;
+        padding-bottom: 18px;
+        border-bottom: 1px solid rgba(77, 58, 53, 0.18);
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 22px;
+        font-weight: 800;
+      }
+
+      .mark {
+        width: 38px;
+        height: 38px;
+        border-radius: 10px;
+        display: grid;
+        place-items: center;
+        color: white;
+        background: #6f8765;
+        font-weight: 900;
+      }
+
+      .tag {
+        color: #6d5d58;
+        font-size: 13px;
+        text-align: right;
+        max-width: 260px;
+      }
+
+      h1 {
+        margin: 30px 0 10px;
+        max-width: 730px;
+        font-size: 45px;
+        line-height: 0.98;
+        letter-spacing: 0;
+      }
+
+      .subtitle {
+        max-width: 650px;
+        margin: 0 0 24px;
+        color: #6d5d58;
+        font-size: 18px;
+        line-height: 1.45;
+      }
+
+      .promise {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 10px;
+        margin: 20px 0 26px;
+      }
+
+      .promise div {
+        min-height: 84px;
+        padding: 14px;
+        border: 1px solid rgba(255, 255, 255, 0.75);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.58);
+        box-shadow: 0 12px 30px rgba(74, 58, 52, 0.08);
+        font-size: 13px;
+        line-height: 1.32;
+      }
+
+      .promise b {
+        display: block;
+        margin-bottom: 6px;
+        color: #3b302d;
+        font-size: 14px;
+      }
+
+      section {
+        margin-top: 20px;
+      }
+
+      h2 {
+        margin: 0 0 10px;
+        font-size: 20px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
+      }
+
+      ul {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      li {
+        position: relative;
+        padding: 0 0 8px 22px;
+        color: #4e423d;
+        font-size: 14px;
+        line-height: 1.35;
+      }
+
+      li::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 6px;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #6f8765;
+      }
+
+      .panel {
+        padding: 18px;
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.66);
+        border: 1px solid rgba(255, 255, 255, 0.78);
+        box-shadow: 0 16px 34px rgba(74, 58, 52, 0.09);
+      }
+
+      .demo {
+        margin-top: 18px;
+        padding: 20px;
+        color: #fff7ee;
+        border-radius: 8px;
+        background: #4f3e38;
+      }
+
+      .demo h2 {
+        color: white;
+      }
+
+      .steps {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 8px;
+      }
+
+      .step {
+        min-height: 78px;
+        padding: 10px;
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.09);
+        font-size: 12px;
+        line-height: 1.28;
+      }
+
+      .demo-footer {
+        display: flex;
+        justify-content: space-between;
+        gap: 18px;
+        margin-top: 14px;
+        padding-top: 13px;
+        border-top: 1px solid rgba(255, 255, 255, 0.18);
+        color: #f5e7d2;
+        font-size: 13px;
+        line-height: 1.35;
+      }
+
+      .num {
+        display: inline-grid;
+        place-items: center;
+        width: 22px;
+        height: 22px;
+        margin-bottom: 8px;
+        border-radius: 50%;
+        color: #4f3e38;
+        background: #f3e4cd;
+        font-weight: 800;
+      }
+
+      footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: end;
+        margin-top: 22px;
+        color: #6d5d58;
+        font-size: 13px;
+      }
+
+      .cta {
+        color: #312724;
+        font-weight: 800;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <header>
+        <div class="brand"><span class="mark">C</span> CONDOS</div>
+        <div class="tag">Activación privada para edificios, condominios y administradoras en Ecuador.</div>
+      </header>
+
+      <h1>Menos llamadas. Menos WhatsApps. Más control.</h1>
+      <p class="subtitle">
+        CONDOS conecta residentes, guardias, administración y directiva para ordenar visitas,
+        paquetes, reservas, mantenimiento, pagos y transparencia.
+      </p>
+
+      <div class="promise">
+        <div><b>Garita clara</b>El guardia ve visitas, huéspedes, fiestas, deliveries y paquetes esperados.</div>
+        <div><b>Residente ágil</b>Preaprueba visitas, reserva amenities, reporta problemas y recibe avisos.</div>
+        <div><b>Admin enfocado</b>Tickets, proveedores, pagos, documentos y pendientes en un solo flujo.</div>
+        <div><b>Directiva tranquila</b>Gastos, recibos, propuestas, votaciones y reportes con evidencia.</div>
+      </div>
+
+      <section class="grid">
+        <div class="panel">
+          <h2>Lo que resuelve</h2>
+          <ul>
+            <li>Visitantes, huéspedes, deliveries y listas de fiestas preaprobadas.</li>
+            <li>Paquetes registrados por garita y notificados al residente.</li>
+            <li>Reservas de áreas comunes por horario, cupo y disponibilidad.</li>
+            <li>Tickets de mantenimiento con estados, proveedor y evidencia.</li>
+            <li>Alícuotas, comprobantes, gastos, recibos y explicaciones claras.</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h2>Para quién es</h2>
+          <ul>
+            <li>Administradoras con varios edificios o urbanizaciones.</li>
+            <li>Torres premium con seguridad, paquetes y amenities.</li>
+            <li>Urbanizaciones con garita y alto flujo de visitantes.</li>
+            <li>Edificios de playa con dueños ausentes y huéspedes frecuentes.</li>
+            <li>Directivas que quieren menos conflicto y más transparencia.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="demo">
+        <h2>Demo privada de 15 minutos</h2>
+        <div class="steps">
+          <div class="step"><span class="num">1</span><br />Residente preaprueba una visita.</div>
+          <div class="step"><span class="num">2</span><br />Guardia ve quién puede entrar.</div>
+          <div class="step"><span class="num">3</span><br />Paquete o delivery queda notificado.</div>
+          <div class="step"><span class="num">4</span><br />Admin revisa ticket y proveedor.</div>
+          <div class="step"><span class="num">5</span><br />Directiva ve recibos y reportes.</div>
+        </div>
+        <div class="demo-footer">
+          <span><strong>Objetivo del piloto:</strong> reducir ruido operativo en un edificio sin cambiar todo de golpe.</span>
+          <span><strong>Contacto:</strong> Sebastián · CONDOS</span>
+        </div>
+      </section>
+
+      <footer>
+        <div>
+          <strong>Objetivo del piloto:</strong> reducir ruido operativo en un edificio sin cambiar todo de golpe.
+        </div>
+        <div class="cta">CONDOS · Demo privada para Ecuador</div>
+      </footer>
+    </main>
+  </body>
+</html>
