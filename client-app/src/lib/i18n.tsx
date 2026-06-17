@@ -877,6 +877,13 @@ const phrases: Copy[] = [
   c('Assembleia encerrada', 'Assembly closed', 'Asamblea cerrada', 'Assemblée close'),
   c('Ata gerada', 'Minutes generated', 'Acta generada', 'Procès-verbal généré'),
   c('Pauta', 'Agenda', 'Agenda', 'Ordre du jour'),
+  c('Prestação de contas', 'Accounts review', 'Rendición de cuentas', 'Présentation des comptes'),
+  c('Revisar e aprovar as contas do exercício anterior.', 'Review and approve the prior-year accounts.', 'Revisar y aprobar las cuentas del ejercicio anterior.', 'Examiner et approuver les comptes de l’exercice précédent.'),
+  c('Review and approve the prior-year accounts.', 'Review and approve the prior-year accounts.', 'Revisar y aprobar las cuentas del ejercicio anterior.', 'Examiner et approuver les comptes de l’exercice précédent.'),
+  c('Previsão orçamentária', 'Budget forecast', 'Previsión presupuestaria', 'Prévision budgétaire'),
+  c('Assuntos gerais', 'General business', 'Asuntos generales', 'Questions diverses'),
+  c('Discussão aberta sobre temas restantes trazidos pelos moradores.', 'Open discussion on any remaining topic raised by residents.', 'Discusión abierta sobre temas pendientes planteados por residentes.', 'Discussion ouverte sur les sujets restants soulevés par les résidents.'),
+  c('Open discussion on any remaining topic raised by residents.', 'Open discussion on any remaining topic raised by residents.', 'Discusión abierta sobre temas pendientes planteados por residentes.', 'Discussion ouverte sur les sujets restants soulevés par les résidents.'),
   c('A IA monta uma pauta padrão de AGO a partir das propostas abertas.', 'AI builds a standard AGO agenda from open proposals.', 'La IA arma una agenda base de AGO desde las propuestas abiertas.', 'L’IA prépare un ordre du jour standard d’AGO à partir des propositions ouvertes.'),
   c('Redigir com IA', 'Draft with AI', 'Redactar con IA', 'Rédiger avec IA'),
   c('Ordinária', 'Ordinary', 'Ordinaria', 'Ordinaire'),
@@ -3327,6 +3334,42 @@ const dynamicPatterns: Pattern[] = [
       `The hallway lighting on the ${floor} floor is flickering at night and looks like it could go out at any moment.`,
       `La iluminación del hall del ${floor} piso parpadea por la noche y parece que puede apagarse en cualquier momento.`,
       `L’éclairage du hall du ${floor} étage clignote la nuit et semble pouvoir s’éteindre à tout moment.`,
+    ]),
+  },
+  {
+    match: /^Aprovar o orçamento do próximo exercício do (.+)\.$/u,
+    replace: (locale, _match, condoName) => pickWord(locale, [
+      `Aprovar o orçamento do próximo exercício do ${condoName}.`,
+      `Approve next year's budget for ${condoName}.`,
+      `Aprobar el presupuesto del próximo ejercicio de ${condoName}.`,
+      `Approuver le budget du prochain exercice de ${condoName}.`,
+    ]),
+  },
+  {
+    match: /^Approve the budget for the coming year at (.+)\.$/u,
+    replace: (locale, _match, condoName) => pickWord(locale, [
+      `Aprovar o orçamento do próximo exercício do ${condoName}.`,
+      `Approve the budget for the coming year at ${condoName}.`,
+      `Aprobar el presupuesto del próximo ejercicio de ${condoName}.`,
+      `Approuver le budget du prochain exercice de ${condoName}.`,
+    ]),
+  },
+  {
+    match: /^Levar a proposta #([0-9]+) para votação formal\.$/u,
+    replace: (locale, _match, proposalId) => pickWord(locale, [
+      `Levar a proposta #${proposalId} para votação formal.`,
+      `Bring proposal #${proposalId} to a formal vote.`,
+      `Llevar la propuesta #${proposalId} a votación formal.`,
+      `Soumettre la proposition #${proposalId} à un vote formel.`,
+    ]),
+  },
+  {
+    match: /^Bring proposal #([0-9]+) to a formal vote\.$/u,
+    replace: (locale, _match, proposalId) => pickWord(locale, [
+      `Levar a proposta #${proposalId} para votação formal.`,
+      `Bring proposal #${proposalId} to a formal vote.`,
+      `Llevar la propuesta #${proposalId} a votación formal.`,
+      `Soumettre la proposition #${proposalId} à un vote formel.`,
     ]),
   },
   {

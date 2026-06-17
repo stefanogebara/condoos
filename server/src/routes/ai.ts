@@ -821,15 +821,15 @@ router.post('/assemblies/:id/suggest-agenda', requireAuth, aiRateLimit, requireR
     ],
     () => ({
       items: [
-        { title: 'Prestação de contas', description: 'Review and approve the prior-year accounts.', item_type: 'accounts', required_majority: 'simple' },
-        { title: 'Previsão orçamentária', description: `Approve the budget for the coming year at ${a.condo_name}.`, item_type: 'budget', required_majority: 'simple' },
+        { title: 'Prestação de contas', description: 'Revisar e aprovar as contas do exercício anterior.', item_type: 'accounts', required_majority: 'simple' },
+        { title: 'Previsão orçamentária', description: `Aprovar o orçamento do próximo exercício do ${a.condo_name}.`, item_type: 'budget', required_majority: 'simple' },
         ...openProposals.slice(0, 3).map((p) => ({
           title: p.title,
-          description: `Bring proposal #${p.id} to a formal vote.`,
+          description: `Levar a proposta #${p.id} para votação formal.`,
           item_type: 'ordinary',
           required_majority: 'simple',
         })),
-        { title: 'Assuntos gerais', description: 'Open discussion on any remaining topic raised by residents.', item_type: 'other', required_majority: 'simple' },
+        { title: 'Assuntos gerais', description: 'Discussão aberta sobre temas restantes trazidos pelos moradores.', item_type: 'other', required_majority: 'simple' },
       ],
     }),
     { jsonMode: true, maxTokens: 800, label: 'assembly-agenda', condoId, res }

@@ -1,0 +1,607 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CONDOS para Administra 360 - IA conectada</title>
+    <style>
+      @page {
+        size: Letter;
+        margin: 0;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color: #302724;
+        background: #f2eee5;
+      }
+
+      .page {
+        position: relative;
+        width: 8.5in;
+        height: 11in;
+        padding: 0.52in 0.58in;
+        overflow: hidden;
+        page-break-after: always;
+        background:
+          radial-gradient(circle at 92% 88%, rgba(120, 148, 112, 0.28), transparent 30%),
+          linear-gradient(135deg, #fffaf2 0%, #f1ebdf 57%, #e6eadc 100%);
+      }
+
+      .page.dark {
+        color: #fff7ed;
+        background:
+          radial-gradient(circle at 86% 86%, rgba(150, 176, 132, 0.28), transparent 28%),
+          linear-gradient(135deg, #3f312d 0%, #5a4741 62%, #789470 100%);
+      }
+
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 24px;
+        padding-bottom: 16px;
+        border-bottom: 1px solid rgba(77, 58, 53, 0.16);
+      }
+
+      .dark header {
+        border-bottom-color: rgba(255, 255, 255, 0.2);
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 22px;
+        font-weight: 850;
+      }
+
+      .mark {
+        width: 38px;
+        height: 38px;
+        border-radius: 9px;
+        display: grid;
+        place-items: center;
+        color: #fffaf2;
+        background: #6f8765;
+        font-weight: 900;
+      }
+
+      .dark .mark {
+        color: #3f312d;
+        background: #f0e4cf;
+      }
+
+      .eyebrow {
+        color: #755f57;
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.11em;
+        text-transform: uppercase;
+      }
+
+      .dark .eyebrow {
+        color: #f0e4cf;
+      }
+
+      .tag {
+        max-width: 285px;
+        color: #6b5b55;
+        font-size: 13px;
+        line-height: 1.35;
+        text-align: right;
+      }
+
+      .dark .tag {
+        color: #f2dfca;
+      }
+
+      h1 {
+        max-width: 720px;
+        margin: 28px 0 12px;
+        font-size: 48px;
+        line-height: 0.98;
+        letter-spacing: 0;
+      }
+
+      h2 {
+        margin: 0 0 12px;
+        font-size: 26px;
+        line-height: 1.08;
+      }
+
+      h3 {
+        margin: 0 0 8px;
+        font-size: 16px;
+      }
+
+      p {
+        margin: 0;
+        color: #62524d;
+        font-size: 15px;
+        line-height: 1.48;
+      }
+
+      .dark p {
+        color: #f4e5d3;
+      }
+
+      .subtitle {
+        max-width: 690px;
+        margin-bottom: 24px;
+        font-size: 19px;
+      }
+
+      .hero-grid {
+        display: grid;
+        grid-template-columns: 1.03fr 0.97fr;
+        gap: 16px;
+        margin-top: 24px;
+      }
+
+      .panel,
+      .tile,
+      .flow,
+      .proof {
+        border: 1px solid rgba(255, 255, 255, 0.74);
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.68);
+        box-shadow: 0 18px 38px rgba(74, 58, 52, 0.09);
+      }
+
+      .panel {
+        padding: 20px;
+      }
+
+      .dark .panel,
+      .dark .tile,
+      .dark .flow,
+      .dark .proof {
+        border-color: rgba(255, 255, 255, 0.18);
+        background: rgba(255, 255, 255, 0.1);
+        box-shadow: none;
+      }
+
+      .promise {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 10px;
+        margin-top: 20px;
+      }
+
+      .tile {
+        min-height: 100px;
+        padding: 13px;
+        font-size: 12.4px;
+        line-height: 1.35;
+        color: #4e423e;
+      }
+
+      .tile b {
+        display: block;
+        margin-bottom: 7px;
+        color: #302724;
+        font-size: 14px;
+      }
+
+      .dark .tile,
+      .dark .tile b {
+        color: #fff7ed;
+      }
+
+      .flow-list {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+        margin-top: 20px;
+      }
+
+      .flow {
+        min-height: 160px;
+        padding: 16px;
+      }
+
+      .num {
+        display: inline-grid;
+        place-items: center;
+        width: 26px;
+        height: 26px;
+        margin-bottom: 10px;
+        border-radius: 50%;
+        color: #fffaf2;
+        background: #6f8765;
+        font-weight: 850;
+      }
+
+      .dark .num {
+        color: #3f312d;
+        background: #f0e4cf;
+      }
+
+      ul {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      li {
+        position: relative;
+        padding: 0 0 9px 20px;
+        color: #4d413d;
+        font-size: 14px;
+        line-height: 1.34;
+      }
+
+      li::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 6px;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #6f8765;
+      }
+
+      .dark li {
+        color: #fff1df;
+      }
+
+      .dark li::before {
+        background: #f0e4cf;
+      }
+
+      .two {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+        margin-top: 18px;
+      }
+
+      .three {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+        margin-top: 18px;
+      }
+
+      .connected {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 10px;
+        margin-top: 22px;
+      }
+
+      .node {
+        min-height: 88px;
+        padding: 14px;
+        border-radius: 10px;
+        color: #3d322f;
+        background: rgba(255, 255, 255, 0.72);
+        border: 1px solid rgba(255, 255, 255, 0.78);
+        font-size: 13px;
+        line-height: 1.32;
+      }
+
+      .node strong {
+        display: block;
+        margin-bottom: 6px;
+      }
+
+      .center-node {
+        grid-column: 1 / 4;
+        min-height: 118px;
+        padding: 22px;
+        color: #fff7ed;
+        background: #4f3e38;
+        text-align: center;
+      }
+
+      .center-node strong {
+        font-size: 23px;
+      }
+
+      .ai-strip {
+        display: grid;
+        grid-template-columns: 0.9fr 1.1fr;
+        gap: 18px;
+        align-items: stretch;
+        margin-top: 18px;
+      }
+
+      .quote {
+        padding: 18px;
+        border-left: 5px solid #6f8765;
+        background: rgba(255, 255, 255, 0.55);
+        border-radius: 8px;
+        font-size: 16px;
+        line-height: 1.42;
+      }
+
+      .checklist {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        margin-top: 14px;
+      }
+
+      .check {
+        min-height: 68px;
+        padding: 12px;
+        border-radius: 8px;
+        background: rgba(111, 135, 101, 0.13);
+        font-size: 13px;
+        line-height: 1.35;
+      }
+
+      .dark .check {
+        background: rgba(255, 255, 255, 0.12);
+      }
+
+      .metric-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 10px;
+        margin-top: 20px;
+      }
+
+      .metric {
+        min-height: 86px;
+        padding: 13px;
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.72);
+        color: #3b302d;
+      }
+
+      .metric b {
+        display: block;
+        margin-bottom: 6px;
+        font-size: 20px;
+      }
+
+      .proof {
+        margin-top: 18px;
+        padding: 18px;
+      }
+
+      .fine {
+        color: #756660;
+        font-size: 12px;
+        line-height: 1.42;
+      }
+
+      .dark .fine {
+        color: #f2dfca;
+      }
+
+      footer {
+        position: absolute;
+        left: 0.58in;
+        right: 0.58in;
+        bottom: 0.38in;
+        display: flex;
+        justify-content: space-between;
+        color: #74645f;
+        font-size: 12px;
+      }
+
+      .dark footer {
+        color: #f2dfca;
+      }
+    </style>
+  </head>
+  <body>
+    <section class="page dark">
+      <header>
+        <div class="brand"><span class="mark">C</span> CONDOS</div>
+        <div class="tag">Presentación privada para Administra 360 - Ecuador</div>
+      </header>
+
+      <div class="eyebrow" style="margin-top: 42px">Operación conectada con IA</div>
+      <h1>El edificio deja de depender de llamadas, WhatsApps y memoria suelta.</h1>
+      <p class="subtitle">
+        CONDOS une residentes, garita, administración, proveedores, finanzas y directiva en un flujo trazable.
+        La IA no es un chat aparte: trabaja encima de la memoria real del edificio.
+      </p>
+
+      <div class="promise">
+        <div class="tile"><b>Garita clara</b>Visitantes, fiestas, deliveries, paquetes y teléfonos del residente en una sola pantalla.</div>
+        <div class="tile"><b>Admin enfocado</b>Tickets, proveedores, reservas, pagos, documentos y urgencias con prioridades.</div>
+        <div class="tile"><b>IA conectada</b>Busca historial, recomienda proveedor y prepara acciones con evidencia.</div>
+        <div class="tile"><b>Directiva tranquila</b>Recibos, decisiones, propuestas y reportes mensuales listos.</div>
+      </div>
+
+      <div class="proof">
+        <h2>Promesa para administradoras</h2>
+        <p>Menos ruido operativo, menos confusión en garita y más confianza para explicar qué se hizo, cuánto costó y por qué.</p>
+      </div>
+
+      <footer><span>CONDOS</span><span>1 / 6</span></footer>
+    </section>
+
+    <section class="page">
+      <header>
+        <div class="brand"><span class="mark">C</span> CONDOS</div>
+        <div class="tag">El sistema conecta señales, decisiones y evidencia.</div>
+      </header>
+
+      <div class="eyebrow" style="margin-top: 30px">La capa operativa</div>
+      <h1>Todo se conecta alrededor del edificio.</h1>
+      <p class="subtitle">
+        Cada acción deja contexto. Eso permite que administración, guardia, residentes y directiva trabajen con la misma verdad.
+      </p>
+
+      <div class="connected">
+        <div class="node"><strong>Residentes</strong>Visitantes, fiestas, reservas, tickets, comprobantes, propuestas y votaciones.</div>
+        <div class="node"><strong>Garita</strong>Hoy: esperados, llegados, paquetes, deliveries, invitados y teléfonos.</div>
+        <div class="node"><strong>Administración</strong>Pendientes, proveedores, work orders, finanzas, documentos y reportes.</div>
+        <div class="center-node node"><strong>Building Memory + IA</strong>Tickets, proveedores, costos, recibos, documentos, decisiones y trazabilidad.</div>
+        <div class="node"><strong>Proveedores</strong>Electricista, plomero, ascensor, limpieza, seguridad y servicios recurrentes.</div>
+        <div class="node"><strong>Directiva</strong>Presupuesto, recibos, propuestas, actas, reportes y transparencia.</div>
+        <div class="node"><strong>Administradora</strong>Vista de portafolio, riesgos, SLA, reportes y operación por edificio.</div>
+      </div>
+
+      <footer><span>CONDOS para Administra 360</span><span>2 / 6</span></footer>
+    </section>
+
+    <section class="page">
+      <header>
+        <div class="brand"><span class="mark">C</span> CONDOS</div>
+        <div class="tag">IA para actuar con contexto, no para inventar.</div>
+      </header>
+
+      <div class="eyebrow" style="margin-top: 30px">IA + proveedores</div>
+      <h1>La IA puede preparar y despachar al proveedor correcto.</h1>
+      <p class="subtitle">
+        Cuando un residente reporta una fuga, un corto eléctrico o un ascensor con ruido, CONDOS revisa la memoria del edificio antes de recomendar acción.
+      </p>
+
+      <div class="flow-list">
+        <div class="flow"><span class="num">1</span><h3>Lee el caso</h3><p>Ticket, foto, categoría, ubicación, prioridad, unidad y reportes similares.</p></div>
+        <div class="flow"><span class="num">2</span><h3>Busca evidencia</h3><p>Historial de costos, work orders, proveedor usado, documentos y recibos.</p></div>
+        <div class="flow"><span class="num">3</span><h3>Elige red de servicio</h3><p>Electricista, plomero, ascensor, seguridad, limpieza u otro contacto guardado.</p></div>
+        <div class="flow"><span class="num">4</span><h3>Prepara contacto</h3><p>Mensaje con contexto, urgencia, ubicación y evidencia para WhatsApp o email.</p></div>
+        <div class="flow"><span class="num">5</span><h3>Control seguro</h3><p>Si falta evidencia, pide aprobación del admin. Si cumple reglas, puede despachar.</p></div>
+        <div class="flow"><span class="num">6</span><h3>Cierra el ciclo</h3><p>Cotización, evidencia, pago, recibo, transparencia y reporte para directiva.</p></div>
+      </div>
+
+      <div class="quote" style="margin-top: 18px">
+        Ejemplo: "Filtración en 8B". La IA revisa casos anteriores, identifica plomero guardado, prepara el mensaje y deja el work order listo con evidencia.
+      </div>
+
+      <footer><span>La IA tiene trazabilidad y compuertas de seguridad.</span><span>3 / 6</span></footer>
+    </section>
+
+    <section class="page">
+      <header>
+        <div class="brand"><span class="mark">C</span> CONDOS</div>
+        <div class="tag">Garita y reservas sin llamadas innecesarias.</div>
+      </header>
+
+      <div class="eyebrow" style="margin-top: 30px">Vida diaria</div>
+      <h1>Visitas, paquetes y reservas fluyen sin perseguir a nadie.</h1>
+
+      <div class="two">
+        <div class="panel">
+          <h2>Garita ultra simple</h2>
+          <ul>
+            <li>Visitantes preaprobados por residente.</li>
+            <li>Fiestas con lista de invitados.</li>
+            <li>Visitantes recurrentes por día y horario.</li>
+            <li>Paquetes y delivery con notificación al residente.</li>
+            <li>Si no está aprobado, guardia notifica y luego llama si hace falta.</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h2>Reservas de amenities</h2>
+          <ul>
+            <li>Admin crea gimnasio, piscina, cancha, salón o BBQ.</li>
+            <li>Admin define horarios, duración y cupo máximo.</li>
+            <li>Residente reserva desde la app y puede cancelar.</li>
+            <li>CONDOS bloquea sobrecupos y doble reserva.</li>
+            <li>Slots semanales abren cada domingo al mediodía.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="three">
+        <div class="tile"><b>Para residentes</b>Acciones rápidas: aprobar visita, reservar, reportar problema, subir comprobante.</div>
+        <div class="tile"><b>Para guardias</b>Una pantalla: buscar unidad, ver esperados, notificar y registrar llegada.</div>
+        <div class="tile"><b>Para admin</b>Historial, permisos, reservas actuales, paquetes y auditoría operativa.</div>
+      </div>
+
+      <footer><span>Menos llamadas en garita, más control real.</span><span>4 / 6</span></footer>
+    </section>
+
+    <section class="page">
+      <header>
+        <div class="brand"><span class="mark">C</span> CONDOS</div>
+        <div class="tag">Dinero y decisiones con evidencia.</div>
+      </header>
+
+      <div class="eyebrow" style="margin-top: 30px">Confianza</div>
+      <h1>El dinero y las decisiones dejan de ser una caja negra.</h1>
+
+      <div class="ai-strip">
+        <div class="panel">
+          <h2>Transparencia financiera</h2>
+          <ul>
+            <li>Alícuotas y cuentas por cobrar.</li>
+            <li>Comprobantes de pago subidos por residentes.</li>
+            <li>Revisión y aprobación del admin.</li>
+            <li>Gastos por categoría con recibos.</li>
+            <li>Presupuesto vs gasto real.</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h2>Directiva informada</h2>
+          <ul>
+            <li>Propuestas con presupuesto antes de votar.</li>
+            <li>Asambleas, actas y votaciones.</li>
+            <li>Documentos, contratos y garantías.</li>
+            <li>Work orders con evidencia.</li>
+            <li>Reporte mensual para directorio.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="proof">
+        <h2>La diferencia</h2>
+        <p>
+          Cuando alguien pregunta "por qué se gastó esto", la respuesta puede venir con recibo,
+          proveedor, ticket relacionado, decisión previa y explicación simple.
+        </p>
+      </div>
+
+      <footer><span>Menos conflicto, más trazabilidad.</span><span>5 / 6</span></footer>
+    </section>
+
+    <section class="page dark">
+      <header>
+        <div class="brand"><span class="mark">C</span> CONDOS</div>
+        <div class="tag">Estado auditado antes de enviar esta presentación.</div>
+      </header>
+
+      <div class="eyebrow" style="margin-top: 30px">Listo para demo privada</div>
+      <h1>Verificamos la app antes de presentar la historia.</h1>
+      <p class="subtitle">
+        La presentación se basa en flujos existentes y auditados. No queremos prometer de más: queremos mostrar una operación que ya camina.
+      </p>
+
+      <div class="metric-grid">
+        <div class="metric"><b>133/133</b>server tests</div>
+        <div class="metric"><b>90/90</b>E2E piloto local</div>
+        <div class="metric"><b>20/20</b>evaluación AI</div>
+        <div class="metric"><b>OK</b>build, producción segura, hardening y backup dry run</div>
+      </div>
+
+      <div class="two">
+        <div class="panel">
+          <h2>Demo de 15 minutos</h2>
+          <ul>
+            <li>Residente crea visita y reserva amenity.</li>
+            <li>Guardia ve llegada, paquete y fiesta.</li>
+            <li>Residente reporta problema.</li>
+            <li>IA propone proveedor y mensaje.</li>
+            <li>Admin revisa costo, evidencia y reporte.</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h2>Nota honesta</h2>
+          <p>
+            El despacho real por WhatsApp/email requiere credenciales configuradas.
+            Sin integración, CONDOS deja el plan y el mensaje listos para aprobación manual.
+          </p>
+        </div>
+      </div>
+
+      <footer><span>Sebastián - CONDOS</span><span>6 / 6</span></footer>
+    </section>
+  </body>
+</html>
